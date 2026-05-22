@@ -1,464 +1,270 @@
 #!/bin/bash
 
-# SDL3 VoidLight-Framework - Detailed Cache Performance Analysis
-# Comprehensive cachegrind analysis with performance comparisons and detailed reporting
+# VoidLight-Framework - Cachegrind performance analysis
+# Profiles cache and branch behavior for selected data/performance-heavy tests.
 
-set -e
+set -u
 
-# Colors for output
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "${PROJECT_ROOT}/tests/valgrind/valgrind_targets.sh"
+
+BUILD_TYPE=""
+TIMEOUT_SECONDS=300
+INCLUDE_BENCHMARKS=false
+TARGETS=()
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+BOLD='\033[1m'
+NC='\033[0m'
 
-# Configuration
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-BIN_DIR="${PROJECT_ROOT}/bin/debug"
-RESULTS_DIR="${PROJECT_ROOT}/test_results/valgrind/cache"
-MAIN_RESULTS_DIR="${PROJECT_ROOT}/test_results/valgrind"
+show_help() {
+    cat <<EOF
+Usage: $0 [options]
 
-# Create results directory
-mkdir -p "${RESULTS_DIR}"
+Options:
+  --debug              Use bin/debug test executables
+  --profile            Use bin/profile test executables
+  --benchmarks         Include benchmark executables
+  --target <name>      Run one executable name from the target manifest
+  --timeout <seconds>  Per-target timeout (default: ${TIMEOUT_SECONDS})
+  --help, -h           Show this help
 
-echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}  Cache Performance Analysis            ${NC}"
-echo -e "${BLUE}  (Detailed Cachegrind Analysis)        ${NC}"
-echo -e "${BLUE}========================================${NC}"
+By default this script uses bin/profile when it exists, otherwise bin/debug.
+Cachegrind is a performance profiling tool; it is not a memory-safety gate.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --debug)
+            BUILD_TYPE="debug"
+            shift
+            ;;
+        --profile)
+            BUILD_TYPE="profile"
+            shift
+            ;;
+        --benchmarks)
+            INCLUDE_BENCHMARKS=true
+            shift
+            ;;
+        --target)
+            if [[ $# -lt 2 ]]; then
+                echo -e "${RED}ERROR: --target requires an executable name${NC}" >&2
+                exit 2
+            fi
+            TARGETS+=("$2")
+            shift 2
+            ;;
+        --timeout)
+            if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ ]]; then
+                echo -e "${RED}ERROR: --timeout requires seconds${NC}" >&2
+                exit 2
+            fi
+            TIMEOUT_SECONDS="$2"
+            shift 2
+            ;;
+        --help|-h)
+            show_help
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}ERROR: Unknown option: $1${NC}" >&2
+            show_help
+            exit 2
+            ;;
+    esac
+done
+
+if [[ -z "${BUILD_TYPE}" ]]; then
+    if [[ -d "${PROJECT_ROOT}/bin/profile" ]]; then
+        BUILD_TYPE="profile"
+    else
+        BUILD_TYPE="debug"
+    fi
+fi
+
+if [[ ${#TARGETS[@]} -eq 0 ]]; then
+    TARGETS=("${VALGRIND_CACHE_TARGETS[@]}")
+    if [[ "${INCLUDE_BENCHMARKS}" == true ]]; then
+        TARGETS+=("${VALGRIND_CACHE_BENCHMARK_TARGETS[@]}")
+    fi
+fi
+
+BIN_DIR="${PROJECT_ROOT}/bin/${BUILD_TYPE}"
+RESULTS_DIR="${PROJECT_ROOT}/test_results/valgrind/cachegrind"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+REPORT_FILE="${RESULTS_DIR}/cachegrind_report_${BUILD_TYPE}_${TIMESTAMP}.md"
+mkdir -p "${RESULTS_DIR}/raw" "${RESULTS_DIR}/annotations"
+
+if ! command -v valgrind >/dev/null 2>&1; then
+    echo -e "${RED}ERROR: valgrind is not installed${NC}" >&2
+    exit 2
+fi
+
+if [[ ! -d "${BIN_DIR}" ]]; then
+    echo -e "${RED}ERROR: build output directory not found: ${BIN_DIR}${NC}" >&2
+    exit 2
+fi
+
+{
+    echo "# Cachegrind Performance Report"
+    echo ""
+    echo "- Generated: $(date)"
+    echo "- Build: ${BUILD_TYPE}"
+    echo "- Tool: $(valgrind --version 2>/dev/null || echo unknown)"
+    echo ""
+    echo "| Target | Status | I1 miss | D1 miss | LL miss | Branch miss | Assessment | Action | Output |"
+    echo "|---|---:|---:|---:|---:|---:|---|---|---|"
+} > "${REPORT_FILE}"
+
+echo -e "${BOLD}VoidLight Cachegrind analysis${NC}"
+echo -e "Build: ${CYAN}${BUILD_TYPE}${NC}"
+echo -e "Targets: ${CYAN}${#TARGETS[@]}${NC}"
+echo -e "Report: ${CYAN}${REPORT_FILE}${NC}"
 echo ""
 
-# Test executables for cache analysis
-declare -A CACHE_TESTS=(
-    ["buffer_utilization"]="buffer_utilization_tests"
-    ["buffer_reuse"]="buffer_reuse_tests"
-    ["ai_optimization"]="ai_optimization_tests"
-    ["ai_collision_integration"]="ai_collision_integration_tests"
-    ["ai_manager_edm_integration"]="ai_manager_edm_integration_tests"
-    ["event_manager"]="event_manager_tests"
-    ["event_manager_behavior"]="event_manager_behavior_tests"
-    ["event_types"]="event_types_tests"
-    ["event_coordination"]="event_coordination_integration_tests"
-    ["save_manager"]="save_manager_tests"
-    ["settings_manager"]="settings_manager_tests"
-    ["weather_events"]="weather_event_tests"
-    ["weather_controller"]="weather_controller_tests"
-    ["thread_safe_ai_mgr"]="thread_safe_ai_manager_tests"
-    ["thread_safe_ai_integ"]="thread_safe_ai_integration_tests"
-    ["particle_performance"]="particle_manager_performance_tests"
-    ["particle_core"]="particle_manager_core_tests"
-    ["particle_threading"]="particle_manager_threading_tests"
-    ["particle_weather"]="particle_manager_weather_tests"
-    ["behavior_functionality"]="behavior_functionality_tests"
-    ["entity_data_manager"]="entity_data_manager_tests"
-    ["entity_state_manager"]="entity_state_manager_tests"
-    ["resource_architecture"]="resource_architecture_tests"
-    ["world_resource_manager"]="world_resource_manager_tests"
-    ["resource_template_manager"]="resource_template_manager_tests"
-    ["resource_integration"]="resource_integration_tests"
-    ["resource_change_event"]="resource_change_event_tests"
-    ["inventory_component"]="inventory_component_tests"
-    ["json_reader"]="json_reader_tests"
-    ["resource_factory"]="resource_factory_tests"
-    ["resource_template_json"]="resource_template_manager_json_tests"
-    ["resource_edge_case"]="resource_edge_case_tests"
-    ["game_state_manager"]="game_state_manager_tests"
-    ["loading_state"]="loading_state_tests"
-    ["world_generator"]="world_generator_tests"
-    ["world_manager"]="world_manager_tests"
-    ["world_manager_events"]="world_manager_event_integration_tests"
-    ["collision_system"]="collision_system_tests"
-    ["collision_manager_edm"]="collision_manager_edm_integration_tests"
-    ["pathfinding_system"]="pathfinding_system_tests"
-    ["pathfinder_manager"]="pathfinder_manager_tests"
-    ["pathfinder_edm"]="pathfinder_manager_edm_integration_tests"
-    ["pathfinder_contention"]="pathfinder_ai_contention_tests"
-    ["collision_pathfinding_integration"]="collision_pathfinding_integration_tests"
-    ["camera"]="camera_tests"
-    ["rendering_pipeline"]="rendering_pipeline_tests"
-    ["input_manager"]="input_manager_tests"
-    ["ui_manager_functional"]="ui_manager_functional_tests"
-    ["controller_registry"]="controller_registry_tests"
-    ["day_night_controller"]="day_night_controller_tests"
-    ["game_time_manager"]="game_time_manager_tests"
-    ["game_time_calendar"]="game_time_manager_calendar_tests"
-    ["game_time_season"]="game_time_manager_season_tests"
-    ["simd_correctness"]="simd_correctness_tests"
-    ["background_simulation"]="background_simulation_manager_tests"
-)
+passed=0
+failed=0
+missing=0
+timed_out=0
+review=0
 
-# Industry benchmark thresholds (percentage miss rates)
-# Sources:
-#   - Intel VTune documentation (memory access analysis)
-#   - SPEC CPU2017 characterization study (NIH PMC6675054)
-#   - Modern processor latency: L1 ~3-4 cycles, L2 ~10-20 cycles,
-#     LLC ~40-70 cycles, RAM ~150-300 cycles
-declare -A INDUSTRY_BENCHMARKS=(
-    ["l1i_good"]="1.0"
-    ["l1i_average"]="2.0"
-    ["l1i_poor"]="5.0"
-    ["l1d_good"]="3.0"
-    ["l1d_average"]="5.0"
-    ["l1d_poor"]="10.0"
-    ["ll_good"]="0.5"
-    ["ll_average"]="1.0"
-    ["ll_poor"]="3.0"
-)
+extract_metric() {
+    local pattern="$1"
+    local log_file="$2"
+    local value
+    value=$(grep "${pattern}" "${log_file}" 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/%//' || true)
+    [[ -n "${value}" ]] && echo "${value}" || echo "N/A"
+}
 
-run_cachegrind_analysis() {
-    local test_name="$1"
-    local executable="$2"
+rate_gt() {
+    local value="$1"
+    local threshold="$2"
+    [[ "${value}" == "N/A" ]] && return 1
+    awk -v value="${value}" -v threshold="${threshold}" 'BEGIN { exit !(value > threshold) }'
+}
+
+cache_assessment() {
+    local d1="$1"
+    local ll="$2"
+    local branch="$3"
+
+    if rate_gt "${ll}" "3.0"; then
+        echo "review|review_ll_cache_misses"
+    elif rate_gt "${d1}" "10.0"; then
+        echo "review|review_data_layout_or_iteration_order"
+    elif rate_gt "${branch}" "10.0"; then
+        echo "review|review_branching_in_hot_path"
+    else
+        echo "ok|none"
+    fi
+}
+
+run_target() {
+    local executable="$1"
     local exe_path="${BIN_DIR}/${executable}"
-    local output_file="${RESULTS_DIR}/${test_name}_cachegrind.out"
-    local log_file="${RESULTS_DIR}/${test_name}_cachegrind.log"
-    local annotated_file="${RESULTS_DIR}/${test_name}_annotated.txt"
+    local out_file="${RESULTS_DIR}/raw/${executable}.cachegrind.out"
+    local log_file="${RESULTS_DIR}/raw/${executable}.cachegrind.log"
+    local annotation_file="${RESULTS_DIR}/annotations/${executable}.cachegrind.txt"
 
-    echo -e "${CYAN}Analyzing cache performance: ${test_name}...${NC}"
-
-    if [[ ! -f "${exe_path}" ]]; then
-        echo -e "${RED}ERROR: ${exe_path} not found!${NC}"
-        return 1
+    if [[ ! -x "${exe_path}" ]]; then
+        echo -e "${YELLOW}MISSING${NC} cachegrind ${executable} path=${exe_path}"
+        echo "| ${executable} | missing | N/A | N/A | N/A | N/A | fail | build_target | |" >> "${REPORT_FILE}"
+        ((missing++))
+        return
     fi
 
-    # Run cachegrind with detailed options
-    timeout 300s valgrind \
+    timeout "${TIMEOUT_SECONDS}s" valgrind \
         --tool=cachegrind \
         --cache-sim=yes \
         --branch-sim=yes \
-        --cachegrind-out-file="${output_file}" \
-        --log-file="${log_file}" \
-        --verbose \
-        "${exe_path}" >/dev/null 2>&1 || {
-        local exit_code=$?
-        if [[ $exit_code -eq 124 ]]; then
-            echo -e "${YELLOW}  WARNING: ${test_name} timed out after 5 minutes${NC}"
-        elif [[ $exit_code -ne 0 ]]; then
-            echo -e "${YELLOW}  NOTE: ${test_name} exited with code ${exit_code}${NC}"
-        fi
-    }
+        "--cachegrind-out-file=${out_file}" \
+        "--log-file=${log_file}" \
+        "${exe_path}" >/dev/null 2>&1
+    local status=$?
 
-    # Generate annotated output if cachegrind completed successfully
-    if [[ -f "${output_file}" ]]; then
-        cg_annotate "${output_file}" > "${annotated_file}" 2>/dev/null || true
-        echo -e "${GREEN}  ✓ Cache analysis complete for ${test_name}${NC}"
+    if [[ ${status} -eq 124 ]]; then
+        echo -e "${YELLOW}TIMEOUT${NC} cachegrind ${executable} after=${TIMEOUT_SECONDS}s log=${log_file}"
+        echo "| ${executable} | timeout | N/A | N/A | N/A | N/A | fail | rerun_target_with_higher_timeout | ${log_file} |" >> "${REPORT_FILE}"
+        ((timed_out++))
+        return
+    fi
+
+    if [[ ! -s "${out_file}" || ! -s "${log_file}" ]]; then
+        echo -e "${RED}FAIL${NC} cachegrind ${executable} reason=no_output log=${log_file}"
+        echo "| ${executable} | failed | N/A | N/A | N/A | N/A | fail | inspect_cachegrind_log | ${log_file} |" >> "${REPORT_FILE}"
+        ((failed++))
+        return
+    fi
+
+    if command -v cg_annotate >/dev/null 2>&1; then
+        cg_annotate "${out_file}" > "${annotation_file}" 2>/dev/null || true
+    fi
+
+    local i1 d1 ll branch
+    i1=$(extract_metric "I1  miss rate:" "${log_file}")
+    d1=$(extract_metric "D1  miss rate:" "${log_file}")
+    ll=$(extract_metric "LL miss rate:" "${log_file}")
+    branch=$(grep "Mispred rate:" "${log_file}" 2>/dev/null | tail -1 | awk '{print $3}' | sed 's/%//' || true)
+    [[ -n "${branch}" ]] || branch="N/A"
+
+    local assessment action
+    IFS='|' read -r assessment action <<< "$(cache_assessment "${d1}" "${ll}" "${branch}")"
+    if [[ "${assessment}" == "review" ]]; then
+        echo -e "${YELLOW}REVIEW${NC} cachegrind ${executable} I1=${i1}% D1=${d1}% LL=${ll}% branch=${branch}% action=${action} raw=${out_file}"
+        ((review++))
     else
-        echo -e "${YELLOW}  ⚠ Cache analysis incomplete for ${test_name}${NC}"
+        echo -e "${GREEN}PASS${NC} cachegrind ${executable} I1=${i1}% D1=${d1}% LL=${ll}% branch=${branch}% action=${action} raw=${out_file}"
     fi
+    echo "| ${executable} | complete | ${i1}% | ${d1}% | ${ll}% | ${branch}% | ${assessment} | ${action} | ${out_file} |" >> "${REPORT_FILE}"
+    ((passed++))
 }
 
-# Function to extract cache statistics
-extract_cache_stats() {
-    local log_file="$1"
-
-    if [[ ! -f "${log_file}" ]]; then
-        echo "N/A N/A N/A N/A N/A N/A"
-        return
-    fi
-
-    local l1i_miss=$(grep "I1  miss rate:" "${log_file}" | awk '{print $5}' | sed 's/%//' 2>/dev/null || echo "N/A")
-    local l1d_miss=$(grep "D1  miss rate:" "${log_file}" | awk '{print $5}' | sed 's/%//' 2>/dev/null || echo "N/A")
-    local ll_miss=$(grep "LL miss rate:" "${log_file}" | awk '{print $5}' | sed 's/%//' 2>/dev/null || echo "N/A")
-    local total_instructions=$(grep "I refs:" "${log_file}" | awk '{print $4}' | sed 's/,//g' 2>/dev/null || echo "N/A")
-    local total_data_refs=$(grep "D refs:" "${log_file}" | awk '{print $4}' | sed 's/,//g' 2>/dev/null || echo "N/A")
-    local branch_mispredicts=$(grep "Mispred rate:" "${log_file}" | awk '{print $4}' | sed 's/%//' 2>/dev/null || echo "N/A")
-
-    echo "${l1i_miss} ${l1d_miss} ${ll_miss} ${total_instructions} ${total_data_refs} ${branch_mispredicts}"
-}
-
-# Function to assess performance level
-assess_performance() {
-    local miss_rate="$1"
-    local cache_type="$2"
-
-    if [[ "${miss_rate}" == "N/A" ]]; then
-        echo "UNKNOWN"
-        return
-    fi
-
-    case "${cache_type}" in
-        "l1i")
-            if (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[l1i_good]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "EXCEPTIONAL"
-            elif (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[l1i_average]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "GOOD"
-            elif (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[l1i_poor]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "AVERAGE"
-            else
-                echo "POOR"
-            fi
-            ;;
-        "l1d")
-            if (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[l1d_good]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "EXCEPTIONAL"
-            elif (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[l1d_average]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "GOOD"
-            elif (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[l1d_poor]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "AVERAGE"
-            else
-                echo "POOR"
-            fi
-            ;;
-        "ll")
-            if (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[ll_good]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "EXCEPTIONAL"
-            elif (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[ll_average]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "GOOD"
-            elif (( $(echo "${miss_rate} < ${INDUSTRY_BENCHMARKS[ll_poor]}" | bc -l 2>/dev/null || echo 0) )); then
-                echo "AVERAGE"
-            else
-                echo "POOR"
-            fi
-            ;;
-    esac
-}
-
-# Function to get performance color
-get_performance_color() {
-    local assessment="$1"
-
-    case "${assessment}" in
-        "EXCEPTIONAL") echo "${GREEN}" ;;
-        "GOOD") echo "${CYAN}" ;;
-        "AVERAGE") echo "${YELLOW}" ;;
-        "POOR") echo "${RED}" ;;
-        *) echo "${NC}" ;;
-    esac
-}
-
-# Run cache analysis on all tests
-echo -e "${BLUE}Running comprehensive cache analysis...${NC}"
-echo ""
-
-for test_name in "${!CACHE_TESTS[@]}"; do
-    run_cachegrind_analysis "${test_name}" "${CACHE_TESTS[$test_name]}"
+for target in "${TARGETS[@]}"; do
+    run_target "${target}"
 done
 
 echo ""
-echo -e "${PURPLE}=== Cache Performance Summary ===${NC}"
-echo ""
+echo -e "${BOLD}Cachegrind summary${NC}"
+echo "  complete: ${passed}"
+echo "  review: ${review}"
+echo "  failed: ${failed}"
+echo "  timeout: ${timed_out}"
+echo "  missing: ${missing}"
+echo "  report: ${REPORT_FILE}"
 
-# Display results table
-printf "%-20s %-12s %-12s %-12s %-15s %-15s %-12s\n" \
-    "Test" "L1I Miss%" "L1D Miss%" "LL Miss%" "Instructions" "Data Refs" "Branch Miss%"
-echo "────────────────────────────────────────────────────────────────────────────────────────────────────────"
+{
+    echo ""
+    echo "## Summary"
+    echo ""
+    echo "- Complete: ${passed}"
+    echo "- Review: ${review}"
+    echo "- Failed: ${failed}"
+    echo "- Timeout: ${timed_out}"
+    echo "- Missing: ${missing}"
+    echo ""
+    if [[ ${failed} -gt 0 || ${timed_out} -gt 0 || ${missing} -gt 0 ]]; then
+        echo "Result: **fail**"
+    elif [[ ${review} -gt 0 ]]; then
+        echo "Result: **review**"
+    else
+        echo "Result: **pass**"
+    fi
+} >> "${REPORT_FILE}"
 
-for test_name in "${!CACHE_TESTS[@]}"; do
-    log_file="${RESULTS_DIR}/${test_name}_cachegrind.log"
-    stats=($(extract_cache_stats "${log_file}"))
+if [[ ${failed} -gt 0 || ${timed_out} -gt 0 || ${missing} -gt 0 ]]; then
+    echo -e "  result: ${RED}FAIL${NC}"
+    exit 1
+fi
 
-    l1i_miss="${stats[0]}"
-    l1d_miss="${stats[1]}"
-    ll_miss="${stats[2]}"
-    instructions="${stats[3]}"
-    data_refs="${stats[4]}"
-    branch_miss="${stats[5]}"
+if [[ ${review} -gt 0 ]]; then
+    echo -e "  result: ${YELLOW}REVIEW${NC}"
+    exit 0
+fi
 
-    # Assess performance levels
-    l1i_assessment=$(assess_performance "${l1i_miss}" "l1i")
-    l1d_assessment=$(assess_performance "${l1d_miss}" "l1d")
-    ll_assessment=$(assess_performance "${ll_miss}" "ll")
-
-    # Get colors for each metric
-    l1i_color=$(get_performance_color "${l1i_assessment}")
-    l1d_color=$(get_performance_color "${l1d_assessment}")
-    ll_color=$(get_performance_color "${ll_assessment}")
-
-    printf "%-20s ${l1i_color}%-12s${NC} ${l1d_color}%-12s${NC} ${ll_color}%-12s${NC} %-15s %-15s %-12s\n" \
-        "${test_name}" "${l1i_miss}%" "${l1d_miss}%" "${ll_miss}%" "${instructions}" "${data_refs}" "${branch_miss}%"
-done
-
-echo ""
-echo -e "${PURPLE}=== Performance Assessment Legend ===${NC}"
-echo -e "${GREEN}EXCEPTIONAL${NC} - Top 1% performance (World-class optimization)"
-echo -e "${CYAN}GOOD${NC}        - Top 10% performance (Excellent optimization)"
-echo -e "${YELLOW}AVERAGE${NC}     - Industry standard performance"
-echo -e "${RED}POOR${NC}        - Below industry standards"
-
-# Generate comprehensive report
-generate_cache_report() {
-    local report_file="${RESULTS_DIR}/cache_performance_report.md"
-
-    cat > "${report_file}" << EOF
-# Cache Performance Analysis Report
-
-Generated on: $(date)
-Analysis Tool: Valgrind Cachegrind
-System: $(uname -a)
-
-## Executive Summary
-
-This report provides detailed cache performance analysis of the SDL3 VoidLight-Framework components using Valgrind's Cachegrind tool.
-
-## System Configuration
-
-- **CPU**: $(grep "model name" /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)
-- **CPU Cores**: $(nproc)
-- **Memory**: $(free -h | grep "Mem:" | awk '{print $2}')
-- **Cache Simulation**: L1I/L1D (32KB), LL (Last Level Cache)
-
-## Industry Benchmark Comparison
-
-### Performance Categories
-- **EXCEPTIONAL**: Better than 99% of applications (World-class)
-- **GOOD**: Better than 90% of applications
-- **AVERAGE**: Industry standard performance
-- **POOR**: Below industry standards
-
-### Benchmark Thresholds
-| Cache Level | Exceptional | Good | Average | Poor |
-|-------------|-------------|------|---------|------|
-| L1 Instruction | < 1.0% | < 3.0% | < 5.0% | > 5.0% |
-| L1 Data | < 5.0% | < 10.0% | < 15.0% | > 15.0% |
-| Last Level | < 1.0% | < 5.0% | < 10.0% | > 10.0% |
-
-## Test Results
-
-EOF
-
-    # Add detailed results for each test
-    for test_name in "${!CACHE_TESTS[@]}"; do
-        log_file="${RESULTS_DIR}/${test_name}_cachegrind.log"
-        stats=($(extract_cache_stats "${log_file}"))
-
-        l1i_miss="${stats[0]}"
-        l1d_miss="${stats[1]}"
-        ll_miss="${stats[2]}"
-        instructions="${stats[3]}"
-        data_refs="${stats[4]}"
-        branch_miss="${stats[5]}"
-
-        # Assess performance levels
-        l1i_assessment=$(assess_performance "${l1i_miss}" "l1i")
-        l1d_assessment=$(assess_performance "${l1d_miss}" "l1d")
-        ll_assessment=$(assess_performance "${ll_miss}" "ll")
-
-        cat >> "${report_file}" << EOF
-### ${test_name}
-
-| Metric | Value | Assessment |
-|--------|-------|------------|
-| **L1 Instruction Miss Rate** | ${l1i_miss}% | **${l1i_assessment}** |
-| **L1 Data Miss Rate** | ${l1d_miss}% | **${l1d_assessment}** |
-| **Last Level Miss Rate** | ${ll_miss}% | **${ll_assessment}** |
-| **Total Instructions** | ${instructions} | - |
-| **Total Data References** | ${data_refs} | - |
-| **Branch Misprediction Rate** | ${branch_miss}% | - |
-
-EOF
-    done
-
-    cat >> "${report_file}" << EOF
-
-## Overall Assessment
-
-Based on the comprehensive cache analysis:
-
-1. **Performance Level**: Most components show EXCEPTIONAL to GOOD cache performance
-2. **Industry Comparison**: Performance significantly exceeds industry averages
-3. **Optimization Quality**: World-class memory hierarchy utilization
-4. **Scalability**: Maintains excellent performance across different workload sizes
-
-## Key Insights
-
-### Strengths
-- Outstanding L1 instruction cache efficiency
-- Excellent data locality patterns
-- Superior last level cache utilization
-- Consistent performance across components
-
-### Recommendations
-1. **Maintain Current Architecture**: The current data structure design is exceptional
-2. **Continue Cache-Aware Programming**: Current patterns are optimal
-3. **Regular Monitoring**: Include cache analysis in performance regression testing
-4. **Documentation**: Document cache optimization techniques for team knowledge
-
-## Detailed Analysis Files
-
-All detailed cachegrind outputs and annotations are available in:
-- \`${RESULTS_DIR}/*_cachegrind.out\` - Raw cachegrind data
-- \`${RESULTS_DIR}/*_cachegrind.log\` - Human-readable summaries
-- \`${RESULTS_DIR}/*_annotated.txt\` - Function-level analysis
-
-## Commands Used
-
-\`\`\`bash
-# Cache analysis
-valgrind --tool=cachegrind --cache-sim=yes --branch-sim=yes [executable]
-
-# Detailed annotation
-cg_annotate cachegrind.out.[pid]
-\`\`\`
-
----
-
-This analysis confirms the SDL3 VoidLight-Framework's exceptional cache efficiency, placing it in the top tier of optimized applications worldwide.
-
-EOF
-
-    echo -e "${GREEN}✓ Comprehensive cache report generated: ${report_file}${NC}"
-}
-
-# Generate hotspot analysis for top performing tests
-generate_hotspot_analysis() {
-    echo -e "${BLUE}Generating hotspot analysis for key components...${NC}"
-
-    local hotspot_file="${RESULTS_DIR}/cache_hotspots.md"
-
-    cat > "${hotspot_file}" << EOF
-# Cache Hotspot Analysis
-
-This document provides detailed function-level cache analysis for key components.
-
-EOF
-
-    # Analyze top 3 performing tests for hotspots
-    key_tests=("event_manager" "buffer_utilization" "ai_optimization")
-
-    for test_name in "${key_tests[@]}"; do
-        annotated_file="${RESULTS_DIR}/${test_name}_annotated.txt"
-
-        if [[ -f "${annotated_file}" ]]; then
-            cat >> "${hotspot_file}" << EOF
-
-## ${test_name} Hotspot Analysis
-
-### Top Cache-Intensive Functions
-
-\`\`\`
-$(head -50 "${annotated_file}" | tail -30)
-\`\`\`
-
-EOF
-        fi
-    done
-
-    echo -e "${GREEN}✓ Hotspot analysis generated: ${hotspot_file}${NC}"
-}
-
-# Generate reports
-echo ""
-echo -e "${BLUE}Generating comprehensive reports...${NC}"
-generate_cache_report
-generate_hotspot_analysis
-
-# Copy key results to main results directory for easy access
-cp "${RESULTS_DIR}/cache_performance_report.md" "${MAIN_RESULTS_DIR}/"
-
-echo ""
-echo -e "${GREEN}========================================${NC}"
-echo -e "${GREEN}  Cache Performance Analysis Complete   ${NC}"
-echo -e "${GREEN}========================================${NC}"
-echo ""
-echo -e "📊 Main Report: ${CYAN}${RESULTS_DIR}/cache_performance_report.md${NC}"
-echo -e "🔥 Hotspot Analysis: ${CYAN}${RESULTS_DIR}/cache_hotspots.md${NC}"
-echo -e "📁 Detailed Files: ${CYAN}${RESULTS_DIR}/${NC}"
-echo ""
-echo -e "${PURPLE}Performance Summary:${NC}"
-echo -e "Your engine demonstrates ${GREEN}EXCEPTIONAL${NC} cache efficiency,"
-echo -e "placing it in the ${GREEN}TOP 1%${NC} of optimized applications worldwide."
-echo ""
-echo -e "${CYAN}Expected Behaviors:${NC}"
-echo -e "  • Exit code 201: Normal Cachegrind behavior for some tests"
-echo -e "  • All miss rates < 1%: Indicates world-class optimization"
-echo -e "  • Branch prediction 1-6%: Excellent for complex game logic"
+echo -e "  result: ${GREEN}PASS${NC}"
+exit 0

@@ -159,20 +159,19 @@ export TSAN_OPTIONS="suppressions=$(pwd)/tests/tsan_suppressions.txt"
 - Memory & thread safety validation: AddressSanitizer (ASAN) and ThreadSanitizer (TSAN) support
   See [docs/core/ThreadSystem.md#threadsanitizer-tsan-support](docs/core/ThreadSystem.md#threadsanitizer-tsan-support) for details
 
-### Valgrind Analysis Suite
-- Comprehensive memory, cache, and thread analysis with Valgrind
-- Quick memory check: `./tests/valgrind/quick_memory_check.sh`
-- Cache performance: `./tests/valgrind/cache_performance_analysis.sh`
-- Function profiling: `./tests/valgrind/callgrind_profiling_analysis.sh`
-- Thread analysis: `./tests/valgrind/thread_safety_check.sh`
-- Full suite: `./tests/valgrind/run_complete_valgrind_suite.sh`
-- **Runtime analysis with Profile build** (Valgrind-compatible optimized):
+### Valgrind Diagnostics
+- Targeted Valgrind diagnostics for deeper heap/lifetime checks and performance profiling
+- Memcheck over high-risk ownership/lifecycle tests: `./tests/valgrind/quick_memory_check.sh`
+- Cachegrind test profiling: `./tests/valgrind/cache_performance_analysis.sh`
+- Callgrind function profiling: `./tests/valgrind/callgrind_profiling_analysis.sh ai`
+- **Runtime diagnostics with Profile build** (Valgrind-compatible optimized):
   ```bash
   cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Profile && ninja -C build
   ./tests/valgrind/runtime_cache_analysis.sh --profile 300   # MPKI analysis
   ./tests/valgrind/runtime_memory_analysis.sh --profile 300  # Memory analysis
   ```
-- See [tests/valgrind/README.md](tests/valgrind/README.md) for details, usage, and performance metrics
+- ASAN/TSAN remain the primary fast memory and race gates; Valgrind is for targeted deeper diagnostics
+- See [tests/valgrind/README.md](tests/valgrind/README.md) for target policy and usage
 
 ---
 

@@ -367,11 +367,30 @@ echo -e "  Suppressed:        ${SUPPRESSED_ERRORS}"
 echo -e "  App Code Errors:   ${APP_ERRORS}"
 echo ""
 
+RESULT_STATUS="REVIEW"
+RESULT_ACTION="inspect_runtime_memory_report"
+if [[ "${ASSESSMENT}" == "EXCELLENT" || "${ASSESSMENT}" == "GOOD" ]]; then
+    RESULT_STATUS="PASS"
+    RESULT_ACTION="none"
+elif [[ "${DEFINITELY_LOST}" -gt 0 || "${INDIRECTLY_LOST}" -gt 0 ]]; then
+    RESULT_ACTION="fix_runtime_leak"
+elif [[ "${APP_ERRORS}" -gt 0 || "${INVALID_READ}" -gt 0 || "${INVALID_WRITE}" -gt 0 || "${INVALID_FREE}" -gt 0 ]]; then
+    RESULT_ACTION="fix_runtime_memory_error"
+fi
+
+{
+    echo ""
+    echo "## Automated Result"
+    echo ""
+    echo "Result: **${RESULT_STATUS,,}**"
+    echo "Action: **${RESULT_ACTION}**"
+} >> "${REPORT_FILE}"
+
 # Color-coded assessment
 case "${ASSESSMENT}" in
     "EXCELLENT")
         echo -e "${BOLD}${GREEN}🎯 ASSESSMENT: EXCELLENT${NC}"
-        echo -e "${GREEN}Zero memory issues from application code. Production ready!${NC}"
+        echo -e "${GREEN}Zero memory issues from application code in this run.${NC}"
         ;;
     "GOOD")
         echo -e "${BOLD}${GREEN}✅ ASSESSMENT: GOOD${NC}"
@@ -386,6 +405,14 @@ case "${ASSESSMENT}" in
         echo -e "${RED}Please review the detailed log for potential issues.${NC}"
         ;;
 esac
+
+if [[ "${RESULT_STATUS}" == "PASS" ]]; then
+    echo -e "Result: ${GREEN}PASS${NC}"
+else
+    echo -e "Result: ${YELLOW}REVIEW${NC}"
+fi
+echo "Action: ${RESULT_ACTION}"
+echo ""
 
 echo ""
 echo -e "${BOLD}Output Files:${NC}"
