@@ -4,20 +4,17 @@
 # Keep these names aligned with `ctest --test-dir build -N`.
 
 VALGRIND_MEMCHECK_EDM_LIFECYCLE_TARGET_SPECS=(
-    "edm_lifecycle_init|entity_data_manager_tests|LifecycleTests/TestInitialization"
-    "edm_lifecycle_double_init|entity_data_manager_tests|LifecycleTests/TestDoubleInitialization"
-    "edm_lifecycle_clean_reinit|entity_data_manager_tests|LifecycleTests/TestCleanAndReinit"
-    "edm_lifecycle_prepare_transition|entity_data_manager_tests|LifecycleTests/TestPrepareForStateTransition"
-    "edm_lifecycle_behavior_config_reuse|entity_data_manager_tests|LifecycleTests/TestDirectDestroyClearsBehaviorConfigForSlotReuse"
-    "edm_lifecycle_behavior_pools|entity_data_manager_tests|LifecycleTests/TestStateTransitionClearsBehaviorStatePools"
+    'edm_lifecycle_clean_reinit|entity_data_manager_tests|LifecycleTests/TestCleanAndReinit'
+    'edm_lifecycle_behavior_config_reuse|entity_data_manager_tests|LifecycleTests/TestDirectDestroyClearsBehaviorConfigForSlotReuse'
+    'edm_lifecycle_behavior_pools|entity_data_manager_tests|LifecycleTests/TestStateTransitionClearsBehaviorStatePools'
 )
 
 VALGRIND_MEMCHECK_EDM_TARGET_SPECS=(
     "${VALGRIND_MEMCHECK_EDM_LIFECYCLE_TARGET_SPECS[@]}"
-    "edm_destruction_queue|entity_data_manager_tests|DestructionQueueTests/*"
-    "edm_slot_reuse|entity_data_manager_tests|SlotReuseTests/TestSlotReuseAfterDestruction"
-    "edm_transition_cache_clear|entity_data_manager_tests|StateTransitionCachedIndicesTests/TestPrepareForStateTransitionClearsKindIndices"
-    "edm_inventory_transfer|entity_data_manager_tests|NPCRenderDataTests/TestInventoryTransferMovesFullQuantityAtomically"
+    'edm_destruction_queue|entity_data_manager_tests|DestructionQueueTests/*'
+    'edm_slot_reuse|entity_data_manager_tests|SlotReuseTests/TestSlotReuseAfterDestruction'
+    'edm_transition_cache_clear|entity_data_manager_tests|StateTransitionCachedIndicesTests/TestPrepareForStateTransitionClearsKindIndices'
+    'edm_inventory_transfer|entity_data_manager_tests|NPCRenderDataTests/TestInventoryTransferMovesFullQuantityAtomically'
 )
 
 VALGRIND_MEMCHECK_TARGETS=(

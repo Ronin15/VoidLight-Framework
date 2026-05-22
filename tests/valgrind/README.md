@@ -166,7 +166,9 @@ need one EDM memory path.
 
 The EDM slices currently exercise:
 
-- `edm_lifecycle`, an alias for the individual `LifecycleTests` cases.
+- `edm_lifecycle`, an alias for memory-relevant lifecycle cleanup cases:
+  `TestCleanAndReinit`, `TestDirectDestroyClearsBehaviorConfigForSlotReuse`,
+  and `TestStateTransitionClearsBehaviorStatePools`.
 - `DestructionQueueTests/*`
 - `SlotReuseTests/TestSlotReuseAfterDestruction`
 - `StateTransitionCachedIndicesTests/TestPrepareForStateTransitionClearsKindIndices`

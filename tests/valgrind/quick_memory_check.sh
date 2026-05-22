@@ -147,7 +147,7 @@ fi
 BIN_DIR="${PROJECT_ROOT}/bin/${BUILD_TYPE}"
 RESULTS_DIR="${PROJECT_ROOT}/test_results/valgrind/memcheck"
 SUPPRESSIONS_FILE="${PROJECT_ROOT}/tests/valgrind/valgrind_suppressions.supp"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S_%N")
 REPORT_FILE="${RESULTS_DIR}/memcheck_report_${BUILD_TYPE}_${TIMESTAMP}.md"
 mkdir -p "${RESULTS_DIR}"
 
