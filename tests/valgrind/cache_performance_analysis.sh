@@ -137,21 +137,39 @@ extract_metric() {
     local pattern="$1"
     local log_file="$2"
     local value
-    value=$(grep "${pattern}" "${log_file}" 2>/dev/null | tail -1 | awk '{print $4}' | sed 's/%//' || true)
+    value=$(awk -v pattern="${pattern}" '
+        index($0, pattern) {
+            line = substr($0, index($0, pattern) + length(pattern))
+            if (match(line, /[0-9]+([.][0-9]+)?%/)) {
+                value = substr(line, RSTART, RLENGTH - 1)
+            }
+        }
+        END {
+            if (value != "") {
+                print value
+            }
+        }
+    ' "${log_file}" 2>/dev/null || true)
     [[ -n "${value}" ]] && echo "${value}" || echo "N/A"
 }
 
 rate_gt() {
     local value="$1"
     local threshold="$2"
-    [[ "${value}" == "N/A" ]] && return 1
-    awk -v value="${value}" -v threshold="${threshold}" 'BEGIN { exit !(value > threshold) }'
+    [[ "${value}" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
+    awk -v value="${value}" -v threshold="${threshold}" 'BEGIN { exit !((value + 0) > (threshold + 0)) }'
 }
 
 cache_assessment() {
-    local d1="$1"
-    local ll="$2"
-    local branch="$3"
+    local i1="$1"
+    local d1="$2"
+    local ll="$3"
+    local branch="$4"
+
+    if [[ "${i1}" == "N/A" || "${d1}" == "N/A" || "${ll}" == "N/A" || "${branch}" == "N/A" ]]; then
+        echo "review|inspect_cachegrind_metric_parse"
+        return
+    fi
 
     if rate_gt "${ll}" "3.0"; then
         echo "review|review_ll_cache_misses"
@@ -209,11 +227,10 @@ run_target() {
     i1=$(extract_metric "I1  miss rate:" "${log_file}")
     d1=$(extract_metric "D1  miss rate:" "${log_file}")
     ll=$(extract_metric "LL miss rate:" "${log_file}")
-    branch=$(grep "Mispred rate:" "${log_file}" 2>/dev/null | tail -1 | awk '{print $3}' | sed 's/%//' || true)
-    [[ -n "${branch}" ]] || branch="N/A"
+    branch=$(extract_metric "Mispred rate:" "${log_file}")
 
     local assessment action
-    IFS='|' read -r assessment action <<< "$(cache_assessment "${d1}" "${ll}" "${branch}")"
+    IFS='|' read -r assessment action <<< "$(cache_assessment "${i1}" "${d1}" "${ll}" "${branch}")"
     if [[ "${assessment}" == "review" ]]; then
         echo -e "${YELLOW}REVIEW${NC} cachegrind ${executable} I1=${i1}% D1=${d1}% LL=${ll}% branch=${branch}% action=${action} raw=${out_file}"
         ((review++))
