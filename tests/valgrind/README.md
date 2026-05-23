@@ -219,7 +219,7 @@ values and a next action. Examples:
 ```text
 PASS memcheck entity_state_manager_tests errors=0 definite=0B indirect=0B possible=0B action=none
 REVIEW cachegrind pathfinder_manager_tests I1=0.12% D1=12.40% LL=0.04% branch=1.50% action=review_data_layout_or_iteration_order
-PASS callgrind ai_optimization_tests instructions=123456789 top="8.2% AIManager::update..." action=review_top_hotspot
+PASS callgrind ai_optimization_tests instructions=123456789 top="517,392,310 (88.49%) src/managers/EntityDataManager.cpp:EntityDataManager::init()" action=review_top_hotspot
 ```
 
 The final summary ends in `Result: PASS`, `Result: REVIEW`, or `Result: FAIL`.
@@ -271,7 +271,9 @@ Callgrind results:
 - The terminal summary shows the generated Markdown report path.
 - Each target line shows whether raw and summary output were produced,
   instruction totals when `callgrind_annotate` is available, the top parsed
-  hotspot, and an action.
+  project hotspot, and an action. Startup frames, Boost harness frames,
+  standard library frames, and Callgrind synthetic frames such as
+  `???:(below main)` are filtered out of the terminal hotspot.
 - The final `Result` is `PASS` when every selected target produced Callgrind
   output and `FAIL` when any target is missing, timed out, or failed.
 - Raw call graph data is written under `test_results/valgrind/callgrind/raw/`.

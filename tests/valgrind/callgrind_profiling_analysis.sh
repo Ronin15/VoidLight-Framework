@@ -188,12 +188,73 @@ benchmark_args_for() {
 
 top_hotspot() {
     local summary_file="$1"
-    grep -E "^[[:space:]]*[0-9]" "${summary_file}" 2>/dev/null \
-        | grep -v -E "PROGRAM TOTALS|ld-linux|libc\.so|libstdc\+\+|BOOST_|boost::unit_test|test_main" \
-        | head -1 \
-        | sed 's/^[[:space:]]*//' \
-        | sed 's/|/ /g' \
-        || true
+    awk -v project_root="${PROJECT_ROOT}" '
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
+
+        function is_profile_line(line) {
+            return line ~ /^[[:space:]]*[0-9][0-9,]*[[:space:]]+\([[:space:]]*[0-9.]+%\)/
+        }
+
+        function is_noise_frame(line) {
+            return line ~ /PROGRAM TOTALS/ ||
+                   line ~ /\?\?\?:/ ||
+                   line ~ /\(below main\)/ ||
+                   line ~ /ld-linux/ ||
+                   line ~ /libc\.so/ ||
+                   line ~ /libstdc\+\+/ ||
+                   line ~ /\/usr\/src\/debug\/glibc/ ||
+                   line ~ /\/usr\/src\/debug\/boost/ ||
+                   line ~ /\/usr\/include\/boost/ ||
+                   line ~ /\/usr\/include\/c\+\+/ ||
+                   line ~ /BOOST_/ ||
+                   line ~ /boost::unit_test/ ||
+                   line ~ /test_main/ ||
+                   line ~ /:main[[:space:]]+\[/
+        }
+
+        function is_project_source(line) {
+            return index(line, project_root "/src/") ||
+                   index(line, project_root "/include/") ||
+                   line ~ /(^|[[:space:]])src\// ||
+                   line ~ /(^|[[:space:]])include\//
+        }
+
+        function is_project_test(line) {
+            return index(line, project_root "/tests/") ||
+                   line ~ /(^|[[:space:]])tests\//
+        }
+
+        is_profile_line($0) {
+            line = trim($0)
+            gsub(/\|/, " ", line)
+
+            if (is_noise_frame(line)) {
+                next
+            }
+
+            if (project_source == "" && is_project_source(line)) {
+                project_source = line
+            } else if (project_test == "" && is_project_test(line)) {
+                project_test = line
+            } else if (fallback == "") {
+                fallback = line
+            }
+        }
+
+        END {
+            if (project_source != "") {
+                print project_source
+            } else if (project_test != "") {
+                print project_test
+            } else if (fallback != "") {
+                print fallback
+            }
+        }
+    ' "${summary_file}" 2>/dev/null || true
 }
 
 run_target() {

@@ -64,14 +64,6 @@ echo -e "${BOLD}${PURPLE}║  Analyzing Existing Callgrind Summary Files        
 echo -e "${BOLD}${PURPLE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-require_bc() {
-    if ! command -v bc &> /dev/null; then
-        echo -e "${RED}Error: 'bc' calculator is required but not installed${NC}"
-        echo "Please install bc: sudo apt-get install bc (Ubuntu/Debian) or brew install bc (macOS)"
-        exit 1
-    fi
-}
-
 # Check if summaries directory exists
 if [[ ! -d "${SUMMARIES_DIR}" ]]; then
     echo -e "${RED}ERROR: Callgrind summaries directory not found: ${SUMMARIES_DIR}${NC}"
@@ -92,6 +84,145 @@ fi
 echo -e "${CYAN}Found ${#summary_files[@]} summary files and ${#analysis_files[@]} analysis files${NC}"
 echo ""
 
+filtered_project_profile_lines() {
+    local file="$1"
+
+    awk -v project_root="${PROJECT_ROOT}" '
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
+
+        function is_profile_line(line) {
+            return line ~ /^[[:space:]]*[0-9][0-9,]*[[:space:]]+\([[:space:]]*[0-9.]+%\)/
+        }
+
+        function is_noise_frame(line) {
+            return line ~ /PROGRAM TOTALS/ ||
+                   line ~ /\?\?\?:/ ||
+                   line ~ /\(below main\)/ ||
+                   line ~ /ld-linux/ ||
+                   line ~ /libc\.so/ ||
+                   line ~ /libstdc\+\+/ ||
+                   line ~ /\/usr\/src\/debug\/glibc/ ||
+                   line ~ /\/usr\/src\/debug\/boost/ ||
+                   line ~ /\/usr\/include\/boost/ ||
+                   line ~ /\/usr\/include\/c\+\+/ ||
+                   line ~ /BOOST_/ ||
+                   line ~ /boost::unit_test/ ||
+                   line ~ /test_main/ ||
+                   line ~ /:main[[:space:]]+\[/
+        }
+
+        function is_project_source(line) {
+            return index(line, project_root "/src/") ||
+                   index(line, project_root "/include/") ||
+                   line ~ /(^|[[:space:]])src\// ||
+                   line ~ /(^|[[:space:]])include\//
+        }
+
+        function frame_key(line, key) {
+            key = line
+            sub(/^[[:space:]]*[0-9][0-9,]*[[:space:]]+\([[:space:]]*[0-9.]+%\)[[:space:]]*/, "", key)
+            gsub(project_root "/", "", key)
+            sub(/[[:space:]]+\[.*\]$/, "", key)
+            return key
+        }
+
+        is_profile_line($0) {
+            line = trim($0)
+            gsub(/\|/, " ", line)
+
+            if (!is_noise_frame(line) && is_project_source(line)) {
+                key = frame_key(line)
+                if (!seen[key]++) {
+                    print line
+                }
+            }
+        }
+    ' "$file" 2>/dev/null
+}
+
+filtered_thread_profile_lines() {
+    local file="$1"
+
+    awk -v project_root="${PROJECT_ROOT}" '
+        function trim(value) {
+            sub(/^[[:space:]]+/, "", value)
+            sub(/[[:space:]]+$/, "", value)
+            return value
+        }
+
+        function is_profile_line(line) {
+            return line ~ /^[[:space:]]*[0-9][0-9,]*[[:space:]]+\([[:space:]]*[0-9.]+%\)/
+        }
+
+        function is_startup_or_harness_frame(line) {
+            return line ~ /PROGRAM TOTALS/ ||
+                   line ~ /\?\?\?:/ ||
+                   line ~ /\(below main\)/ ||
+                   line ~ /ld-linux/ ||
+                   line ~ /__libc_start_main/ ||
+                   line ~ /libc_start_call_main/ ||
+                   line ~ /\/usr\/src\/debug\/boost/ ||
+                   line ~ /\/usr\/include\/boost/ ||
+                   line ~ /BOOST_/ ||
+                   line ~ /boost::unit_test/ ||
+                   line ~ /test_main/ ||
+                   line ~ /:main[[:space:]]+\[/
+        }
+
+        function is_thread_frame(line) {
+            return line ~ /pthread/ ||
+                   line ~ /std::thread/ ||
+                   line ~ /ThreadPool/ ||
+                   line ~ /workerThread/ ||
+                   line ~ /enqueueWithResult/ ||
+                   line ~ /packaged_task/ ||
+                   line ~ /std::call_once/ ||
+                   line ~ /\/future:/ ||
+                   line ~ /\/mutex:/
+        }
+
+        function frame_key(line, key) {
+            key = line
+            sub(/^[[:space:]]*[0-9][0-9,]*[[:space:]]+\([[:space:]]*[0-9.]+%\)[[:space:]]*/, "", key)
+            gsub(project_root "/", "", key)
+            sub(/[[:space:]]+\[.*\]$/, "", key)
+            return key
+        }
+
+        is_profile_line($0) {
+            line = trim($0)
+            gsub(/\|/, " ", line)
+
+            if (!is_startup_or_harness_frame(line) && is_thread_frame(line)) {
+                key = frame_key(line)
+                if (!seen[key]++) {
+                    print line
+                }
+            }
+        }
+    ' "$file" 2>/dev/null
+}
+
+callgrind_percent() {
+    sed -E 's/^[[:space:]]*[0-9,]+[[:space:]]+\([[:space:]]*([0-9.]+)%\).*/\1/'
+}
+
+callgrind_function_text() {
+    sed -E 's/^[[:space:]]*[0-9,]+[[:space:]]+\([[:space:]]*[0-9.]+%\)[[:space:]]*//'
+}
+
+percent_at_least() {
+    awk -v value="$1" -v minimum="$2" 'BEGIN { exit !((value + 0) >= (minimum + 0)) }'
+}
+
+percent_in_range() {
+    awk -v value="$1" -v minimum="$2" -v maximum="$3" 'BEGIN { exit !((value + 0) >= (minimum + 0) && (value + 0) < (maximum + 0)) }'
+}
+
 # Function to extract top functions from a summary file with context awareness
 extract_top_functions() {
     local file="$1"
@@ -109,27 +240,26 @@ extract_top_functions() {
     if [[ -f "$file" ]]; then
         if is_threading_test "$test_name" || is_scaling_test "$test_name"; then
             # For threading/scaling tests, focus on application logic
-            echo -e "${CYAN}Application Logic (excluding system threading):${NC}"
-            grep -E "^[[:space:]]*[0-9]" "$file" 2>/dev/null | \
-            grep -v -E "(clone|pthread|thread|std::thread|_M_run|_Invoker|__invoke|PROGRAM TOTALS|ld-linux)" | \
-            head -10 | while read line; do
+            echo -e "${CYAN}Project Logic (excluding startup, harness, and system frames):${NC}"
+            filtered_project_profile_lines "$file" | head -10 | while read line; do
                 if [[ -n "$line" ]]; then
                     echo "  $line"
                 fi
             done
             
             echo -e "${CYAN}Top System Functions (threading overhead):${NC}"
-            grep -E "^[[:space:]]*[0-9]" "$file" 2>/dev/null | \
-            grep -E "(clone|pthread|thread|std::thread)" | \
-            head -3 | while read line; do
+            count=0
+            filtered_thread_profile_lines "$file" | while read line; do
                 if [[ -n "$line" ]]; then
                     echo "  $line"
+                    ((++count))
+                    [[ ${count} -ge 3 ]] && break
                 fi
             done
         else
             # For core functionality tests, show normal analysis
-            echo -e "${CYAN}Top Functions (by instruction count):${NC}"
-            grep -E "^[[:space:]]*[0-9]" "$file" 2>/dev/null | head -10 | while read line; do
+            echo -e "${CYAN}Top Project Functions (by inclusive instruction count):${NC}"
+            filtered_project_profile_lines "$file" | head -10 | while read line; do
                 if [[ -n "$line" ]]; then
                     echo "  $line"
                 fi
@@ -137,7 +267,7 @@ extract_top_functions() {
         fi
         
         # Look for total instruction count
-        total=$(grep "PROGRAM TOTALS" "$file" 2>/dev/null | awk '{print $2}' || echo "")
+        total=$(grep "PROGRAM TOTALS" "$file" 2>/dev/null | awk '{print $1}' | tr -d ',' || echo "")
         if [[ -n "$total" ]]; then
             echo -e "${CYAN}Total Instructions: ${total}${NC}"
         fi
@@ -249,9 +379,9 @@ find_global_hotspots() {
     # Extract all function percentages from summary files and categorize
     for file in "${summary_files[@]}"; do
         test_name="$(basename "$file" "_summary.txt")"
-        grep -E "^[[:space:]]*[0-9]" "$file" 2>/dev/null | head -20 | while read line; do
-            percentage=$(echo "$line" | awk '{print $1}' | tr -d '%' | tr -d ',' | grep -E '^[0-9.]+$' || echo "0")
-            function_name=$(echo "$line" | awk '{$1=""; print $0}' | sed 's/^[[:space:]]*//')
+        filtered_project_profile_lines "$file" | head -20 | while read line; do
+            percentage=$(echo "$line" | callgrind_percent | grep -E '^[0-9.]+$' || echo "0")
+            function_name=$(echo "$line" | callgrind_function_text)
             if [[ -n "$percentage" && "$percentage" != "0" && -n "$function_name" ]]; then
                 echo "$percentage|$function_name|$test_name" >> "$all_functions"
                 
@@ -275,21 +405,31 @@ find_global_hotspots() {
         # Filter out obvious threading/system functions for core analysis
         sort -t'|' -nr -k1 "$core_functions" | \
         grep -v -E "(clone|pthread|thread|std::thread|_M_run|_Invoker|__invoke)" | \
+        {
+        count=0
         while IFS='|' read -r percentage function_name test_name; do
-            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && (( $(echo "$percentage >= 10.0" | bc -l) )) && ! is_test_code_function "$function_name"; then
+            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && percent_at_least "$percentage" 10.0 && ! is_test_code_function "$function_name"; then
                 printf "  %.1f%% - %s (in %s)\n" "$percentage" "$function_name" "$test_name"
+                ((++count))
+                [[ ${count} -ge 10 ]] && break
             fi
-        done | head -10
+        done
+        }
         
         echo ""
         echo -e "${YELLOW}Moderate Targets (2-10% in core tests):${NC}"
         sort -t'|' -nr -k1 "$core_functions" | \
         grep -v -E "(clone|pthread|thread|std::thread|_M_run|_Invoker|__invoke)" | \
+        {
+        count=0
         while IFS='|' read -r percentage function_name test_name; do
-            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && (( $(echo "$percentage >= 2.0 && $percentage < 10.0" | bc -l) )) && ! is_test_code_function "$function_name"; then
+            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && percent_in_range "$percentage" 2.0 10.0 && ! is_test_code_function "$function_name"; then
                 printf "  %.1f%% - %s (in %s)\n" "$percentage" "$function_name" "$test_name"
+                ((++count))
+                [[ ${count} -ge 10 ]] && break
             fi
-        done | head -10
+        done
+        }
         echo ""
     fi
     
@@ -302,11 +442,16 @@ find_global_hotspots() {
         # Look for application-specific functions in threading tests
         sort -t'|' -nr -k1 "$threading_functions" | \
         grep -E "(VoidLight-Framework|AIManager|ParticleManager|TaskQueue|Entity|Behavior)" | \
+        {
+        count=0
         while IFS='|' read -r percentage function_name test_name; do
-            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && (( $(echo "$percentage >= 1.0" | bc -l) )) && ! is_test_code_function "$function_name"; then
+            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && percent_at_least "$percentage" 1.0 && ! is_test_code_function "$function_name"; then
                 printf "  %.1f%% - %s (in %s)\n" "$percentage" "$function_name" "$test_name"
+                ((++count))
+                [[ ${count} -ge 10 ]] && break
             fi
-        done | head -10
+        done
+        }
         echo ""
     fi
     
@@ -318,11 +463,16 @@ find_global_hotspots() {
         
         sort -t'|' -nr -k1 "$scaling_functions" | \
         grep -v -E "(clone|pthread|thread|std::thread|_M_run|_Invoker|__invoke|PROGRAM TOTALS|ld-linux)" | \
+        {
+        count=0
         while IFS='|' read -r percentage function_name test_name; do
-            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && (( $(echo "$percentage >= 5.0" | bc -l) )) && ! is_test_code_function "$function_name"; then
+            if [[ "$percentage" =~ ^[0-9]+\.?[0-9]*$ ]] && percent_at_least "$percentage" 5.0 && ! is_test_code_function "$function_name"; then
                 printf "  %.1f%% - %s (in %s)\n" "$percentage" "$function_name" "$test_name"
+                ((++count))
+                [[ ${count} -ge 10 ]] && break
             fi
-        done | head -10
+        done
+        }
         echo ""
     fi
     
@@ -370,9 +520,9 @@ EOF
     
     for file in "${summary_files[@]}"; do
         test_name="$(basename "$file" "_summary.txt")"
-        grep -E "^[[:space:]]*[0-9]" "$file" 2>/dev/null | head -5 | while read line; do
-            percentage=$(echo "$line" | awk '{print $1}' | tr -d '%' | tr -d ',' | grep -E '^[0-9.]+$' || echo "0")
-            function_name=$(echo "$line" | awk '{$1=""; print $0}' | sed 's/^[[:space:]]*//')
+        filtered_project_profile_lines "$file" | head -5 | while read line; do
+            percentage=$(echo "$line" | callgrind_percent | grep -E '^[0-9.]+$' || echo "0")
+            function_name=$(echo "$line" | callgrind_function_text)
             if [[ -n "$percentage" && "$percentage" != "0" && -n "$function_name" ]]; then
                 echo "$percentage|$function_name|$test_name" >> "$temp_file"
             fi
@@ -518,7 +668,6 @@ case "${1:-all}" in
         exit 0
         ;;
     "all"|*)
-        require_bc
         main
         ;;
 esac
