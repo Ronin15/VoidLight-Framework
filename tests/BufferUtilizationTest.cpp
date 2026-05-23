@@ -11,10 +11,6 @@
 #include <iomanip>
 #include <vector>
 #include <cstdlib>
-#include <chrono>
-#include <atomic>
-#include <thread>
-#include <cmath>
 
 // Global fixture: ThreadSystem initialized once for entire test suite
 struct GlobalThreadSystemFixture {
@@ -195,119 +191,45 @@ BOOST_AUTO_TEST_CASE(TestCacheInvalidation) {
 
 BOOST_AUTO_TEST_CASE(TestThreadingThresholds) {
     std::cout << "\n=== Testing Threading Thresholds ===\n";
-    std::cout << "Finding optimal workload sizes for threading...\n\n";
+    std::cout << "Validating WorkerBudget threshold learning state machine...\n\n";
 
-    auto& threadSystem = VoidLight::ThreadSystem::Instance();
-    const size_t workers = threadSystem.getThreadCount();
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+    const auto systemType = VoidLight::SystemType::BackgroundSim;
+    const size_t learningWorkload = 1000;
 
-    std::cout << "Workers: " << workers << "\n\n";
+    budgetMgr.prepareForStateTransition();
 
-    // Test different workload sizes
-    std::vector<size_t> workloads = {10, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000};
+    auto initialDecision = budgetMgr.shouldUseThreading(systemType, learningWorkload);
+    BOOST_CHECK(!initialDecision.shouldThread);
+    BOOST_CHECK_EQUAL(budgetMgr.getLearnedThreshold(systemType), 0);
+    BOOST_CHECK(!budgetMgr.isThresholdActive(systemType));
 
-    // Simulated work per item - adjust to match actual manager work
-    auto doWork = [](size_t iterations) {
-        volatile double result = 0;
-        for (size_t i = 0; i < iterations; ++i) {
-            result += std::sin(static_cast<double>(i)) * std::cos(static_cast<double>(i));
-        }
-        return result;
-    };
+    for (int sample = 0; sample < 9; ++sample) {
+        budgetMgr.reportExecution(systemType, learningWorkload, false, 1, 2.0);
 
-    const size_t workPerItem = 100;  // iterations of work per item
-    const size_t testRuns = 5;       // average over multiple runs
-
-    std::cout << std::setw(10) << "Workload"
-              << std::setw(15) << "Single (ms)"
-              << std::setw(15) << "Threaded (ms)"
-              << std::setw(12) << "Speedup"
-              << std::setw(15) << "Recommendation" << "\n";
-    std::cout << std::string(67, '-') << "\n";
-
-    size_t threadingThreshold = 0;
-
-    for (size_t workload : workloads) {
-        double singleTotal = 0;
-        double threadedTotal = 0;
-
-        for (size_t run = 0; run < testRuns; ++run) {
-            // Single-threaded timing
-            auto singleStart = std::chrono::high_resolution_clock::now();
-            for (size_t i = 0; i < workload; ++i) {
-                doWork(workPerItem);
-            }
-            auto singleEnd = std::chrono::high_resolution_clock::now();
-            singleTotal += std::chrono::duration<double, std::milli>(singleEnd - singleStart).count();
-
-            // Multi-threaded timing using ThreadSystem
-            auto threadedStart = std::chrono::high_resolution_clock::now();
-
-            size_t batchCount = std::min(workers, workload);
-            size_t batchSize = (workload + batchCount - 1) / batchCount;
-            std::atomic<size_t> completed{0};
-
-            for (size_t batch = 0; batch < batchCount; ++batch) {
-                size_t start = batch * batchSize;
-                size_t end = std::min(start + batchSize, workload);
-
-                threadSystem.enqueueTask([&, start, end]() {
-                    for (size_t i = start; i < end; ++i) {
-                        doWork(workPerItem);
-                    }
-                    completed.fetch_add(1, std::memory_order_release);
-                });
-            }
-
-            // Wait for completion
-            while (completed.load(std::memory_order_acquire) < batchCount) {
-                std::this_thread::yield();
-            }
-
-            auto threadedEnd = std::chrono::high_resolution_clock::now();
-            threadedTotal += std::chrono::duration<double, std::milli>(threadedEnd - threadedStart).count();
-        }
-
-        double singleAvg = singleTotal / testRuns;
-        double threadedAvg = threadedTotal / testRuns;
-        double speedup = singleAvg / threadedAvg;
-
-        std::string recommendation;
-        if (speedup > 1.5) {
-            recommendation = "THREAD";
-            if (threadingThreshold == 0) threadingThreshold = workload;
-        } else if (speedup > 1.1) {
-            recommendation = "marginal";
-        } else {
-            recommendation = "single";
-        }
-
-        std::cout << std::setw(10) << workload
-                  << std::setw(15) << std::fixed << std::setprecision(3) << singleAvg
-                  << std::setw(15) << std::fixed << std::setprecision(3) << threadedAvg
-                  << std::setw(11) << std::fixed << std::setprecision(2) << speedup << "x"
-                  << std::setw(15) << recommendation << "\n";
+        auto warmupDecision = budgetMgr.shouldUseThreading(systemType, learningWorkload);
+        BOOST_CHECK(!warmupDecision.shouldThread);
+        BOOST_CHECK_EQUAL(budgetMgr.getLearnedThreshold(systemType), 0);
+        BOOST_CHECK(!budgetMgr.isThresholdActive(systemType));
     }
 
-    std::cout << "\n=== Current Manager Thresholds ===\n";
-    std::cout << "AIManager:       100 entities\n";
-    std::cout << "ParticleManager: 100 particles\n";
-    std::cout << "EventManager:    100 events\n";
+    budgetMgr.reportExecution(systemType, learningWorkload, false, 1, 2.0);
 
-    std::cout << "\n=== Recommendations ===\n";
-    if (threadingThreshold == 0) {
-        std::cout << "Threading beneficial at all tested sizes (10+)\n";
-        std::cout << "Current threshold of 100 is conservative - could lower to 50\n";
-    } else if (threadingThreshold <= 100) {
-        std::cout << "Threading beneficial at: " << threadingThreshold << "+ items\n";
-        std::cout << "Current threshold of 100 is appropriate\n";
-    } else {
-        std::cout << "Threading beneficial at: " << threadingThreshold << "+ items\n";
-        std::cout << "Consider RAISING thresholds to: " << threadingThreshold << "\n";
-    }
+    BOOST_CHECK_EQUAL(budgetMgr.getLearnedThreshold(systemType), learningWorkload);
+    BOOST_CHECK(budgetMgr.isThresholdActive(systemType));
 
-    // Basic sanity check - threading should help somewhere
-    // Threshold varies with system load; 1000-2000 is the realistic crossover range
-    BOOST_CHECK_LE(threadingThreshold, 2000);
+    auto threadedDecision = budgetMgr.shouldUseThreading(systemType, learningWorkload);
+    BOOST_CHECK(threadedDecision.shouldThread);
+
+    const size_t hysteresisDropWorkload = 949;
+    auto relearnDecision = budgetMgr.shouldUseThreading(systemType, hysteresisDropWorkload);
+    BOOST_CHECK(!relearnDecision.shouldThread);
+    BOOST_CHECK_EQUAL(budgetMgr.getLearnedThreshold(systemType), 0);
+    BOOST_CHECK(!budgetMgr.isThresholdActive(systemType));
+
+    std::cout << "Threshold learning, activation, and hysteresis re-learning verified\n";
+
+    budgetMgr.prepareForStateTransition();
 }
 
 BOOST_AUTO_TEST_CASE(TestBatchTuningStability) {
