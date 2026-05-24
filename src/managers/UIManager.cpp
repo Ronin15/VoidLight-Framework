@@ -655,11 +655,15 @@ void UIManager::setText(const std::string &id, const std::string &text) {
 
   auto component = getComponent(id);
   if (component) {
+    const bool textChanged = component->m_text != text;
     component->m_text = text;
     m_textCache[id] = text; // Update cache
     // Re-run auto-sizing so the component grows/shrinks to fit the new text.
     // calculateOptimalSize() is a no-op when m_autoSize is false.
     calculateOptimalSize(component);
+    if (textChanged && component->m_onTextChanged) {
+      component->m_onTextChanged(text);
+    }
   }
 }
 
