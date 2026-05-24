@@ -21,6 +21,7 @@
 #include "entities/Player.hpp"
 #include "events/EntityEvents.hpp"
 #include "world/WorldData.hpp"
+#include <format>
 #include <memory>
 #include <vector>
 #include <thread>
@@ -2437,6 +2438,11 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
     auto& memData = edm.getMemoryData(attackerIdx);
     memData.setValid(true);
     memData.lastTarget = playerHandle;
+    memData.emotions.clear();
+    memData.personality.bravery = 0.55f;
+    memData.personality.aggression = 0.45f;
+    memData.personality.composure = 0.75f;
+    memData.personality.loyalty = 0.5f;
 
     const float initialPlayerHealth = player->getHealth();
     bool firstHit = false;
@@ -2468,8 +2474,29 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
         secondHit = player->getHealth() < postRetreatStartHealth;
     }
 
+    const auto finalRef = edm.getBehaviorConfigRef(attackerIdx);
+    std::string finalState = "not-attack";
+    bool finalCanAttack = false;
+    bool finalRetreating = false;
+    float finalAttackTimer = 0.0f;
+    float finalPressure = 0.0f;
+    if (finalRef.type == BehaviorType::Attack) {
+        const auto& finalAttackState = edm.getAttackState(finalRef.index);
+        finalState = std::to_string(finalAttackState.currentState);
+        finalCanAttack = finalAttackState.canAttack;
+        finalRetreating = finalAttackState.isRetreating;
+        finalAttackTimer = finalAttackState.attackTimer;
+        finalPressure = finalAttackState.pressureScore;
+    }
+
     BOOST_CHECK_MESSAGE(secondHit,
-                        "Retreat must not strand attack readiness after interrupting recovery");
+                        std::format("Retreat must not strand attack readiness after interrupting recovery "
+                                    "(type={}, state={}, canAttack={}, retreating={}, attackTimer={:.2f}, "
+                                    "pressure={:.2f}, healthBefore={:.2f}, healthAfter={:.2f})",
+                                    static_cast<int>(finalRef.type), finalState,
+                                    finalCanAttack, finalRetreating, finalAttackTimer,
+                                    finalPressure, postRetreatStartHealth,
+                                    player->getHealth()));
     aiMgr.unassignBehavior(attackerHandle);
 }
 
