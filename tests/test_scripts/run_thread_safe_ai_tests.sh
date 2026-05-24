@@ -86,13 +86,7 @@ else
 fi
 
 # Set test command options
-# no_result_code ensures proper exit code even with thread cleanup issues
-# detect_memory_leak=0 prevents false positives from thread cleanup
-# catch_system_errors=no prevents threading errors from causing test failure
-# build_info=no prevents crash report from failing tests
-# detect_fp_exceptions=no prevents floating point exceptions from failing tests
-# --report_format=XML will produce parsable output for post-processing
-TEST_OPTS="--log_level=all --catch_system_errors=no --no_result_code --detect_memory_leak=0 --build_info=no --detect_fp_exceptions=no"
+TEST_OPTS="--log_level=all --catch_system_errors=no --detect_memory_leak=0 --build_info=no --detect_fp_exceptions=no"
 if [ "$VERBOSE" = true ]; then
   TEST_OPTS="$TEST_OPTS --report_level=detailed"
 fi
@@ -117,18 +111,6 @@ fi
 # Print exit code for debugging
 echo "Test exit code: $TEST_RESULT" >> "$TEMP_OUTPUT"
 
-# Force success if tests passed but cleanup had issues
-if [ $TEST_RESULT -ne 0 ] &&
-   (grep -q "Leaving test module \"ThreadSafeAIManagerTests\"" "$TEMP_OUTPUT" ||
-    grep -q "Test module \"ThreadSafeAIManagerTests\" has completed" "$TEMP_OUTPUT") &&
-   (grep -q "No errors detected" "$TEMP_OUTPUT" ||
-    grep -q "successful" "$TEMP_OUTPUT" ||
-    ! grep -q "failure\|test cases failed\|assertion failed" "$TEMP_OUTPUT" ||
-    (grep -q "fatal error: in.*unrecognized signal" "$TEMP_OUTPUT" && ! grep -q "test cases failed" "$TEMP_OUTPUT")); then
-  echo "Tests passed successfully but had non-zero exit code due to cleanup issues. Treating as success."
-  TEST_RESULT=0
-fi
-
 # Handle timeout scenario and core dumps
 if [ -n "$TIMEOUT_CMD" ] && [ $TEST_RESULT -eq 124 ]; then
   echo "⚠️ Test execution timed out after 30 seconds!"
@@ -146,25 +128,9 @@ grep -E "time:|entities:|processed:|Concurrent processing time" "$TEMP_OUTPUT" >
 if [ $TEST_RESULT -eq 124 ]; then
   echo "❌ Tests timed out! See $PROJECT_ROOT/test_results/thread_safe_ai_test_output.txt for details."
   exit $TEST_RESULT
-elif [ $TEST_RESULT -eq 139 ] && grep -q "No errors detected" "$TEMP_OUTPUT" && grep -q "Leaving test module \"ThreadSafeAIManagerTests\"" "$TEMP_OUTPUT"; then
-  echo "⚠️ Tests completed successfully but crashed during cleanup. This is a known issue - treating as success."
-  exit 0
 elif [ $TEST_RESULT -ne 0 ] || grep -q "failure\|test cases failed\|assertion failed\|error:" "$TEMP_OUTPUT"; then
-  # Additional check for known cleanup issues that can be ignored
-  if (grep -q "system_error.*Operation not permitted" "$TEMP_OUTPUT" ||
-      grep -q "fatal error: in.*unrecognized signal" "$TEMP_OUTPUT" ||
-      grep -q "memory access violation" "$TEMP_OUTPUT" ||
-      grep -q "Segmentation fault" "$TEMP_OUTPUT" ||
-      grep -q "Abort trap" "$TEMP_OUTPUT" ||
-      grep -q "dumped core" "$TEMP_OUTPUT") &&
-     ! grep -q "test cases failed" "$TEMP_OUTPUT" &&
-     ! grep -q "assertion failed\|error:" "$TEMP_OUTPUT"; then
-    echo "⚠️ Tests completed with known threading cleanup issues, but all tests passed!"
-    exit 0
-  else
-    echo "❌ Some tests failed! See $PROJECT_ROOT/test_results/thread_safe_ai_test_output.txt for details."
-    exit 1
-  fi
+  echo "❌ Some tests failed! See $PROJECT_ROOT/test_results/thread_safe_ai_test_output.txt for details."
+  exit 1
 else
   echo "✅ All Thread-Safe AI Manager tests passed!"
   exit 0

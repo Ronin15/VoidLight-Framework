@@ -122,7 +122,7 @@ struct EventManagerFixture {
 // ==================== Basic Initialization Tests ====================
 
 BOOST_FIXTURE_TEST_CASE(InitAndClean, EventManagerFixture) {
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
   EventManager::Instance().clean();
 }
@@ -455,7 +455,7 @@ BOOST_FIXTURE_TEST_CASE(EventPoolRecycling_ParticleEffectEvents, EventManagerFix
 
 BOOST_FIXTURE_TEST_CASE(ThreadSafety_ConcurrentTriggers, EventManagerFixture) {
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   std::atomic<int> handlerCallCount{0};
 
@@ -491,7 +491,7 @@ BOOST_FIXTURE_TEST_CASE(ThreadSafety_ConcurrentTriggers, EventManagerFixture) {
 
 BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManagerFixture) {
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   // Register a handler
   bool handlerCalled = false;
@@ -516,7 +516,7 @@ BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManage
 #ifndef NDEBUG
 BOOST_FIXTURE_TEST_CASE(DynamicThreadingControl, EventManagerFixture) {
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   std::atomic<int> handlerCallCount{0};
 
@@ -837,7 +837,7 @@ BOOST_FIXTURE_TEST_CASE(CleanAndInit_DropsDeferredCombatEvents,
   BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 1);
 
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 0);
 
@@ -1155,7 +1155,7 @@ BOOST_FIXTURE_TEST_CASE(Reinitialize_WorksAfterClean, EventManagerFixture) {
   BOOST_CHECK(!EventManager::Instance().isInitialized());
 
   // Re-initialize should work
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
 
   // Should be fully functional
@@ -1173,7 +1173,7 @@ BOOST_FIXTURE_TEST_CASE(DoubleInit_WarnsAndSucceeds, EventManagerFixture) {
   BOOST_CHECK(EventManager::Instance().isInitialized());
 
   // Second init should also return true (with warning logged)
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
 }
 
@@ -1191,6 +1191,6 @@ BOOST_FIXTURE_TEST_CASE(IdempotentClean_SafeMultipleCalls, EventManagerFixture) 
   BOOST_CHECK(!EventManager::Instance().isInitialized());
 
   // Re-init should still work
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
 }

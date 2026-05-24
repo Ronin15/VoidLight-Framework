@@ -39,7 +39,7 @@ public:
     SocialControllerTestFixture() {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         // Initialize managers
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
@@ -47,8 +47,8 @@ public:
         BOOST_REQUIRE(CollisionManager::Instance().init());
         BOOST_REQUIRE(PathfinderManager::Instance().init());
         BOOST_REQUIRE(AIManager::Instance().init());
-        GameTimeManager::Instance().init();
-        UIManager::Instance().init();
+        BOOST_REQUIRE(GameTimeManager::Instance().init());
+        BOOST_REQUIRE(UIManager::Instance().init());
 
         player = std::make_shared<Player>();
         player->initializeInventory();
@@ -61,7 +61,7 @@ public:
     }
 
     ~SocialControllerTestFixture() {
-        UIManager::Instance().clean();
+        UIManager::Instance().prepareForStateTransition();
         AIManager::Instance().clean();
         PathfinderManager::Instance().clean();
         CollisionManager::Instance().clean();

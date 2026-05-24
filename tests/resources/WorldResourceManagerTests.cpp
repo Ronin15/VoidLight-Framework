@@ -603,12 +603,9 @@ BOOST_AUTO_TEST_CASE(TestConcurrentInventoryOperations) {
   BOOST_CHECK(successfulAdds.load() > 0);
   BOOST_CHECK_EQUAL(successfulQueries.load(), NUM_THREADS * OPERATIONS_PER_THREAD);
 
-  // Verify final state is consistent
-  // Note: Due to potential race conditions in concurrent access, we allow some tolerance
-  // The important thing is that the inventory doesn't corrupt and the total is reasonable
+  // Verify supported concurrent inventory adds preserve every successful mutation.
   auto finalQty = worldManager->queryInventoryTotal(worldId, goldHandle);
-  BOOST_CHECK_GE(finalQty, successfulAdds.load() * 95 / 100);  // Allow up to 5% loss
-  BOOST_CHECK_LE(finalQty, successfulAdds.load());
+  BOOST_CHECK_EQUAL(finalQty, successfulAdds.load());
 
   // Cleanup
   entityDataManager->destroyInventory(invIndex);

@@ -114,12 +114,12 @@ run_test() {
     local test_path="${BIN_DIR}/${test_name}"
 
     if [[ ! -f "${test_path}" ]]; then
-        echo -e "${YELLOW}  [SKIP] ${test_name} (not built)${NC}"
-        return 2
+        echo -e "${RED}  [FAIL] ${test_name} (not built)${NC}"
+        return 1
     fi
 
     local output_file="${RESULTS_DIR}/${test_name}_output.txt"
-    local test_args="--catch_system_errors=no --no_result_code"
+    local test_args="--catch_system_errors=no"
 
     if [[ "${VERBOSE}" == "true" ]]; then
         test_args="${test_args} --log_level=all"

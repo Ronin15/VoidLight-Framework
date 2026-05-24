@@ -90,7 +90,7 @@ fi
 TIMEOUT_DURATION=120s
 
 # Set test options
-TEST_OPTS="--catch_system_errors=no --no_result_code"
+TEST_OPTS="--catch_system_errors=no"
 if [ "$VERBOSE" = true ]; then
   TEST_OPTS="$TEST_OPTS --log_level=all"
 else
@@ -111,10 +111,10 @@ echo -e "${YELLOW}Build type: $BUILD_TYPE${NC}"
 echo -e "${BLUE}Running projectile scaling benchmarks...${NC}"
 if [ -n "$TIMEOUT_CMD" ]; then
   $TIMEOUT_CMD --preserve-status $TIMEOUT_DURATION "$BENCHMARK_EXECUTABLE" $TEST_OPTS 2>&1 | tee -a "$RESULTS_FILE"
-  TEST_RESULT=$?
+  TEST_RESULT=${PIPESTATUS[0]}
 else
   "$BENCHMARK_EXECUTABLE" $TEST_OPTS 2>&1 | tee -a "$RESULTS_FILE"
-  TEST_RESULT=$?
+  TEST_RESULT=${PIPESTATUS[0]}
 fi
 
 # Check for success
@@ -122,9 +122,6 @@ if [ $TEST_RESULT -eq 0 ]; then
   echo -e "${GREEN}Benchmark completed successfully!${NC}"
 elif [ $TEST_RESULT -eq 124 ]; then
   echo -e "${RED}Benchmark timed out after $TIMEOUT_DURATION!${NC}"
-elif grep -q "SCALABILITY SUMMARY" "$RESULTS_FILE"; then
-  echo -e "${YELLOW}Benchmark completed with warnings (results captured)${NC}"
-  TEST_RESULT=0
 else
   echo -e "${RED}Benchmark failed with exit code $TEST_RESULT${NC}"
 fi

@@ -1,13 +1,11 @@
 #!/bin/bash
-# Script to run the Input Manager Tests
+# Script to run sidecar storage and integration tests
 # Copyright (c) 2025 Hammer Forged Games, MIT License
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
-
-echo -e "${YELLOW}Running Input Manager Tests...${NC}"
 
 BUILD_TYPE="Debug"
 VERBOSE=false
@@ -28,13 +26,6 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-mkdir -p "$PROJECT_ROOT/test_results"
-
-TEST_OPTS="--log_level=all --catch_system_errors=no"
-if [ "$VERBOSE" = true ]; then
-  TEST_OPTS="$TEST_OPTS --report_level=detailed"
-fi
-
 if [ "$BUILD_TYPE" = "Debug" ]; then
   BIN_DIR="$PROJECT_ROOT/bin/debug"
 else
@@ -42,11 +33,22 @@ else
 fi
 
 TEST_EXECUTABLES=(
-  "input_manager_tests"
-  "input_manager_command_tests"
+  "sparse_sidecar_tests"
+  "knockback_sidecar_tests"
 )
 
+mkdir -p "$PROJECT_ROOT/test_results"
+
+TEST_OPTS="--catch_system_errors=no"
+if [ "$VERBOSE" = true ]; then
+  TEST_OPTS="$TEST_OPTS --log_level=all --report_level=detailed"
+else
+  TEST_OPTS="$TEST_OPTS --report_level=short"
+fi
+
 FINAL_RESULT=0
+echo -e "${YELLOW}Running sidecar tests...${NC}"
+
 for EXEC in "${TEST_EXECUTABLES[@]}"; do
   TEST_EXECUTABLE="$BIN_DIR/$EXEC"
   OUTPUT_FILE="$PROJECT_ROOT/test_results/${EXEC}_output.txt"
@@ -67,9 +69,4 @@ for EXEC in "${TEST_EXECUTABLES[@]}"; do
   fi
 done
 
-if [ $FINAL_RESULT -ne 0 ]; then
-  exit $FINAL_RESULT
-fi
-
-echo -e "${GREEN}✅ All Input Manager tests passed!${NC}"
-exit 0
+exit $FINAL_RESULT

@@ -131,12 +131,6 @@ else
   TEST_RESULT=${PIPESTATUS[0]}
 fi
 
-# Force success if tests passed but cleanup had issues
-if [ $TEST_RESULT -ne 0 ] && grep -q "Leaving test case" "$OUTPUT_FILE"; then
-  echo -e "${YELLOW}Tests completed but encountered cleanup issues. Treating as success.${NC}"
-  TEST_RESULT=0
-fi
-
 # Generate test summary
 echo -e "${YELLOW}Generating test summary...${NC}"
 {

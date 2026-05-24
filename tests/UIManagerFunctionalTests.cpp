@@ -297,10 +297,9 @@ BOOST_AUTO_TEST_CASE(TestOnClickCallback) {
         buttonClicked.store(true, std::memory_order_release);
     });
 
-    // Simulate click by calling processEvent with mouse down/up
-    // (In actual usage, UIManager::handleInput processes SDL events)
-    // For testing, we verify the callback was set successfully
-    BOOST_CHECK(ui.hasComponent("click_button"));
+    ui.simulateClick("click_button");
+    ui.update(0.016f);
+    BOOST_CHECK(buttonClicked.load(std::memory_order_acquire));
 
     // Clean up
     ui.removeComponent("click_button");
@@ -325,32 +324,34 @@ BOOST_AUTO_TEST_CASE(TestOnValueChangedCallback) {
     // Update progress bar value
     ui.updateProgressBar("progress", 0.5f); // 50%
 
-    // Verify callback was set
-    BOOST_CHECK(ui.hasComponent("progress"));
+    BOOST_CHECK_CLOSE(lastValue.load(std::memory_order_acquire), 0.5f, 0.001f);
 
     ui.removeComponent("progress");
 }
 
 // ----------------------------------------------------------------------------
-// Test: onTextChanged callback for input field
+// Test: onTextChanged callback for text updates
 // ----------------------------------------------------------------------------
 
 BOOST_AUTO_TEST_CASE(TestOnTextChangedCallback) {
     auto& ui = UIManager::Instance();
 
-    ui.createInputField("input", UIRect{100, 100, 200, 30}, "Enter text...");
+    ui.createLabel("label", UIRect{100, 100, 200, 30}, "Initial");
 
     // Set up callback to track text changes
     std::atomic<bool> textChanged{false};
 
-    ui.setOnTextChanged("input", [&textChanged](const std::string&) {
+    ui.setOnTextChanged("label", [&textChanged](const std::string&) {
         textChanged.store(true, std::memory_order_release);
     });
 
-    // Verify callback was set
-    BOOST_CHECK(ui.hasComponent("input"));
+    ui.setText("label", "Initial");
+    BOOST_CHECK(!textChanged.load(std::memory_order_acquire));
 
-    ui.removeComponent("input");
+    ui.setText("label", "Updated");
+    BOOST_CHECK(textChanged.load(std::memory_order_acquire));
+
+    ui.removeComponent("label");
 }
 
 // ----------------------------------------------------------------------------
@@ -374,9 +375,13 @@ BOOST_AUTO_TEST_CASE(TestMultipleIndependentCallbacks) {
         button2Clicks.fetch_add(1, std::memory_order_relaxed);
     });
 
-    // Verify both buttons exist with independent callbacks
-    BOOST_CHECK(ui.hasComponent("button1"));
-    BOOST_CHECK(ui.hasComponent("button2"));
+    ui.simulateClick("button1");
+    ui.simulateClick("button2");
+    ui.simulateClick("button2");
+    ui.update(0.016f);
+
+    BOOST_CHECK_EQUAL(button1Clicks.load(std::memory_order_relaxed), 1);
+    BOOST_CHECK_EQUAL(button2Clicks.load(std::memory_order_relaxed), 2);
 
     ui.removeComponent("button1");
     ui.removeComponent("button2");

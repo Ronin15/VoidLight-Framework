@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "core/ThreadSystem.hpp"
+#include "core/WorkerBudget.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -71,21 +72,31 @@ private:
 // Global fixture for test setup and cleanup
 struct ThreadSafeAIFixture {
   ThreadSafeAIFixture() {
-    if (!VoidLight::ThreadSystem::Instance().init()) {
+        if (!VoidLight::ThreadSystem::Instance().init()) {
       throw std::runtime_error("ThreadSystem::init() failed");
     }
     if (!EntityDataManager::Instance().init()) {
       throw std::runtime_error("EntityDataManager::init() failed");
     }
-    CollisionManager::Instance().init();
-    PathfinderManager::Instance().init();
-    AIManager::Instance().init();
-    BackgroundSimulationManager::Instance().init();
+    if (!CollisionManager::Instance().init()) {
+      throw std::runtime_error("CollisionManager::init() failed");
+    }
+    if (!PathfinderManager::Instance().init()) {
+      throw std::runtime_error("PathfinderManager::init() failed");
+    }
+    VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
+    if (!AIManager::Instance().init()) {
+      throw std::runtime_error("AIManager::init() failed");
+    }
+    if (!BackgroundSimulationManager::Instance().init()) {
+      throw std::runtime_error("BackgroundSimulationManager::init() failed");
+    }
   }
 
   ~ThreadSafeAIFixture() {
     BackgroundSimulationManager::Instance().clean();
     AIManager::Instance().clean();
+    VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
     PathfinderManager::Instance().clean();
     CollisionManager::Instance().clean();
     EntityDataManager::Instance().clean();
@@ -100,6 +111,35 @@ void updateAI(float deltaTime, const Vector2D& referencePoint = Vector2D(500.0f,
   BackgroundSimulationManager::Instance().invalidateTiers();
   BackgroundSimulationManager::Instance().update(referencePoint, deltaTime);
   AIManager::Instance().update(deltaTime);
+}
+
+void destroyTestEntity(EntityHandle handle) {
+  if (!handle.isValid()) {
+    return;
+  }
+
+  AIManager::Instance().unassignBehavior(handle);
+  auto& edm = EntityDataManager::Instance();
+  edm.destroyEntity(handle);
+  edm.processDestructionQueue();
+}
+
+void destroyTestEntities(const std::vector<EntityHandle>& handles) {
+  auto& edm = EntityDataManager::Instance();
+  for (const auto& handle : handles) {
+    AIManager::Instance().unassignBehavior(handle);
+    edm.destroyEntity(handle);
+  }
+  edm.processDestructionQueue();
+}
+
+void primeAIThreadingDecision(size_t workloadSize) {
+  auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+  budgetMgr.prepareForStateTransition();
+  for (int sample = 0; sample < 10; ++sample) {
+    budgetMgr.reportExecution(VoidLight::SystemType::AI, workloadSize, false, 1, 5.0);
+  }
+  BOOST_REQUIRE(budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, workloadSize).shouldThread);
 }
 
 // ===========================================================================
@@ -120,69 +160,38 @@ BOOST_AUTO_TEST_CASE(BasicEntityRegistration)
   BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
 
   // Clean up
-  AIManager::Instance().unassignBehavior(handle);
-  auto& edm = EntityDataManager::Instance();
-  edm.destroyEntity(handle);
+  destroyTestEntity(handle);
 }
 
-// Test concurrent behavior assignment from multiple threads
-// Note: Entity creation is main-thread-only per EDM design, but behavior
-// assignment via AIManager IS thread-safe
-BOOST_AUTO_TEST_CASE(ConcurrentBehaviorAssignment)
+BOOST_AUTO_TEST_CASE(MainThreadBehaviorAssignmentBeforeThreadedUpdate)
 {
-  constexpr int NUM_THREADS = 4;
-  constexpr int ENTITIES_PER_THREAD = 25;
-  constexpr int TOTAL_ENTITIES = NUM_THREADS * ENTITIES_PER_THREAD;
+  constexpr int TOTAL_ENTITIES = 160;
 
-  // Create all entities on main thread (EDM creation is main-thread-only)
   std::vector<std::shared_ptr<TestNPC>> npcs;
   std::vector<EntityHandle> allHandles;
   npcs.reserve(TOTAL_ENTITIES);
   allHandles.reserve(TOTAL_ENTITIES);
 
-  for (int t = 0; t < NUM_THREADS; ++t) {
-    for (int i = 0; i < ENTITIES_PER_THREAD; ++i) {
-      Vector2D pos(t * 100.0f + i * 10.0f, t * 100.0f + i * 10.0f);
-      auto npc = TestNPC::create(pos);
-      EntityHandle handle = npc->getHandle();
-      BOOST_REQUIRE(handle.isValid());
-      npcs.push_back(npc);
-      allHandles.push_back(handle);
-    }
+  for (int i = 0; i < TOTAL_ENTITIES; ++i) {
+    Vector2D pos(static_cast<float>(i % 40) * 10.0f,
+                 static_cast<float>(i / 40) * 10.0f);
+    auto npc = TestNPC::create(pos);
+    EntityHandle handle = npc->getHandle();
+    BOOST_REQUIRE(handle.isValid());
+    npcs.push_back(npc);
+    allHandles.push_back(handle);
+    AIManager::Instance().assignBehavior(handle, "Wander");
   }
 
-  // Now test concurrent behavior assignment (this IS thread-safe)
-  std::vector<std::future<int>> futures;
-  std::atomic<int> successCount{0};
-
-  for (int t = 0; t < NUM_THREADS; ++t) {
-    futures.push_back(std::async(std::launch::async, [&, t]() {
-      int localSuccess = 0;
-      for (int i = 0; i < ENTITIES_PER_THREAD; ++i) {
-        int idx = t * ENTITIES_PER_THREAD + i;
-        AIManager::Instance().assignBehavior(allHandles[idx], "Wander");
-        if (AIManager::Instance().hasBehavior(allHandles[idx])) {
-          ++localSuccess;
-        }
-      }
-      successCount.fetch_add(localSuccess, std::memory_order_relaxed);
-      return localSuccess;
-    }));
+  for (const auto& handle : allHandles) {
+    BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
   }
 
-  // Wait for all threads
-  for (auto& f : futures) {
-    f.get();
-  }
-
-  BOOST_CHECK_EQUAL(successCount.load(), TOTAL_ENTITIES);
+  primeAIThreadingDecision(allHandles.size());
+  updateAI(0.016f, Vector2D(200.0f, 200.0f));
 
   // Clean up
-  auto& edm = EntityDataManager::Instance();
-  for (const auto& handle : allHandles) {
-    AIManager::Instance().unassignBehavior(handle);
-    edm.destroyEntity(handle);
-  }
+  destroyTestEntities(allHandles);
 }
 
 // Test AI update with multiple entities
@@ -211,17 +220,12 @@ BOOST_AUTO_TEST_CASE(MultipleEntityUpdate)
   }
 
   // Clean up
-  auto& edm = EntityDataManager::Instance();
-  for (const auto& handle : handles) {
-    AIManager::Instance().unassignBehavior(handle);
-    edm.destroyEntity(handle);
-  }
+  destroyTestEntities(handles);
 }
 
-// Test behavior assignment during update (concurrent access)
-BOOST_AUTO_TEST_CASE(ConcurrentBehaviorAssignmentDuringUpdate)
+BOOST_AUTO_TEST_CASE(MainThreadBehaviorReassignmentBeforeUpdate)
 {
-  constexpr int NUM_ENTITIES = 20;
+  constexpr int NUM_ENTITIES = 120;
   std::vector<std::shared_ptr<TestNPC>> npcs;
   std::vector<EntityHandle> handles;
 
@@ -233,23 +237,16 @@ BOOST_AUTO_TEST_CASE(ConcurrentBehaviorAssignmentDuringUpdate)
     npcs.push_back(npc);
   }
 
-  // Assign behaviors in one thread while updating in another
-  auto assignThread = std::async(std::launch::async, [&]() {
-    for (const auto& handle : handles) {
-      AIManager::Instance().assignBehavior(handle, "Wander");
-      std::this_thread::sleep_for(std::chrono::microseconds(100));
-    }
-  });
+  for (const auto& handle : handles) {
+    AIManager::Instance().assignBehavior(handle, "Idle");
+  }
+  updateAI(0.016f, Vector2D(200.0f, 200.0f));
 
-  auto updateThread = std::async(std::launch::async, [&]() {
-    for (int i = 0; i < 10; ++i) {
-      updateAI(0.016f);
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  });
-
-  assignThread.wait();
-  updateThread.wait();
+  for (const auto& handle : handles) {
+    AIManager::Instance().assignBehavior(handle, "Wander");
+  }
+  primeAIThreadingDecision(handles.size());
+  updateAI(0.016f, Vector2D(200.0f, 200.0f));
 
   // Verify all entities have behaviors
   for (const auto& handle : handles) {
@@ -257,11 +254,7 @@ BOOST_AUTO_TEST_CASE(ConcurrentBehaviorAssignmentDuringUpdate)
   }
 
   // Clean up
-  auto& edm = EntityDataManager::Instance();
-  for (const auto& handle : handles) {
-    AIManager::Instance().unassignBehavior(handle);
-    edm.destroyEntity(handle);
-  }
+  destroyTestEntities(handles);
 }
 
 // Test message sending
@@ -279,9 +272,7 @@ BOOST_AUTO_TEST_CASE(MessageSending)
   updateAI(0.016f);
 
   // Clean up
-  AIManager::Instance().unassignBehavior(handle);
-  auto& edm = EntityDataManager::Instance();
-  edm.destroyEntity(handle);
+  destroyTestEntity(handle);
 
   BOOST_CHECK_GT(AIManager::Instance().getBehaviorUpdateCount(), initialUpdates);
 }
@@ -301,8 +292,7 @@ BOOST_AUTO_TEST_CASE(RapidAssignmentUnassignment)
   }
 
   // Clean up
-  auto& edm = EntityDataManager::Instance();
-  edm.destroyEntity(handle);
+  destroyTestEntity(handle);
 }
 
 // Test global pause
@@ -325,9 +315,7 @@ BOOST_AUTO_TEST_CASE(GlobalPause)
   BOOST_CHECK(!AIManager::Instance().isGloballyPaused());
 
   // Clean up
-  AIManager::Instance().unassignBehavior(handle);
-  auto& edm = EntityDataManager::Instance();
-  edm.destroyEntity(handle);
+  destroyTestEntity(handle);
 }
 
 // Test different behavior types
@@ -358,11 +346,7 @@ BOOST_AUTO_TEST_CASE(DifferentBehaviorTypes)
   }
 
   // Clean up
-  auto& edm = EntityDataManager::Instance();
-  for (const auto& handle : handles) {
-    AIManager::Instance().unassignBehavior(handle);
-    edm.destroyEntity(handle);
-  }
+  destroyTestEntities(handles);
 }
 
 // Test high entity count
@@ -383,8 +367,10 @@ BOOST_AUTO_TEST_CASE(HighEntityCount)
     handles.push_back(handle);
   }
 
-  // Update multiple frames
-  for (int frame = 0; frame < 5; ++frame) {
+  primeAIThreadingDecision(handles.size());
+
+  // Update enough frames to exercise the learned WorkerBudget threaded path.
+  for (int frame = 0; frame < 12; ++frame) {
     updateAI(0.016f);
   }
 
@@ -399,11 +385,7 @@ BOOST_AUTO_TEST_CASE(HighEntityCount)
   BOOST_CHECK_EQUAL(assignedCount, NUM_ENTITIES);
 
   // Clean up
-  auto& edm = EntityDataManager::Instance();
-  for (const auto& handle : handles) {
-    AIManager::Instance().unassignBehavior(handle);
-    edm.destroyEntity(handle);
-  }
+  destroyTestEntities(handles);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

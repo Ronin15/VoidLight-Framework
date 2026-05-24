@@ -21,7 +21,10 @@
 #include "controllers/ControllerRegistry.hpp"
 #include "controllers/ControllerBase.hpp"
 #include "controllers/IUpdatable.hpp"
+#include "events/Event.hpp"
 #include "managers/EventManager.hpp"
+#include <atomic>
+#include <memory>
 #include <string_view>
 
 // --- Test Fixtures ---
@@ -112,13 +115,61 @@ private:
     int m_updateCount{0};
 };
 
+class TokenOwningController : public ControllerBase
+{
+public:
+    static void resetEventCount()
+    {
+        s_eventCount.store(0, std::memory_order_relaxed);
+    }
+
+    static int eventCount()
+    {
+        return s_eventCount.load(std::memory_order_relaxed);
+    }
+
+    void subscribe() override
+    {
+        if (checkAlreadySubscribed()) {
+            return;
+        }
+
+        addHandlerToken(EventManager::Instance().registerHandlerWithToken(
+            EventTypeId::Custom,
+            [](const EventData&) {
+                s_eventCount.fetch_add(1, std::memory_order_relaxed);
+            }));
+        setSubscribed(true);
+    }
+
+    [[nodiscard]] std::string_view getName() const override { return "TokenOwningController"; }
+
+private:
+    static inline std::atomic<int> s_eventCount{0};
+};
+
+class TokenCleanupEvent : public Event
+{
+public:
+    void update() override {}
+    void execute() override {}
+    void reset() override {}
+    void clean() override {}
+
+    [[nodiscard]] std::string getName() const override { return "TokenCleanupEvent"; }
+    [[nodiscard]] std::string getType() const override { return "Custom"; }
+    [[nodiscard]] std::string getTypeName() const override { return "TokenCleanupEvent"; }
+    [[nodiscard]] EventTypeId getTypeId() const override { return EventTypeId::Custom; }
+    [[nodiscard]] bool checkConditions() override { return true; }
+};
+
 struct RegistryFixture
 {
     RegistryFixture()
     {
         // Initialize EventManager for tests that need it
         EventManager::Instance().prepareForStateTransition();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
     }
 
     ~RegistryFixture()
@@ -456,6 +507,24 @@ BOOST_FIXTURE_TEST_CASE(TestClearUnsubscribesFirst, RegistryFixture)
 
     // After clear, registry is empty
     BOOST_CHECK(registry.empty());
+}
+
+BOOST_FIXTURE_TEST_CASE(TestClearRemovesEventHandlerTokens, RegistryFixture)
+{
+    TokenOwningController::resetEventCount();
+    registry.add<TokenOwningController>();
+    registry.subscribeAll();
+
+    auto event = std::make_shared<TokenCleanupEvent>();
+    BOOST_REQUIRE(EventManager::Instance().dispatchEvent(
+        event, EventManager::DispatchMode::Immediate));
+    BOOST_CHECK_EQUAL(TokenOwningController::eventCount(), 1);
+
+    registry.clear();
+
+    BOOST_CHECK(!EventManager::Instance().dispatchEvent(
+        event, EventManager::DispatchMode::Immediate));
+    BOOST_CHECK_EQUAL(TokenOwningController::eventCount(), 1);
 }
 
 BOOST_FIXTURE_TEST_CASE(TestReAddAfterClear, RegistryFixture)

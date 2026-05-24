@@ -374,7 +374,7 @@ BOOST_AUTO_TEST_CASE(TestChaseBehavior) {
             edm.initMemoryData(chaserIdx);
             auto& memData = edm.getMemoryData(chaserIdx);
             memData.lastAttacker = opponentHandle;  // Opponent attacked us - chase them!
-            memData.lastCombatTime = GameTimeManager::Instance().getTotalGameTimeSeconds();  // Just happened
+            memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
             memData.setValid(true);
         }
     }
@@ -436,7 +436,7 @@ BOOST_AUTO_TEST_CASE(TestKnockbackOverridesChaseMovement) {
     edm.initMemoryData(targetIdx);
     auto& memData = edm.getMemoryData(targetIdx);
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = GameTimeManager::Instance().getTotalGameTimeSeconds();
+    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
     memData.setValid(true);
 
     updateAI(0.016f, attacker->getPosition());

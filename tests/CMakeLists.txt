@@ -102,6 +102,8 @@ set(ALL_TESTS
 
 # Create all test executables
 foreach(test_name ${ALL_TESTS})
+    set(test_source "")
+
     # Determine source file based on test name
     if(${test_name} STREQUAL "save_manager_tests")
         set(test_source "SaveManagerTests.cpp")
@@ -274,6 +276,10 @@ foreach(test_name ${ALL_TESTS})
         set(test_source "integration/KnockbackSidecarTest.cpp")
     endif()
 
+    if("${test_source}" STREQUAL "")
+        message(FATAL_ERROR "No test source mapped for ${test_name}")
+    endif()
+
     add_executable(${test_name} ${test_source})
     target_link_libraries(${test_name} PRIVATE VoidLightLib Boost::unit_test_framework)
     target_compile_definitions(${test_name} PRIVATE BOOST_TEST_NO_SIGNAL_HANDLING)
@@ -379,10 +385,15 @@ set(GPU_UNIT_TESTS
 
     # Source file mapping for GPU unit tests (no GPU required)
     foreach(test_name ${GPU_UNIT_TESTS})
+        set(test_source "")
         if(${test_name} STREQUAL "gpu_types_tests")
             set(test_source "gpu/GPUTypesTests.cpp")
         elseif(${test_name} STREQUAL "gpu_pipeline_config_tests")
             set(test_source "gpu/GPUPipelineConfigTests.cpp")
+        endif()
+
+        if(test_source STREQUAL "")
+            message(FATAL_ERROR "No source mapping found for GPU unit test '${test_name}'")
         endif()
 
         add_executable(${test_name} ${test_source})
@@ -397,6 +408,7 @@ set(GPU_UNIT_TESTS
 
     # Source file mapping for GPU integration tests (require GPU)
     foreach(test_name ${GPU_INTEGRATION_TESTS})
+        set(test_source "")
         if(${test_name} STREQUAL "gpu_device_tests")
             set(test_source "gpu/GPUDeviceTests.cpp")
         elseif(${test_name} STREQUAL "gpu_shader_manager_tests")
@@ -407,6 +419,10 @@ set(GPU_UNIT_TESTS
             set(test_source "gpu/GPUVertexPoolTests.cpp")
         elseif(${test_name} STREQUAL "sprite_batch_tests")
             set(test_source "gpu/SpriteBatchTests.cpp")
+        endif()
+
+        if(test_source STREQUAL "")
+            message(FATAL_ERROR "No source mapping found for GPU integration test '${test_name}'")
         endif()
 
         add_executable(${test_name} ${test_source})
@@ -421,8 +437,13 @@ set(GPU_UNIT_TESTS
 
     # Source file mapping for GPU system tests (full frame flow)
     foreach(test_name ${GPU_SYSTEM_TESTS})
+        set(test_source "")
         if(${test_name} STREQUAL "gpu_renderer_tests")
             set(test_source "gpu/GPURendererTests.cpp")
+        endif()
+
+        if(test_source STREQUAL "")
+            message(FATAL_ERROR "No source mapping found for GPU system test '${test_name}'")
         endif()
 
         add_executable(${test_name} ${test_source})

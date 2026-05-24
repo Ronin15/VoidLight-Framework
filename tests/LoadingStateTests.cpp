@@ -9,9 +9,65 @@
 #include <atomic>
 #include <thread>
 #include <chrono>
+#include <memory>
 
 #include "gameStates/LoadingState.hpp"
+#include "core/ThreadSystem.hpp"
+#include "managers/CollisionManager.hpp"
+#include "managers/EventManager.hpp"
+#include "managers/GameStateManager.hpp"
+#include "managers/GameTimeManager.hpp"
+#include "managers/PathfinderManager.hpp"
+#include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
+
+namespace {
+
+class TestMainMenuState final : public GameState
+{
+public:
+    static void reset()
+    {
+        s_entered.store(false, std::memory_order_release);
+        s_exited.store(false, std::memory_order_release);
+    }
+
+    static bool entered()
+    {
+        return s_entered.load(std::memory_order_acquire);
+    }
+
+    static bool exited()
+    {
+        return s_exited.load(std::memory_order_acquire);
+    }
+
+    bool enter() override
+    {
+        s_entered.store(true, std::memory_order_release);
+        return true;
+    }
+
+    void update(float) override {}
+    void handleInput() override {}
+
+    bool exit() override
+    {
+        s_exited.store(true, std::memory_order_release);
+        return true;
+    }
+
+    GameStateId getStateId() const override
+    {
+        return GameStateId::MAIN_MENU;
+    }
+
+private:
+    static inline std::atomic<bool> s_entered{false};
+    static inline std::atomic<bool> s_exited{false};
+};
+
+} // namespace
 
 // ============================================================================
 // TEST SUITE: AsyncLoadingPatternTests
@@ -120,6 +176,65 @@ BOOST_AUTO_TEST_CASE(TestEnterFailsWhenUnconfigured) {
     LoadingState loadingState;
 
     BOOST_CHECK(!loadingState.enter());
+}
+
+BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {
+    TestMainMenuState::reset();
+
+    BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
+    BOOST_REQUIRE(EventManager::Instance().init());
+    BOOST_REQUIRE(GameTimeManager::Instance().init());
+    BOOST_REQUIRE(UIManager::Instance().init());
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+    BOOST_REQUIRE(PathfinderManager::Instance().init());
+    BOOST_REQUIRE(WorldManager::Instance().init());
+
+    VoidLight::WorldGenerationConfig config{};
+    config.width = 4;
+    config.height = 4;
+    config.seed = 2026;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.3f;
+    config.mountainLevel = 0.7f;
+
+    GameStateManager stateManager;
+    auto loadingState = std::make_unique<LoadingState>();
+    auto* loadingStatePtr = loadingState.get();
+    stateManager.addState(std::move(loadingState));
+    stateManager.addState(std::make_unique<TestMainMenuState>());
+
+    loadingStatePtr->configure(GameStateId::MAIN_MENU, config);
+    stateManager.pushState(GameStateId::LOADING);
+
+    auto& ui = UIManager::Instance();
+    BOOST_CHECK(ui.hasComponent("loading_title"));
+    BOOST_CHECK(ui.hasComponent("loading_progress"));
+    BOOST_CHECK(ui.hasComponent("loading_status"));
+
+    for (int i = 0; i < 200 && !TestMainMenuState::entered(); ++i) {
+        stateManager.update(0.016f);
+        EventManager::Instance().update();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    BOOST_CHECK(TestMainMenuState::entered());
+    BOOST_CHECK(!WorldManager::Instance().getCurrentWorldId().empty());
+    BOOST_CHECK(PathfinderManager::Instance().isGridReady());
+    BOOST_CHECK(!ui.hasComponent("loading_title"));
+    BOOST_CHECK(!ui.hasComponent("loading_progress"));
+    BOOST_CHECK(!ui.hasComponent("loading_status"));
+
+    stateManager.clearAllStates();
+    BOOST_CHECK(TestMainMenuState::exited());
+
+    WorldManager::Instance().clean();
+    PathfinderManager::Instance().clean();
+    CollisionManager::Instance().clean();
+    GameTimeManager::Instance().setGlobalPause(false);
+    UIManager::Instance().prepareForStateTransition();
+    EventManager::Instance().clean();
+    VoidLight::ThreadSystem::Instance().clean();
 }
 
 // ----------------------------------------------------------------------------

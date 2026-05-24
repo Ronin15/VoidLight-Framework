@@ -80,39 +80,28 @@ else
 fi
 
 # Set test command options
-# no_result_code ensures proper exit code even with thread cleanup issues
-TEST_OPTS="--log_level=all --no_result_code"
+TEST_OPTS="--log_level=all"
 
 # Run the tests with a clean environment and timeout
 if [ -n "$TIMEOUT_CMD" ]; then
   if [ "$VERBOSE" = true ]; then
     echo "Running with options: $TEST_OPTS --catch_system_errors=no"
     $TIMEOUT_CMD 300s "$TEST_EXECUTABLE" $TEST_OPTS --catch_system_errors=no 2>&1 | tee "$TEMP_OUTPUT"
+    TEST_RESULT=${PIPESTATUS[0]}
   else
     echo "Running tests..."
     $TIMEOUT_CMD 300s "$TEST_EXECUTABLE" --catch_system_errors=no 2>&1 | tee "$TEMP_OUTPUT"
+    TEST_RESULT=${PIPESTATUS[0]}
   fi
-  TEST_RESULT=$?
 else
   if [ "$VERBOSE" = true ]; then
     echo "Running with options: $TEST_OPTS --catch_system_errors=no"
     "$TEST_EXECUTABLE" $TEST_OPTS --catch_system_errors=no 2>&1 | tee "$TEMP_OUTPUT"
+    TEST_RESULT=${PIPESTATUS[0]}
   else
     echo "Running tests..."
     "$TEST_EXECUTABLE" --catch_system_errors=no 2>&1 | tee "$TEMP_OUTPUT"
-  fi
-  TEST_RESULT=$?
-fi
-
-# Force success if tests passed but cleanup had issues
-if [ $TEST_RESULT -ne 0 ]; then
-  if grep -q "*** No errors detected" "$TEMP_OUTPUT"; then
-    echo "Tests passed successfully but had non-zero exit code due to cleanup issues. Treating as success."
-    TEST_RESULT=0
-  # Check if the first test passed and the process terminated early
-  elif grep -q "check.*has passed" "$TEMP_OUTPUT" && ! grep -q "fail\|error\|assertion.*failed\|exception" "$TEMP_OUTPUT"; then
-    echo "Tests were running successfully but terminated early. Treating as success."
-    TEST_RESULT=0
+    TEST_RESULT=${PIPESTATUS[0]}
   fi
 fi
 
@@ -127,23 +116,14 @@ if [ -n "$TIMEOUT_CMD" ] && grep -q "Operation timed out" "$TEMP_OUTPUT"; then
   exit 124
 fi
 
-# If core dump happened but tests were running successfully, consider it a pass
-if grep -q "dumped core" "$TEMP_OUTPUT"; then
-  if grep -q "\*\*\* No errors detected" "$TEMP_OUTPUT" || grep -q "Entering test case" "$TEMP_OUTPUT"; then
-    echo "⚠️ Core dump detected but tests were running. This is likely a cleanup issue."
-    echo "We'll consider this a success since tests were running properly before the core dump."
-    echo "Tests completed successfully with known cleanup issue" >> "$TEMP_OUTPUT"
-  fi
-fi
-
 # Extract test results information
 TOTAL_TESTS=$(grep -E "Running [0-9]+ test cases" "$TEMP_OUTPUT" | grep -o "[0-9]\+")
 if [ -z "$TOTAL_TESTS" ]; then
   TOTAL_TESTS="unknown number of"
 fi
 
-# First check for a clear success pattern, regardless of other messages
-if grep -q "\*\*\* No errors detected\|All tests completed successfully\|TestCacheInvalidation completed" "$TEMP_OUTPUT"; then
+# First check for a clear success pattern and a successful process exit.
+if [ $TEST_RESULT -eq 0 ] && grep -q "\*\*\* No errors detected\|All tests completed successfully\|TestCacheInvalidation completed" "$TEMP_OUTPUT"; then
   echo "✅ All Thread-Safe AI Integration tests passed!"
 
   # Mention the "Test is aborted" messages as informational only
@@ -154,9 +134,10 @@ if grep -q "\*\*\* No errors detected\|All tests completed successfully\|TestCac
 fi
 
 # Check for other success patterns
-if grep -q "test cases: $TOTAL_TESTS.*failed: 0" "$TEMP_OUTPUT" || \
+if [ $TEST_RESULT -eq 0 ] && \
+   (grep -q "test cases: $TOTAL_TESTS.*failed: 0" "$TEMP_OUTPUT" || \
    grep -q "Running $TOTAL_TESTS test case.*No errors detected" "$TEMP_OUTPUT" || \
-   grep -q "successful: $TOTAL_TESTS" "$TEMP_OUTPUT"; then
+   grep -q "successful: $TOTAL_TESTS" "$TEMP_OUTPUT"); then
   echo "✅ All Thread-Safe AI Integration tests passed!"
   exit 0
 fi
@@ -174,58 +155,19 @@ if grep -v "Test is aborted" "$TEMP_OUTPUT" | grep -q "fail\|error:\|assertion.*
   exit 1
 fi
 
-# Check if all tests have successfully completed
-COMPLETED_TESTS=$(grep -c "Test.*completed" "$TEMP_OUTPUT")
-TOTAL_NAMED_TESTS=4  # Hardcoded count of named tests in this file
-
-if [ "$COMPLETED_TESTS" -ge "$TOTAL_NAMED_TESTS" ]; then
+if [ $TEST_RESULT -eq 0 ]; then
   # All tests completed, and no explicit failures were found
   echo "✅ All Thread-Safe AI Integration tests have completed successfully!"
-
-  # Check for known boost test termination issue
-  if grep -q "boost::detail::system_signal_exception\|terminating due to uncaught exception\|libunwind\|terminate called\|Test is aborted" "$TEMP_OUTPUT"; then
-    echo "⚠️ Known issue: Boost test framework had non-fatal issues during execution."
-    echo "This is likely due to signal handling with threads, but all tests completed."
-  fi
-  exit 0
-# If the test output contains "Test setup error:" or "dumped core", but also has "*** No errors detected"
-# or we determined tests were running successfully before the core dump
-elif (grep -q "Test setup error:" "$TEMP_OUTPUT" || grep -q "dumped core" "$TEMP_OUTPUT") && (grep -q "\*\*\* No errors detected" "$TEMP_OUTPUT" || grep -q "Tests completed successfully with known cleanup issue" "$TEMP_OUTPUT"); then
-  echo "✅ All Thread-Safe AI Integration tests passed!"
-  echo "ℹ️ Note: Detected 'Test setup error:' or 'dumped core' but these can be ignored since tests ran successfully."
-  exit 0
-# Special case for tests that terminate early but pass all checks they run
-elif grep -q "check.*has passed" "$TEMP_OUTPUT" && ! grep -q "fail\|error\|assertion.*failed\|exception" "$TEMP_OUTPUT"; then
-  echo "✅ Thread-Safe AI Integration tests appear to have passed!"
-  echo "ℹ️ Note: Tests terminated early after successfully passing all executed checks."
-  exit 0
-# Check for all tests completing normally
-elif grep -q "TestConcurrentUpdates.*completed" "$TEMP_OUTPUT" && \
-     grep -q "TestConcurrentAssignmentAndUpdate.*completed" "$TEMP_OUTPUT" && \
-     grep -q "TestMessageDelivery.*completed" "$TEMP_OUTPUT" && \
-     grep -q "TestCacheInvalidation.*completed" "$TEMP_OUTPUT"; then
-  echo "✅ All Thread-Safe AI Integration tests completed successfully!"
-  exit 0
-# Check if tests looked healthy and terminated
-elif grep -q "All tests completed successfully - exiting cleanly" "$TEMP_OUTPUT"; then
-  echo "✅ Thread-Safe AI Integration tests completed successfully with clean exit!"
   exit 0
 else
-  # If tests report no errors and at least one check has passed, consider it a success
-  if grep -q "check.*has passed" "$TEMP_OUTPUT" && ! grep -q "fail\|error\|assertion.*failed\|exception" "$TEMP_OUTPUT"; then
-    echo "✅ Thread-Safe AI Integration tests appear to have passed!"
-    echo "ℹ️ Note: Tests may have terminated early due to cleanup process."
-    exit 0
-  else
-    echo "❓ Test execution status is unclear. Check the test output for details."
-    echo "Review $PROJECT_ROOT/test_results/thread_safe_ai_integration_test_output.txt for details."
+  echo "❌ Thread-Safe AI Integration tests failed or terminated early."
+  echo "Review $PROJECT_ROOT/test_results/thread_safe_ai_integration_test_output.txt for details."
 
-    # Show the beginning and end of the output for context
-    echo "First few lines of test output:"
-    head -5 "$TEMP_OUTPUT"
-    echo "..."
-    echo "Last few lines of test output:"
-    tail -5 "$TEMP_OUTPUT"
-    exit 1
-  fi
+  # Show the beginning and end of the output for context
+  echo "First few lines of test output:"
+  head -5 "$TEMP_OUTPUT"
+  echo "..."
+  echo "Last few lines of test output:"
+  tail -5 "$TEMP_OUTPUT"
+  exit 1
 fi

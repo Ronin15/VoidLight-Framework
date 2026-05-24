@@ -98,11 +98,11 @@ struct AIManagerEDMFixture {
     AIManagerEDMFixture() {
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        EventManager::Instance().init();
-        AIManager::Instance().init();
-        BackgroundSimulationManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
     }
 
     ~AIManagerEDMFixture() {
