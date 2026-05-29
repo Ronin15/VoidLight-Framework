@@ -403,6 +403,34 @@ BOOST_AUTO_TEST_CASE(TestOpenNearbyContainerUsesExplicitNonAtlasIconTexture) {
     BOOST_CHECK(sameRect(ui.getImageSourceRect("container_icon_0"), UIRect{}));
 }
 
+BOOST_AUTO_TEST_CASE(TestOpenContainerClosesWhenPlayerLeavesInteractionRange) {
+    const auto oldShirt = getResourceHandleById("old_shirt");
+    BOOST_REQUIRE(oldShirt.isValid());
+    const EntityHandle chest = createChestWithContents(player, {"old_shirt"});
+    auto& edm = EntityDataManager::Instance();
+    const uint32_t chestInventory = edm.getContainerData(chest).inventoryIndex;
+
+    InventoryController controller(player);
+    controller.initializeInventoryUI();
+    BOOST_REQUIRE(controller.tryOpenNearbyContainer());
+    BOOST_REQUIRE(controller.isInventoryVisible());
+    BOOST_REQUIRE(edm.getContainerData(chest).isOpen());
+
+    player->setPosition(
+        player->getPosition() + Vector2D(InventoryController::PICKUP_RADIUS + 8.0f, 0.0f));
+    controller.update(0.016f);
+
+    BOOST_CHECK(!edm.getContainerData(chest).isOpen());
+    BOOST_CHECK(controller.isInventoryVisible());
+
+    auto& ui = UIManager::Instance();
+    ui.simulateClick("container_slot_0");
+    ui.update(0.016f);
+
+    BOOST_CHECK_EQUAL(player->getInventoryQuantity(oldShirt), 0);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(chestInventory, oldShirt), 1);
+}
+
 BOOST_AUTO_TEST_CASE(TestLootAllMovesContainerContentsToPlayerInventory) {
     const auto oldShirt = getResourceHandleById("old_shirt");
     const auto oldPants = getResourceHandleById("old_pants");

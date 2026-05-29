@@ -16,6 +16,7 @@
  */
 
 #include "controllers/ControllerBase.hpp"
+#include "controllers/IUpdatable.hpp"
 #include "utils/ResourceHandle.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -31,7 +32,7 @@ class HudController;
 struct InventoryResourceChange;
 struct UIRect;
 
-class InventoryController : public ControllerBase {
+class InventoryController : public ControllerBase, public IUpdatable {
 public:
     explicit InventoryController(std::shared_ptr<Player> player)
         : mp_player(std::move(player)) {}
@@ -42,6 +43,7 @@ public:
     InventoryController& operator=(InventoryController&&) noexcept = default;
 
     void subscribe() override;
+    void update(float) override;
 
     [[nodiscard]] std::string_view getName() const override { return "InventoryController"; }
 

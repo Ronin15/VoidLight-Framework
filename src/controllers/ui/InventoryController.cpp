@@ -234,6 +234,38 @@ bool InventoryController::tryOpenNearbyContainer() {
     return true;
 }
 
+void InventoryController::update(float) {
+    if (!hasOpenContainer()) {
+        return;
+    }
+
+    auto player = mp_player.lock();
+    if (!player) {
+        closeOpenContainer();
+        return;
+    }
+
+    auto& edm = EntityDataManager::Instance();
+    if (m_openContainerStaticIndex >= edm.getStaticHotDataArray().size() ||
+        !edm.isValidInventoryIndex(m_openContainerInventoryIndex)) {
+        closeOpenContainer();
+        return;
+    }
+
+    const auto& hot = edm.getStaticHotDataByIndex(m_openContainerStaticIndex);
+    if (!hot.isAlive() || hot.kind != EntityKind::Container) {
+        closeOpenContainer();
+        return;
+    }
+
+    const Vector2D delta = hot.transform.position - player->getPosition();
+    const float distanceSq =
+        (delta.getX() * delta.getX()) + (delta.getY() * delta.getY());
+    if (distanceSq > (PICKUP_RADIUS * PICKUP_RADIUS)) {
+        closeOpenContainer();
+    }
+}
+
 void InventoryController::initializeInventoryUI() {
     if (m_inventoryUICreated) {
         refreshInventoryUI();
@@ -1306,6 +1338,11 @@ void InventoryController::closeOpenContainer() {
 
     m_openContainerInventoryIndex = NO_OPEN_CONTAINER_INVENTORY;
     m_openContainerStaticIndex = SIZE_MAX;
+    if (m_draggedContainerHandle.isValid()) {
+        updateDragGhost(VoidLight::ResourceHandle{}, false);
+    }
+    m_draggedContainerSourceSlot = -1;
+    m_draggedContainerHandle = VoidLight::ResourceHandle{};
     m_containerEntries.clear();
     setContainerComponentsVisible(false);
 }
