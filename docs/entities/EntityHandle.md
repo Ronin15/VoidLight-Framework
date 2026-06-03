@@ -17,12 +17,12 @@ Handles are the primary way to reference entities throughout the codebase. They 
 ```cpp
 struct EntityHandle {
     using IDType = uint64_t;
-    using Generation = uint8_t;
+    using Generation = uint32_t;
 
     IDType id{INVALID_ID};                      // 8 bytes: Unique identifier
     EntityKind kind{EntityKind::NPC};           // 1 byte: Entity type
-    Generation generation{INVALID_GENERATION};  // 1 byte: Stale detection
-    uint16_t padding{0};                        // 2 bytes: Alignment
+    uint8_t padding[3]{0, 0, 0};                // 3 bytes: Alignment
+    Generation generation{INVALID_GENERATION};  // 4 bytes: Stale detection
     // Total: 16 bytes (8-byte aligned)
 };
 ```

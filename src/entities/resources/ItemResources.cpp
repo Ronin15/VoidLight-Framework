@@ -20,26 +20,6 @@ void Item::setDurability(int durability, int maxDurability) {
   m_maxDurability = maxDurability;
 }
 
-// Equipment implementation
-Equipment::Equipment(VoidLight::ResourceHandle handle, const std::string &id,
-                     const std::string &name, EquipmentSlot slot)
-    : Item(handle, id, name, ResourceType::Equipment), m_equipmentSlot(slot) {
-  // Equipment is not stackable
-  setMaxStackSize(1);
-  setConsumable(false);
-}
-
-std::string Equipment::equipmentSlotToString(EquipmentSlot slot) {
-  static const std::unordered_map<EquipmentSlot, std::string> slotMap = {
-      {EquipmentSlot::Weapon, "Weapon"}, {EquipmentSlot::Helmet, "Helmet"},
-      {EquipmentSlot::Chest, "Chest"},   {EquipmentSlot::Legs, "Legs"},
-      {EquipmentSlot::Boots, "Boots"},   {EquipmentSlot::Gloves, "Gloves"},
-      {EquipmentSlot::Ring, "Ring"},     {EquipmentSlot::Necklace, "Necklace"}};
-
-  auto it = slotMap.find(slot);
-  return (it != slotMap.end()) ? it->second : "Unknown";
-}
-
 // Consumable implementation
 Consumable::Consumable(VoidLight::ResourceHandle handle,
                        const std::string &id, const std::string &name)
@@ -56,6 +36,7 @@ std::string Consumable::consumableEffectToString(ConsumableEffect effect) {
       {ConsumableEffect::BoostAttack, "Boost Attack"},
       {ConsumableEffect::BoostDefense, "Boost Defense"},
       {ConsumableEffect::BoostSpeed, "Boost Speed"},
+      {ConsumableEffect::RestoreStamina, "Restore Stamina"},
       {ConsumableEffect::Teleport, "Teleport"}};
 
   auto it = effectMap.find(effect);
@@ -69,4 +50,11 @@ QuestItem::QuestItem(VoidLight::ResourceHandle handle, const std::string &id,
   // Quest items are not stackable and not consumable
   setMaxStackSize(1);
   setConsumable(false);
+}
+
+Ammunition::Ammunition(VoidLight::ResourceHandle handle, const std::string &id,
+                       const std::string &name, const std::string &ammoType)
+    : Item(handle, id, name, ResourceType::Ammunition), m_ammoType(ammoType) {
+  setMaxStackSize(200);
+  setConsumable(true);
 }

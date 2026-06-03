@@ -9,14 +9,14 @@
 #include "core/Logger.hpp"
 #include "managers/FontManager.hpp"
 #include "managers/InputManager.hpp"
+#include "managers/TextureManager.hpp"
 #include <algorithm>
 #include <cmath>
 #include <format>
-#include <numeric>
+#include <limits>
 #include "gpu/GPURenderer.hpp"
 #include "gpu/GPUVertexPool.hpp"
 #include "gpu/GPUTypes.hpp"
-#include "gpu/SpriteBatch.hpp"
 
 bool UIManager::init() {
   if (m_isShutdown) {
@@ -48,27 +48,27 @@ bool UIManager::init() {
       INTERACTIONS_CAPACITY); // Reserve for typical hover states
   m_focusedComponent.clear();
   m_hoveredTooltip.clear();
+  m_hoveredTooltipCandidate.clear();
 
   m_tooltipTimer = 0.0f;
   m_mousePressed = false;
   m_mouseReleased = false;
 
-  // Initialize current logical dimensions from GameEngine
+  // Initialize current pixel dimensions from GameEngine
   const auto& gameEngine = GameEngine::Instance();
-  m_currentLogicalWidth = gameEngine.getLogicalWidth();
-  m_currentLogicalHeight = gameEngine.getLogicalHeight();
-  UI_INFO(std::format("Initialized logical dimensions: {}x{}",
-                      m_currentLogicalWidth, m_currentLogicalHeight));
+  m_currentWidthInPixels = gameEngine.getWidthInPixels();
+  m_currentHeightInPixels = gameEngine.getHeightInPixels();
+  UI_INFO(std::format("Initialized pixel dimensions: {}x{}",
+                      m_currentWidthInPixels, m_currentHeightInPixels));
 
   // Calculate and set resolution-aware UI scale (1920x1080 baseline, capped at 1.0)
-  m_globalScale = calculateOptimalScale(m_currentLogicalWidth, m_currentLogicalHeight);
+  m_globalScale = calculateOptimalScale(m_currentWidthInPixels, m_currentHeightInPixels);
   UI_INFO(std::format("UI scale set to {} for resolution {}x{}",
-                      m_globalScale, m_currentLogicalWidth, m_currentLogicalHeight));
+                      m_globalScale, m_currentWidthInPixels, m_currentHeightInPixels));
 
-  // Reserve GPU command buffers to avoid per-frame reallocations
-  m_gpuPrimitiveCommands.reserve(GPU_PRIMITIVE_COMMAND_CAPACITY);
-  m_gpuTextCommands.reserve(GPU_TEXT_COMMAND_CAPACITY);
-  m_gpuImageCommands.reserve(GPU_IMAGE_COMMAND_CAPACITY);
+  // Reserve GPU batch buffers to avoid per-frame reallocations.
+  m_textRenderBatches.reserve(UI_TEXT_BATCH_CAPACITY);
+  m_imageRenderBatches.reserve(UI_IMAGE_BATCH_CAPACITY);
 
   // Note: UIManager::onWindowResize() is called directly by InputManager when window resizes
 
@@ -190,9 +190,54 @@ void UIManager::invalidateComponentCache() {
   m_sortedComponentsDirty = true;
 }
 
+void UIManager::clearFrameRenderBatches() {
+  m_uiPrimitiveVertexCount = 0;
+  m_imageRenderBatches.clear();
+  m_textRenderBatches.clear();
+}
+
+// Parent/child linkage — called from every create* method after the
+// component is in m_components. Registers with parent, computes backdrop
+// inheritance, and suppresses the child's default text-background when the
+// parent already provides one (PANEL/DIALOG or any descendant of one).
+void UIManager::linkToParent(const std::shared_ptr<UIComponent> &component,
+                             const std::string &parentId) {
+  if (!component || parentId.empty()) {
+    return;
+  }
+
+  auto parent = getComponent(parentId);
+  if (!parent) {
+    UI_WARN(std::format("linkToParent: parent '{}' not found for child '{}'",
+                        parentId, component->m_id));
+    return;
+  }
+
+  component->m_parentId = parentId;
+  parent->m_childIds.push_back(component->m_id);
+
+  const bool parentProvidesBackdrop =
+      parent->m_type == UIComponentType::PANEL ||
+      parent->m_type == UIComponentType::DIALOG ||
+      parent->m_hasBackdropAncestor;
+
+  component->m_hasBackdropAncestor = parentProvidesBackdrop;
+  if (parentProvidesBackdrop) {
+    component->m_style.useTextBackground = false;
+  }
+
+  // Ensure child renders on top of its parent regardless of theme defaults.
+  // Additive bump preserves relative ordering between siblings (e.g. a button at z=10 and
+  // a title at z=25 inside a modal dialog at z=600 end up at 611 and 626 respectively).
+  if (component->m_zOrder <= parent->m_zOrder) {
+    component->m_zOrder += parent->m_zOrder + 1;
+  }
+}
+
 // Component creation methods
 void UIManager::createButton(const std::string &id, const UIRect &bounds,
-                             const std::string &text) {
+                             const std::string &text,
+                             const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::BUTTON;
@@ -202,12 +247,17 @@ void UIManager::createButton(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::BUTTON);
   component->m_zOrder = UIConstants::ZORDER_BUTTON; // Interactive elements on top
 
-  m_components[id] = component;
-  invalidateComponentCache();
+  // Caller-supplied size is the floor; auto-sizing only grows the button to fit text
+  component->m_minBounds.width = component->m_bounds.width;
+  component->m_minBounds.height = component->m_bounds.height;
+
+  // Grow to fit text so long labels never overflow the button bounds
+  registerComponent(component, parentId, true);
 }
 
 void UIManager::createButtonDanger(const std::string &id, const UIRect &bounds,
-                                   const std::string &text) {
+                                   const std::string &text,
+                                   const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::BUTTON_DANGER;
@@ -217,12 +267,15 @@ void UIManager::createButtonDanger(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::BUTTON_DANGER);
   component->m_zOrder = UIConstants::ZORDER_BUTTON; // Interactive elements on top
 
-  m_components[id] = component;
-  invalidateComponentCache();
+  component->m_minBounds.width = component->m_bounds.width;
+  component->m_minBounds.height = component->m_bounds.height;
+
+  registerComponent(component, parentId, true);
 }
 
 void UIManager::createButtonSuccess(const std::string &id, const UIRect &bounds,
-                                    const std::string &text) {
+                                    const std::string &text,
+                                    const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::BUTTON_SUCCESS;
@@ -232,12 +285,15 @@ void UIManager::createButtonSuccess(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::BUTTON_SUCCESS);
   component->m_zOrder = UIConstants::ZORDER_BUTTON; // Interactive elements on top
 
-  m_components[id] = component;
-  invalidateComponentCache();
+  component->m_minBounds.width = component->m_bounds.width;
+  component->m_minBounds.height = component->m_bounds.height;
+
+  registerComponent(component, parentId, true);
 }
 
 void UIManager::createButtonWarning(const std::string &id, const UIRect &bounds,
-                                    const std::string &text) {
+                                    const std::string &text,
+                                    const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::BUTTON_WARNING;
@@ -247,12 +303,15 @@ void UIManager::createButtonWarning(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::BUTTON_WARNING);
   component->m_zOrder = UIConstants::ZORDER_BUTTON; // Interactive elements on top
 
-  m_components[id] = component;
-  invalidateComponentCache();
+  component->m_minBounds.width = component->m_bounds.width;
+  component->m_minBounds.height = component->m_bounds.height;
+
+  registerComponent(component, parentId, true);
 }
 
 void UIManager::createLabel(const std::string &id, const UIRect &bounds,
-                            const std::string &text) {
+                            const std::string &text,
+                            const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::LABEL;
@@ -262,14 +321,13 @@ void UIManager::createLabel(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::LABEL);
   component->m_zOrder = UIConstants::ZORDER_LABEL; // Text on top
 
-  m_components[id] = component;
-
   // Apply auto-sizing after creation
-  calculateOptimalSize(component);
+  registerComponent(component, parentId, true);
 }
 
 void UIManager::createTitle(const std::string &id, const UIRect &bounds,
-                            const std::string &text) {
+                            const std::string &text,
+                            const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::TITLE;
@@ -279,13 +337,12 @@ void UIManager::createTitle(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::TITLE);
   component->m_zOrder = UIConstants::ZORDER_TITLE; // Titles on top
 
-  m_components[id] = component;
-
   // Apply auto-sizing after creation
-  calculateOptimalSize(component);
+  registerComponent(component, parentId, true);
 }
 
-void UIManager::createPanel(const std::string &id, const UIRect &bounds) {
+void UIManager::createPanel(const std::string &id, const UIRect &bounds,
+                            const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::PANEL;
@@ -294,11 +351,12 @@ void UIManager::createPanel(const std::string &id, const UIRect &bounds) {
   component->m_style = m_currentTheme.getStyle(UIComponentType::PANEL);
   component->m_zOrder = UIConstants::ZORDER_PANEL; // Background panels
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
 }
 
 void UIManager::createProgressBar(const std::string &id, const UIRect &bounds,
-                                  float minVal, float maxVal) {
+                                  float minVal, float maxVal,
+                                  const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::PROGRESS_BAR;
@@ -310,11 +368,12 @@ void UIManager::createProgressBar(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::PROGRESS_BAR);
   component->m_zOrder = UIConstants::ZORDER_PROGRESS_BAR; // UI elements
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
 }
 
 void UIManager::createInputField(const std::string &id, const UIRect &bounds,
-                                 const std::string &placeholder) {
+                                 const std::string &placeholder,
+                                 const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::INPUT_FIELD;
@@ -324,11 +383,12 @@ void UIManager::createInputField(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::INPUT_FIELD);
   component->m_zOrder = UIConstants::ZORDER_INPUT_FIELD; // Interactive elements
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
 }
 
 void UIManager::createImage(const std::string &id, const UIRect &bounds,
-                            const std::string &textureID) {
+                            const std::string &textureID,
+                            const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::IMAGE;
@@ -338,11 +398,29 @@ void UIManager::createImage(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::IMAGE);
   component->m_zOrder = UIConstants::ZORDER_IMAGE; // Background images
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
+}
+
+void UIManager::createAtlasImage(const std::string &id, const UIRect &bounds,
+                                 const std::string &textureID,
+                                 const UIRect &sourceRect,
+                                 const std::string &parentId) {
+  auto component = std::make_shared<UIComponent>();
+  component->m_id = id;
+  component->m_type = UIComponentType::IMAGE;
+  component->m_bounds = scaleRect(bounds);
+  component->m_textureID = textureID;
+  component->m_imageSourceRect = sourceRect;
+  component->m_useImageSourceRect = true;
+  component->m_style = m_currentTheme.getStyle(UIComponentType::IMAGE);
+  component->m_zOrder = UIConstants::ZORDER_IMAGE;
+
+  registerComponent(component, parentId);
 }
 
 void UIManager::createSlider(const std::string &id, const UIRect &bounds,
-                             float minVal, float maxVal) {
+                             float minVal, float maxVal,
+                             const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::SLIDER;
@@ -354,11 +432,12 @@ void UIManager::createSlider(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::SLIDER);
   component->m_zOrder = UIConstants::ZORDER_SLIDER; // Interactive elements
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
 }
 
 void UIManager::createCheckbox(const std::string &id, const UIRect &bounds,
-                               const std::string &text) {
+                               const std::string &text,
+                               const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::CHECKBOX;
@@ -369,10 +448,11 @@ void UIManager::createCheckbox(const std::string &id, const UIRect &bounds,
   component->m_style = m_currentTheme.getStyle(UIComponentType::CHECKBOX);
   component->m_zOrder = UIConstants::ZORDER_CHECKBOX; // Interactive elements
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
 }
 
-void UIManager::createList(const std::string &id, const UIRect &bounds) {
+void UIManager::createList(const std::string &id, const UIRect &bounds,
+                           const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::LIST;
@@ -382,10 +462,8 @@ void UIManager::createList(const std::string &id, const UIRect &bounds) {
   component->m_style = m_currentTheme.getStyle(UIComponentType::LIST);
   component->m_zOrder = UIConstants::ZORDER_LIST; // UI elements
 
-  m_components[id] = component;
-
   // Enable auto-sizing for dynamic content-based sizing
-  calculateOptimalSize(component);
+  registerComponent(component, parentId, true);
 }
 
 void UIManager::createTooltip(const std::string &id, const std::string &text) {
@@ -397,7 +475,7 @@ void UIManager::createTooltip(const std::string &id, const std::string &text) {
   component->m_style = m_currentTheme.getStyle(UIComponentType::TOOLTIP);
   component->m_zOrder = UIConstants::ZORDER_TOOLTIP; // Always on top
 
-  m_components[id] = component;
+  registerComponent(component, "");
 }
 
 void UIManager::createEventLog(const std::string &id, const UIRect &bounds,
@@ -412,20 +490,20 @@ void UIManager::createEventLog(const std::string &id, const UIRect &bounds,
       UIComponentType::EVENT_LOG); // Use event log styling
   component->m_zOrder = UIConstants::ZORDER_EVENT_LOG;           // UI elements
 
-  m_components[id] = component;
-  invalidateComponentCache();
+  registerComponent(component, "");
 }
 
-void UIManager::createDialog(const std::string &id, const UIRect &bounds) {
+void UIManager::createDialog(const std::string &id, const UIRect &bounds,
+                             const std::string &parentId) {
   auto component = std::make_shared<UIComponent>();
   component->m_id = id;
   component->m_type = UIComponentType::DIALOG;
   // Apply global scale for resolution-aware sizing
   component->m_bounds = scaleRect(bounds);
   component->m_style = m_currentTheme.getStyle(UIComponentType::DIALOG);
-  component->m_zOrder = UIConstants::ZORDER_DIALOG; // Render behind other elements by default
+  component->m_zOrder = UIConstants::ZORDER_DIALOG; // Default z; createModal() bumps to ZORDER_MODAL_DIALOG for modal use
 
-  m_components[id] = component;
+  registerComponent(component, parentId);
 }
 
 void UIManager::createModal(const std::string &dialogId, const UIRect &bounds,
@@ -438,41 +516,71 @@ void UIManager::createModal(const std::string &dialogId, const UIRect &bounds,
     refreshAllComponentThemes();
   }
 
-  // Create overlay to dim background
+  // Create overlay to dim background, then elevate it to the modal layer so it
+  // renders above all regular UI (buttons/labels/titles) and dims them correctly.
   createOverlay(windowWidth, windowHeight);
+  if (auto overlay = getComponent("__overlay")) {
+    overlay->m_zOrder = UIConstants::ZORDER_MODAL_OVERLAY;
+    // The modal overlay must swallow input for everything beneath it; otherwise
+    // clicks pass through the overlay onto the buttons underneath (PANEL hits
+    // do not set mouseHandled in handleInput).
+    overlay->m_blocksInputBelow = true;
+    overlay->m_occludesRenderingBelow = true;
+    invalidateComponentCache();
+  }
 
-  // Create dialog box
+  // Create dialog box and elevate it above the modal overlay so children added
+  // via linkToParent (createLabel/createButton with parentId) auto-elevate above it.
   createDialog(dialogId, bounds);
+  if (auto dialog = getComponent(dialogId)) {
+    dialog->m_zOrder = UIConstants::ZORDER_MODAL_DIALOG;
+    invalidateComponentCache();
+  }
 }
 
 void UIManager::refreshAllComponentThemes() const {
-  // Apply current theme to all existing components, preserving custom alignment
-  for (const auto &[id, component] : m_components) {
-    if (component) {
-      UIAlignment preservedAlignment = component->m_style.textAlign;
-      component->m_style = m_currentTheme.getStyle(component->m_type);
-      component->m_style.textAlign = preservedAlignment;
-    }
-  }
+  applyCurrentThemeToComponents();
 }
 
 // Component manipulation
 void UIManager::removeComponent(const std::string &id) {
 
-  // BUGFIX: Decrement binding count if component has active bindings
-  // This prevents m_activeBindingCount from drifting when bound components are removed
   auto it = m_components.find(id);
-  if (it != m_components.end() && it->second) {
-    if (it->second->m_textBinding) {
-      --m_activeBindingCount;
-    }
-    if (it->second->m_listBinding) {
-      --m_activeBindingCount;
-    }
+  if (it == m_components.end() || !it->second) {
+    return;
   }
 
-  m_components.erase(id);
+  // Snapshot parent/children before erasing — iterators invalidate on erase
+  // and recursive removeComponent() calls below will modify the same map.
+  const std::string parentId = it->second->m_parentId;
+  const std::vector<std::string> childIds = it->second->m_childIds;
+
+  // Decrement binding count if component has active bindings. Prevents
+  // m_activeBindingCount from drifting when bound components are removed.
+  if (it->second->m_textBinding) {
+    --m_activeBindingCount;
+  }
+  if (it->second->m_listBinding) {
+    --m_activeBindingCount;
+  }
+
+  m_components.erase(it);
   invalidateComponentCache();
+
+  // Cascade removal to children so parent destruction takes its subtree
+  // with it (no dangling child ids referring to a removed parent).
+  for (const auto &childId : childIds) {
+    removeComponent(childId);
+  }
+
+  // Unlink from parent's child list
+  if (!parentId.empty()) {
+    if (auto parent = getComponent(parentId)) {
+      auto &siblings = parent->m_childIds;
+      siblings.erase(std::remove(siblings.begin(), siblings.end(), id),
+                     siblings.end());
+    }
+  }
 
   // Clear from value/text caches
   m_valueCache.erase(id);
@@ -497,8 +605,14 @@ bool UIManager::hasComponent(const std::string &id) const {
 
 void UIManager::setComponentVisible(const std::string &id, bool visible) {
   auto component = getComponent(id);
-  if (component) {
-    component->m_visible = visible;
+  if (!component) {
+    return;
+  }
+  component->m_visible = visible;
+  // Cascade to children — callers toggle a single container and all child
+  // labels/lists/bars follow. Eliminates per-component visibility boilerplate.
+  for (const auto &childId : component->m_childIds) {
+    setComponentVisible(childId, visible);
   }
 }
 
@@ -541,8 +655,15 @@ void UIManager::setText(const std::string &id, const std::string &text) {
 
   auto component = getComponent(id);
   if (component) {
+    const bool textChanged = component->m_text != text;
     component->m_text = text;
     m_textCache[id] = text; // Update cache
+    // Re-run auto-sizing so the component grows/shrinks to fit the new text.
+    // calculateOptimalSize() is a no-op when m_autoSize is false.
+    calculateOptimalSize(component);
+    if (textChanged && component->m_onTextChanged) {
+      component->m_onTextChanged(text);
+    }
   }
 }
 
@@ -551,6 +672,42 @@ void UIManager::setTexture(const std::string &id,
   auto component = getComponent(id);
   if (component) {
     component->m_textureID = textureID;
+  }
+}
+
+void UIManager::setImageSource(const std::string &id,
+                               const TextureSource &source) {
+  auto component = getComponent(id);
+  if (!component) {
+    return;
+  }
+
+  component->m_textureID = source.textureId;
+  if (source.isEmpty() || !source.useSourceRect) {
+    component->m_imageSourceRect = UIRect{};
+    component->m_useImageSourceRect = false;
+    return;
+  }
+
+  component->m_imageSourceRect =
+      UIRect{source.sourceX, source.sourceY, source.sourceW, source.sourceH};
+  component->m_useImageSourceRect = true;
+}
+
+void UIManager::setImageSourceRect(const std::string &id,
+                                   const UIRect &sourceRect) {
+  auto component = getComponent(id);
+  if (component) {
+    component->m_imageSourceRect = sourceRect;
+    component->m_useImageSourceRect = true;
+  }
+}
+
+void UIManager::clearImageSourceRect(const std::string &id) {
+  auto component = getComponent(id);
+  if (component) {
+    component->m_imageSourceRect = UIRect{};
+    component->m_useImageSourceRect = false;
   }
 }
 
@@ -668,6 +825,16 @@ std::string UIManager::getText(const std::string &id) const {
   return component ? component->m_text : "";
 }
 
+std::string UIManager::getTexture(const std::string &id) const {
+  auto component = getComponent(id);
+  return component ? component->m_textureID : "";
+}
+
+UIRect UIManager::getImageSourceRect(const std::string &id) const {
+  auto component = getComponent(id);
+  return component ? component->m_imageSourceRect : UIRect{};
+}
+
 float UIManager::getValue(const std::string &id) const {
   auto component = getComponent(id);
   return component ? component->m_value : 0.0f;
@@ -706,6 +873,31 @@ bool UIManager::isButtonHovered(const std::string &id) const {
 
 bool UIManager::isComponentFocused(const std::string &id) const {
   return m_focusedComponent == id;
+}
+
+void UIManager::setKeyboardSelection(const std::string &id) {
+  m_keyboardSelection = id;
+}
+
+void UIManager::clearKeyboardSelection() {
+  m_keyboardSelection.clear();
+}
+
+void UIManager::simulateClick(const std::string &id) {
+  auto component = getComponent(id);
+  if (!component) {
+    return;
+  }
+  // Mirror the type-specific effects of a mouse click (see update()):
+  // checkboxes toggle their state before firing onClick so the callback reads
+  // the new checked value. Buttons just fire the callback.
+  if (component->m_type == UIComponentType::CHECKBOX) {
+    component->m_checked = !component->m_checked;
+  }
+  if (component->m_onClick) {
+    m_deferredCallbacks.push_back(component->m_onClick);
+    m_clickedButtons.push_back(id);
+  }
 }
 
 // Callback setters
@@ -895,6 +1087,11 @@ int UIManager::getSelectedListItem(const std::string &listID) const {
 void UIManager::setSelectedListItem(const std::string &listID, int index) {
   auto component = getComponent(listID);
   if (component && component->m_type == UIComponentType::LIST) {
+    if (index == -1) {
+      component->m_selectedIndex = -1;
+      return;
+    }
+
     if (index >= 0 && index < static_cast<int>(component->m_listItems.size())) {
       component->m_selectedIndex = index;
     }
@@ -1031,17 +1228,27 @@ void UIManager::setEventLogMaxEntries(const std::string &logID,
 void UIManager::setTitleAlignment(const std::string &titleID,
                                   UIAlignment alignment) {
   auto component = getComponent(titleID);
-  if (component && component->m_type == UIComponentType::TITLE) {
-    component->m_style.textAlign = alignment;
+  if (!component || component->m_type != UIComponentType::TITLE) {
+    return;
+  }
+  component->m_style.textAlign = alignment;
 
-    // If setting to CENTER_CENTER and auto-sizing is enabled, recalculate
-    // position
-    if (alignment == UIAlignment::CENTER_CENTER && component->m_autoSize &&
-        component->m_autoWidth) {
-      const auto &gameEngine = GameEngine::Instance();
-      int windowWidth = gameEngine.getLogicalWidth();
-      component->m_bounds.x = (windowWidth - component->m_bounds.width) / 2;
-    }
+  // Titles with their text-align set to CENTER_CENTER should also recenter
+  // themselves against the surrounding container. If the title has a parent
+  // (panel/dialog), center within the parent's bounds; otherwise fall back
+  // to window-centering. Only reposition when auto-sizing owns the width —
+  // callers who set an explicit width are assumed to have positioned them.
+  if (alignment != UIAlignment::CENTER_CENTER ||
+      !component->m_autoSize || !component->m_autoWidth) {
+    return;
+  }
+
+  if (auto parent = getComponent(component->m_parentId)) {
+    component->m_bounds.x = parent->m_bounds.x +
+        (parent->m_bounds.width - component->m_bounds.width) / 2;
+  } else {
+    const int windowWidth = GameEngine::Instance().getWidthInPixels();
+    component->m_bounds.x = (windowWidth - component->m_bounds.width) / 2;
   }
 }
 
@@ -1186,15 +1393,7 @@ bool UIManager::isAnimating(const std::string &id) const {
 // Theme management
 void UIManager::loadTheme(const UITheme &theme) {
   m_currentTheme = theme;
-
-  // Apply theme to all existing components, preserving custom alignment
-  for (const auto &[id, component] : m_components) {
-    if (component) {
-      UIAlignment preservedAlignment = component->m_style.textAlign;
-      component->m_style = m_currentTheme.getStyle(component->m_type);
-      component->m_style.textAlign = preservedAlignment;
-    }
-  }
+  applyCurrentThemeToComponents();
 }
 
 void UIManager::setDefaultTheme() {
@@ -1214,6 +1413,8 @@ void UIManager::setLightTheme() {
   buttonStyle.textColor = {.r=255, .g=255, .b=255, .a=255};
   buttonStyle.hoverColor = {.r=80, .g=140, .b=200, .a=255};
   buttonStyle.pressedColor = {.r=40, .g=100, .b=160, .a=255};
+  buttonStyle.highlightOnMouseHover = true;
+  buttonStyle.showTooltipOnMouseHover = true;
   buttonStyle.borderWidth = UIConstants::BORDER_WIDTH_NORMAL;
   buttonStyle.textAlign = UIAlignment::CENTER_CENTER;
   buttonStyle.fontID = UIConstants::FONT_UI;
@@ -1258,6 +1459,8 @@ void UIManager::setLightTheme() {
   // Panel style - light overlay for subtle UI separation
   UIStyle panelStyle;
   panelStyle.backgroundColor = {.r=0, .g=0, .b=0, .a=40}; // Very light overlay (15% opacity)
+  panelStyle.hoverColor = panelStyle.backgroundColor;
+  panelStyle.pressedColor = panelStyle.backgroundColor;
   panelStyle.borderWidth = UIConstants::BORDER_WIDTH_NONE;
   panelStyle.fontID = UIConstants::FONT_UI;
   lightTheme.m_componentStyles[UIComponentType::PANEL] = panelStyle;
@@ -1310,6 +1513,8 @@ void UIManager::setLightTheme() {
   checkboxStyle.backgroundColor = {.r=180, .g=180, .b=180, .a=255};
   checkboxStyle.hoverColor = {.r=200, .g=200, .b=200, .a=255};
   checkboxStyle.textColor = {.r=20, .g=20, .b=20, .a=255}; // Dark text for light backgrounds
+  checkboxStyle.highlightOnMouseHover = false;
+  checkboxStyle.showTooltipOnMouseHover = false;
   checkboxStyle.textAlign = UIAlignment::CENTER_LEFT;
   checkboxStyle.fontID = UIConstants::FONT_UI;
   lightTheme.m_componentStyles[UIComponentType::CHECKBOX] = checkboxStyle;
@@ -1361,15 +1566,7 @@ void UIManager::setLightTheme() {
   lightTheme.m_componentStyles[UIComponentType::DIALOG] = dialogStyle;
 
   m_currentTheme = lightTheme;
-
-  // Apply theme to all existing components, preserving custom alignment
-  for (const auto &[id, component] : m_components) {
-    if (component) {
-      UIAlignment preservedAlignment = component->m_style.textAlign;
-      component->m_style = m_currentTheme.getStyle(component->m_type);
-      component->m_style.textAlign = preservedAlignment;
-    }
-  }
+  applyCurrentThemeToComponents();
 }
 
 void UIManager::setDarkTheme() {
@@ -1384,6 +1581,8 @@ void UIManager::setDarkTheme() {
   buttonStyle.textColor = {.r=255, .g=255, .b=255, .a=255};
   buttonStyle.hoverColor = {.r=70, .g=70, .b=80, .a=255};
   buttonStyle.pressedColor = {.r=30, .g=30, .b=40, .a=255};
+  buttonStyle.highlightOnMouseHover = true;
+  buttonStyle.showTooltipOnMouseHover = true;
   buttonStyle.borderWidth = UIConstants::BORDER_WIDTH_NORMAL;
   buttonStyle.textAlign = UIAlignment::CENTER_CENTER;
   buttonStyle.fontID = UIConstants::FONT_UI;
@@ -1427,6 +1626,8 @@ void UIManager::setDarkTheme() {
   // Panel style - slightly more overlay for dark theme
   UIStyle panelStyle;
   panelStyle.backgroundColor = {.r=0, .g=0, .b=0, .a=50}; // 19% opacity
+  panelStyle.hoverColor = panelStyle.backgroundColor;
+  panelStyle.pressedColor = panelStyle.backgroundColor;
   panelStyle.borderWidth = UIConstants::BORDER_WIDTH_NONE;
   panelStyle.fontID = UIConstants::FONT_UI;
   darkTheme.m_componentStyles[UIComponentType::PANEL] = panelStyle;
@@ -1479,6 +1680,8 @@ void UIManager::setDarkTheme() {
   checkboxStyle.backgroundColor = {.r=60, .g=60, .b=60, .a=255};
   checkboxStyle.hoverColor = {.r=80, .g=80, .b=80, .a=255};
   checkboxStyle.textColor = {.r=255, .g=255, .b=255, .a=255};
+  checkboxStyle.highlightOnMouseHover = false;
+  checkboxStyle.showTooltipOnMouseHover = false;
   checkboxStyle.textAlign = UIAlignment::CENTER_LEFT;
   checkboxStyle.fontID = UIConstants::FONT_UI;
   darkTheme.m_componentStyles[UIComponentType::CHECKBOX] = checkboxStyle;
@@ -1530,15 +1733,7 @@ void UIManager::setDarkTheme() {
   darkTheme.m_componentStyles[UIComponentType::DIALOG] = dialogStyle;
 
   m_currentTheme = darkTheme;
-
-  // Apply theme to all existing components, preserving custom alignment
-  for (const auto &[id, component] : m_components) {
-    if (component) {
-      UIAlignment preservedAlignment = component->m_style.textAlign;
-      component->m_style = m_currentTheme.getStyle(component->m_type);
-      component->m_style.textAlign = preservedAlignment;
-    }
-  }
+  applyCurrentThemeToComponents();
 }
 
 void UIManager::setThemeMode(const std::string &mode) {
@@ -1628,6 +1823,7 @@ void UIManager::clearAllComponents() {
   m_hoveredComponents.clear();
   m_focusedComponent.clear();
   m_hoveredTooltip.clear();
+  m_hoveredTooltipCandidate.clear();
 }
 
 void UIManager::resetToDefaultTheme() {
@@ -1656,18 +1852,17 @@ void UIManager::cleanupForStateTransition() {
   // Stop and clear all animations
   m_animations.clear();
 
-  // Clear any queued callbacks and cached GPU draw commands so no UI-owned GPU
-  // resources survive past explicit shutdown.
+  // Clear any queued callbacks and frame-local GPU batch descriptors.
   m_deferredCallbacks.clear();
-  m_gpuPrimitiveCommands.clear();
-  m_gpuTextCommands.clear();
-  m_gpuImageCommands.clear();
+  clearFrameRenderBatches();
 
   // Clear all interaction state
   m_clickedButtons.clear();
   m_hoveredComponents.clear();
   m_focusedComponent.clear();
+  m_keyboardSelection.clear();
   m_hoveredTooltip.clear();
+  m_hoveredTooltipCandidate.clear();
   m_tooltipTimer = 0.0f;
 
   // Clear event log states
@@ -1701,9 +1896,7 @@ void UIManager::prepareForStateTransition() {
 void UIManager::applyThemeToComponent(const std::string &id,
                                       UIComponentType type) {
   auto component = getComponent(id);
-  if (component) {
-    component->m_style = m_currentTheme.getStyle(type);
-  }
+  applyThemeStyle(component, type);
 }
 
 void UIManager::setGlobalStyle(const UIStyle &style) { m_globalStyle = style; }
@@ -1746,6 +1939,66 @@ std::shared_ptr<UILayout> UIManager::getLayout(const std::string &id) {
   return (it != m_layouts.end()) ? it->second : nullptr;
 }
 
+void UIManager::registerComponent(const std::shared_ptr<UIComponent> &component,
+                                  const std::string &parentId,
+                                  bool autoSize) {
+  if (!component) {
+    return;
+  }
+
+  m_components[component->m_id] = component;
+  linkToParent(component, parentId);
+
+  if (autoSize) {
+    calculateOptimalSize(component);
+  }
+
+  invalidateComponentCache();
+}
+
+void UIManager::applyThemeStyle(const std::shared_ptr<UIComponent> &component,
+                                UIComponentType type) const {
+  if (!component) {
+    return;
+  }
+
+  const UIAlignment preservedAlignment = component->m_style.textAlign;
+  component->m_style = m_currentTheme.getStyle(type);
+  component->m_style.textAlign = preservedAlignment;
+
+  if (component->m_hasBackdropAncestor &&
+      (component->m_type == UIComponentType::LABEL ||
+       component->m_type == UIComponentType::TITLE)) {
+    component->m_style.useTextBackground = false;
+  }
+}
+
+void UIManager::applyCurrentThemeToComponents() const {
+  for (const auto &entry : m_components) {
+    const auto &component = entry.second;
+    if (component) {
+      applyThemeStyle(component, component->m_type);
+    }
+  }
+}
+
+int UIManager::calculateListItemHeight(
+    const std::shared_ptr<UIComponent> &component) const {
+  int lineHeight = 0;
+  const int scaledPadding =
+      static_cast<int>(UIConstants::LIST_ITEM_PADDING * m_globalScale);
+  int itemHeight =
+      static_cast<int>(UIConstants::DEFAULT_LIST_ITEM_HEIGHT * m_globalScale);
+
+  if (component &&
+      FontManager::Instance().getFontMetrics(component->m_style.fontID,
+                                             &lineHeight, nullptr, nullptr)) {
+    itemHeight = lineHeight + scaledPadding;
+  }
+
+  return std::max(1, itemHeight);
+}
+
 void UIManager::handleInput() {
   const auto &inputManager = InputManager::Instance();
 
@@ -1763,6 +2016,7 @@ void UIManager::handleInput() {
 
   // Clear previous hover state
   m_hoveredComponents.clear();
+  m_hoveredTooltipCandidate.clear();
 
   // Process components in reverse z-order (top to bottom, const ref avoids copy)
   bool mouseHandled = false;
@@ -1790,13 +2044,29 @@ void UIManager::handleInput() {
 
     if (isHovered) {
       m_hoveredComponents.push_back(component->m_id);
+      if (m_hoveredTooltipCandidate.empty() &&
+          component->m_style.showTooltipOnMouseHover) {
+        m_hoveredTooltipCandidate = component->m_id;
+      }
 
       // Handle hover state
-      if (component->m_state == UIState::NORMAL) {
+      if (component->m_style.highlightOnMouseHover &&
+          component->m_state == UIState::NORMAL) {
         component->m_state = UIState::HOVERED;
         if (component->m_onHover) {
           m_deferredCallbacks.push_back(component->m_onHover);
         }
+      } else if (!component->m_style.highlightOnMouseHover &&
+                 component->m_state == UIState::HOVERED) {
+        component->m_state = UIState::NORMAL;
+      }
+
+      // Modal-style components (e.g. the modal overlay) swallow input for any
+      // lower-z component beneath the cursor. We mark mouseHandled so the rest
+      // of the loop short-circuits, preventing click-through to the UI below.
+      if (component->m_blocksInputBelow) {
+        mouseHandled = true;
+        continue;
       }
 
       // Handle click/press for interactive components
@@ -1832,7 +2102,9 @@ void UIManager::handleInput() {
               m_deferredCallbacks.push_back(component->m_onClick);
             }
           }
-          component->m_state = UIState::HOVERED;
+          component->m_state = component->m_style.highlightOnMouseHover
+                                   ? UIState::HOVERED
+                                   : UIState::NORMAL;
           mouseHandled = true;
         }
 
@@ -1861,16 +2133,7 @@ void UIManager::handleInput() {
 
       // Handle list selection
       if (component->m_type == UIComponentType::LIST && mouseJustPressed) {
-        // Calculate item height dynamically based on current font metrics
-        // Must match rendering calculation (scaled padding) for accurate click detection
-        auto &fontManager = FontManager::Instance();
-        int lineHeight = 0;
-        int const scaledPadding = static_cast<int>(UIConstants::LIST_ITEM_PADDING * m_globalScale);
-        int itemHeight = static_cast<int>(UIConstants::DEFAULT_LIST_ITEM_HEIGHT * m_globalScale); // Scaled fallback
-        if (fontManager.getFontMetrics(component->m_style.fontID, &lineHeight,
-                                       nullptr, nullptr)) {
-          itemHeight = lineHeight + scaledPadding; // Scaled padding to match rendering
-        }
+        const int itemHeight = calculateListItemHeight(component);
         int itemIndex = static_cast<int>(
             (mousePos.getY() - component->m_bounds.y) / itemHeight);
         if (itemIndex >= 0 &&
@@ -1902,6 +2165,31 @@ void UIManager::handleInput() {
       }
     }
     m_focusedComponent.clear();
+  }
+
+  // Gamepad/keyboard selection wins over mouse hover when active.
+  // MenuNavigation::applySelection() only sets m_keyboardSelection when a
+  // gamepad is connected, so a non-empty value implies gamepad-driven menu
+  // navigation. In that mode the mouse cursor is typically stale (user isn't
+  // moving it), and letting a stale mouse hover suppress the gamepad highlight
+  // means the selected component has no visible highlight.
+  if (!m_keyboardSelection.empty()) {
+    // Clear any HOVERED state the mouse-hover loop just set on other
+    // components so we render exactly one highlight (the gamepad target).
+    for (const auto &id : m_hoveredComponents) {
+      auto other = getComponent(id);
+      if (other && other->m_state == UIState::HOVERED) {
+        other->m_state = UIState::NORMAL;
+      }
+    }
+    m_hoveredComponents.clear();
+
+    auto selected = getComponent(m_keyboardSelection);
+    if (selected && selected->m_visible && selected->m_enabled &&
+        selected->m_state != UIState::PRESSED) {
+      selected->m_state = UIState::HOVERED;
+      m_hoveredComponents.push_back(m_keyboardSelection);
+    }
   }
 }
 
@@ -1948,9 +2236,11 @@ void UIManager::updateTooltips(float deltaTime) {
     return;
   }
 
-  if (!m_hoveredComponents.empty()) {
-    m_hoveredTooltip =
-        m_hoveredComponents.back(); // Use topmost hovered component
+  if (!m_hoveredTooltipCandidate.empty()) {
+    if (m_hoveredTooltip != m_hoveredTooltipCandidate) {
+      m_hoveredTooltip = m_hoveredTooltipCandidate;
+      m_tooltipTimer = 0.0f;
+    }
     m_tooltipTimer += deltaTime;
   } else {
     m_hoveredTooltip.clear();
@@ -2115,9 +2405,9 @@ void UIManager::calculateOptimalSize(std::shared_ptr<UIComponent> component) {
         component->m_bounds.width != oldWidth &&
         (component->m_type == UIComponentType::TITLE ||
          component->m_type == UIComponentType::LABEL)) {
-      // Get logical width for centering calculation
+      // Get pixel width for centering calculation
       const auto &gameEngine = GameEngine::Instance();
-      int windowWidth = gameEngine.getLogicalWidth();
+      int windowWidth = gameEngine.getWidthInPixels();
       component->m_bounds.x = (windowWidth - component->m_bounds.width) / 2;
     }
   }
@@ -2185,18 +2475,7 @@ bool UIManager::measureComponentContent(
     return true;
 
   case UIComponentType::LIST: {
-    // Calculate height based on font metrics dynamically
-    int lineHeight = 0;
-    int itemHeight = UIConstants::DEFAULT_LIST_ITEM_HEIGHT; // Default fallback
-    int const scaledPadding = static_cast<int>(UIConstants::LIST_ITEM_PADDING * m_globalScale);
-    if (fontManager.getFontMetrics(component->m_style.fontID, &lineHeight,
-                                   nullptr, nullptr)) {
-      itemHeight = lineHeight + scaledPadding; // Add padding for better mouse accuracy
-    } else {
-      // If font metrics fail, use reasonable fallback based on expected font
-      // sizes Assume 21px font (typical for UI) + 8px padding = 29px
-      itemHeight = UIConstants::FALLBACK_LIST_ITEM_HEIGHT;
-    }
+    const int itemHeight = calculateListItemHeight(component);
 
     // Calculate based on list items and item height
     if (!component->m_listItems.empty()) {
@@ -2294,14 +2573,14 @@ void UIManager::setAutoSizingConstraints(const std::string &id,
 }
 
 // Auto-detection methods
-int UIManager::getLogicalWidth() const {
+int UIManager::getWidthInPixels() const {
   const auto &gameEngine = GameEngine::Instance();
-  return gameEngine.getLogicalWidth();
+  return gameEngine.getWidthInPixels();
 }
 
-int UIManager::getLogicalHeight() const {
+int UIManager::getHeightInPixels() const {
   const auto &gameEngine = GameEngine::Instance();
-  return gameEngine.getLogicalHeight();
+  return gameEngine.getHeightInPixels();
 }
 
 // Auto-detecting overlay creation
@@ -2356,13 +2635,6 @@ void UIManager::createCenteredDialog(const std::string &id, int width,
                                0,
                                width,
                                height});
-
-  // Apply positioning for overlay background using unified API
-  setComponentPositioning("overlay_background", {UIPositionMode::TOP_ALIGNED,
-                                                 0,
-                                                 0,
-                                                 -1,   // Full width
-                                                 -1}); // Full height
 }
 
 void UIManager::createCenteredButton(const std::string &id, int offsetY,
@@ -2404,20 +2676,37 @@ void UIManager::createCombatHUD() {
   // Combat HUD layout constants (top-left positioning)
   constexpr int hudMarginLeft = 20;
   constexpr int hudMarginTop = 40;
-  constexpr int labelWidth = 30;
+  constexpr int labelWidth = 50;
   constexpr int barWidth = 150;
-  constexpr int barHeight = 20;
-  constexpr int rowSpacing = 35;
-  constexpr int labelBarGap = 15;
+  constexpr int barHeight = 28;
+  constexpr int rowSpacing = 40;
+  constexpr int labelBarGap = 12;
+
+  UIStyle hudLabelStyle;
+  hudLabelStyle.backgroundColor = {.r=0, .g=0, .b=0, .a=140};
+  hudLabelStyle.textColor = {.r=255, .g=255, .b=255, .a=255};
+  hudLabelStyle.textAlign = UIAlignment::CENTER_CENTER;
+  hudLabelStyle.fontID = UIConstants::FONT_UI;
+  hudLabelStyle.useTextBackground = false;
+
+  // Gap between target NAME label and its HP bar — larger than bar-to-bar
+  // gap because text→bar transition needs more visual separation.
+  constexpr int targetNameToBarGap = 16;
+
+  // Extra vertical breathing room above the target block so it is visually
+  // separated from the player stamina row.
+  constexpr int targetBlockTopPad = 10;
 
   // Row positions
   int healthRowY = hudMarginTop;
   int staminaRowY = hudMarginTop + rowSpacing;
-  int targetRowY = hudMarginTop + rowSpacing * 2 + 10;
+  int targetRowY = hudMarginTop + rowSpacing * 2 + targetBlockTopPad;
+  int targetBarY = targetRowY + barHeight + targetNameToBarGap;
 
   // --- Player Health Bar ---
   createLabel("hud_health_label",
               {hudMarginLeft, healthRowY, labelWidth, barHeight}, "HP");
+  setStyle("hud_health_label", hudLabelStyle);
   setComponentPositioning("hud_health_label",
                           {UIPositionMode::TOP_ALIGNED, hudMarginLeft, healthRowY,
                            labelWidth, barHeight});
@@ -2441,6 +2730,7 @@ void UIManager::createCombatHUD() {
   // --- Player Stamina Bar ---
   createLabel("hud_stamina_label",
               {hudMarginLeft, staminaRowY, labelWidth, barHeight}, "SP");
+  setStyle("hud_stamina_label", hudLabelStyle);
   setComponentPositioning("hud_stamina_label",
                           {UIPositionMode::TOP_ALIGNED, hudMarginLeft, staminaRowY,
                            labelWidth, barHeight});
@@ -2472,12 +2762,12 @@ void UIManager::createCombatHUD() {
   setComponentVisible("hud_target_name", false);
 
   createProgressBar("hud_target_health",
-                    {hudMarginLeft + labelWidth + labelBarGap, targetRowY + rowSpacing,
+                    {hudMarginLeft + labelWidth + labelBarGap, targetBarY,
                      targetBarWidth, barHeight},
                     0.0f, 100.0f);
   setComponentPositioning("hud_target_health",
                           {UIPositionMode::TOP_ALIGNED,
-                           hudMarginLeft + labelWidth + labelBarGap, targetRowY + rowSpacing,
+                           hudMarginLeft + labelWidth + labelBarGap, targetBarY,
                            targetBarWidth, barHeight});
   setComponentVisible("hud_target_health", false);
 
@@ -2490,10 +2780,11 @@ void UIManager::createCombatHUD() {
 
   // Add "HP" label for target health bar to match player bars
   createLabel("hud_target_hp_label",
-              {hudMarginLeft, targetRowY + rowSpacing, labelWidth, barHeight}, "HP");
+              {hudMarginLeft, targetBarY, labelWidth, barHeight}, "HP");
+  setStyle("hud_target_hp_label", hudLabelStyle);
   setComponentPositioning("hud_target_hp_label",
                           {UIPositionMode::TOP_ALIGNED, hudMarginLeft,
-                           targetRowY + rowSpacing, labelWidth, barHeight});
+                           targetBarY, labelWidth, barHeight});
   setComponentVisible("hud_target_hp_label", false);
 
   UI_INFO("Combat HUD created");
@@ -2527,19 +2818,19 @@ void UIManager::destroyCombatHUD() {
 }
 
 // Auto-repositioning system implementation
-void UIManager::onWindowResize(int newLogicalWidth, int newLogicalHeight) {
+void UIManager::onWindowResize(int newWidthInPixels, int newHeightInPixels) {
 
   UI_DEBUG(std::format("Window resized: {}x{} - auto-repositioning UI components",
-                       newLogicalWidth, newLogicalHeight));
+                       newWidthInPixels, newHeightInPixels));
 
   // Recalculate UI scale for new resolution (1920x1080 baseline, capped at 1.0)
-  m_globalScale = calculateOptimalScale(newLogicalWidth, newLogicalHeight);
+  m_globalScale = calculateOptimalScale(newWidthInPixels, newHeightInPixels);
   UI_INFO(std::format("UI scale updated to {} for new resolution {}x{}",
-                      m_globalScale, newLogicalWidth, newLogicalHeight));
+                      m_globalScale, newWidthInPixels, newHeightInPixels));
 
-  repositionAllComponents(newLogicalWidth, newLogicalHeight);
-  m_currentLogicalWidth = newLogicalWidth;
-  m_currentLogicalHeight = newLogicalHeight;
+  repositionAllComponents(newWidthInPixels, newHeightInPixels);
+  m_currentWidthInPixels = newWidthInPixels;
+  m_currentHeightInPixels = newHeightInPixels;
 }
 
 void UIManager::repositionAllComponents(int width, int height) {
@@ -2662,17 +2953,16 @@ void UIManager::setComponentPositioning(const std::string &id,
   if (component) {
     component->m_positioning = positioning;
     // Immediately apply the new positioning
-    applyPositioning(component, m_currentLogicalWidth, m_currentLogicalHeight);
+    applyPositioning(component, m_currentWidthInPixels, m_currentHeightInPixels);
   }
 }
 
 void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
+  clearFrameRenderBatches();
+
   if (m_components.empty()) {
     return;
   }
-
-  m_gpuPrimitiveCommands.clear();
-  m_gpuTextCommands.clear();
 
   auto& primPool = gpuRenderer.getPrimitiveVertexPool();
   auto& uiPool = gpuRenderer.getUIVertexPool();
@@ -2686,11 +2976,17 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
 
   uint32_t primOffset = 0;
   uint32_t uiOffset = 0;
+  const uint32_t primitiveVertexLimit = static_cast<uint32_t>(
+      std::min(primPool.getMaxVertices(),
+               static_cast<size_t>(std::numeric_limits<uint32_t>::max())));
+  const uint32_t uiVertexLimit = static_cast<uint32_t>(
+      std::min(uiPool.getMaxVertices(),
+               static_cast<size_t>(std::numeric_limits<uint32_t>::max())));
   const float viewportHeight = static_cast<float>(gpuRenderer.getViewportHeight());
 
   // Helper to add a filled rectangle
   auto addFilledRect = [&](const UIRect& rect, const SDL_Color& color) {
-    if (primOffset + 6 > GPU_PRIMITIVE_VERTEX_LIMIT) return;  // Safety limit
+    if (primitiveVertexLimit < 6 || primOffset > primitiveVertexLimit - 6) return;
 
     float x = static_cast<float>(rect.x);
     float y = static_cast<float>(rect.y);
@@ -2709,12 +3005,8 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
     v[4] = {.x=x + w, .y=bottom, .r=color.r, .g=color.g, .b=color.b, .a=color.a};
     v[5] = {.x=x,     .y=bottom, .r=color.r, .g=color.g, .b=color.b, .a=color.a};
 
-    UIGPUDrawCommand cmd;
-    cmd.type = UIGPUDrawCommand::Type::Rect;
-    cmd.vertexOffset = primOffset;
-    cmd.vertexCount = 6;
-    m_gpuPrimitiveCommands.push_back(cmd);
     primOffset += 6;
+    m_uiPrimitiveVertexCount = primOffset;
   };
 
   // Helper to add border (4 thin rectangles)
@@ -2730,13 +3022,107 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
     addFilledRect({rect.x + rect.width - width, rect.y + width, width, rect.height - 2 * width}, color);
   };
 
+  auto appendImageBatch = [&](SDL_GPUTexture* texture, uint32_t vertexOffset,
+                              uint32_t vertexCount) {
+    if (!texture || vertexCount == 0) {
+      return;
+    }
+
+    if (!m_imageRenderBatches.empty()) {
+      auto& last = m_imageRenderBatches.back();
+      if (last.texture == texture &&
+          last.vertexOffset + last.vertexCount == vertexOffset) {
+        last.vertexCount += vertexCount;
+        return;
+      }
+    }
+
+    VoidLight::UITextureDrawBatch batch;
+    batch.texture = texture;
+    batch.vertexOffset = vertexOffset;
+    batch.vertexCount = vertexCount;
+    m_imageRenderBatches.push_back(batch);
+  };
+
+  auto appendTextBatch = [&](SDL_GPUTexture* texture, VoidLight::UITextPipelineKind pipeline,
+                             uint32_t vertexOffset, uint32_t vertexCount) {
+    if (!texture || vertexCount == 0) {
+      return;
+    }
+
+    if (!m_textRenderBatches.empty()) {
+      auto& last = m_textRenderBatches.back();
+      if (last.texture == texture &&
+          last.pipeline == pipeline &&
+          last.vertexOffset + last.vertexCount == vertexOffset) {
+        last.vertexCount += vertexCount;
+        return;
+      }
+    }
+
+    VoidLight::UITextDrawBatch batch;
+    batch.texture = texture;
+    batch.pipeline = pipeline;
+    batch.vertexOffset = vertexOffset;
+    batch.vertexCount = vertexCount;
+    m_textRenderBatches.push_back(batch);
+  };
+
+  auto addImage = [&](const std::shared_ptr<UIComponent>& component) {
+    if (!component || component->m_textureID.empty()) {
+      return;
+    }
+
+    auto textureData =
+        TextureManager::Instance().getGPUTextureData(component->m_textureID);
+    if (!textureData || !textureData->texture || !textureData->texture->get()) {
+      return;
+    }
+
+    UIRect srcRect = component->m_useImageSourceRect
+                         ? component->m_imageSourceRect
+                         : UIRect{0, 0,
+                                  static_cast<int>(textureData->width),
+                                  static_cast<int>(textureData->height)};
+    if (srcRect.width <= 0 || srcRect.height <= 0 ||
+        component->m_bounds.width <= 0 || component->m_bounds.height <= 0 ||
+        uiVertexLimit < 6 || uiOffset > uiVertexLimit - 6) {
+      return;
+    }
+
+    const float textureWidth = textureData->width > 0.0f ? textureData->width : 1.0f;
+    const float textureHeight = textureData->height > 0.0f ? textureData->height : 1.0f;
+    const float u0 = static_cast<float>(srcRect.x) / textureWidth;
+    const float v0 = static_cast<float>(srcRect.y) / textureHeight;
+    const float u1 = static_cast<float>(srcRect.x + srcRect.width) / textureWidth;
+    const float v1 = static_cast<float>(srcRect.y + srcRect.height) / textureHeight;
+
+    const float x = static_cast<float>(component->m_bounds.x);
+    const float y = static_cast<float>(component->m_bounds.y);
+    const float w = static_cast<float>(component->m_bounds.width);
+    const float h = static_cast<float>(component->m_bounds.height);
+    const float top = viewportHeight - y;
+    const float bottom = top - h;
+
+    VoidLight::SpriteVertex* v = uiBase + uiOffset;
+    v[0] = {.x=x,     .y=top,    .u=u0, .v=v0, .r=255, .g=255, .b=255, .a=255};
+    v[1] = {.x=x + w, .y=top,    .u=u1, .v=v0, .r=255, .g=255, .b=255, .a=255};
+    v[2] = {.x=x + w, .y=bottom, .u=u1, .v=v1, .r=255, .g=255, .b=255, .a=255};
+    v[3] = {.x=x,     .y=top,    .u=u0, .v=v0, .r=255, .g=255, .b=255, .a=255};
+    v[4] = {.x=x + w, .y=bottom, .u=u1, .v=v1, .r=255, .g=255, .b=255, .a=255};
+    v[5] = {.x=x,     .y=bottom, .u=u0, .v=v1, .r=255, .g=255, .b=255, .a=255};
+
+    appendImageBatch(textureData->texture->get(), uiOffset, 6);
+    uiOffset += 6;
+  };
+
   // Helper to add text with optional background
   auto& fontMgr = FontManager::Instance();
   auto addText = [&](const std::string& textKey, const std::string& text,
                      const std::string& fontID, int x, int y,
                      const SDL_Color& color, int alignment,
                      bool useBackground = false, const SDL_Color& bgColor = {.r=0, .g=0, .b=0, .a=0},
-                     int bgPadding = 0) {
+                     int bgPadding = 0, const UIRect* clampBounds = nullptr) {
     if (text.empty()) return;
 
     int textWidth = 0;
@@ -2774,20 +3160,30 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
         break;
     }
 
-    // Draw background rectangle if enabled (added to primitive commands, renders before text)
+    // Draw background rectangle if enabled (added to the primitive family, renders before text)
     if (useBackground && bgColor.a > 0) {
-      // Scale-compensate padding: text doesn't scale but UI gaps do, so use less
-      // padding when scale < 1.0 to prevent background from extending into adjacent elements
-      int effectivePadding = bgPadding;
-      if (m_globalScale < 1.0f) {
-        effectivePadding = static_cast<int>(bgPadding * m_globalScale);
-      }
       UIRect bgRect;
-      bgRect.x = static_cast<int>(dstX) - effectivePadding;
-      bgRect.y = static_cast<int>(dstY) - effectivePadding;
-      bgRect.width = static_cast<int>(dstW) + (effectivePadding * 2);
-      bgRect.height = static_cast<int>(dstH) + (effectivePadding * 2);
-      addFilledRect(bgRect, bgColor);
+      bgRect.x = static_cast<int>(dstX) - bgPadding;
+      bgRect.y = static_cast<int>(dstY) - bgPadding;
+      bgRect.width = static_cast<int>(dstW) + (bgPadding * 2);
+      bgRect.height = static_cast<int>(dstH) + (bgPadding * 2);
+      // Safety net: clamp the text-bg to the source component's declared
+      // bounds so a glyph wider than the container can never paint past the
+      // component's edge (e.g. small-scale resolutions where the font is
+      // floored at MIN_UI_FONT_SIZE but bounds are scaled).
+      if (clampBounds && bgRect.width > 0 && bgRect.height > 0) {
+        const int right = std::min(bgRect.x + bgRect.width,
+                                   clampBounds->x + clampBounds->width);
+        const int bottom = std::min(bgRect.y + bgRect.height,
+                                    clampBounds->y + clampBounds->height);
+        bgRect.x = std::max(bgRect.x, clampBounds->x);
+        bgRect.y = std::max(bgRect.y, clampBounds->y);
+        bgRect.width = std::max(0, right - bgRect.x);
+        bgRect.height = std::max(0, bottom - bgRect.y);
+      }
+      if (bgRect.width > 0 && bgRect.height > 0) {
+        addFilledRect(bgRect, bgColor);
+      }
     }
 
     // Raster UI text should land on whole pixels to avoid linear-filter
@@ -2807,14 +3203,19 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
         continue;
       }
 
-      if (uiOffset + static_cast<uint32_t>(seq->num_indices) > GPU_UI_VERTEX_LIMIT) {
+      const uint32_t indexCount = static_cast<uint32_t>(seq->num_indices);
+      if (indexCount > uiVertexLimit || uiOffset > uiVertexLimit - indexCount) {
         return;
       }
 
       v = uiBase + uiOffset;
       SDL_Color drawColor = color;
+      auto pipeline = VoidLight::UITextPipelineKind::Alpha;
       if (seq->image_type == TTF_IMAGE_COLOR) {
         drawColor = {.r=255, .g=255, .b=255, .a=color.a};
+        pipeline = VoidLight::UITextPipelineKind::Color;
+      } else if (seq->image_type == TTF_IMAGE_SDF) {
+        pipeline = VoidLight::UITextPipelineKind::SDF;
       }
       for (int i = 0; i < seq->num_indices; ++i) {
         int sourceIndex = seq->indices[i];
@@ -2830,21 +3231,27 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
                 .r=drawColor.r, .g=drawColor.g, .b=drawColor.b, .a=drawColor.a};
       }
 
-      UIGPUDrawCommand cmd;
-      cmd.type = UIGPUDrawCommand::Type::Text;
-      cmd.texture = seq->atlas_texture;
-      cmd.imageType = seq->image_type;
-      cmd.vertexOffset = uiOffset;
-      cmd.vertexCount = static_cast<uint32_t>(seq->num_indices);
-      m_gpuTextCommands.push_back(cmd);
-      uiOffset += static_cast<uint32_t>(seq->num_indices);
+      appendTextBatch(seq->atlas_texture, pipeline, uiOffset, indexCount);
+      uiOffset += indexCount;
     }
   };
 
-  // Render components in z-order
+  // Record components by z-priority inside the fixed UI render families.
   const auto& sortedComponents = getSortedComponents();
+
+  // Modal render occlusion: fixed families intentionally do not provide
+  // arbitrary cross-family z-order. Modal overlays instead become an explicit
+  // render cutoff; lower normal UI is not recorded into any family.
+  int modalCullZ = std::numeric_limits<int>::min();
+  for (const auto& component : sortedComponents) {
+    if (component && component->m_visible && component->m_occludesRenderingBelow) {
+      modalCullZ = std::max(modalCullZ, component->m_zOrder);
+    }
+  }
+
   for (const auto& component : sortedComponents) {
     if (!component || !component->m_visible) continue;
+    if (component->m_zOrder < modalCullZ) continue;
 
     SDL_Color bgColor = component->m_style.backgroundColor;
 
@@ -2893,6 +3300,9 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
 
       case UIComponentType::LABEL:
       case UIComponentType::TITLE:
+        if (component->m_style.backgroundColor.a > 0) {
+          addFilledRect(component->m_bounds, component->m_style.backgroundColor);
+        }
         if (!component->m_text.empty()) {
           int textX, textY, alignment;
           int scaledPadding = static_cast<int>(component->m_style.padding * m_globalScale);
@@ -2944,7 +3354,7 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
           addText(component->m_id, component->m_text, component->m_style.fontID,
                   textX, textY, component->m_style.textColor, alignment,
                   needsBackground, component->m_style.textBackgroundColor,
-                  scaledTextBgPadding);
+                  scaledTextBgPadding, &component->m_bounds);
         }
         break;
 
@@ -3014,6 +3424,14 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
 
       case UIComponentType::SLIDER:
         {
+          // When the slider is the keyboard-selected component (HOVERED state
+          // in our selection model), draw a highlight border around the full
+          // slider bounds so the player gets visual feedback. Sliders always
+          // render their handle in hoverColor, so the state alone isn't visible.
+          if (component->m_state == UIState::HOVERED) {
+            addBorder(component->m_bounds, component->m_style.hoverColor, 2);
+          }
+
           // Draw track
           UIRect trackRect = {
               component->m_bounds.x,
@@ -3097,7 +3515,7 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
 
           // Scale padding and item height
           int scaledPadding = static_cast<int>(component->m_style.padding * m_globalScale);
-          int scaledItemHeight = static_cast<int>(component->m_style.listItemHeight * m_globalScale);
+          int scaledItemHeight = calculateListItemHeight(component);
 
           // Draw list items
           int itemY = component->m_bounds.y + scaledPadding;
@@ -3179,8 +3597,7 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
         break;
 
       case UIComponentType::IMAGE:
-        // Images require TextureManager GPU integration - placeholder for now
-        // The TextureManager would need to provide GPUTexture* for the texture ID
+        addImage(component);
         break;
 
       case UIComponentType::TOOLTIP:
@@ -3219,8 +3636,8 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
         int tooltipY = static_cast<int>(m_lastMousePosition.getY()) - tooltipHeight - scaledMouseOffset;
 
         // Clamp tooltip to screen bounds
-        if (tooltipX + tooltipWidth > m_currentLogicalWidth) {
-          tooltipX = m_currentLogicalWidth - tooltipWidth;
+        if (tooltipX + tooltipWidth > m_currentWidthInPixels) {
+          tooltipX = m_currentWidthInPixels - tooltipWidth;
         }
         if (tooltipY < 0) {
           tooltipY = static_cast<int>(m_lastMousePosition.getY()) + scaledMouseOffset * 2;
@@ -3250,69 +3667,6 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
 }
 
 void UIManager::renderGPU(VoidLight::GPURenderer& gpuRenderer, SDL_GPURenderPass* pass) {
-  if (!pass) return;
-
-  // Create orthographic projection for screen-space rendering
-  float orthoMatrix[16];
-  VoidLight::GPURenderer::createOrthoMatrix(
-      0.0f, static_cast<float>(gpuRenderer.getViewportWidth()),
-      0.0f, static_cast<float>(gpuRenderer.getViewportHeight()),
-      orthoMatrix);
-
-  // Render primitives (filled rectangles)
-  if (!m_gpuPrimitiveCommands.empty()) {
-    SDL_BindGPUGraphicsPipeline(pass, gpuRenderer.getUIPrimitivePipeline());
-    gpuRenderer.pushViewProjection(pass, orthoMatrix);
-
-    SDL_GPUBufferBinding vertexBinding{};
-    vertexBinding.buffer = gpuRenderer.getPrimitiveVertexPool().getGPUBuffer();
-    vertexBinding.offset = 0;
-    SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-
-    // Draw all primitives in one call (they share the same pipeline)
-    uint32_t totalVertices = std::accumulate(
-        m_gpuPrimitiveCommands.begin(), m_gpuPrimitiveCommands.end(), 0u,
-        [](uint32_t sum, const auto& cmd) { return sum + cmd.vertexCount; });
-    if (totalVertices > 0) {
-      SDL_DrawGPUPrimitives(pass, totalVertices, 1, 0, 0);
-    }
-  }
-
-  // Render atlas-backed text triangles
-  if (!m_gpuTextCommands.empty()) {
-    SDL_GPUBufferBinding vertexBinding{};
-    vertexBinding.buffer = gpuRenderer.getUIVertexPool().getGPUBuffer();
-    vertexBinding.offset = 0;
-    SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-
-    for (const auto& cmd : m_gpuTextCommands) {
-      SDL_GPUTexture* textTexture =
-          cmd.textureOwner ? cmd.textureOwner->get() : cmd.texture;
-      if (!textTexture) {
-        continue;
-      }
-
-      SDL_GPUTextureSamplerBinding texSampler{};
-      texSampler.texture = textTexture;
-      switch (cmd.imageType) {
-        case TTF_IMAGE_SDF:
-          texSampler.sampler = gpuRenderer.getLinearSampler();
-          SDL_BindGPUGraphicsPipeline(pass, gpuRenderer.getUITextSDFPipeline());
-          break;
-        case TTF_IMAGE_COLOR:
-          texSampler.sampler = gpuRenderer.getLinearSampler();
-          SDL_BindGPUGraphicsPipeline(pass, gpuRenderer.getUISpritePipeline());
-          break;
-        case TTF_IMAGE_ALPHA:
-        default:
-          texSampler.sampler = gpuRenderer.getLinearSampler();
-          SDL_BindGPUGraphicsPipeline(pass, gpuRenderer.getUITextAlphaPipeline());
-          break;
-      }
-      gpuRenderer.pushViewProjection(pass, orthoMatrix);
-      SDL_BindGPUFragmentSamplers(pass, 0, &texSampler, 1);
-
-      SDL_DrawGPUPrimitives(pass, cmd.vertexCount, 1, cmd.vertexOffset, 0);
-    }
-  }
+  gpuRenderer.renderUIBatches(pass, m_uiPrimitiveVertexCount,
+                              m_imageRenderBatches, m_textRenderBatches);
 }

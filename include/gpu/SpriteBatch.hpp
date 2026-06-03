@@ -105,6 +105,15 @@ public:
                 uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 
     /**
+     * Draw a sprite using normalized texture coordinates, rotated around its center.
+     * @param angleRad Rotation angle in radians (0 = right-facing, positive = clockwise in Y-down engine space)
+     */
+    void drawUVRotated(float u0, float v0, float u1, float v1,
+                       float dstX, float dstY, float dstW, float dstH,
+                       float angleRad,
+                       uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
+
+    /**
      * End recording and return vertex count.
      * @return Number of vertices written (for vertex pool endFrame)
      */
@@ -154,6 +163,11 @@ private:
     void addQuad(float x0, float y0, float x1, float y1,
                  float u0, float v0, float u1, float v1,
                  uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+
+    void addQuadRotated(float cx, float cy, float halfW, float halfH,
+                        float cosA, float sinA,
+                        float u0, float v0, float u1, float v1,
+                        uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
     SDL_GPUDevice* m_device{nullptr};
     SDL_GPUTexture* m_texture{nullptr};

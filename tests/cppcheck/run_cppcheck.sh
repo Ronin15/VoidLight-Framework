@@ -1,5 +1,5 @@
 #!/bin/bash
-# Cppcheck Analysis Script for SDL3_VoidLight-Framework_Template
+# Cppcheck Analysis Script for VoidLight-Framework
 # This script runs cppcheck with optimized settings to focus on real issues
 
 set -e  # Exit on any error
@@ -15,14 +15,13 @@ NC='\033[0m' # No Color
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 INCLUDE_DIRS="include src"
 LIBRARY_CONFIG="cppcheck_lib.cfg"
-SUPPRESSIONS="cppcheck_suppressions.txt"
 OUTPUT_DIR="${PROJECT_ROOT}/test_results"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
 # Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
 
-echo -e "${BLUE}=== SDL3 VoidLight-Framework - Cppcheck Analysis ===${NC}"
+echo -e "${BLUE}=== VoidLight-Framework - Cppcheck Analysis ===${NC}"
 echo -e "${BLUE}Project Root: $PROJECT_ROOT${NC}"
 echo -e "${BLUE}Timestamp: $TIMESTAMP${NC}"
 echo ""
@@ -43,7 +42,6 @@ run_cppcheck() {
             --enable=warning,style,performance,portability,information \
             --library=std,posix \
             --library="$LIBRARY_CONFIG" \
-            --suppressions-list="$SUPPRESSIONS" \
             --std=c++20 \
             --verbose \
             --xml \
@@ -56,7 +54,6 @@ run_cppcheck() {
             --enable=warning,style,performance,portability,information \
             --library=std,posix \
             --library="$LIBRARY_CONFIG" \
-            --suppressions-list="$SUPPRESSIONS" \
             --platform=unix64 \
             --std=c++20 \
             --verbose \
@@ -79,7 +76,6 @@ run_cppcheck() {
             echo "=== Cppcheck $name Analysis Summary ==="
             echo "Generated: $(date)"
             echo "Configuration: $LIBRARY_CONFIG"
-            echo "Suppressions: $SUPPRESSIONS"
             echo ""
             echo "Results:"
             echo "  Total Issues: $error_count"
@@ -141,11 +137,6 @@ if [ ! -f "$LIBRARY_CONFIG" ]; then
     exit 1
 fi
 
-if [ ! -f "$SUPPRESSIONS" ]; then
-    echo -e "${RED}Error: Suppressions file '$SUPPRESSIONS' not found${NC}"
-    exit 1
-fi
-
 echo -e "${GREEN}✓ Configuration files validated${NC}"
 echo ""
 
@@ -173,7 +164,7 @@ final_summary="${OUTPUT_DIR}/cppcheck_final_summary_${TIMESTAMP}.txt"
 {
     echo "=== FINAL CPPCHECK SUMMARY ==="
     echo "Generated: $(date)"
-    echo "Project: SDL3_VoidLight-Framework_Template"
+    echo "Project: VoidLight-Framework"
     echo ""
     echo "Analysis Results:"
     echo "  Critical Issues: $critical_issues"
@@ -196,8 +187,7 @@ final_summary="${OUTPUT_DIR}/cppcheck_final_summary_${TIMESTAMP}.txt"
     echo "Next Steps:"
     echo "1. Review critical issues first (highest priority)"
     echo "2. Consider style improvements for code quality"
-    echo "3. Update suppressions file if false positives are found"
-    echo "4. Re-run analysis after fixes"
+    echo "3. Re-run analysis after fixes"
 
 } > "$final_summary"
 

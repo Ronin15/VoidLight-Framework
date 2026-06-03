@@ -13,8 +13,10 @@
 #include "gpu/GPUPipeline.hpp"
 #include "gpu/GPUVertexPool.hpp"
 #include "gpu/SpriteBatch.hpp"
+#include "gpu/UIRenderBatches.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <memory>
+#include <span>
 #include <vector>
 
 namespace VoidLight {
@@ -88,12 +90,6 @@ public:
     SDL_GPUGraphicsPipeline* getPrimitivePipeline() const;
     SDL_GPUGraphicsPipeline* getCompositePipeline() const;
 
-    // Pipeline accessors (UI rendering - to swapchain)
-    SDL_GPUGraphicsPipeline* getUISpritePipeline() const;
-    SDL_GPUGraphicsPipeline* getUITextAlphaPipeline() const;
-    SDL_GPUGraphicsPipeline* getUITextSDFPipeline() const;
-    SDL_GPUGraphicsPipeline* getUIPrimitivePipeline() const;
-
     // Sampler accessors
     SDL_GPUSampler* getNearestSampler() const { return m_nearestSampler.get(); }
     SDL_GPUSampler* getLinearSampler() const { return m_linearSampler.get(); }
@@ -133,6 +129,16 @@ public:
      * @param viewProjection 4x4 matrix data
      */
     void pushViewProjection(const SDL_GPURenderPass* pass, const float* viewProjection);
+
+    /**
+     * Submit pre-recorded UI render families during the swapchain UI pass.
+     * UIManager records vertices and frame-local batches; GPURenderer owns the
+     * SDL_GPU pipeline, sampler, vertex-buffer, and draw-call submission.
+     */
+    void renderUIBatches(SDL_GPURenderPass* pass,
+                         uint32_t primitiveVertexCount,
+                         std::span<const UITextureDrawBatch> imageBatches,
+                         std::span<const UITextDrawBatch> textBatches);
 
     /**
      * Push composite uniforms.

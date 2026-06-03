@@ -7,6 +7,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "events/EventFactory.hpp"
+#include "events/MerchantSpawnEvent.hpp"
 #include "events/NPCSpawnEvent.hpp"
 #include "events/ParticleEffectEvent.hpp"
 #include "events/SceneChangeEvent.hpp"
@@ -34,6 +35,7 @@ struct EventTypesFixture {
     registerWeatherCreator();
     registerSceneChangeCreator();
     registerNPCSpawnCreator();
+    registerMerchantSpawnCreator();
   }
 
   ~EventTypesFixture() {
@@ -97,7 +99,44 @@ struct EventTypesFixture {
               def.name, npcType, count, spawnRadius);
         });
   }
+
+  void registerMerchantSpawnCreator() {
+    EventFactory::Instance().registerCustomEventCreator(
+        "MerchantSpawn", [](const EventDefinition &def) {
+          std::string merchantClass = def.params.count("merchantClass")
+                                          ? def.params.at("merchantClass")
+                                          : "GeneralMerchant";
+          std::string merchantRace = def.params.count("merchantRace")
+                                         ? def.params.at("merchantRace")
+                                         : "Human";
+          int count = static_cast<int>(def.numParams.count("count")
+                                           ? def.numParams.at("count")
+                                           : 1.0f);
+          float spawnRadius = def.numParams.count("spawnRadius")
+                                  ? def.numParams.at("spawnRadius")
+                                  : 0.0f;
+
+          return EventFactory::Instance().createMerchantSpawnEvent(
+              def.name, merchantClass, merchantRace, count, spawnRadius);
+        });
+  }
 };
+
+BOOST_AUTO_TEST_CASE(EventFactoryCleanInitRestoresBuiltInCreators) {
+  auto& factory = EventFactory::Instance();
+  factory.clean();
+  BOOST_REQUIRE(factory.init());
+
+  EventDefinition def;
+  def.type = "MerchantSpawn";
+  def.name = "MerchantAfterClean";
+
+  auto event = factory.createEvent(def);
+  BOOST_REQUIRE(event != nullptr);
+  BOOST_CHECK_EQUAL(event->getType(), "MerchantSpawn");
+
+  factory.clean();
+}
 
 // Test WeatherEvent creation and functionality
 BOOST_FIXTURE_TEST_CASE(WeatherEventBasics, EventTypesFixture) {
@@ -291,6 +330,22 @@ BOOST_FIXTURE_TEST_CASE(NPCSpawnEventBasics, EventTypesFixture) {
   conditionFlag = true;
   // In a real test, this would still return false because the proximity and
   // time conditions aren't met
+}
+
+BOOST_FIXTURE_TEST_CASE(MerchantSpawnEventBasics, EventTypesFixture) {
+  MerchantSpawnParameters params;
+  params.merchantClass = "GeneralMerchant";
+  params.merchantRace = "Human";
+  params.count = 1;
+
+  auto merchantEvent = std::make_shared<MerchantSpawnEvent>("SpawnMerchant", params);
+
+  BOOST_CHECK_EQUAL(merchantEvent->getName(), "SpawnMerchant");
+  BOOST_CHECK_EQUAL(merchantEvent->getType(), "MerchantSpawn");
+  BOOST_CHECK_EQUAL(merchantEvent->getTypeName(), "MerchantSpawnEvent");
+  BOOST_CHECK(merchantEvent->getTypeId() == EventTypeId::MerchantSpawn);
+  BOOST_CHECK_EQUAL(merchantEvent->getMerchantSpawnParameters().merchantClass,
+                    "GeneralMerchant");
 }
 
 // Test EventFactory creation methods
@@ -751,7 +806,6 @@ BOOST_FIXTURE_TEST_CASE(TimeEventBaseClass, EventTypesFixture) {
 // ============================================================================
 
 #include "events/CameraEvent.hpp"
-#include "events/CollisionEvent.hpp"
 #include "events/CollisionObstacleChangedEvent.hpp"
 #include "events/HarvestResourceEvent.hpp"
 #include "events/ResourceChangeEvent.hpp"
@@ -777,7 +831,8 @@ BOOST_AUTO_TEST_CASE(TestEventTypeIdEnumValues) {
   BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::Combat), 13);
   BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::Entity), 14);
   BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::BehaviorMessage), 15);
-  BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::COUNT), 16);
+  BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::MerchantSpawn), 16);
+  BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::COUNT), 17);
 }
 
 // Test ResourceChangeEvent
@@ -890,26 +945,6 @@ BOOST_FIXTURE_TEST_CASE(HarvestResourceEventBasics, EventTypesFixture) {
 
 }
 
-// Test CollisionEvent
-BOOST_FIXTURE_TEST_CASE(CollisionEventBasics, EventTypesFixture) {
-    VoidLight::CollisionInfo info;
-    info.a = 1;
-    info.b = 2;
-
-    CollisionEvent event(info);
-
-    BOOST_CHECK_EQUAL(event.getName(), "CollisionEvent");
-    BOOST_CHECK_EQUAL(event.getType(), "CollisionEvent");
-    BOOST_CHECK(event.getTypeId() == EventTypeId::Collision);
-    BOOST_CHECK_EQUAL(event.getInfo().a, 1);
-    BOOST_CHECK_EQUAL(event.getInfo().b, 2);
-
-    // Test reset - clears all data for event pool recycling
-    event.reset();
-    BOOST_CHECK_EQUAL(event.getInfo().a, 0);
-    BOOST_CHECK_EQUAL(event.getInfo().b, 0);
-}
-
 // Test WorldTriggerEvent
 BOOST_FIXTURE_TEST_CASE(WorldTriggerEventBasics, EventTypesFixture) {
     WorldTriggerEvent event(42, 1, VoidLight::TriggerTag::Water, Vector2D(5, 10), TriggerPhase::Enter);
@@ -953,6 +988,9 @@ BOOST_FIXTURE_TEST_CASE(AllEventTypesReturnCorrectTypeId, EventTypesFixture) {
   NPCSpawnEvent npcEvent("test", "Guard");
   BOOST_CHECK(npcEvent.getTypeId() == EventTypeId::NPCSpawn);
 
+  MerchantSpawnEvent merchantEvent("merchant_test", "GeneralMerchant");
+  BOOST_CHECK(merchantEvent.getTypeId() == EventTypeId::MerchantSpawn);
+
   // ParticleEffect
   ParticleEffectEvent particleEvent("test", ParticleEffectType::Fire, 0.0f, 0.0f);
   BOOST_CHECK(particleEvent.getTypeId() == EventTypeId::ParticleEffect);
@@ -974,13 +1012,6 @@ BOOST_FIXTURE_TEST_CASE(AllEventTypesReturnCorrectTypeId, EventTypesFixture) {
   // Harvest
   HarvestResourceEvent harvestEvent(1, 0, 0, "wood");
   BOOST_CHECK(harvestEvent.getTypeId() == EventTypeId::Harvest);
-
-  // Collision
-  VoidLight::CollisionInfo info;
-  info.a = 1;
-  info.b = 2;
-  CollisionEvent collisionEvent(info);
-  BOOST_CHECK(collisionEvent.getTypeId() == EventTypeId::Collision);
 
   // WorldTrigger
   WorldTriggerEvent triggerEvent(1, 2, VoidLight::TriggerTag::None, Vector2D(0,0), TriggerPhase::Enter);

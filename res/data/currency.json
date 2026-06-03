@@ -1,0 +1,74 @@
+{
+  "resources": [
+    {
+      "id": "gold_coins",
+      "name": "Gold Coins",
+      "category": "Currency",
+      "type": "Gold",
+      "description": "Standard gold coins used as currency throughout the realm.",
+      "value": 1,
+      "maxStackSize": 10000,
+      "consumable": false,
+      "textureId": "gold_icon"
+    },
+    {
+      "id": "platinum_coins",
+      "name": "Platinum Coins",
+      "category": "Currency",
+      "type": "Gold",
+      "description": "Rare platinum coins worth significantly more than gold.",
+      "value": 10,
+      "maxStackSize": 10000,
+      "consumable": false,
+      "textureId": "platinum_coins_icon"
+    },
+    {
+      "id": "dragon_gems",
+      "name": "Dragon Gems",
+      "category": "Currency",
+      "type": "Gem",
+      "description": "Precious gems that dragons hoard, extremely valuable and rare.",
+      "value": 1000,
+      "maxStackSize": 1000,
+      "consumable": false,
+      "textureId": "dragon_gems",
+      "numFrames": 2,
+      "animSpeed": 100
+    },
+    {
+      "id": "guild_tokens",
+      "name": "Guild Tokens",
+      "category": "Currency",
+      "type": "FactionToken",
+      "description": "Special tokens earned through guild activities and achievements.",
+      "value": 5,
+      "maxStackSize": 5000,
+      "consumable": false,
+      "textureId": "guild_tokens_icon"
+    },
+    {
+      "id": "arcane_energy",
+      "name": "Arcane Energy",
+      "category": "Currency",
+      "type": "CraftingCurrency",
+      "description": "Pure magical energy used to power spells and enchantments.",
+      "value": 0,
+      "maxStackSize": 999999,
+      "consumable": false,
+      "textureId": "arcane_energy",
+      "numFrames": 2,
+      "animSpeed": 100
+    },
+    {
+      "id": "soul_essence",
+      "name": "Soul Essence",
+      "category": "Currency",
+      "type": "CraftingCurrency",
+      "description": "The essence of one's soul, used for the most powerful magical rituals.",
+      "value": 0,
+      "maxStackSize": 10000,
+      "consumable": false,
+      "textureId": "soul_essence"
+    }
+  ]
+}

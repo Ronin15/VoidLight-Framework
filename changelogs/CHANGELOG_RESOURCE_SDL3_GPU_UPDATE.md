@@ -491,17 +491,21 @@ docs/MIGRATION_PLAN.md (586)
 docs/managers/BackgroundSimulationManager.md (107)
 ```
 
-**Data/Resources (11 files):**
+**Data/Resources (13 files):**
 ```
 res/data/
 ├── atlas.json (6917) - Complete texture atlas mappings
 ├── animal_roles.json (37)
 ├── classes.json (76)
+├── currency.json
+├── equipment.json
+├── items.json
+├── materials.json
 ├── monster_types.json (92)
 ├── monster_variants.json (48)
 ├── races.json (88)
-├── resources.json (481)
 ├── species.json (92)
+├── weapons.json
 └── world_objects.json (293)
 ```
 

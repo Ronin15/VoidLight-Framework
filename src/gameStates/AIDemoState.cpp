@@ -257,8 +257,8 @@ bool AIDemoState::enter() {
                                  m_worldWidth, m_worldHeight));
     } else {
       // Fallback to screen dimensions if world bounds unavailable
-      m_worldWidth = gameEngine.getLogicalWidth();
-      m_worldHeight = gameEngine.getLogicalHeight();
+      m_worldWidth = gameEngine.getWidthInPixels();
+      m_worldHeight = gameEngine.getHeightInPixels();
     }
 
     // Create player first (the chase behavior will need it)
@@ -281,7 +281,7 @@ bool AIDemoState::enter() {
     auto &ui = UIManager::Instance();
     ui.createTitle("ai_title",
                    {0, UIConstants::TITLE_TOP_OFFSET,
-                    gameEngine.getLogicalWidth(),
+                    gameEngine.getWidthInPixels(),
                     UIConstants::DEFAULT_TITLE_HEIGHT},
                    "AI Demo State");
     ui.setTitleAlignment("ai_title", UIAlignment::CENTER_CENTER);
@@ -293,7 +293,7 @@ bool AIDemoState::enter() {
     ui.createLabel(
         "ai_instructions_line1",
         {UIConstants::INFO_LABEL_MARGIN_X, UIConstants::INFO_FIRST_LINE_Y,
-         gameEngine.getLogicalWidth() - 2 * UIConstants::INFO_LABEL_MARGIN_X,
+         gameEngine.getWidthInPixels() - 2 * UIConstants::INFO_LABEL_MARGIN_X,
          UIConstants::INFO_LABEL_HEIGHT},
         "Controls: [B] Exit | [SPACE] Pause/Resume | [N] Spawn 2K Standard | "
         "[M] Spawn 2K Random | [ ] Zoom");
@@ -310,7 +310,7 @@ bool AIDemoState::enter() {
     ui.createLabel(
         "ai_instructions_line2",
         {UIConstants::INFO_LABEL_MARGIN_X, line2Y,
-         gameEngine.getLogicalWidth() - 2 * UIConstants::INFO_LABEL_MARGIN_X,
+         gameEngine.getWidthInPixels() - 2 * UIConstants::INFO_LABEL_MARGIN_X,
          UIConstants::INFO_LABEL_HEIGHT},
         "Behaviors: [1] Wander | [2] Patrol | [3] Chase | [4] Small | [5] "
         "Large | "
@@ -577,8 +577,8 @@ void AIDemoState::initializeCamera() {
   // Create camera starting at player position
   m_camera = std::make_unique<VoidLight::Camera>(
       playerPosition.getX(), playerPosition.getY(), // Start at player position
-      static_cast<float>(gameEngine.getLogicalWidth()),
-      static_cast<float>(gameEngine.getLogicalHeight()));
+      static_cast<float>(gameEngine.getWidthInPixels()),
+      static_cast<float>(gameEngine.getHeightInPixels()));
 
   // Configure camera to follow player
   if (m_player) {
@@ -591,14 +591,7 @@ void AIDemoState::initializeCamera() {
     m_camera->setTarget(playerAsEntity);
     m_camera->setMode(VoidLight::Camera::Mode::Follow);
 
-    // Set up camera configuration for fast, smooth following
-    // Using exponential smoothing for smooth, responsive follow
-    VoidLight::Camera::Config config;
-    config.followSpeed = 5.0f;      // Speed of camera interpolation
-    config.deadZoneRadius = 0.0f;   // No dead zone - always follow
-    config.smoothingFactor = 0.85f; // Smoothing factor (0-1, higher = smoother)
-    config.clampToWorldBounds = true; // Keep camera within world
-    m_camera->setConfig(config);
+    // Camera follow tuning lives in Camera::Config defaults — uniform across states.
 
     // Provide camera to player for screen-to-world coordinate conversion
     m_player->setCamera(m_camera.get());

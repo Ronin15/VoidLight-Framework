@@ -50,7 +50,6 @@ private:
       false}; // Flag to indicate we're transitioning to loading state
   bool m_transitioningToGameOver{false}; // Prevent duplicate death transitions
   std::shared_ptr<Player> mp_Player{nullptr}; // Player object
-  bool m_inventoryVisible{false}; // Flag to control inventory UI visibility
   bool m_initialized{false}; // Flag to track if state is already initialized (for pause/resume)
 
   // Camera for world navigation and player following
@@ -82,7 +81,8 @@ private:
   bool m_statusBarDirty{true};   // Flag to rebuild status bar only when events fire
 
   // Inventory UI methods
-  void initializeInventoryUI();
+  void spawnStarterGearChest();
+  bool tryOpenNearbyMerchantTrade();
   void toggleInventoryDisplay();
   void registerEventHandlers();
   void unregisterEventHandlers();

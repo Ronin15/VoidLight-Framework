@@ -4,7 +4,7 @@ Comprehensive performance validation suite for VoidLight-Framework's SIMD optimi
 
 ## Purpose
 
-This benchmark suite validates the SIMD performance claims documented in CLAUDE.md:
+This benchmark suite validates the SIMD performance claims documented in the SIMD docs and repo guidance:
 - **AIManager distance calculations**: 3-4x speedup
 - **CollisionManager bounds (ARM64)**: 2-3x speedup
 - **ParticleManager physics**: 2-4x speedup
@@ -163,6 +163,7 @@ ninja -C build simd_performance_benchmark && \
 
 ## References
 
-- **CLAUDE.md**: SIMD optimization documentation and performance claims
+- **SIMDMath**: SIMD optimization documentation and performance claims
+- **AGENTS.md**: Repo-level performance and architecture guidance
 - **Architecture**: VoidLight-Framework uses Data-Oriented Design with SoA layouts optimized for SIMD
 - **Cross-Platform**: Same SIMD code compiles for x86-64 (SSE2/AVX2) and ARM64 (NEON)

@@ -88,12 +88,12 @@ private:
                                       const JsonValue &json);
   static ResourcePtr createQuestItem(VoidLight::ResourceHandle handle,
                                      const JsonValue &json);
+  static ResourcePtr createAmmunition(VoidLight::ResourceHandle handle,
+                                      const JsonValue &json);
   static ResourcePtr createMaterial(VoidLight::ResourceHandle handle,
                                     const JsonValue &json);
   static ResourcePtr createCurrency(VoidLight::ResourceHandle handle,
                                     const JsonValue &json);
-  static ResourcePtr createGameResource(VoidLight::ResourceHandle handle,
-                                        const JsonValue &json);
 
   // Helper method to extract common resource properties from JSON
   static void setCommonProperties(const ResourcePtr& resource, const JsonValue &json);

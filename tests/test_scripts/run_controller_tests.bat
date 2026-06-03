@@ -21,7 +21,7 @@ set RUN_WEATHER=false
 set RUN_DAYNIGHT=false
 set RUN_HARVEST=false
 set RUN_NPCRENDER=false
-set RUN_ITEM=false
+set RUN_INVENTORY=false
 set RUN_COMBAT=false
 set RUN_RESOURCERENDER=false
 set RUN_SOCIAL=false
@@ -63,9 +63,9 @@ if /i "%~1"=="--npcrender" (
     shift
     goto parse_args
 )
-if /i "%~1"=="--item" (
+if /i "%~1"=="--inventory" (
     set RUN_ALL=false
-    set RUN_ITEM=true
+    set RUN_INVENTORY=true
     shift
     goto parse_args
 )
@@ -98,7 +98,7 @@ if /i "%~1"=="--help" (
     echo   --daynight     Run only DayNightController tests
     echo   --harvest      Run only HarvestController tests
     echo   --npcrender    Run only NPCRenderController tests
-    echo   --item         Run only ItemController tests
+    echo   --inventory    Run only InventoryController tests
     echo   --combat       Run only CombatController tests
     echo   --resourcerender Run only ResourceRenderController tests
     echo   --social       Run only SocialController tests
@@ -122,7 +122,7 @@ if "%RUN_ALL%"=="true" (
     call :run_single_test day_night_controller_tests
     call :run_single_test harvest_controller_tests
     call :run_single_test npc_render_controller_tests
-    call :run_single_test item_controller_tests
+    call :run_single_test inventory_controller_tests
     call :run_single_test combat_controller_tests
     call :run_single_test resource_render_controller_tests
     call :run_single_test social_controller_tests
@@ -132,7 +132,7 @@ if "%RUN_ALL%"=="true" (
     if "%RUN_DAYNIGHT%"=="true" call :run_single_test day_night_controller_tests
     if "%RUN_HARVEST%"=="true" call :run_single_test harvest_controller_tests
     if "%RUN_NPCRENDER%"=="true" call :run_single_test npc_render_controller_tests
-    if "%RUN_ITEM%"=="true" call :run_single_test item_controller_tests
+    if "%RUN_INVENTORY%"=="true" call :run_single_test inventory_controller_tests
     if "%RUN_COMBAT%"=="true" call :run_single_test combat_controller_tests
     if "%RUN_RESOURCERENDER%"=="true" call :run_single_test resource_render_controller_tests
     if "%RUN_SOCIAL%"=="true" call :run_single_test social_controller_tests
@@ -195,7 +195,7 @@ if !OVERALL_RESULT! neq 0 (
     echo !GREEN!  DayNightController tests!NC!
     echo !GREEN!  HarvestController tests!NC!
     echo !GREEN!  NPCRenderController tests!NC!
-    echo !GREEN!  ItemController tests!NC!
+    echo !GREEN!  InventoryController tests!NC!
     echo !GREEN!  CombatController tests!NC!
     echo !GREEN!  ResourceRenderController tests!NC!
     echo !GREEN!  SocialController tests!NC!

@@ -40,25 +40,6 @@ class PathfinderManager;
 // BehaviorType enum is defined in EntityDataManager.hpp
 
 /**
- * @brief Cache-efficient AI entity data using Structure of Arrays (SoA)
- * Hot data (frequently accessed) is separated from cold data for better cache
- * performance
- *
- * NOTE: All entity data is now owned by EntityDataManager.
- * Behavior config and state are stored in EDM's BehaviorConfigData and BehaviorData.
- */
-struct AIEntityData {
-  // Hot data - accessed every frame
-  struct HotData {
-    bool active;           // Active flag (1 byte)
-    uint8_t padding[7];    // Pad to 8 bytes for alignment
-  };
-
-  // Cold data removed - behaviors are now data in EDM
-  AIEntityData() = default;
-};
-
-/**
  * @brief High-performance AI data processor
  *
  * Orchestrates behavior execution and movement integration.
@@ -255,15 +236,14 @@ private:
   // Cache-efficient storage using Structure of Arrays (SoA)
   // Position/size data lives in EntityDataManager (single source of truth)
   // AIManager stores AI-specific data (behaviors, priorities) + cached EDM indices
+  // Active/inactive state is tracked via m_edmToStorageIndex (SIZE_MAX = inactive)
   struct EntityStorage {
-    std::vector<AIEntityData::HotData> hotData;
     std::vector<EntityHandle> handles;  // 8 bytes each
     std::vector<float> lastUpdateTimes;
     std::vector<size_t> edmIndices;  // Cached for O(1) batch access
 
     size_t size() const { return handles.size(); }
     void reserve(size_t capacity) {
-      hotData.reserve(capacity);
       handles.reserve(capacity);
       lastUpdateTimes.reserve(capacity);
       edmIndices.reserve(capacity);
@@ -291,14 +271,16 @@ private:
 #endif
   std::atomic<bool> m_globallyPaused{false};
 
-  // Behavior execution tracking
-  std::atomic<size_t> m_totalBehaviorExecutions{0};
+  // Behavior execution tracking — worker threads fetch_add once per batch;
+  // cache-line isolated to avoid false sharing with read-mostly atomics above.
+  alignas(64) std::atomic<size_t> m_totalBehaviorExecutions{0};
 
   // Thread-safe assignment tracking
   std::atomic<size_t> m_totalAssignmentCount{0};
 
   // Frame counter for cache invalidation and distance staggering (operational)
-  std::atomic<uint64_t> m_frameCounter{0};
+  // Written once per frame on main thread; isolated from the worker-written counter above.
+  alignas(64) std::atomic<uint64_t> m_frameCounter{0};
 
   // Thread synchronization
   mutable std::shared_mutex m_entitiesMutex;
@@ -318,6 +300,12 @@ private:
   // Reusable buffer for single-threaded path deferred events (avoids per-call allocation)
   std::vector<EventManager::DeferredEvent> m_singleBatchEvents;
 
+  // Per-batch knockback-expiry queues. Workers enqueue edmIdx when framesRemaining
+  // hits zero; main thread drains after futures join. Keeps SparseSidecar::remove()
+  // off worker threads — its pop_back / cross-entity m_sparse patch is not race-safe.
+  std::vector<std::vector<uint32_t>> m_batchKnockbackClears;
+  std::vector<uint32_t> m_singleBatchKnockbackClears;
+
   // Reusable buffer for Active tier EDM indices (avoids per-frame allocation)
   std::vector<size_t> m_activeIndicesBuffer;
 
@@ -335,16 +323,20 @@ private:
   std::vector<VoidLight::AICommandBus::BehaviorTransitionCommand> m_selectedTransitions;
   std::unordered_map<size_t, size_t> m_selectedTransitionsByEdmIndex;
   std::vector<VoidLight::AICommandBus::FactionChangeCommand> m_pendingFactionChanges;
+  std::vector<VoidLight::AICommandBus::EquipmentSwapCommand> m_pendingMeleeFallbackEquips;
+  std::vector<VoidLight::AICommandBus::RangedAttackCommand> m_pendingRangedAttacks;
 
   void addToIndices(size_t edmIndex, BehaviorType behaviorType);
   void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
   void commitQueuedFactionChanges();
+  void commitQueuedRangedAttacks();
+  void commitQueuedMeleeFallbackEquips();
   void commitQueuedBehaviorMessages();
   void commitQueuedBehaviorTransitions();
 
-  // Process batch of Active tier entities using EDM indices directly
-  // No tier check needed - getActiveIndices() already filters to Active tier
-  // Collects deferred events from this batch's thread-local buffer into outEvents
+  // Process batch of Active tier entities using EDM indices directly.
+  // Runs emotional decay and behavior dispatch in a single fused pass.
+  // Collects deferred events from this batch's thread-local buffer into outEvents.
   void processBatch(const std::vector<size_t>& activeIndices,
                     size_t start, size_t end,
                     float deltaTime,
@@ -352,7 +344,8 @@ private:
                     EntityHandle playerHandle, const Vector2D& playerPos,
                     const Vector2D& playerVel, bool playerValid,
                     float gameTime,
-                    std::vector<EventManager::DeferredEvent>& outEvents);
+                    std::vector<EventManager::DeferredEvent>& outEvents,
+                    std::vector<uint32_t>& outKnockbackClears);
 
   // Shutdown state
   bool m_isShutdown{false};

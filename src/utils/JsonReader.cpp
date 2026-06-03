@@ -113,13 +113,45 @@ size_t JsonValue::size() const {
   return 0;
 }
 
-std::string JsonValue::toString() const {
+std::string JsonValue::toString(bool pretty) const {
   std::ostringstream oss;
-  writeToStream(oss);
+  writeToStream(oss, pretty ? 0 : -1);
   return oss.str();
 }
 
-void JsonValue::writeToStream(std::ostream &stream) const {
+namespace {
+void writeIndent(std::ostream &stream, int depth) {
+  for (int i = 0; i < depth; ++i) {
+    stream << "  ";
+  }
+}
+
+void writeEscapedString(std::ostream &stream, std::string_view s) {
+  stream << '"';
+  for (unsigned char c : s) {
+    switch (c) {
+    case '"':  stream << "\\\""; break;
+    case '\\': stream << "\\\\"; break;
+    case '\b': stream << "\\b";  break;
+    case '\f': stream << "\\f";  break;
+    case '\n': stream << "\\n";  break;
+    case '\r': stream << "\\r";  break;
+    case '\t': stream << "\\t";  break;
+    default:
+      if (c < 0x20) {
+        stream << std::format("\\u{:04x}", static_cast<unsigned int>(c));
+      } else {
+        stream << static_cast<char>(c);
+      }
+      break;
+    }
+  }
+  stream << '"';
+}
+} // namespace
+
+void JsonValue::writeToStream(std::ostream &stream, int depth) const {
+  const bool pretty = depth >= 0;
   switch (getType()) {
   case JsonType::Null:
     stream << "null";
@@ -137,29 +169,56 @@ void JsonValue::writeToStream(std::ostream &stream) const {
     break;
   }
   case JsonType::String:
-    stream << "\"" << asString() << "\"";
+    writeEscapedString(stream, asString());
     break;
   case JsonType::Array: {
-    stream << "[";
     const auto &arr = asArray();
+    if (arr.empty()) {
+      stream << "[]";
+      break;
+    }
+    stream << "[";
     for (size_t i = 0; i < arr.size(); ++i) {
       if (i > 0)
         stream << ",";
-      arr[i].writeToStream(stream);
+      if (pretty) {
+        stream << "\n";
+        writeIndent(stream, depth + 1);
+      }
+      arr[i].writeToStream(stream, pretty ? depth + 1 : -1);
+    }
+    if (pretty) {
+      stream << "\n";
+      writeIndent(stream, depth);
     }
     stream << "]";
     break;
   }
   case JsonType::Object: {
-    stream << "{";
     const auto &obj = asObject();
+    if (obj.empty()) {
+      stream << "{}";
+      break;
+    }
+    stream << "{";
     bool first = true;
     for (const auto &[key, value] : obj) {
       if (!first)
         stream << ",";
       first = false;
-      stream << "\"" << key << "\":";
-      value.writeToStream(stream);
+      if (pretty) {
+        stream << "\n";
+        writeIndent(stream, depth + 1);
+      }
+      writeEscapedString(stream, key);
+      stream << ":";
+      if (pretty)
+        stream << " ";
+      value.writeToStream(stream, pretty ? depth + 1 : -1);
+    }
+    if (pretty) {
+      stream << "\n";
+      writeIndent(stream, depth);
     }
     stream << "}";
     break;

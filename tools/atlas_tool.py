@@ -7,12 +7,12 @@ Coherent workflow for managing sprite atlases:
 1. EXTRACT  - Extract sprites from atlas.png → res/sprites/
 2. EDIT     - Add/modify sprites in res/sprites/ (manual step)
 3. MAP      - Assign texture IDs to sprites (visual tool)
-4. PACK     - Pack sprites into atlas.png + export all JSON files
+4. PACK     - Pack sprites into atlas.png + update atlas.json
 
 Usage:
     python3 tools/atlas_tool.py extract    # Extract sprites from atlas.png
     python3 tools/atlas_tool.py map        # Open visual mapper to assign IDs
-    python3 tools/atlas_tool.py pack       # Pack and export all JSON files
+    python3 tools/atlas_tool.py pack       # Pack sprites and update atlas.json
     python3 tools/atlas_tool.py list       # List current sprites
 
 Requires: pip install pillow
@@ -43,11 +43,6 @@ def get_paths():
         'sprites_dir': project_root / "res" / "sprites",
         'atlas_png': project_root / "res" / "img" / "atlas.png",
         'atlas_json': project_root / "res" / "data" / "atlas.json",
-        'resources_json': project_root / "res" / "data" / "resources.json",
-        'races_json': project_root / "res" / "data" / "races.json",
-        'monster_types_json': project_root / "res" / "data" / "monster_types.json",
-        'species_json': project_root / "res" / "data" / "species.json",
-        'world_objects_json': project_root / "res" / "data" / "world_objects.json",
         'mapper_session': script_dir / "atlas_mapper_session.html",
     }
 
@@ -65,6 +60,7 @@ class MapperRequestHandler(SimpleHTTPRequestHandler):
     """HTTP handler for the sprite mapper with save endpoint."""
 
     sprites_dir = None  # Set by cmd_map
+    paths = None        # Set by cmd_map
 
     def do_POST(self):
         if self.path == '/save-mappings':
@@ -72,29 +68,16 @@ class MapperRequestHandler(SimpleHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             mappings = json.loads(post_data.decode('utf-8'))
 
-            # Apply renames immediately (two-phase to handle circular deps)
             sprites_dir = MapperRequestHandler.sprites_dir
-            renames = {old: new for old, new in mappings.items() if old != new}
-            renamed = []
-
-            if renames:
-                # Phase 1: Move to temp names
-                temp_files = {}
-                for old_name in renames.keys():
-                    src = sprites_dir / f"{old_name}.png"
-                    if src.exists():
-                        tmp = sprites_dir / f"_tmp_{old_name}.png"
-                        src.rename(tmp)
-                        temp_files[old_name] = tmp
-
-                # Phase 2: Move to final names
-                for old_name, new_name in renames.items():
-                    if old_name in temp_files:
-                        tmp = temp_files[old_name]
-                        dst = sprites_dir / f"{new_name}.png"
-                        tmp.rename(dst)
-                        renamed.append({'old': old_name, 'new': new_name})
-                        print(f"  Renamed: {old_name}.png -> {new_name}.png")
+            try:
+                renamed = apply_sprite_renames(sprites_dir, mappings)
+            except ValueError as exc:
+                self.send_response(400)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                response = json.dumps({'status': 'error', 'error': str(exc)})
+                self.wfile.write(response.encode('utf-8'))
+                return
 
             self.send_response(200)
             self.send_header('Content-type', 'application/json')
@@ -103,12 +86,31 @@ class MapperRequestHandler(SimpleHTTPRequestHandler):
             self.wfile.write(response.encode('utf-8'))
 
             if renamed:
-                print(f"\nRenamed {len(renamed)} sprites. Refresh browser to see changes.")
+                print(f"\nRenamed {len(renamed)} sprites.")
             else:
                 print("\nNo renames needed - all mappings already match filenames.")
         else:
             self.send_response(404)
             self.end_headers()
+
+    def do_GET(self):
+        if self.path == '/mapper-state':
+            if MapperRequestHandler.paths is None:
+                self.send_response(500)
+                self.send_header('Content-type', 'application/json')
+                self.end_headers()
+                response = json.dumps({'status': 'error', 'error': 'Mapper paths not configured'})
+                self.wfile.write(response.encode('utf-8'))
+                return
+
+            state = build_mapper_state(MapperRequestHandler.paths)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(state).encode('utf-8'))
+            return
+
+        super().do_GET()
 
     def log_message(self, format, *args):
         pass  # Suppress request logging
@@ -562,10 +564,124 @@ def guess_category(width: int, height: int, atlas_y: int) -> str:
     return 'Unknown'
 
 
-def cmd_map(paths: dict):
-    """Open visual mapper to assign texture IDs to sprites."""
+def build_mapper_state(paths: dict) -> dict:
+    """Collect current sprite mapper state from disk."""
     import base64
 
+    sprites_dir = paths['sprites_dir']
+
+    # Load manifest for position info
+    manifest_path = sprites_dir / "_manifest.json"
+    manifest_sprites = {}
+    if manifest_path.exists():
+        with open(manifest_path, 'r') as f:
+            mdata = json.load(f)
+        for s in mdata.get('sprites', []):
+            manifest_sprites[s['name']] = s
+
+    sprite_data = []
+    for png_file in sorted(sprites_dir.glob("*.png")):
+        if png_file.name.startswith('_'):
+            continue
+
+        with Image.open(png_file) as img:
+            width = img.width
+            height = img.height
+
+        with open(png_file, 'rb') as f:
+            b64 = base64.b64encode(f.read()).decode('utf-8')
+
+        minfo = manifest_sprites.get(png_file.stem, {})
+        atlas_y = minfo.get('y', 0)
+        suggested_category = guess_category(width, height, atlas_y)
+
+        sprite_data.append({
+            'filename': png_file.stem,
+            'dataUrl': f'data:image/png;base64,{b64}',
+            'width': width,
+            'height': height,
+            'atlasY': atlas_y,
+            'mapped': not png_file.stem.startswith('sprite_'),
+            'suggestedCategory': suggested_category
+        })
+
+    expected_ids = collect_expected_texture_ids(paths)
+    sprite_names = {s['filename'] for s in sprite_data}
+    missing_by_category = {}
+
+    for category, ids in expected_ids.items():
+        missing = []
+        for item in ids:
+            if item['id'] not in sprite_names:
+                missing.append(item)
+        if missing:
+            missing_by_category[category] = missing
+
+    return {
+        'sprites': sprite_data,
+        'expectedIds': expected_ids,
+        'missingIds': missing_by_category,
+    }
+
+
+def apply_sprite_renames(sprites_dir: Path, mappings: dict) -> list:
+    """Apply mapper renames using temp files so swaps and cycles are correct."""
+    renames = {old: new for old, new in mappings.items() if old != new}
+    if not renames:
+        return []
+
+    targets = list(renames.values())
+    duplicate_targets = sorted({name for name in targets if targets.count(name) > 1})
+    if duplicate_targets:
+        raise ValueError(f"Multiple sprites map to the same target: {', '.join(duplicate_targets)}")
+
+    source_names = set(renames.keys())
+    existing_names = {
+        path.stem for path in sprites_dir.glob("*.png")
+        if not path.name.startswith('_')
+    }
+    conflicts = sorted(
+        new_name for new_name in targets
+        if new_name in existing_names and new_name not in source_names
+    )
+    if conflicts:
+        raise ValueError(f"Target sprite already exists: {', '.join(conflicts)}")
+
+    temp_files = {}
+    pid = os.getpid()
+
+    for index, old_name in enumerate(renames.keys()):
+        src = sprites_dir / f"{old_name}.png"
+        if not src.exists():
+            continue
+
+        suffix = 0
+        while True:
+            tmp_name = f"__atlas_tmp_{pid}_{index}_{suffix}_{old_name}.png"
+            tmp = sprites_dir / tmp_name
+            if not tmp.exists():
+                break
+            suffix += 1
+
+        src.rename(tmp)
+        temp_files[old_name] = tmp
+
+    renamed = []
+    for old_name, new_name in renames.items():
+        tmp = temp_files.get(old_name)
+        if tmp is None:
+            continue
+
+        dst = sprites_dir / f"{new_name}.png"
+        tmp.rename(dst)
+        renamed.append({'old': old_name, 'new': new_name})
+        print(f"  Renamed: {old_name}.png -> {new_name}.png")
+
+    return renamed
+
+
+def cmd_map(paths: dict):
+    """Open visual mapper to assign texture IDs to sprites."""
     sprites_dir = paths['sprites_dir']
     output_html = paths['mapper_session']
 
@@ -579,66 +695,17 @@ def cmd_map(paths: dict):
         print(f"Error: No sprites found in {sprites_dir}")
         return False
 
-    # Load manifest if exists
-    manifest_path = sprites_dir / "_manifest.json"
-    manifest = {}
-    if manifest_path.exists():
-        with open(manifest_path, 'r') as f:
-            manifest = json.load(f)
-
-    # Load manifest for position info
-    manifest_path = sprites_dir / "_manifest.json"
-    manifest_sprites = {}
-    if manifest_path.exists():
-        with open(manifest_path, 'r') as f:
-            mdata = json.load(f)
-        for s in mdata.get('sprites', []):
-            manifest_sprites[s['name']] = s
-
-    # Build sprite data with base64 images
-    sprite_data = []
-    for png_file in sprite_files:
-        if png_file.name.startswith('_'):
-            continue
-
-        img = Image.open(png_file)
-        with open(png_file, 'rb') as f:
-            b64 = base64.b64encode(f.read()).decode('utf-8')
-
-        # Get position from manifest
-        minfo = manifest_sprites.get(png_file.stem, {})
-        atlas_y = minfo.get('y', 0)
-
-        # Guess category based on size and position
-        suggested_category = guess_category(img.width, img.height, atlas_y)
-
-        sprite_data.append({
-            'filename': png_file.stem,
-            'dataUrl': f'data:image/png;base64,{b64}',
-            'width': img.width,
-            'height': img.height,
-            'atlasY': atlas_y,
-            'mapped': not png_file.stem.startswith('sprite_'),
-            'suggestedCategory': suggested_category
-        })
-
-    # Load expected texture IDs from JSON files
-    expected_ids = collect_expected_texture_ids(paths)
-
-    # Find which texture IDs have matching sprites vs missing
+    mapper_state = build_mapper_state(paths)
+    sprite_data = mapper_state['sprites']
+    expected_ids = mapper_state['expectedIds']
+    missing_by_category = mapper_state['missingIds']
     sprite_names = {s['filename'] for s in sprite_data}
-    missing_by_category = {}
-    mapped_count = 0
-
-    for category, ids in expected_ids.items():
-        missing = []
-        for item in ids:
-            if item['id'] in sprite_names:
-                mapped_count += 1
-            else:
-                missing.append(item)
-        if missing:
-            missing_by_category[category] = missing
+    mapped_count = sum(
+        1
+        for ids in expected_ids.values()
+        for item in ids
+        if item['id'] in sprite_names
+    )
 
     total_ids = sum(len(v) for v in expected_ids.values())
     total_missing = sum(len(v) for v in missing_by_category.values())
@@ -663,13 +730,14 @@ def cmd_map(paths: dict):
     print(f"\nStarting mapper server on http://localhost:8000")
     print("\nWorkflow:")
     print("  1. Click a sprite on the left")
-    print("  2. Click a texture ID on the right (or type custom)")
+    print("  2. Click a texture ID on the right to assign")
     print("  3. Repeat for all unmapped sprites")
     print("  4. Click 'Save Mappings'")
     print("\nPress Ctrl+C to stop server when done")
 
     # Set up HTTP server
     MapperRequestHandler.sprites_dir = sprites_dir
+    MapperRequestHandler.paths = paths
     original_dir = os.getcwd()
     os.chdir(output_html.parent)
 
@@ -691,41 +759,54 @@ def collect_expected_texture_ids(paths: dict) -> dict:
     categories = {}
     data_dir = paths['project_root'] / "res" / "data"
 
-    # Process resources.json (unified items, materials, currency)
-    resources_path = data_dir / "resources.json"
-    if resources_path.exists():
+    # Process resource catalogs (items, weapons, equipment, materials, currency)
+    resource_catalogs = (
+        "items.json",
+        "weapons.json",
+        "equipment.json",
+        "materials.json",
+        "currency.json",
+    )
+    items_found = []
+    materials_found = []
+    currency_found = []
+    seen_tex_ids = set()
+    for catalog_name in resource_catalogs:
+        resources_path = data_dir / catalog_name
+        if not resources_path.exists():
+            continue
         try:
             with open(resources_path, 'r') as f:
                 data = json.load(f)
             # Separate into categories based on the 'category' field
-            items_found = []
-            materials_found = []
-            currency_found = []
             for resource in data.get('resources', []):
-                tex_id = resource.get('textureId')
-                if tex_id:
-                    entry = {
-                        'id': tex_id,
-                        'name': resource.get('name', tex_id),
-                        'source': 'resources.json'
-                    }
-                    cat = resource.get('category', '')
-                    if cat == 'Item':
-                        items_found.append(entry)
-                    elif cat == 'Material':
-                        materials_found.append(entry)
-                    elif cat in ('Currency', 'GameResource'):
-                        currency_found.append(entry)
-                    else:
-                        items_found.append(entry)
-            if items_found:
-                categories['Items'] = items_found
-            if materials_found:
-                categories['Materials'] = materials_found
-            if currency_found:
-                categories['Currency & Resources'] = currency_found
+                for texture_key in ('textureId', 'worldTextureId', 'iconTextureId'):
+                    tex_id = resource.get(texture_key)
+                    if tex_id and tex_id not in seen_tex_ids:
+                        seen_tex_ids.add(tex_id)
+                        entry = {
+                            'id': tex_id,
+                            'name': resource.get('name', tex_id),
+                            'source': catalog_name
+                        }
+                        cat = resource.get('category', '')
+                        if cat == 'Item':
+                            items_found.append(entry)
+                        elif cat == 'Material':
+                            materials_found.append(entry)
+                        elif cat == 'Currency':
+                            currency_found.append(entry)
+                        else:
+                            items_found.append(entry)
         except Exception:
             pass
+
+    if items_found:
+        categories['Items'] = items_found
+    if materials_found:
+        categories['Materials'] = materials_found
+    if currency_found:
+        categories['Currency'] = currency_found
 
     # Process races.json (NPCs)
     races_path = data_dir / "races.json"
@@ -775,12 +856,20 @@ def collect_expected_texture_ids(paths: dict) -> dict:
             for subcat in ['biomes', 'obstacles', 'decorations', 'buildings']:
                 if subcat in data:
                     found = []
+                    seen_tex_ids = set()
                     for key, obj in data[subcat].items():
                         tex_id = obj.get('textureId')
-                        if tex_id:
+                        if tex_id and tex_id not in seen_tex_ids:
+                            seen_tex_ids.add(tex_id)
                             is_seasonal = obj.get('seasonal', False)
+                            # Always include base texture ID
+                            found.append({
+                                'id': tex_id,
+                                'name': obj.get('name', key),
+                                'source': 'world_objects.json'
+                            })
                             if is_seasonal:
-                                # Generate all 4 seasonal variants (prefix pattern: season_base)
+                                # Also generate all 4 seasonal variants
                                 for season in seasons:
                                     found.append({
                                         'id': f"{season}_{tex_id}",
@@ -789,12 +878,6 @@ def collect_expected_texture_ids(paths: dict) -> dict:
                                         'seasonal': True,
                                         'baseName': obj.get('name', key)
                                     })
-                            else:
-                                found.append({
-                                    'id': tex_id,
-                                    'name': obj.get('name', key),
-                                    'source': 'world_objects.json'
-                                })
                     if found:
                         categories[subcat.title()] = found
         except Exception:
@@ -803,15 +886,18 @@ def collect_expected_texture_ids(paths: dict) -> dict:
     return categories
 
 
-def scan_for_texture_ids(data, source: str, parent_name: str = None) -> list:
-    """Recursively scan data structure for texture ID fields."""
+def scan_for_texture_ids(data, source: str, parent_name: str = None,
+                         _seen: set = None) -> list:
+    """Recursively scan data structure for unique texture ID fields."""
+    if _seen is None:
+        _seen = set()
     found = []
-    texture_keys = ('textureId', 'worldTextureId')  # Icons share world coords
+    texture_keys = ('textureId', 'worldTextureId', 'iconTextureId')
 
     if isinstance(data, dict):
-        # Check if this dict has a texture ID
         for key in texture_keys:
-            if key in data and data[key]:
+            if key in data and data[key] and data[key] not in _seen:
+                _seen.add(data[key])
                 name = data.get('name') or data.get('id') or parent_name or data[key]
                 found.append({
                     'id': data[key],
@@ -819,13 +905,12 @@ def scan_for_texture_ids(data, source: str, parent_name: str = None) -> list:
                     'source': source
                 })
 
-        # Recurse into values
         for k, v in data.items():
-            found.extend(scan_for_texture_ids(v, source, k))
+            found.extend(scan_for_texture_ids(v, source, k, _seen))
 
     elif isinstance(data, list):
         for item in data:
-            found.extend(scan_for_texture_ids(item, source, parent_name))
+            found.extend(scan_for_texture_ids(item, source, parent_name, _seen))
 
     return found
 
@@ -835,7 +920,6 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
     sprites_json = json.dumps(sprites)
     ids_json = json.dumps(expected_ids)
     missing_json = json.dumps(missing_ids or {})
-    sprites_dir = str(paths['sprites_dir'])
 
     return f'''<!DOCTYPE html>
 <html>
@@ -858,7 +942,12 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
 
         .container {{ display: flex; height: calc(100vh - 56px); }}
 
-        .sprites-panel {{ flex: 1; overflow-y: auto; padding: 15px; background: #0f0f1a; }}
+        .sprites-panel {{ flex: 1; overflow-y: auto; padding: 15px; background: #0f0f1a; display: flex; flex-direction: column; }}
+        .sprites-filter {{ padding: 8px; margin-bottom: 8px; display: flex; gap: 8px; flex-shrink: 0; }}
+        .sprites-filter input {{ flex: 1; padding: 8px; background: #1a1a2e; border: 1px solid #333; color: #eee; border-radius: 4px; }}
+        .sprites-filter input:focus {{ border-color: #0f9; outline: none; }}
+        .sprites-filter select {{ padding: 8px; background: #1a1a2e; border: 1px solid #333; color: #eee; border-radius: 4px; }}
+        .sprites-grid-wrapper {{ flex: 1; overflow-y: auto; }}
         .sprites-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 8px; }}
 
         .sprite-card {{ background: #1a1a2e; border: 2px solid #333; border-radius: 6px; padding: 6px; cursor: pointer; text-align: center; }}
@@ -873,9 +962,9 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
         .ids-panel {{ width: 320px; background: #16213e; border-left: 2px solid #0f3460; display: flex; flex-direction: column; }}
         .ids-panel h3 {{ padding: 10px; background: #0f3460; font-size: 0.9em; }}
 
-        .custom-input {{ padding: 10px; border-bottom: 1px solid #333; }}
-        .custom-input input {{ width: 100%; padding: 8px; background: #1a1a2e; border: 1px solid #333; color: #eee; border-radius: 4px; }}
-        .custom-input input:focus {{ border-color: #0f9; outline: none; }}
+        .id-search {{ padding: 10px; border-bottom: 1px solid #333; }}
+        .id-search input {{ width: 100%; padding: 8px; background: #1a1a2e; border: 1px solid #333; color: #eee; border-radius: 4px; }}
+        .id-search input:focus {{ border-color: #0f9; outline: none; }}
 
         .id-list {{ flex: 1; overflow-y: auto; }}
         .id-category {{ border-bottom: 1px solid #333; }}
@@ -920,7 +1009,17 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
 
     <div class="container">
         <div class="sprites-panel">
-            <div class="sprites-grid" id="spritesGrid"></div>
+            <div class="sprites-filter">
+                <input type="text" id="spriteSearch" placeholder="Search sprites..." oninput="render()">
+                <select id="spriteFilter" onchange="render()">
+                    <option value="all">All</option>
+                    <option value="unmapped">Unmapped</option>
+                    <option value="mapped">Mapped</option>
+                </select>
+            </div>
+            <div class="sprites-grid-wrapper">
+                <div class="sprites-grid" id="spritesGrid"></div>
+            </div>
         </div>
 
         <div class="ids-panel">
@@ -928,26 +1027,8 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
                 <div style="color: #666; text-align: center;">Select a sprite</div>
             </div>
 
-            <div class="custom-input">
-                <input type="text" id="customId" placeholder="Texture ID (e.g. my_sword_world)">
-                <input type="text" id="customName" placeholder="Name (e.g. My Sword)" style="margin-top:5px;">
-                <select id="customCategory" style="margin-top:5px; width:100%; padding:8px; background:#1a1a2e; border:1px solid #333; color:#eee; border-radius:4px;">
-                    <option value="Custom">Custom (no category)</option>
-                    <option value="Items">Items</option>
-                    <option value="Materials">Materials</option>
-                    <option value="Currency & Resources">Currency & Resources</option>
-                    <option value="Races">Races</option>
-                    <option value="Monsters">Monsters</option>
-                    <option value="Animals">Animals</option>
-                    <option value="Biomes">Biomes</option>
-                    <option value="Obstacles">Obstacles</option>
-                    <option value="Decorations">Decorations</option>
-                    <option value="Buildings">Buildings</option>
-                </select>
-                <div style="display:flex; gap:5px; margin-top:5px;">
-                    <button class="btn" style="flex:1; background:#2a4a2a; color:#0f9;" onclick="addCustomIdOnly()">Add to List</button>
-                    <button class="btn" style="flex:1; background:#0f9; color:#000;" onclick="assignCustomId()">Assign</button>
-                </div>
+            <div class="id-search">
+                <input type="text" id="idSearch" placeholder="Filter texture IDs..." oninput="render()">
             </div>
 
             <div class="missing-section" id="missingSection"></div>
@@ -956,19 +1037,21 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
     </div>
 
     <script>
-        const sprites = {sprites_json};
-        const expectedIds = {ids_json};
-        const missingIds = {missing_json};
-        const spritesDir = "{sprites_dir}";
+        let sprites = {sprites_json};
+        let expectedIds = {ids_json};
+        let missingIds = {missing_json};
 
         let selectedSprite = null;
         let mappings = {{}};  // filename -> textureId
-        let customIds = [];   // user-added custom texture IDs (objects with id and name)
 
-        // Initialize mappings from already-named sprites
-        sprites.forEach(s => {{
-            if (s.mapped) mappings[s.filename] = s.filename;
-        }});
+        function rebuildMappingsFromSprites() {{
+            mappings = {{}};
+            sprites.forEach(s => {{
+                if (s.mapped) mappings[s.filename] = s.filename;
+            }});
+        }}
+
+        rebuildMappingsFromSprites();
 
         function render() {{
             // Save scroll positions before re-rendering
@@ -1062,14 +1145,31 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
             const grid = document.getElementById('spritesGrid');
             grid.innerHTML = '';
 
-            sprites.forEach(sprite => {{
+            const search = (document.getElementById('spriteSearch')?.value || '').toLowerCase();
+            const filter = document.getElementById('spriteFilter')?.value || 'all';
+
+            // Sort: mapped sprites first, then unmapped
+            const sorted = [...sprites].sort((a, b) => {{
+                const aM = mappings[a.filename] ? 0 : 1;
+                const bM = mappings[b.filename] ? 0 : 1;
+                return aM - bM;
+            }});
+
+            sorted.forEach(sprite => {{
+                const isMapped = !!mappings[sprite.filename];
+                if (filter === 'unmapped' && isMapped) return;
+                if (filter === 'mapped' && !isMapped) return;
+
+                const displayName = mappings[sprite.filename] || sprite.filename;
+                if (search && !displayName.toLowerCase().includes(search) &&
+                    !sprite.filename.toLowerCase().includes(search)) return;
+
                 const card = document.createElement('div');
                 card.className = 'sprite-card' +
                     (selectedSprite === sprite.filename ? ' selected' : '') +
-                    (mappings[sprite.filename] ? ' mapped' : '');
+                    (isMapped ? ' mapped' : '');
 
-                const displayName = mappings[sprite.filename] || sprite.filename;
-                const guessHtml = !mappings[sprite.filename] && sprite.suggestedCategory ?
+                const guessHtml = !isMapped && sprite.suggestedCategory ?
                     `<div class="guess">${{sprite.suggestedCategory}}</div>` : '';
                 card.innerHTML = `
                     <img src="${{sprite.dataUrl}}" alt="${{sprite.filename}}">
@@ -1086,6 +1186,7 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
             list.innerHTML = '';
 
             const usedIds = new Set(Object.values(mappings));
+            const idSearch = (document.getElementById('idSearch')?.value || '').toLowerCase();
 
             // Build set of missing IDs dynamically
             const currentMissing = getMissingIds();
@@ -1095,28 +1196,20 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
             const selectedSpriteData = sprites.find(s => s.filename === selectedSprite);
             const suggestedCat = selectedSpriteData?.suggestedCategory;
 
-            // Merge custom IDs into their categories
+            // Categories from data files
             const allCategories = {{}};
-
-            // Start with expected IDs
             Object.entries(expectedIds).forEach(([cat, ids]) => {{
                 allCategories[cat] = [...ids];
             }});
 
-            // Add custom IDs to their categories
-            customIds.forEach(item => {{
-                if (item.category === 'Custom') {{
-                    if (!allCategories['Custom']) allCategories['Custom'] = [];
-                    allCategories['Custom'].push({{id: item.id, name: item.name, isCustom: true}});
-                }} else {{
-                    if (!allCategories[item.category]) allCategories[item.category] = [];
-                    allCategories[item.category].push({{id: item.id, name: item.name, isCustom: true}});
-                }}
-            }});
+            // Helper: check if item matches ID search
+            const matchesSearch = (item) => !idSearch ||
+                item.id.toLowerCase().includes(idSearch) ||
+                (item.name && item.name.toLowerCase().includes(idSearch));
 
             // Show suggested matches first if we have a suggestion
             if (suggestedCat && suggestedCat !== 'Unknown' && allCategories[suggestedCat]) {{
-                const suggestedIds = allCategories[suggestedCat].filter(x => !usedIds.has(x.id));
+                const suggestedIds = allCategories[suggestedCat].filter(x => !usedIds.has(x.id) && matchesSearch(x));
                 if (suggestedIds.length > 0) {{
                     const suggestCat = document.createElement('div');
                     suggestCat.className = 'id-category';
@@ -1127,11 +1220,10 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
                         const isMissing = missingIdSet.has(item.id);
                         div.className = 'id-item' + (isMissing ? ' missing' : '');
                         div.style.borderLeftColor = '#f90';
-                        const customBadge = item.isCustom ? ' <span style="color:#2a4a2a;background:#0f9;padding:1px 4px;border-radius:3px;font-size:9px;">NEW</span>' : '';
                         const missingBadge = isMissing ? ' <span style="color:#fff;background:#e94560;padding:1px 4px;border-radius:3px;font-size:9px;">NO SPRITE</span>' : '';
-                        const hasSpriteBadge = !isMissing && !item.isCustom ? ' <span style="color:#fff;background:#2a6a2a;padding:1px 4px;border-radius:3px;font-size:9px;">✓</span>' : '';
+                        const hasSpriteBadge = !isMissing ? ' <span style="color:#fff;background:#2a6a2a;padding:1px 4px;border-radius:3px;font-size:9px;">✓</span>' : '';
                         div.innerHTML = `
-                            <div class="id-name">${{item.id}}${{customBadge}}${{missingBadge}}${{hasSpriteBadge}}</div>
+                            <div class="id-name">${{item.id}}${{missingBadge}}${{hasSpriteBadge}}</div>
                             <div class="id-desc">${{item.name}}</div>
                         `;
                         div.onclick = () => assignId(item.id);
@@ -1142,31 +1234,29 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
                 }}
             }}
 
-            // Define category order (includes all creature types)
-            const categoryOrder = ['Items', 'Materials', 'Currency & Resources', 'Races', 'Monsters', 'Animals', 'Biomes', 'Obstacles', 'Decorations', 'Buildings', 'Custom'];
+            const categoryOrder = ['Items', 'Materials', 'Currency', 'Races', 'Monsters', 'Animals', 'Biomes', 'Obstacles', 'Decorations', 'Buildings'];
 
-            // Render categories in order
             categoryOrder.forEach(categoryName => {{
                 const ids = allCategories[categoryName];
                 if (!ids || ids.length === 0) return;
 
+                const filteredIds = idSearch ? ids.filter(matchesSearch) : ids;
+                if (filteredIds.length === 0) return;
+
                 const cat = document.createElement('div');
                 cat.className = 'id-category';
-                const missingCount = ids.filter(x => missingIdSet.has(x.id)).length;
-                const hasSpritesCount = ids.length - missingCount;
-                const headerStyle = categoryName === 'Custom' ? ' style="background:#2a4a2a;"' : '';
+                const missingCount = filteredIds.filter(x => missingIdSet.has(x.id)).length;
                 const missingIndicator = missingCount > 0 ? ` <span style="color:#e94560;">⚠️ ${{missingCount}} need sprites</span>` : '';
-                cat.innerHTML = `<div class="id-category-header"${{headerStyle}}>${{categoryName}} (${{ids.length}})${{missingIndicator}}</div>`;
+                cat.innerHTML = `<div class="id-category-header">${{categoryName}} (${{filteredIds.length}})${{missingIndicator}}</div>`;
 
-                ids.forEach(item => {{
+                filteredIds.forEach(item => {{
                     const div = document.createElement('div');
                     const isMissing = missingIdSet.has(item.id);
                     div.className = 'id-item' + (usedIds.has(item.id) ? ' used' : '') + (isMissing ? ' missing' : '');
-                    const customBadge = item.isCustom ? ' <span style="color:#2a4a2a;background:#0f9;padding:1px 4px;border-radius:3px;font-size:9px;">NEW</span>' : '';
                     const missingBadge = isMissing ? ' <span style="color:#fff;background:#e94560;padding:1px 4px;border-radius:3px;font-size:9px;">NO SPRITE</span>' : '';
-                    const hasSpriteBadge = !isMissing && !item.isCustom ? ' <span style="color:#fff;background:#2a6a2a;padding:1px 4px;border-radius:3px;font-size:9px;">✓</span>' : '';
+                    const hasSpriteBadge = !isMissing ? ' <span style="color:#fff;background:#2a6a2a;padding:1px 4px;border-radius:3px;font-size:9px;">✓</span>' : '';
                     div.innerHTML = `
-                        <div class="id-name">${{item.id}}${{customBadge}}${{missingBadge}}${{hasSpriteBadge}}</div>
+                        <div class="id-name">${{item.id}}${{missingBadge}}${{hasSpriteBadge}}</div>
                         <div class="id-desc">${{item.name}}</div>
                     `;
                     div.onclick = () => assignId(item.id);
@@ -1192,11 +1282,6 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
                 <div class="label">Mapped to:</div>
                 <div class="value">${{mappings[filename] || '(unmapped)'}}</div>
             `;
-
-            // Pre-select the suggested category in dropdown
-            if (sprite.suggestedCategory && sprite.suggestedCategory !== 'Unknown') {{
-                document.getElementById('customCategory').value = sprite.suggestedCategory;
-            }}
 
             render();
         }}
@@ -1227,45 +1312,6 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
             render();
         }}
 
-        function assignCustomId() {{
-            const idInput = document.getElementById('customId');
-            const nameInput = document.getElementById('customName');
-            const catSelect = document.getElementById('customCategory');
-            const id = idInput.value.trim();
-            const name = nameInput.value.trim() || id;
-            const category = catSelect.value;
-            if (id) {{
-                // Check if this is a new custom ID (not in expected lists)
-                const allExpectedIds = Object.values(expectedIds).flat().map(x => x.id);
-                const existingCustom = customIds.find(x => x.id === id);
-                if (!allExpectedIds.includes(id) && !existingCustom) {{
-                    customIds.push({{id, name, category}});
-                }}
-                assignId(id);
-                idInput.value = '';
-                nameInput.value = '';
-            }}
-        }}
-
-        function addCustomIdOnly() {{
-            const idInput = document.getElementById('customId');
-            const nameInput = document.getElementById('customName');
-            const catSelect = document.getElementById('customCategory');
-            const id = idInput.value.trim();
-            const name = nameInput.value.trim() || id;
-            const category = catSelect.value;
-            if (id) {{
-                const allExpectedIds = Object.values(expectedIds).flat().map(x => x.id);
-                const existingCustom = customIds.find(x => x.id === id);
-                if (!allExpectedIds.includes(id) && !existingCustom) {{
-                    customIds.push({{id, name, category}});
-                    render();
-                }}
-                idInput.value = '';
-                nameInput.value = '';
-            }}
-        }}
-
         function updateStats() {{
             const total = sprites.length;
             const mapped = Object.keys(mappings).length;
@@ -1280,6 +1326,36 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
             }}
         }}
 
+        function loadMapperState(previousSelection) {{
+            return fetch('/mapper-state', {{cache: 'no-store'}})
+                .then(response => {{
+                    if (!response.ok) {{
+                        return response.json().then(data => {{
+                            throw new Error(data.error || 'Failed to load mapper state');
+                        }});
+                    }}
+                    return response.json();
+                }})
+                .then(state => {{
+                    sprites = state.sprites || [];
+                    expectedIds = state.expectedIds || {{}};
+                    missingIds = state.missingIds || {{}};
+                    rebuildMappingsFromSprites();
+
+                    selectedSprite = sprites.some(s => s.filename === previousSelection)
+                        ? previousSelection
+                        : null;
+
+                    if (selectedSprite) {{
+                        selectSprite(selectedSprite);
+                    }} else {{
+                        document.getElementById('selectedInfo').innerHTML =
+                            '<div style="color: #666; text-align: center;">Select a sprite</div>';
+                        render();
+                    }}
+                }});
+        }}
+
         function saveMappings() {{
             const renames = Object.entries(mappings).filter(([old, newN]) => old !== newN);
 
@@ -1288,18 +1364,29 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
                 return;
             }}
 
-            // Apply renames immediately via server
+            if (!confirm(`Rename ${{renames.length}} sprite(s)?\\n\\n${{renames.map(([o,n]) => o + ' → ' + n).join('\\n')}}`)) {{
+                return;
+            }}
+
             fetch('/save-mappings', {{
                 method: 'POST',
                 headers: {{'Content-Type': 'application/json'}},
                 body: JSON.stringify(mappings, null, 2)
             }})
-            .then(response => response.json())
+            .then(response => {{
+                if (!response.ok) {{
+                    return response.json().then(data => {{
+                        throw new Error(data.error || 'Save failed');
+                    }});
+                }}
+                return response.json();
+            }})
             .then(data => {{
                 if (data.renamed && data.renamed.length > 0) {{
-                    const names = data.renamed.map(r => `${{r.old}} -> ${{r.new}}`).join('\\n');
-                    alert(`Renamed ${{data.renamed.length}} sprites:\\n\\n${{names}}\\n\\nPage will reload to show changes.`);
-                    location.reload();
+                    const previousSelection = selectedSprite;
+                    return loadMapperState(previousSelection).then(() => {{
+                        alert(`Renamed ${{data.renamed.length}} sprites. Ready for next batch or pack.`);
+                    }});
                 }} else {{
                     alert('No renames were applied.');
                 }}
@@ -1307,14 +1394,17 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
             .catch(err => alert('Error: ' + err));
         }}
 
-        // Keyboard navigation
+        // Keyboard navigation (skip when typing in inputs)
         document.addEventListener('keydown', e => {{
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
             if (!selectedSprite) return;
             const idx = sprites.findIndex(s => s.filename === selectedSprite);
 
             if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {{
+                e.preventDefault();
                 selectSprite(sprites[(idx + 1) % sprites.length].filename);
             }} else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {{
+                e.preventDefault();
                 selectSprite(sprites[(idx - 1 + sprites.length) % sprites.length].filename);
             }}
         }});
@@ -1326,53 +1416,11 @@ def generate_mapper_html(sprites: list, expected_ids: dict, paths: dict, missing
 
 
 # =============================================================================
-# Sprite Rename Helper
-# =============================================================================
-
-def apply_sprite_renames(sprites_dir: Path, mappings_file: Path):
-    """Apply sprite renames using two-phase approach to handle circular dependencies."""
-    with open(mappings_file) as f:
-        mappings = json.load(f)
-
-    # Filter to only renames (old != new)
-    renames = {old: new for old, new in mappings.items() if old != new}
-
-    if not renames:
-        print("  No renames needed")
-        mappings_file.unlink()
-        return
-
-    print(f"  Renaming {len(renames)} sprites...")
-
-    # Phase 1: Move all source files to temporary names
-    temp_files = {}
-    for old_name in renames.keys():
-        src = sprites_dir / f"{old_name}.png"
-        if src.exists():
-            tmp = sprites_dir / f"_tmp_{old_name}.png"
-            src.rename(tmp)
-            temp_files[old_name] = tmp
-            print(f"    {old_name}.png -> _tmp_{old_name}.png")
-
-    # Phase 2: Move temporary files to final names
-    for old_name, new_name in renames.items():
-        if old_name in temp_files:
-            tmp = temp_files[old_name]
-            dst = sprites_dir / f"{new_name}.png"
-            tmp.rename(dst)
-            print(f"    _tmp_{old_name}.png -> {new_name}.png")
-
-    # Clean up mappings file
-    mappings_file.unlink()
-    print("  Renames complete, removed mappings.json")
-
-
-# =============================================================================
-# PACK - Pack sprites into atlas and export all JSON files
+# PACK - Pack sprites into atlas and update atlas.json
 # =============================================================================
 
 def cmd_pack(paths: dict):
-    """Pack sprites into atlas.png and export all JSON files."""
+    """Pack sprites into atlas.png and update atlas.json."""
     sprites_dir = paths['sprites_dir']
     atlas_png = paths['atlas_png']
     atlas_json_path = paths['atlas_json']
@@ -1381,18 +1429,29 @@ def cmd_pack(paths: dict):
         print(f"Error: Sprites directory not found: {sprites_dir}")
         return False
 
-    # Apply pending renames from mappings.json (if exists)
-    mappings_file = sprites_dir / 'mappings.json'
-    if mappings_file.exists():
-        print("Found mappings.json - applying sprite renames...")
-        apply_sprite_renames(sprites_dir, mappings_file)
-
     # Collect all PNG files (excluding manifest and temp files)
     sprite_files = [f for f in sorted(sprites_dir.glob("*.png")) if not f.name.startswith('_')]
 
     if not sprite_files:
         print("No sprites found")
         return False
+
+    existing_region_count = 0
+    if atlas_json_path.exists():
+        try:
+            with atlas_json_path.open('r', encoding='utf-8') as f:
+                atlas_data = json.load(f)
+            existing_region_count = len(atlas_data.get('regions', {}))
+        except (OSError, json.JSONDecodeError) as ex:
+            print(f"Warning: Could not read existing atlas.json for pack sanity check: {ex}")
+
+    if existing_region_count > 0 and len(sprite_files) < max(1, existing_region_count // 2):
+        print(
+            "Warning: res/sprites contains far fewer sprites than the current atlas "
+            f"({len(sprite_files)} PNGs vs {existing_region_count} atlas regions). "
+            "If you intend to update the existing atlas, run extract first; pack will "
+            "replace atlas.png and atlas.json with only the sprites currently present."
+        )
 
     print(f"Loading {len(sprite_files)} sprites...")
 
@@ -1519,9 +1578,7 @@ def cmd_pack(paths: dict):
         json.dump(atlas_data, f, indent=2)
     print(f"Saved: {atlas_json_path} ({len(regions)} regions)")
 
-    # Export to all JSON files
-    print("\nUpdating JSON files...")
-    export_to_json_files(paths, regions)
+    print("\n  Atlas coordinates stored in atlas.json only (data files unchanged)")
 
     # Clean up sprite files after successful pack
     current_sprites = [f for f in sprites_dir.glob("*.png") if not f.name.startswith('_')]
@@ -1532,29 +1589,6 @@ def cmd_pack(paths: dict):
         print("  Sprites removed (now in atlas)")
 
     return True
-
-
-def export_to_json_files(paths: dict, regions: dict):
-    """Export atlas coordinates - only updates atlas.json now.
-
-    Atlas coordinates are no longer written to data files (resources.json,
-    races.json, etc.). The C++ code now reads textureId from data files and
-    looks up coordinates from atlas.json at runtime. This provides a single
-    source of truth for sprite coordinates.
-    """
-    # Atlas.json is already saved in cmd_pack() before this function is called
-    print("  Atlas coordinates stored in atlas.json only (data files unchanged)")
-    print("  C++ code looks up coords via textureId -> atlas.json at runtime")
-
-
-# NOTE: The following functions are deprecated and no longer used.
-# Atlas coordinates are now only stored in atlas.json. The C++ code reads
-# textureId from data files and looks up coordinates from atlas.json at runtime.
-# These functions are kept for reference but can be removed in a future cleanup.
-#
-# def update_resources_json(json_path: Path, regions: dict, texture_key: str) -> int:
-# def update_creature_json(json_path: Path, regions: dict, array_key: str) -> int:
-# def update_world_objects_json(json_path: Path, regions: dict) -> int:
 
 
 # =============================================================================
@@ -1609,12 +1643,12 @@ def main():
 Workflow:
   1. extract  - Extract sprites from atlas.png
   2. map      - Assign texture IDs to sprites (visual tool)
-  3. pack     - Pack sprites and export all JSON files
+  3. pack     - Pack sprites and update atlas.json
 
 Example:
   python3 tools/atlas_tool.py extract
   python3 tools/atlas_tool.py map
-  # (assign IDs in browser, download rename script, run it)
+  # (assign IDs in browser, save to apply renames)
   python3 tools/atlas_tool.py pack
 ''')
 
@@ -1632,7 +1666,7 @@ Example:
     extract_from_parser.add_argument('--max-size', type=int, default=64,
         help='Split regions larger than this (default: 64)')
     subparsers.add_parser('map', help='Visual tool to assign texture IDs')
-    subparsers.add_parser('pack', help='Pack sprites and export JSON files')
+    subparsers.add_parser('pack', help='Pack sprites into atlas.png and update atlas.json')
     subparsers.add_parser('list', help='List current sprites')
 
     args = parser.parse_args()

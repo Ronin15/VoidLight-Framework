@@ -12,6 +12,7 @@
 #include "utils/Vector2D.hpp"
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <type_traits>
 #include <string>
@@ -330,12 +331,13 @@ private:
     void fireWorldLoadedEvent(const std::string& worldId);
     void fireWorldUnloadedEvent(const std::string& worldId);
     void initializeWorldResources();
-    void unloadWorldUnsafe();  // Internal method - assumes caller already holds lock
+    std::optional<std::string> unloadWorldLocked();  // Assumes caller already holds lock
     bool applyTileUpdateLocked(int x, int y, const VoidLight::Tile& newTile);
 
     std::unique_ptr<VoidLight::WorldData> m_currentWorld;
     std::unique_ptr<VoidLight::TileRenderer> m_tileRenderer;
 
+    mutable std::mutex m_loadMutex;
     mutable std::shared_mutex m_worldMutex;
     std::atomic<bool> m_initialized{false};
     bool m_isShutdown{false};

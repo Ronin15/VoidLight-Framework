@@ -1065,17 +1065,11 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity)
     BOOST_REQUIRE_MESSAGE(hotA.hasCollision(), "Entity A should have collision enabled");
     BOOST_REQUIRE_MESSAGE(hotB.hasCollision(), "Entity B should have collision enabled");
 
-    // Set up collision callback to inspect CollisionInfo
-    std::vector<CollisionInfo> capturedCollisions;
-
-    CollisionManager::Instance().addCollisionCallback([&capturedCollisions](const CollisionInfo& collision) {
-        capturedCollisions.push_back(collision);
-    });
-
     // Run collision detection
     CollisionManager::Instance().update(0.016f);
 
-    // Verify we captured collisions
+    // Read this frame's collisions directly from the manager's reusable buffer
+    const auto& capturedCollisions = CollisionManager::Instance().getLastFrameCollisions();
     BOOST_REQUIRE_MESSAGE(!capturedCollisions.empty(), "Expected movable-movable collision between overlapping EDM entities");
 
     for (const auto& collision : capturedCollisions) {
@@ -1219,6 +1213,51 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrat
 
     // Clean up
     edm.unregisterEntity(movableId);
+    edm.clean();
+    EventManager::Instance().removeHandler(token);
+}
+
+BOOST_FIXTURE_TEST_CASE(TestNonProjectileCollisionPairsAreNotEventManagerEvents, CollisionIntegrationFixture)
+{
+    std::atomic<int> collisionEventCount{0};
+    auto token = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Collision,
+        [&collisionEventCount](const EventData&) {
+            ++collisionEventCount;
+        });
+
+    auto& edm = EntityDataManager::Instance();
+    BOOST_REQUIRE(edm.init());
+
+    EntityHandle handleA = edm.createNPCWithRaceClass({100.0f, 100.0f}, "Human", "Guard");
+    EntityHandle handleB = edm.createNPCWithRaceClass({110.0f, 100.0f}, "Human", "Guard");
+
+    size_t idxA = edm.getIndex(handleA);
+    size_t idxB = edm.getIndex(handleB);
+    auto& hotA = edm.getHotDataByIndex(idxA);
+    auto& hotB = edm.getHotDataByIndex(idxB);
+    hotA.collisionLayers = CollisionLayer::Layer_Enemy;
+    hotA.collisionMask = CollisionLayer::Layer_Enemy;
+    hotA.setCollisionEnabled(true);
+    hotB.collisionLayers = CollisionLayer::Layer_Enemy;
+    hotB.collisionMask = CollisionLayer::Layer_Enemy;
+    hotB.setCollisionEnabled(true);
+
+    auto& bgm = BackgroundSimulationManager::Instance();
+    BOOST_REQUIRE(bgm.init());
+    bgm.setActiveRadius(2000.0f);
+    bgm.setBackgroundRadius(4000.0f);
+    bgm.update({100.0f, 100.0f}, 0.016f);
+
+    CollisionManager::Instance().update(0.016f);
+    BOOST_REQUIRE(!CollisionManager::Instance().getLastFrameCollisions().empty());
+
+    EventManager::Instance().drainAllDeferredEvents();
+    BOOST_CHECK_EQUAL(collisionEventCount.load(), 0);
+
+    edm.destroyEntity(handleA);
+    edm.destroyEntity(handleB);
+    bgm.clean();
     edm.clean();
     EventManager::Instance().removeHandler(token);
 }

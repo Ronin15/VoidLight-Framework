@@ -198,6 +198,43 @@ BOOST_AUTO_TEST_CASE(TestChangeState) {
     BOOST_CHECK(state2Ptr->wasEnterCalled());
 }
 
+BOOST_AUTO_TEST_CASE(TestChangeStateClearingStackExitsAllActiveStates) {
+    auto menuState = std::make_unique<MockGameState>(GameStateId::MAIN_MENU);
+    auto gameState = std::make_unique<MockGameState>(GameStateId::GAME_PLAY);
+    auto pauseState = std::make_unique<MockGameState>(GameStateId::PAUSE);
+    MockGameState* menuPtr = menuState.get();
+    MockGameState* gamePtr = gameState.get();
+    MockGameState* pausePtr = pauseState.get();
+
+    manager.addState(std::move(menuState));
+    manager.addState(std::move(gameState));
+    manager.addState(std::move(pauseState));
+
+    manager.pushState(GameStateId::MAIN_MENU);
+    manager.changeState(GameStateId::GAME_PLAY);
+    manager.pushState(GameStateId::PAUSE);
+
+    menuPtr->resetFlags();
+    gamePtr->resetFlags();
+    pausePtr->resetFlags();
+
+    manager.changeStateClearingStack(GameStateId::MAIN_MENU);
+
+    BOOST_CHECK(pausePtr->wasExitCalled());
+    BOOST_CHECK(gamePtr->wasExitCalled());
+    BOOST_CHECK(!gamePtr->wasResumeCalled());
+    BOOST_CHECK(menuPtr->wasEnterCalled());
+
+    menuPtr->resetFlags();
+    gamePtr->resetFlags();
+    pausePtr->resetFlags();
+    manager.update(0.016f);
+
+    BOOST_CHECK(menuPtr->wasUpdateCalled());
+    BOOST_CHECK(!gamePtr->wasUpdateCalled());
+    BOOST_CHECK(!pausePtr->wasUpdateCalled());
+}
+
 BOOST_AUTO_TEST_CASE(TestImmediateStateChange) {
     auto mockState1 = std::make_unique<MockGameState>(GameStateId::LOGO);
     auto mockState2 = std::make_unique<MockGameState>(GameStateId::LOADING);

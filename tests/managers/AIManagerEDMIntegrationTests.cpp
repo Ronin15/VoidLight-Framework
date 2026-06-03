@@ -31,6 +31,7 @@
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/PathfinderManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -95,12 +96,13 @@ private:
 // Test fixture that initializes all required managers
 struct AIManagerEDMFixture {
     AIManagerEDMFixture() {
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        EventManager::Instance().init();
-        AIManager::Instance().init();
-        BackgroundSimulationManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
     }
 
     ~AIManagerEDMFixture() {
@@ -110,6 +112,7 @@ struct AIManagerEDMFixture {
         PathfinderManager::Instance().clean();
         CollisionManager::Instance().clean();
         EntityDataManager::Instance().clean();
+        ResourceTemplateManager::Instance().clean();
     }
 };
 
@@ -133,6 +136,49 @@ BOOST_AUTO_TEST_CASE(TestBehaviorAssignmentCreatesEdmIndexMapping) {
 
     // Verify behavior is assigned
     BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
+}
+
+BOOST_AUTO_TEST_CASE(TestRangedAttackCommitFailureQueuesBehaviorOwnedReset) {
+    auto& edm = EntityDataManager::Instance();
+    auto& rtm = ResourceTemplateManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    VoidLight::AICommandBus::Instance().clearAll();
+
+    auto attacker = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    aiMgr.unassignBehavior(attackerHandle);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+    BOOST_REQUIRE(aiMgr.hasBehavior(attackerHandle));
+    const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+
+    const auto bow = rtm.getHandleById("bow");
+    BOOST_REQUIRE(bow.isValid());
+    auto& charData = edm.getCharacterDataByIndex(attackerIdx);
+    BOOST_REQUIRE(charData.hasInventory());
+    BOOST_REQUIRE(edm.addToInventory(charData.inventoryIndex, bow, 1));
+    BOOST_REQUIRE(edm.equipCharacterItem(attackerHandle, bow));
+
+    auto& attackState = edm.getAttackState(ref.index);
+    attackState.currentState = 4;
+    attackState.stateChangeTimer = 0.0f;
+    attackState.canAttack = false;
+    attackState.lastAttackHit = true;
+
+    VoidLight::AICommandBus::Instance().enqueueRangedAttack(
+        attackerHandle, attackerIdx, Vector2D(100.0f, 100.0f),
+        Vector2D(140.0f, 100.0f), 10.0f, 160.0f, 180.0f);
+
+    aiMgr.update(0.0f);
+    BOOST_CHECK_EQUAL(static_cast<int>(attackState.currentState), 4);
+
+    aiMgr.update(0.0f);
+    BOOST_CHECK_EQUAL(static_cast<int>(attackState.currentState), 0);
+    BOOST_CHECK(attackState.canAttack);
+    BOOST_CHECK(!attackState.lastAttackHit);
 }
 
 BOOST_AUTO_TEST_CASE(TestSparseBehaviorVectorHandlesGaps) {
@@ -739,7 +785,7 @@ BOOST_AUTO_TEST_CASE(StaleHigherSequenceTransitionDoesNotSuppressValidTransition
     BOOST_REQUIRE(reusedIndex != SIZE_MAX);
 
     aiMgr.assignBehavior(staleHandle, "Idle");
-    BOOST_REQUIRE(edm.getBehaviorConfig(reusedIndex).type == BehaviorType::Idle);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(reusedIndex).type == BehaviorType::Idle);
 
     aiMgr.unregisterEntity(staleHandle);
     edm.destroyEntity(staleHandle);
@@ -766,7 +812,7 @@ BOOST_AUTO_TEST_CASE(StaleHigherSequenceTransitionDoesNotSuppressValidTransition
     BOOST_REQUIRE(edm.getIndex(currentHandle) == reusedIndex);
 
     aiMgr.assignBehavior(currentHandle, "Idle");
-    BOOST_REQUIRE(edm.getBehaviorConfig(reusedIndex).type == BehaviorType::Idle);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(reusedIndex).type == BehaviorType::Idle);
 
     // Valid transition first (older sequence): should still apply even if a stale
     // command with newer sequence is enqueued after it.
@@ -778,7 +824,7 @@ BOOST_AUTO_TEST_CASE(StaleHigherSequenceTransitionDoesNotSuppressValidTransition
         staleHandle, reusedIndex, staleConfig);
 
     aiMgr.update(0.016f);
-    BOOST_CHECK(edm.getBehaviorConfig(reusedIndex).type == BehaviorType::Attack);
+    BOOST_CHECK(edm.getBehaviorConfigRef(reusedIndex).type == BehaviorType::Attack);
 }
 
 BOOST_AUTO_TEST_CASE(StaleTransitionSuppressionStressLoop) {
@@ -792,7 +838,7 @@ BOOST_AUTO_TEST_CASE(StaleTransitionSuppressionStressLoop) {
         BOOST_REQUIRE(reusedIndex != SIZE_MAX);
 
         aiMgr.assignBehavior(staleHandle, "Idle");
-        BOOST_REQUIRE(edm.getBehaviorConfig(reusedIndex).type == BehaviorType::Idle);
+        BOOST_REQUIRE(edm.getBehaviorConfigRef(reusedIndex).type == BehaviorType::Idle);
 
         aiMgr.unregisterEntity(staleHandle);
         edm.destroyEntity(staleHandle);
@@ -815,7 +861,7 @@ BOOST_AUTO_TEST_CASE(StaleTransitionSuppressionStressLoop) {
         BOOST_REQUIRE(slotReused);
 
         aiMgr.assignBehavior(currentHandle, "Idle");
-        BOOST_REQUIRE(edm.getBehaviorConfig(reusedIndex).type == BehaviorType::Idle);
+        BOOST_REQUIRE(edm.getBehaviorConfigRef(reusedIndex).type == BehaviorType::Idle);
 
         Behaviors::switchBehavior(reusedIndex, BehaviorType::Attack);
 
@@ -825,7 +871,7 @@ BOOST_AUTO_TEST_CASE(StaleTransitionSuppressionStressLoop) {
             staleHandle, reusedIndex, staleConfig);
 
         aiMgr.update(0.016f);
-        BOOST_CHECK(edm.getBehaviorConfig(reusedIndex).type == BehaviorType::Attack);
+        BOOST_CHECK(edm.getBehaviorConfigRef(reusedIndex).type == BehaviorType::Attack);
     }
 }
 

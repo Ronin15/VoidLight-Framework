@@ -1,4 +1,0 @@
-interface:
-  display_name: "Senior GameDev Review"
-  short_description: "Review game systems for coherency and completeness"
-  default_prompt: "Use $senior-gamedev-review to review this C++20 game engine change for system coherency, lifecycle completeness, integration risks, and production readiness."

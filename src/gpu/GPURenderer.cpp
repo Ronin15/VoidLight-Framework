@@ -492,22 +492,6 @@ SDL_GPUGraphicsPipeline* GPURenderer::getCompositePipeline() const {
     return m_compositePipeline.get();
 }
 
-SDL_GPUGraphicsPipeline* GPURenderer::getUISpritePipeline() const {
-    return m_uiSpritePipeline.get();
-}
-
-SDL_GPUGraphicsPipeline* GPURenderer::getUITextAlphaPipeline() const {
-    return m_uiTextAlphaPipeline.get();
-}
-
-SDL_GPUGraphicsPipeline* GPURenderer::getUITextSDFPipeline() const {
-    return m_uiTextSDFPipeline.get();
-}
-
-SDL_GPUGraphicsPipeline* GPURenderer::getUIPrimitivePipeline() const {
-    return m_uiPrimitivePipeline.get();
-}
-
 void GPURenderer::updateViewport(uint32_t width, uint32_t height) {
     if (width == 0 || height == 0) {
         GAMEENGINE_WARN(std::format("GPURenderer::updateViewport ignored invalid size: {}x{}", width, height));
@@ -545,6 +529,106 @@ void GPURenderer::pushViewProjection(const SDL_GPURenderPass* pass, const float*
     }
 
     SDL_PushGPUVertexUniformData(m_commandBuffer, 0, viewProjection, sizeof(float) * 16);
+}
+
+void GPURenderer::renderUIBatches(SDL_GPURenderPass* pass,
+                                  uint32_t primitiveVertexCount,
+                                  std::span<const UITextureDrawBatch> imageBatches,
+                                  std::span<const UITextDrawBatch> textBatches) {
+    if (!pass || (primitiveVertexCount == 0 && imageBatches.empty() && textBatches.empty())) {
+        return;
+    }
+
+    float orthoMatrix[16];
+    createOrthoMatrix(0.0f, static_cast<float>(m_viewportWidth),
+                      0.0f, static_cast<float>(m_viewportHeight),
+                      orthoMatrix);
+
+    SDL_GPUGraphicsPipeline* currentPipeline = nullptr;
+    SDL_GPUBuffer* currentVertexBuffer = nullptr;
+    SDL_GPUTexture* currentTexture = nullptr;
+    SDL_GPUSampler* currentSampler = nullptr;
+
+    auto bindPipeline = [&](SDL_GPUGraphicsPipeline* pipeline) {
+        if (currentPipeline == pipeline) {
+            return;
+        }
+        SDL_BindGPUGraphicsPipeline(pass, pipeline);
+        pushViewProjection(pass, orthoMatrix);
+        currentPipeline = pipeline;
+    };
+
+    auto bindVertexBuffer = [&](SDL_GPUBuffer* buffer) {
+        if (currentVertexBuffer == buffer) {
+            return;
+        }
+        SDL_GPUBufferBinding vertexBinding{};
+        vertexBinding.buffer = buffer;
+        vertexBinding.offset = 0;
+        SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+        currentVertexBuffer = buffer;
+    };
+
+    auto bindFragmentSampler = [&](SDL_GPUTexture* texture, SDL_GPUSampler* sampler) {
+        if (currentTexture == texture && currentSampler == sampler) {
+            return;
+        }
+        SDL_GPUTextureSamplerBinding texSampler{};
+        texSampler.texture = texture;
+        texSampler.sampler = sampler;
+        SDL_BindGPUFragmentSamplers(pass, 0, &texSampler, 1);
+        currentTexture = texture;
+        currentSampler = sampler;
+    };
+
+    if (primitiveVertexCount > 0) {
+        bindPipeline(m_uiPrimitivePipeline.get());
+        bindVertexBuffer(m_primitiveVertexPool.getGPUBuffer());
+        SDL_DrawGPUPrimitives(pass, primitiveVertexCount, 1, 0, 0);
+    }
+
+    if (!imageBatches.empty()) {
+        bindVertexBuffer(m_uiVertexPool.getGPUBuffer());
+        bindPipeline(m_uiSpritePipeline.get());
+        SDL_GPUSampler* nearestSampler = m_nearestSampler.get();
+
+        for (const auto& batch : imageBatches) {
+            if (!batch.texture) {
+                continue;
+            }
+
+            bindFragmentSampler(batch.texture, nearestSampler);
+            SDL_DrawGPUPrimitives(pass, batch.vertexCount, 1, batch.vertexOffset, 0);
+        }
+    }
+
+    if (!textBatches.empty()) {
+        bindVertexBuffer(m_uiVertexPool.getGPUBuffer());
+        SDL_GPUSampler* linearSampler = m_linearSampler.get();
+
+        for (const auto& batch : textBatches) {
+            if (!batch.texture) {
+                continue;
+            }
+
+            SDL_GPUGraphicsPipeline* pipeline = m_uiTextAlphaPipeline.get();
+            switch (batch.pipeline) {
+                case UITextPipelineKind::SDF:
+                    pipeline = m_uiTextSDFPipeline.get();
+                    break;
+                case UITextPipelineKind::Color:
+                    pipeline = m_uiSpritePipeline.get();
+                    break;
+                case UITextPipelineKind::Alpha:
+                default:
+                    break;
+            }
+
+            bindPipeline(pipeline);
+            bindFragmentSampler(batch.texture, linearSampler);
+            SDL_DrawGPUPrimitives(pass, batch.vertexCount, 1, batch.vertexOffset, 0);
+        }
+    }
 }
 
 void GPURenderer::pushCompositeUniforms(const SDL_GPURenderPass* pass,

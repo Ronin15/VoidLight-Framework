@@ -88,7 +88,7 @@ fi
 TIMEOUT_DURATION=180s  # 3 minutes for full benchmark suite
 
 # Set test command options
-TEST_OPTS="--catch_system_errors=no --no_result_code"
+TEST_OPTS="--catch_system_errors=no"
 if [ "$VERBOSE" = true ]; then
   TEST_OPTS="$TEST_OPTS --log_level=all"
 else
@@ -108,10 +108,10 @@ echo >> "$RESULTS_FILE"
 
 if [ -n "$TIMEOUT_CMD" ]; then
   $TIMEOUT_CMD --preserve-status $TIMEOUT_DURATION "$BENCHMARK_EXECUTABLE" $TEST_OPTS 2>&1 | tee -a "$RESULTS_FILE"
-  TEST_RESULT=$?
+  TEST_RESULT=${PIPESTATUS[0]}
 else
   "$BENCHMARK_EXECUTABLE" $TEST_OPTS 2>&1 | tee -a "$RESULTS_FILE"
-  TEST_RESULT=$?
+  TEST_RESULT=${PIPESTATUS[0]}
 fi
 
 echo >> "$RESULTS_FILE"
@@ -123,9 +123,6 @@ if [ $TEST_RESULT -eq 0 ]; then
   echo -e "${GREEN}Benchmark completed successfully!${NC}"
 elif [ $TEST_RESULT -eq 124 ]; then
   echo -e "${RED}Benchmark timed out after $TIMEOUT_DURATION!${NC}"
-elif grep -q "SCALABILITY SUMMARY" "$RESULTS_FILE"; then
-  echo -e "${YELLOW}Benchmark completed with warnings (results captured)${NC}"
-  TEST_RESULT=0
 else
   echo -e "${RED}Benchmark failed with exit code $TEST_RESULT${NC}"
 fi
@@ -133,13 +130,42 @@ fi
 # Extract performance metrics
 echo -e "${BLUE}Performance Summary:${NC}"
 
+print_table_section() {
+  local section_title="$1"
+  awk -v title="$section_title" '
+    index($0, title) { printing = 1; next }
+    printing && /^$/ { exit }
+    printing && ($0 ~ /^Workload:/ || $0 ~ /^[[:space:]]*[0-9]+/ || $0 ~ /Entities|Attackers/) { print }
+  ' "$RESULTS_FILE"
+}
+
 # Extract key metrics from new tabular format
 echo "--- AI Entity Scaling Results ---"
-grep -A 20 "AI Entity Scaling" "$RESULTS_FILE" | grep -E "^\s+[0-9]+|Entities"
+print_table_section "AI Entity Scaling"
+
+echo
+echo "--- Attack Behavior Pressure Scaling ---"
+print_table_section "Attack Behavior Decision Pressure Scaling"
+
+echo
+echo "--- Attack Behavior Tactical Reset Scaling ---"
+print_table_section "Attack Behavior Decision Tactical Reset Scaling"
+
+echo
+echo "--- Attack Behavior Cold Burst Resolve Scaling ---"
+print_table_section "Attack Behavior Cold Burst Resolve Scaling"
+
+echo
+echo "--- Attack Behavior Cadenced Resolve Scaling ---"
+print_table_section "Attack Behavior Cadenced Resolve Scaling"
 
 echo
 echo "--- Scalability Summary ---"
-grep -A 5 "SCALABILITY SUMMARY" "$RESULTS_FILE"
+awk '
+  /SCALABILITY SUMMARY/ { printing = 1 }
+  printing { print; ++lines }
+  printing && lines >= 4 { exit }
+' "$RESULTS_FILE"
 
 # Create a current run copy for regression detection
 cp "$RESULTS_FILE" "$PROJECT_ROOT/test_results/ai_scaling_current.txt"

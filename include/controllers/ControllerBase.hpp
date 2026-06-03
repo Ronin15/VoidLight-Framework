@@ -8,17 +8,18 @@
 
 /**
  * @file ControllerBase.hpp
- * @brief Base class for lightweight event-bridge controllers
+ * @brief Base class for lightweight state-scoped controllers
  *
- * Controllers are state-scoped helpers that monitor events and dispatch
- * other events or trigger manager actions. They do NOT own data and
- * should NOT contain UI logic.
+ * Controllers are state-scoped helpers that monitor events, dispatch other
+ * events, trigger manager actions, or coordinate state-local UI. They should
+ * not own long-lived simulation/storage data; persistent data belongs in
+ * managers or EDM.
  *
  * Key characteristics:
  * - Owned by GameState via ControllerRegistry
  * - Auto-unsubscribe on destruction
  * - Support suspend/resume for pause states
- * - Minimal state (subscription tokens only)
+ * - Minimal state (subscription tokens, short-lived UI/view state, caches)
  *
  * Controller types:
  * - Frame-updatable: Inherit ControllerBase AND IUpdatable
@@ -27,6 +28,7 @@
  * Use a Controller when:
  * - Bridging one event type to another
  * - Triggering manager actions on specific events
+ * - Coordinating UI that is only relevant while a state is active
  * - Logic is only relevant while in certain game states
  *
  * Promote to Manager when:

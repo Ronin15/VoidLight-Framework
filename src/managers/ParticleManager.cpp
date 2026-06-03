@@ -41,55 +41,6 @@ inline int fast_rand() {
 // Static mutex for update serialization
 // Remove static mutex - GameEngine handles synchronization
 
-// ParticleData method implementations
-bool ParticleData::isActive() const {
-    return flags & FLAG_ACTIVE;
-}
-
-void ParticleData::setActive(bool active) {
-    if (active)
-        flags |= FLAG_ACTIVE;
-    else
-        flags &= ~FLAG_ACTIVE;
-}
-
-bool ParticleData::isVisible() const {
-    return flags & FLAG_VISIBLE;
-}
-
-void ParticleData::setVisible(bool visible) {
-    if (visible)
-        flags |= FLAG_VISIBLE;
-    else
-        flags &= ~FLAG_VISIBLE;
-}
-
-bool ParticleData::isWeatherParticle() const {
-    return flags & FLAG_WEATHER;
-}
-
-void ParticleData::setWeatherParticle(bool weather) {
-    if (weather)
-        flags |= FLAG_WEATHER;
-    else
-        flags &= ~FLAG_WEATHER;
-}
-
-bool ParticleData::isFadingOut() const {
-    return flags & FLAG_FADE_OUT;
-}
-
-void ParticleData::setFadingOut(bool fading) {
-    if (fading)
-        flags |= FLAG_FADE_OUT;
-    else
-        flags &= ~FLAG_FADE_OUT;
-}
-
-float ParticleData::getLifeRatio() const {
-    return maxLife > 0 ? life / maxLife : 0.0f;
-}
-
 // UnifiedParticle method implementations
 bool UnifiedParticle::isActive() const {
     return flags & FLAG_ACTIVE;
@@ -550,6 +501,10 @@ bool ParticleManager::init() {
     // PERFORMANCE OPTIMIZATION: Initialize trigonometric lookup tables
     initTrigLookupTables();
 
+    m_effectDefinitions.reserve(static_cast<size_t>(ParticleEffectType::COUNT));
+    m_effectInstances.reserve(512);
+    m_effectIdToIndex.reserve(512);
+
     // Register built-in particle effects
     registerBuiltInEffects();
 
@@ -819,8 +774,8 @@ void ParticleManager::update(float deltaTime) {
       return;
     }
 
-    // WorkerBudget should learn against the actual traversed span because the
-    // particle update iterates every slot up to maxActiveIndex and skips holes.
+    // The update range is sparse, but WorkerBudget scheduling should be based
+    // on active particles so sparse storage does not thread tiny live workloads.
     const size_t traversedCount = std::min(bufferSize, m_storage.maxActiveIndex + 1);
     if (traversedCount == 0) {
       return;
@@ -833,7 +788,7 @@ void ParticleManager::update(float deltaTime) {
     // WorkerBudget is the AUTHORITATIVE source - no manager overrides
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
     auto decision = budgetMgr.shouldUseThreading(
-        VoidLight::SystemType::Particle, traversedCount);
+        VoidLight::SystemType::Particle, activeCount);
     bool useThreading = decision.shouldThread;
 
     // Track threading decision for interval logging (local vars, zero overhead in release)
@@ -843,9 +798,9 @@ void ParticleManager::update(float deltaTime) {
       // Use WorkerBudget system if enabled, otherwise fall back to legacy threading
       // Timing captured inside updateParticlesThreaded (after strategy, around actual work)
       if (m_useWorkerBudget.load(std::memory_order_acquire)) {
-        updateWithWorkerBudget(deltaTime, traversedCount, threadingInfo);
+        updateWithWorkerBudget(deltaTime, traversedCount, activeCount, threadingInfo);
       } else {
-        updateParticlesThreaded(deltaTime, traversedCount, threadingInfo);
+        updateParticlesThreaded(deltaTime, traversedCount, activeCount, threadingInfo);
       }
     } else {
       // Single-threaded — timing feeds threshold learning
@@ -929,7 +884,7 @@ void ParticleManager::update(float deltaTime) {
 
     // Report tight per-path timing for adaptive tuning (not preprocessing/postprocessing)
     budgetMgr.reportExecution(VoidLight::SystemType::Particle,
-                              traversedCount, threadingInfo.wasThreaded,
+                              activeCount, threadingInfo.wasThreaded,
                               threadingInfo.batchCount, threadingInfo.batchTimeMs);
 
   } catch (const std::exception &e) {
@@ -954,7 +909,9 @@ void ParticleManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
 
   // THREAD SAFETY: Get immutable snapshot of particle data
   const auto &particles = m_storage.getParticlesForRead();
-  const size_t n = particles.getSafeAccessCount();
+  const size_t safeCount = particles.getSafeAccessCount();
+  const size_t activeSpan = m_storage.maxActiveIndex + 1;
+  const size_t n = std::min(safeCount, activeSpan);
   if (n == 0) return;
 
   // Get particle vertex pool from GPURenderer (already mapped by GPURenderer::beginFrame)
@@ -1614,6 +1571,26 @@ uint32_t ParticleManager::generateEffectId() {
   return m_nextEffectId.fetch_add(1, std::memory_order_relaxed);
 }
 
+void ParticleManager::compactInactiveEffectInstances() {
+  const auto oldSize = m_effectInstances.size();
+  auto newEnd = std::remove_if(
+      m_effectInstances.begin(), m_effectInstances.end(),
+      [](const EffectInstance &effect) { return !effect.active; });
+
+  if (newEnd == m_effectInstances.end()) {
+    return;
+  }
+
+  m_effectInstances.erase(newEnd, m_effectInstances.end());
+  m_effectIdToIndex.clear();
+  for (size_t i = 0; i < m_effectInstances.size(); ++i) {
+    m_effectIdToIndex[m_effectInstances[i].id] = i;
+  }
+
+  PARTICLE_DEBUG(std::format("Compacted {} inactive particle effect instances",
+                             oldSize - m_effectInstances.size()));
+}
+
 void ParticleManager::registerBuiltInEffects() {
   PARTICLE_INFO("*** REGISTERING BUILT-IN EFFECTS");
 
@@ -1652,7 +1629,7 @@ ParticleEffectDefinition ParticleManager::createRainEffect() {
   const auto &gameEngine = GameEngine::Instance();
   ParticleEffectDefinition rain("Rain", ParticleEffectType::Rain);
   rain.layer = UnifiedParticle::RenderLayer::Background;
-  rain.emitterConfig.spread = static_cast<float>(gameEngine.getLogicalWidth());
+  rain.emitterConfig.spread = static_cast<float>(gameEngine.getWidthInPixels());
   rain.emitterConfig.emissionRate =
       300.0f; // Reduced emission for better performance while maintaining
               // coverage
@@ -1684,7 +1661,7 @@ ParticleEffectDefinition ParticleManager::createHeavyRainEffect() {
                                      ParticleEffectType::HeavyRain);
   heavyRain.layer = UnifiedParticle::RenderLayer::Background;
   heavyRain.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth());
+      static_cast<float>(gameEngine.getWidthInPixels());
   heavyRain.emitterConfig.emissionRate =
       500.0f; // Reduced emission while maintaining storm intensity
   heavyRain.emitterConfig.minSpeed =
@@ -1715,7 +1692,7 @@ ParticleEffectDefinition ParticleManager::createSnowEffect() {
   ParticleEffectDefinition snow("Snow", ParticleEffectType::Snow);
   snow.layer = UnifiedParticle::RenderLayer::Background;
   snow.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth()); // Moderate spread for
+      static_cast<float>(gameEngine.getWidthInPixels()); // Moderate spread for
                                                         // gentle snow drift
   snow.emitterConfig.emissionRate =
       180.0f; // Further reduced emission for optimal density
@@ -1747,7 +1724,7 @@ ParticleEffectDefinition ParticleManager::createHeavySnowEffect() {
                                      ParticleEffectType::HeavySnow);
   heavySnow.layer = UnifiedParticle::RenderLayer::Background;
   heavySnow.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth());
+      static_cast<float>(gameEngine.getWidthInPixels());
   heavySnow.emitterConfig.emissionRate =
       350.0f; // Further reduced emission for realistic blizzard
   heavySnow.emitterConfig.minSpeed = 25.0f; // Much faster in heavy blizzard
@@ -1778,7 +1755,7 @@ ParticleEffectDefinition ParticleManager::createFogEffect() {
   ParticleEffectDefinition fog("Fog", ParticleEffectType::Fog);
   fog.layer = UnifiedParticle::RenderLayer::Foreground;
   fog.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth()); // Very wide spread to
+      static_cast<float>(gameEngine.getWidthInPixels()); // Very wide spread to
                                                         // cover entire screen
   fog.emitterConfig.emissionRate =
       38.0f;                          // Increased emission rate for denser fog
@@ -1808,7 +1785,7 @@ ParticleEffectDefinition ParticleManager::createCloudyEffect() {
   cloudy.emitterConfig.direction = Vector2D(
       1.0f, 0.0f); // Horizontal movement for clouds sweeping across sky
   cloudy.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth());
+      static_cast<float>(gameEngine.getWidthInPixels());
   cloudy.emitterConfig.emissionRate =
       1.2f; // Further reduced for less dense cloud effect
   cloudy.emitterConfig.minSpeed =
@@ -1839,7 +1816,7 @@ ParticleEffectDefinition ParticleManager::createWindyEffect() {
   ParticleEffectDefinition windy("Windy", ParticleEffectType::Windy);
   windy.layer = UnifiedParticle::RenderLayer::Background;
   windy.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalHeight());  // Screen height for vertical spread
+      static_cast<float>(gameEngine.getHeightInPixels());  // Screen height for vertical spread
   windy.emitterConfig.emissionRate = 80.0f;   // Sparse streaks
   windy.emitterConfig.minSpeed = 600.0f;      // Very fast horizontal
   windy.emitterConfig.maxSpeed = 900.0f;
@@ -1864,7 +1841,7 @@ ParticleEffectDefinition ParticleManager::createWindyDustEffect() {
   ParticleEffectDefinition dust("WindyDust", ParticleEffectType::WindyDust);
   dust.layer = UnifiedParticle::RenderLayer::Background;
   dust.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalHeight());  // Screen height for vertical spread
+      static_cast<float>(gameEngine.getHeightInPixels());  // Screen height for vertical spread
   dust.emitterConfig.emissionRate = 150.0f;   // More particles for dust clouds
   dust.emitterConfig.minSpeed = 300.0f;
   dust.emitterConfig.maxSpeed = 500.0f;
@@ -1889,7 +1866,7 @@ ParticleEffectDefinition ParticleManager::createWindyStormEffect() {
   ParticleEffectDefinition storm("WindyStorm", ParticleEffectType::WindyStorm);
   storm.layer = UnifiedParticle::RenderLayer::Background;
   storm.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalHeight());  // Screen height for vertical spread
+      static_cast<float>(gameEngine.getHeightInPixels());  // Screen height for vertical spread
   storm.emitterConfig.emissionRate = 100.0f;
   storm.emitterConfig.minSpeed = 200.0f;
   storm.emitterConfig.maxSpeed = 400.0f;
@@ -1916,7 +1893,7 @@ ParticleEffectDefinition ParticleManager::createAmbientDustEffect() {
 
   // Subtle dust motes floating in the air - visible during daytime
   dust.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth());  // Screen-wide
+      static_cast<float>(gameEngine.getWidthInPixels());  // Screen-wide
   dust.emitterConfig.emissionRate = 8.0f;   // Very sparse for subtle effect
   dust.emitterConfig.minSpeed = 5.0f;       // Very slow drift
   dust.emitterConfig.maxSpeed = 15.0f;
@@ -1943,7 +1920,7 @@ ParticleEffectDefinition ParticleManager::createAmbientFireflyEffect() {
 
   // Glowing fireflies at night - bright additive particles
   firefly.emitterConfig.spread =
-      static_cast<float>(gameEngine.getLogicalWidth());  // Screen-wide
+      static_cast<float>(gameEngine.getWidthInPixels());  // Screen-wide
   firefly.emitterConfig.emissionRate = 3.0f;  // Very sparse - fireflies are special
   firefly.emitterConfig.minSpeed = 10.0f;     // Lazy floating
   firefly.emitterConfig.maxSpeed = 30.0f;
@@ -2103,11 +2080,18 @@ size_t ParticleManager::countActiveParticles() const {
 void ParticleManager::updateEffectInstances(float deltaTime) {
   std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
 
+  bool hasInactiveEffects = false;
   auto it = m_effectInstances.begin();
   while (it != m_effectInstances.end()) {
     auto &instance = *it;
 
     if (!instance.active) {
+      hasInactiveEffects = true;
+      ++it;
+      continue;
+    }
+
+    if (instance.paused) {
       ++it;
       continue;
     }
@@ -2119,6 +2103,7 @@ void ParticleManager::updateEffectInstances(float deltaTime) {
     if (instance.maxDuration > 0.0f &&
         instance.durationTimer >= instance.maxDuration) {
       instance.active = false;
+      hasInactiveEffects = true;
       ++it;
       continue;
     }
@@ -2144,9 +2129,14 @@ void ParticleManager::updateEffectInstances(float deltaTime) {
 
     ++it;
   }
+
+  if (hasInactiveEffects) {
+    compactInactiveEffectInstances();
+  }
 }
 void ParticleManager::updateParticlesThreaded(float deltaTime,
                                               size_t traversedParticleCount,
+                                              size_t activeParticleCount,
                                               ParticleThreadingInfo& outThreadingInfo) {
   // Use lock-free double buffering for threaded updates
   auto &currentBuffer = m_storage.getCurrentBuffer();
@@ -2177,11 +2167,12 @@ void ParticleManager::updateParticlesThreaded(float deltaTime,
 
   // Get optimal workers (WorkerBudget determines everything dynamically)
   size_t optimalWorkerCount = budgetMgr.getOptimalWorkers(
-      VoidLight::SystemType::Particle, traversedParticleCount);
+      VoidLight::SystemType::Particle, activeParticleCount);
 
   // Get adaptive batch strategy (maximizes parallelism, fine-tunes based on timing)
-  auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-      VoidLight::SystemType::Particle, traversedParticleCount, optimalWorkerCount);
+  const auto batchStrategy = budgetMgr.getBatchStrategy(
+      VoidLight::SystemType::Particle, activeParticleCount, optimalWorkerCount);
+  size_t batchCount = batchStrategy.first;
 
   // Set threading info for interval logging (local struct, zero overhead in release)
   outThreadingInfo.workerCount = optimalWorkerCount;
@@ -2512,23 +2503,23 @@ void ParticleManager::createParticleForEffect(
   if (!config.useWorldSpace) {
     // Screen-space effect (like weather) - spawn relative to camera position
     const auto &gameEngine = GameEngine::Instance();
-    int logicalWidth = gameEngine.getLogicalWidth();
-    int logicalHeight = gameEngine.getLogicalHeight();
+    int widthInPixels = gameEngine.getWidthInPixels();
+    int heightInPixels = gameEngine.getHeightInPixels();
 
     // Guard against uninitialized GameEngine (default to viewport size or sensible fallback)
-    if (logicalWidth <= 0) {
-      logicalWidth = static_cast<int>(m_viewport.width > 0 ? m_viewport.width : 1920);
+    if (widthInPixels <= 0) {
+      widthInPixels = static_cast<int>(m_viewport.width > 0 ? m_viewport.width : 1920);
     }
-    if (logicalHeight <= 0) {
-      logicalHeight = static_cast<int>(m_viewport.height > 0 ? m_viewport.height : 1080);
+    if (heightInPixels <= 0) {
+      heightInPixels = static_cast<int>(m_viewport.height > 0 ? m_viewport.height : 1080);
     }
 
     float const spawnX = m_viewport.x +
-        static_cast<float>(fast_rand() % logicalWidth);
+        static_cast<float>(fast_rand() % widthInPixels);
     float spawnY;
     if (config.fullScreenSpawn) {
       // Spawn across full screen height (weather, ambient effects)
-      spawnY = m_viewport.y + static_cast<float>(fast_rand() % logicalHeight);
+      spawnY = m_viewport.y + static_cast<float>(fast_rand() % heightInPixels);
     } else {
       // Spawn at configured Y position
       spawnY = m_viewport.y + config.position.getY();
@@ -2643,6 +2634,7 @@ void ParticleManager::enableWorkerBudgetThreading(bool enable) {
 
 void ParticleManager::updateWithWorkerBudget(float deltaTime,
                                              size_t traversedParticleCount,
+                                             size_t activeParticleCount,
                                              ParticleThreadingInfo& outThreadingInfo) {
   /**
    * WorkerBudget-optimized particle update path.
@@ -2653,11 +2645,13 @@ void ParticleManager::updateWithWorkerBudget(float deltaTime,
    *
    * @param deltaTime Time elapsed since last update
    * @param traversedParticleCount Current traversed particle span
+   * @param activeParticleCount Current active particle count for WorkerBudget scheduling
    * @param outThreadingInfo Output struct for threading info (zero overhead in release)
    */
   // Trust the caller's threading decision (already made in update())
   // — do NOT re-query shouldUseThreading() as hysteresis state may have changed
-  updateParticlesThreaded(deltaTime, traversedParticleCount, outThreadingInfo);
+  updateParticlesThreaded(deltaTime, traversedParticleCount, activeParticleCount,
+                          outThreadingInfo);
 }
 
 #ifndef NDEBUG

@@ -1,0 +1,225 @@
+{
+  "commands": {
+    "menu_right": [
+      {
+        "code": "Right",
+        "source": "keyboard"
+      },
+      {
+        "code": "dpright",
+        "source": "gamepad_button"
+      }
+    ],
+    "menu_up": [
+      {
+        "code": "Up",
+        "source": "keyboard"
+      },
+      {
+        "code": "dpup",
+        "source": "gamepad_button"
+      }
+    ],
+    "move_up": [
+      {
+        "code": "W",
+        "source": "keyboard"
+      },
+      {
+        "code": "lefty",
+        "source": "gamepad_axis_neg"
+      }
+    ],
+    "move_down": [
+      {
+        "code": "S",
+        "source": "keyboard"
+      },
+      {
+        "code": "lefty",
+        "source": "gamepad_axis_pos"
+      }
+    ],
+    "zoom_out": [
+      {
+        "code": "[",
+        "source": "keyboard"
+      },
+      {
+        "code": "dpdown",
+        "source": "gamepad_button"
+      }
+    ],
+    "move_left": [
+      {
+        "code": "A",
+        "source": "keyboard"
+      },
+      {
+        "code": "leftx",
+        "source": "gamepad_axis_neg"
+      }
+    ],
+    "menu_left": [
+      {
+        "code": "Left",
+        "source": "keyboard"
+      },
+      {
+        "code": "dpleft",
+        "source": "gamepad_button"
+      }
+    ],
+    "move_right": [
+      {
+        "code": "D",
+        "source": "keyboard"
+      },
+      {
+        "code": "leftx",
+        "source": "gamepad_axis_pos"
+      }
+    ],
+    "attack_light": [
+      {
+        "code": "F",
+        "source": "keyboard"
+      },
+      {
+        "code": "x",
+        "source": "gamepad_button"
+      }
+    ],
+    "interact": [
+      {
+        "code": "E",
+        "source": "keyboard"
+      },
+      {
+        "code": "a",
+        "source": "gamepad_button"
+      }
+    ],
+    "pause": [
+      {
+        "code": "Escape",
+        "source": "keyboard"
+      },
+      {
+        "code": "start",
+        "source": "gamepad_button"
+      }
+    ],
+    "zoom_in": [
+      {
+        "code": "]",
+        "source": "keyboard"
+      },
+      {
+        "code": "dpup",
+        "source": "gamepad_button"
+      }
+    ],
+    "open_inventory": [
+      {
+        "code": "I",
+        "source": "keyboard"
+      },
+      {
+        "code": "y",
+        "source": "gamepad_button"
+      }
+    ],
+    "menu_down": [
+      {
+        "code": "Down",
+        "source": "keyboard"
+      },
+      {
+        "code": "dpdown",
+        "source": "gamepad_button"
+      }
+    ],
+    "world_interact": [
+      {
+        "code": "left",
+        "source": "mouse_button"
+      }
+    ],
+    "menu_confirm": [
+      {
+        "code": "Return",
+        "source": "keyboard"
+      },
+      {
+        "code": "a",
+        "source": "gamepad_button"
+      }
+    ],
+    "menu_cancel": [
+      {
+        "code": "Escape",
+        "source": "keyboard"
+      },
+      {
+        "code": "b",
+        "source": "gamepad_button"
+      }
+    ],
+    "hotbar_slot_1": [
+      {
+        "code": "1",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_2": [
+      {
+        "code": "2",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_3": [
+      {
+        "code": "3",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_4": [
+      {
+        "code": "4",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_5": [
+      {
+        "code": "5",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_6": [
+      {
+        "code": "6",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_7": [
+      {
+        "code": "7",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_8": [
+      {
+        "code": "8",
+        "source": "keyboard"
+      }
+    ],
+    "hotbar_slot_9": [
+      {
+        "code": "9",
+        "source": "keyboard"
+      }
+    ]
+  },
+  "schema_version": 1
+}

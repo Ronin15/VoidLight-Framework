@@ -346,6 +346,123 @@ BOOST_AUTO_TEST_CASE(TestExtremeQuantityValues) {
   entityDataManager->destroyInventory(invIndex);
 }
 
+BOOST_AUTO_TEST_CASE(TestInventoryAddFailureDoesNotPartiallyMutate) {
+  auto resource = createTestResource("AtomicInventoryAddTest");
+  resource->setMaxStackSize(10);
+  BOOST_REQUIRE(templateManager->registerResourceTemplate(resource));
+
+  auto handle = resource->getHandle();
+  uint32_t invIndex = entityDataManager->createInventory(1, true);
+  BOOST_REQUIRE(invIndex != INVALID_INVENTORY_INDEX);
+
+  const int maxStack = templateManager->getMaxStackSize(handle);
+  const int actualInlineCapacity =
+      static_cast<int>(InventoryData::INLINE_SLOT_COUNT) * maxStack;
+  const int initialQuantity = actualInlineCapacity - 2;
+
+  BOOST_REQUIRE(entityDataManager->addToInventory(invIndex, handle, initialQuantity));
+  BOOST_CHECK(!entityDataManager->addToInventory(invIndex, handle, 3));
+  BOOST_CHECK_EQUAL(entityDataManager->getInventoryQuantity(invIndex, handle),
+                    initialQuantity);
+
+  entityDataManager->destroyInventory(invIndex);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventorySlotSwapPreservesOccupiedStacks) {
+  auto firstResource = createTestResource("SlotSwapFirst");
+  auto secondResource = createTestResource("SlotSwapSecond");
+  BOOST_REQUIRE(templateManager->registerResourceTemplate(firstResource));
+  BOOST_REQUIRE(templateManager->registerResourceTemplate(secondResource));
+
+  const auto firstHandle = firstResource->getHandle();
+  const auto secondHandle = secondResource->getHandle();
+  uint32_t invIndex = entityDataManager->createInventory(5, true);
+  BOOST_REQUIRE(invIndex != INVALID_INVENTORY_INDEX);
+  BOOST_REQUIRE(entityDataManager->addToInventory(invIndex, firstHandle, 4));
+  BOOST_REQUIRE(entityDataManager->addToInventory(invIndex, secondHandle, 7));
+
+  const uint16_t usedSlotsBefore = entityDataManager->getInventoryData(invIndex).usedSlots;
+  BOOST_REQUIRE(entityDataManager->swapInventorySlots(invIndex, 0, 1));
+
+  const InventorySlotData slot0 = entityDataManager->getInventorySlot(invIndex, 0);
+  const InventorySlotData slot1 = entityDataManager->getInventorySlot(invIndex, 1);
+  BOOST_CHECK(slot0.resourceHandle == secondHandle);
+  BOOST_CHECK_EQUAL(slot0.quantity, 7);
+  BOOST_CHECK(slot1.resourceHandle == firstHandle);
+  BOOST_CHECK_EQUAL(slot1.quantity, 4);
+  BOOST_CHECK_EQUAL(entityDataManager->getInventoryData(invIndex).usedSlots, usedSlotsBefore);
+
+  entityDataManager->destroyInventory(invIndex);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventorySlotSwapMovesOccupiedStackToEmptySlot) {
+  auto resource = createTestResource("SlotMoveToEmpty");
+  BOOST_REQUIRE(templateManager->registerResourceTemplate(resource));
+
+  const auto handle = resource->getHandle();
+  uint32_t invIndex = entityDataManager->createInventory(5, true);
+  BOOST_REQUIRE(invIndex != INVALID_INVENTORY_INDEX);
+  BOOST_REQUIRE(entityDataManager->addToInventory(invIndex, handle, 6));
+
+  const uint16_t usedSlotsBefore = entityDataManager->getInventoryData(invIndex).usedSlots;
+  BOOST_REQUIRE(entityDataManager->swapInventorySlots(invIndex, 0, 4));
+
+  BOOST_CHECK(entityDataManager->getInventorySlot(invIndex, 0).isEmpty());
+  const InventorySlotData slot4 = entityDataManager->getInventorySlot(invIndex, 4);
+  BOOST_CHECK(slot4.resourceHandle == handle);
+  BOOST_CHECK_EQUAL(slot4.quantity, 6);
+  BOOST_CHECK_EQUAL(entityDataManager->getInventoryData(invIndex).usedSlots, usedSlotsBefore);
+
+  entityDataManager->destroyInventory(invIndex);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventorySlotSwapAllowsSameSlotNoOpAndRejectsInvalidInput) {
+  auto resource = createTestResource("SlotSwapInvalidInput");
+  BOOST_REQUIRE(templateManager->registerResourceTemplate(resource));
+
+  const auto handle = resource->getHandle();
+  uint32_t invIndex = entityDataManager->createInventory(2, true);
+  BOOST_REQUIRE(invIndex != INVALID_INVENTORY_INDEX);
+  BOOST_REQUIRE(entityDataManager->addToInventory(invIndex, handle, 3));
+
+  BOOST_CHECK(entityDataManager->swapInventorySlots(invIndex, 0, 0));
+  BOOST_CHECK(entityDataManager->getInventorySlot(invIndex, 0).resourceHandle == handle);
+  BOOST_CHECK(!entityDataManager->swapInventorySlots(INVALID_INVENTORY_INDEX, 0, 1));
+  BOOST_CHECK(!entityDataManager->swapInventorySlots(invIndex, 0, 2));
+  BOOST_CHECK(!entityDataManager->swapInventorySlots(invIndex, 2, 0));
+
+  entityDataManager->destroyInventory(invIndex);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventorySlotSwapCrossesInlineAndOverflowStorage) {
+  uint32_t invIndex = entityDataManager->createInventory(10, true);
+  BOOST_REQUIRE(invIndex != INVALID_INVENTORY_INDEX);
+
+  std::vector<ResourceHandle> handles;
+  handles.reserve(9);
+  for (int i = 0; i < 9; ++i) {
+    auto resource = createTestResource("InlineOverflowSlot" + std::to_string(i));
+    BOOST_REQUIRE(templateManager->registerResourceTemplate(resource));
+    handles.push_back(resource->getHandle());
+    BOOST_REQUIRE(entityDataManager->addToInventory(invIndex, handles.back(), i + 1));
+  }
+
+  const uint16_t usedSlotsBefore = entityDataManager->getInventoryData(invIndex).usedSlots;
+  BOOST_REQUIRE(entityDataManager->swapInventorySlots(
+      invIndex, 0, InventoryData::INLINE_SLOT_COUNT));
+
+  const InventorySlotData inlineSlot = entityDataManager->getInventorySlot(invIndex, 0);
+  const InventorySlotData overflowSlot =
+      entityDataManager->getInventorySlot(invIndex, InventoryData::INLINE_SLOT_COUNT);
+  BOOST_CHECK(inlineSlot.resourceHandle == handles[InventoryData::INLINE_SLOT_COUNT]);
+  BOOST_CHECK_EQUAL(inlineSlot.quantity, InventoryData::INLINE_SLOT_COUNT + 1);
+  BOOST_CHECK(overflowSlot.resourceHandle == handles[0]);
+  BOOST_CHECK_EQUAL(overflowSlot.quantity, 1);
+  BOOST_CHECK_EQUAL(entityDataManager->getInventoryData(invIndex).usedSlots, usedSlotsBefore);
+
+  entityDataManager->destroyInventory(invIndex);
+}
+
 //==============================================================================
 // Malformed Input and Error Recovery
 //==============================================================================

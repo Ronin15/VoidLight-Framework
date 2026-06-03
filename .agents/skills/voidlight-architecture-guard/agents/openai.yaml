@@ -1,0 +1,7 @@
+interface:
+  display_name: "VoidLight Architecture Guard"
+  short_description: "Check and enforce engine architecture"
+  default_prompt: "Use $voidlight-architecture-guard to review this change for EDM, manager, controller, and state-boundary coherence."
+
+policy:
+  allow_implicit_invocation: true

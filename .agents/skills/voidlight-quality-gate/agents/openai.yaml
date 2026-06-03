@@ -1,0 +1,4 @@
+interface:
+  display_name: "VoidLight Quality Gate"
+  short_description: "Run standards, analyzers, and focused checks"
+  default_prompt: "Use $voidlight-quality-gate to run the VoidLight quality gate, investigate analyzer or standards findings, and fix verified issues."

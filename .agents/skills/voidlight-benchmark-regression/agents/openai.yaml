@@ -1,0 +1,4 @@
+interface:
+  display_name: "VoidLight Benchmark Regression"
+  short_description: "Run benchmark regression checks"
+  default_prompt: "Use $voidlight-benchmark-regression to run the VoidLight benchmark regression workflow, compare current metrics to baselines, and report any performance regressions."

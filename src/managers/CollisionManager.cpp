@@ -97,16 +97,6 @@ bool CollisionManager::init() {
   m_currentTriggerPairsBuffer.reserve(1000); // Typical trigger count
   // Note: pools.staticIndices is reserved by CollisionPool::ensureCapacity()
 
-  // Forward non-projectile collision notifications to EventManager.
-  // Projectile collisions are routed via m_projectileHitSink (set by ProjectileManager::init()).
-  addCollisionCallback([](const VoidLight::CollisionInfo &info) {
-    if (info.projectileInvolved) {
-      return;
-    }
-
-    EventManager::Instance().triggerCollision(
-        info, EventManager::DispatchMode::Deferred);
-  });
   m_initialized = true;
   m_isShutdown = false;
   return true;
@@ -133,7 +123,6 @@ void CollisionManager::clean() {
    // Clear all collision bodies and spatial hashes
    m_storage.clear();
    m_statisticsDirty = true;
-  m_callbacks.clear();
   m_initialized = false;
   COLLISION_INFO("Cleaned and shut down SOA storage");
 }
@@ -150,9 +139,9 @@ void CollisionManager::prepareForStateTransition() {
   /* IMPORTANT: Clear ALL collision bodies during state transitions
    *
    * Previous logic tried to be "smart" by keeping static bodies when a world
-   * was active, expecting WorldUnloadedEvent to clean them up. This was BROKEN
-   * because prepareForStateTransition() unregisters event handlers (line 138),
-   * so the WorldUnloadedEvent handler never fires!
+   * was active, expecting WorldUnloadedEvent to clean them up. This was broken
+   * because WorldUnloadedEvent is deferred and state cleanup can clear pending
+   * deferred events before delivery.
    *
    * Result: Static bodies from old world persisted into new world, causing:
    * - Duplicate/stale collision bodies
@@ -193,15 +182,13 @@ void CollisionManager::prepareForStateTransition() {
   // Reset trigger cooldown settings
   m_defaultTriggerCooldownSec = 0.0f;
 
-  // World event handlers and the collision→EventManager forwarding callback
-  // are persistent (registered in init()) and survive state transitions via
-  // EventManager::clearTransientHandlers(). No re-registration needed.
+  // World event handlers are persistent (registered in init()) and survive
+  // state transitions via EventManager::clearTransientHandlers(). No
+  // re-registration needed.
   //
   // Only clear handler tokens that were explicitly removed (e.g., by
   // unsubscribeWorldEvents before a clean shutdown). Persistent handlers
   // remain registered in EventManager; we keep the tokens for clean() removal.
-  //
-  // m_callbacks (collision forwarding) persist — no state registers its own.
 
   // Reset performance stats for clean slate
   m_perf = PerfStats{};
@@ -685,10 +672,6 @@ void CollisionManager::setGlobalPause(bool paused) {
 
 bool CollisionManager::isGloballyPaused() const {
   return m_globallyPaused.load(std::memory_order_acquire);
-}
-
-void CollisionManager::addCollisionCallback(CollisionCB cb) {
-  m_callbacks.push_back(std::move(cb));
 }
 
 void CollisionManager::logCollisionStatistics() const {
@@ -1448,11 +1431,13 @@ CollisionManager::buildActiveIndices(const CullingArea &cullingArea) const {
       // via spatial query
       pools.staticAABBs.reserve(pools.staticIndices.size());
 
-      // Filter indices and build AABBs for physics bodies only
-      std::vector<size_t> physicsIndices;
-      physicsIndices.reserve(pools.staticIndices.size());
-
-      for (size_t storageIdx : pools.staticIndices) {
+      // Filter indices and build AABBs for physics bodies only.
+      // In-place compaction: writeIdx ≤ readIdx always, so we can overwrite
+      // pools.staticIndices as we iterate and shrink at the end. Avoids a
+      // per-frame scratch vector allocation each time the culling area moves.
+      size_t writeIdx = 0;
+      for (size_t readIdx = 0; readIdx < pools.staticIndices.size(); ++readIdx) {
+        const size_t storageIdx = pools.staticIndices[readIdx];
         const auto &staticHot = m_storage.hotData[storageIdx];
 
         // Skip inactive statics at cache time - avoids per-frame active checks
@@ -1468,7 +1453,7 @@ CollisionManager::buildActiveIndices(const CullingArea &cullingArea) const {
         }
 
         // Physical bodies (obstacles, physical triggers) go to broadphase
-        physicsIndices.push_back(storageIdx);
+        pools.staticIndices[writeIdx++] = storageIdx;
         CollisionPool::StaticAABB aabb;
         aabb.minX = staticHot.aabbMinX;
         aabb.minY = staticHot.aabbMinY;
@@ -1478,9 +1463,7 @@ CollisionManager::buildActiveIndices(const CullingArea &cullingArea) const {
         aabb.active = staticHot.active;
         pools.staticAABBs.push_back(aabb);
       }
-
-      // Replace staticIndices with filtered physics-only indices
-      pools.staticIndices = std::move(physicsIndices);
+      pools.staticIndices.resize(writeIdx);
 
       // PERF: Sort static pool indices by minX for SAP (Sweep-and-Prune)
       // This enables O(n + k) movable-vs-static instead of O(n × spatial_query)
@@ -2339,10 +2322,6 @@ void CollisionManager::update(float) {
       if (m_projectileHitSink) {
         m_projectileHitSink(collision);
       }
-      continue;
-    }
-    for (const auto &cb : m_callbacks) {
-      cb(collision);
     }
   }
   VOIDLIGHT_DEBUG_ONLY(auto t4 = clock::now();)

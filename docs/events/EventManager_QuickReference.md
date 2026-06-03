@@ -46,9 +46,9 @@ Runtime notes:
 
 ```cpp
 Weather, SceneChange, NPCSpawn, ParticleEffect,
-ResourceChange, World, Camera, Harvest,
-Collision, WorldTrigger, CollisionObstacleChanged, Custom,
-Time, Combat, Entity, BehaviorMessage
+ResourceChange, World, Camera, Harvest, Collision,
+WorldTrigger, CollisionObstacleChanged, Custom,
+Time, Combat, Entity, BehaviorMessage, MerchantSpawn
 ```
 
 ## Current Usage Rules
@@ -57,4 +57,8 @@ Time, Combat, Entity, BehaviorMessage
 - Use deferred dispatch for worker-thread producers and cross-system frame coordination.
 - Use immediate dispatch only when the caller owns timing and thread-safety.
 - `EventTypeId::Combat` / `DamageEvent` applies damage results inside `EventManager` before subscribed handlers run.
+- `EventTypeId::Collision` is reserved and has no `CollisionEvent` payload.
+- Use `CollisionObstacleChanged` for world obstacle changes and the projectile
+  hit sink for projectile collisions.
+- Use `EventManager::spawnMerchant(...)` for merchant-focused NPC spawning; it dispatches `EventTypeId::MerchantSpawn`.
 - Use `drainAllDeferredEvents()` only in tests or controlled synchronization points.

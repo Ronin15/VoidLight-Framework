@@ -1,5 +1,5 @@
 #!/bin/bash
-# Full clang-tidy analysis for SDL3_VoidLight-Framework
+# Full clang-tidy analysis for VoidLight-Framework
 # Checks all source files (comprehensive but slower)
 
 set -e
@@ -10,7 +10,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo -e "${BLUE}=== SDL3 VoidLight-Framework - Full clang-tidy Analysis ===${NC}"
+echo -e "${BLUE}=== VoidLight-Framework - Full clang-tidy Analysis ===${NC}"
 echo ""
 
 # Check if clang-tidy is available

@@ -2,7 +2,7 @@
 
 This document provides a comprehensive guide to the testing framework used in the VoidLight Engine project. All tests use the Boost Test Framework for consistency and are organized by component.
 
-**Current Test Coverage:** 74 source-controlled test executables covering AI systems, AI behaviors, behavior state transitions, crowd-query runtime behavior, UI functionality, core systems, collision detection, pathfinding, WorkerBudget coordination, event management, particle systems, buffer management, rendering pipeline, SIMD correctness, camera systems, input handling, loading-state helpers, manager runtime behavior, frame profiling, GameTimeManager simulation, controller systems, entity state management, entity data management, NPC memory system, background simulation, EDM integration tests, GPU rendering subsystem, GPU frame timing benchmarks, and utility components with both functional validation and performance benchmarking.
+**Current Test Coverage:** 80 core source-controlled test executables plus 8 GPU-specific test targets covering AI systems, AI behaviors, behavior state transitions, crowd-query runtime behavior, UI functionality, core systems, collision detection, pathfinding, WorkerBudget coordination, event management, particle systems, buffer management, rendering pipeline, SIMD correctness, camera systems, input handling, loading-state helpers, manager runtime behavior, frame profiling, GameTimeManager simulation, controller systems, entity state management, entity data management, NPC memory system, background simulation, EDM integration tests, resource integration coverage, GPU rendering subsystem, GPU frame timing benchmarks, and utility components with both functional validation and performance benchmarking.
 
 ## Test Suites Overview
 
@@ -27,6 +27,7 @@ The VoidLight Engine has the following test suites:
    - Camera Tests: Validate camera world/screen coordinate transformations
    - Frame Profiler Tests: Validate overlay toggling, suppression, hitch attribution, and GPU swapchain-wait exclusion
    - InputManager Tests: Validate input handling and coordinate conversion
+   - InputManager Command Tests: Validate action command bindings, rebinding, persistence, and command edge state
    - Loading State Tests: Validate `LoadingState` configuration/reset helpers and non-blocking async-loading primitives
    - Rendering Pipeline Tests: Source-structure validation for render-flow ownership and GPU pass boundaries
    - Save Manager Tests: Validate save/load functionality with directory creation and file operations
@@ -73,7 +74,7 @@ The VoidLight Engine has the following test suites:
    - WeatherController Tests: Weather event coordination and state transitions
    - DayNightController Tests: Time period tracking and visual transitions
    - HarvestController Tests: Resource harvest coordination and guard behavior
-   - ItemController Tests: Item interaction behavior and event wiring
+   - InventoryController Tests: Inventory UI, item interaction behavior, event wiring, hotbar dragging, and inventory slot drag/drop reordering
    - NPCRenderController Tests: Animation state, row/frame selection, and facing behavior
    - CombatController Tests: Controller basics and null-player guard behavior
    - ResourceRenderController Tests: Resource render-controller lifecycle and update behavior
@@ -84,6 +85,8 @@ The VoidLight Engine has the following test suites:
 
 11. **Entity Data Management Tests**
     - EntityDataManager Tests: Data-oriented entity storage, handle validation, tier management
+    - SparseSidecar Tests: Validate sparse/dense transient sidecar storage invariants
+    - KnockbackSidecar Tests: Validate knockback sidecar lifecycle during destruction and expiry
     - BackgroundSimulationManager Tests: Background entity simulation, tier-based processing, pause/resume
 
 12. **Utility Runtime Tests**
@@ -114,11 +117,15 @@ The VoidLight Engine has the following test suites:
     - Sprite Batch Tests: Batch recording, vertex data verification
     - GPU Renderer Tests: Full frame flow, pipeline/pool accessors, composite rendering
 
+16. **Tooling Tests**
+    - Atlas Tool Tests: Python unittest coverage for sprite extraction/mapping/packing helpers (`python3 -B tests/tools/test_atlas_tool.py`)
+
 **Test Execution Categories:**
 - **Core Tests**: Fast functional validation (~4-8 minutes total)
 - **Benchmarks**: Performance and scalability testing (~8-20 minutes total)
 - **GPU Tests**: SDL3 GPU rendering validation
-- **Total Coverage**: 74 source-controlled test executables with comprehensive automation scripts
+- **Tooling Tests**: Python tool validation outside the Boost executable list
+- **Total Coverage**: 80 core `ALL_TESTS` executables plus 8 GPU-specific test targets with comprehensive automation scripts
 
 ## Running Tests
 
@@ -1018,11 +1025,15 @@ Located in `tests/controllers/`, these tests validate the state-scoped controlle
 
 4. **Additional Controller Targets**:
    - `HarvestControllerTests.cpp`
-   - `ItemControllerTests.cpp`
+   - `InventoryControllerTests.cpp` - inventory UI, equipment clicks, hotbar assignment/dragging, and inventory slot drag/drop reordering
    - `NPCRenderControllerTests.cpp`
    - `CombatControllerTests.cpp`
    - `ResourceRenderControllerTests.cpp`
    - `SocialControllerTests.cpp`
+
+5. **Related Input/Inventory Targets**:
+   - `InputManagerCommandTests.cpp`
+   - `InventoryControllerTests.cpp`
 
 #### Common Test Infrastructure
 

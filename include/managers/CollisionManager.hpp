@@ -54,13 +54,13 @@ public:
      * This method MUST clear ALL collision bodies (both dynamic and static) during state transitions.
      *
      * WHY THIS IS NECESSARY:
-     * prepareForStateTransition() is called BEFORE state exit, which unregisters event handlers.
-     * This means WorldUnloadedEvent handlers will NOT fire after state transition begins.
+     * State transition cleanup can discard or outrun deferred WorldUnloadedEvent delivery.
+     * Collision storage must not depend on later world-event timing.
      *
      * Previous "smart" logic tried to keep static bodies when a world was active, expecting
      * WorldUnloadedEvent to clean them up. This was BROKEN because:
-     * 1. prepareForStateTransition() unregisters event handlers first
-     * 2. WorldUnloadedEvent handler never fires
+     * 1. WorldUnloadedEvent is deferred
+     * 2. State cleanup can clear pending deferred events before delivery
      * 3. Static bodies from old world persist into new world
      *
      * CONSEQUENCES OF NOT CLEARING ALL BODIES:
@@ -74,7 +74,7 @@ public:
      * and the new state will rebuild static bodies when it loads its world via WorldLoadedEvent.
      *
      * @note This is called automatically by GameStateManager before state transitions
-     * @note Event handlers are unregistered AFTER this method completes
+     * @note Persistent manager event handlers stay registered across transitions
      * @see GameStateManager::changeState()
      */
     void prepareForStateTransition();
@@ -165,15 +165,16 @@ public:
     void onTileChanged(int x, int y);             // update a specific cell
     void setWorldBounds(float minX, float minY, float maxX, float maxY);
 
-    // Callbacks
-    using CollisionCB = std::function<void(const CollisionInfo&)>;
-    void addCollisionCallback(CollisionCB cb);
-    void onCollision(CollisionCB cb) { addCollisionCallback(std::move(cb)); }
-
     // Projectile hit sink: registered by ProjectileManager::init(), cleared in clean().
     // Keeps CollisionManager agnostic of the higher-layer ProjectileManager.
     using ProjectileHitSink = std::function<void(const CollisionInfo&)>;
     void setProjectileHitSink(ProjectileHitSink sink) { m_projectileHitSink = std::move(sink); }
+
+    // Read-only view of collisions resolved during the most recent update().
+    // Buffer is reused each frame; do not hold the reference across update() calls.
+    const std::vector<CollisionInfo>& getLastFrameCollisions() const {
+        return m_collisionPool.collisionBuffer;
+    }
 
     // Metrics
     size_t getBodyCount() const { return m_storage.size(); }
@@ -475,7 +476,6 @@ private:
     mutable CullingArea m_lastStaticQueryCullingArea{0.0f, 0.0f, 0.0f, 0.0f};
     mutable bool m_staticQueryCacheDirty{true};
 
-    std::vector<CollisionCB> m_callbacks;
     ProjectileHitSink m_projectileHitSink;
     std::vector<EventManager::HandlerToken> m_handlerTokens;
     std::unordered_map<uint64_t, std::pair<EntityID,EntityID>> m_activeTriggerPairs; // OnEnter/Exit filtering

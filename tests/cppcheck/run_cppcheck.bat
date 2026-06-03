@@ -1,5 +1,5 @@
 @echo off
-REM Cppcheck Analysis Script for SDL3_HammerEngine_Template (Windows)
+REM Cppcheck Analysis Script for VoidLight-Framework (Windows)
 REM This script runs cppcheck with optimized settings to focus on real issues
 
 setlocal enabledelayedexpansion
@@ -8,7 +8,6 @@ REM Configuration
 set PROJECT_ROOT=%~dp0..\..
 set INCLUDE_DIRS=include src
 set LIBRARY_CONFIG=cppcheck_lib.cfg
-set SUPPRESSIONS=cppcheck_suppressions.txt
 set OUTPUT_DIR=%PROJECT_ROOT%\test_results
 for /f "tokens=2 delims==" %%I in ('wmic OS Get localdatetime /value') do set datetime=%%I
 set TIMESTAMP=%datetime:~0,8%_%datetime:~8,6%
@@ -16,7 +15,7 @@ set TIMESTAMP=%datetime:~0,8%_%datetime:~8,6%
 REM Create output directory if it doesn't exist
 if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
 
-echo === SDL3 VoidLight-Framework - Cppcheck Analysis ===
+echo === VoidLight-Framework - Cppcheck Analysis ===
 echo Project Root: %PROJECT_ROOT%
 echo Timestamp: %TIMESTAMP%
 echo.
@@ -40,12 +39,6 @@ if not exist "%LIBRARY_CONFIG%" (
     exit /b 1
 )
 
-if not exist "%SUPPRESSIONS%" (
-    echo Error: Suppressions file '%SUPPRESSIONS%' not found
-    pause
-    exit /b 1
-)
-
 echo Configuration files validated
 echo.
 
@@ -62,7 +55,7 @@ REM Analysis 1: Critical Issues Only
 echo === ANALYSIS 1: Critical Issues Only ===
 echo Running critical analysis...
 
-cppcheck --enable=warning,performance,portability --library=std,posix --library="%LIBRARY_CONFIG%" --suppressions-list="%SUPPRESSIONS%" --include-path=..\..\include --include-path=..\..\src --platform=win64 --std=c++20 --verbose --xml --suppress=information --suppress=style ..\..\src\ ..\..\include\ 2>"%CRITICAL_OUTPUT%"
+cppcheck --enable=warning,performance,portability --library=std,posix --library="%LIBRARY_CONFIG%" --include-path=..\..\include --include-path=..\..\src --platform=win64 --std=c++20 --verbose --xml --suppress=information --suppress=style ..\..\src\ ..\..\include\ 2>"%CRITICAL_OUTPUT%"
 
 if exist "%CRITICAL_OUTPUT%" (
     REM Count errors in critical analysis
@@ -77,7 +70,6 @@ if exist "%CRITICAL_OUTPUT%" (
     echo === Cppcheck Critical Analysis Summary === > "%CRITICAL_SUMMARY%"
     echo Generated: %date% %time% >> "%CRITICAL_SUMMARY%"
     echo Configuration: %LIBRARY_CONFIG% >> "%CRITICAL_SUMMARY%"
-    echo Suppressions: %SUPPRESSIONS% >> "%CRITICAL_SUMMARY%"
     echo. >> "%CRITICAL_SUMMARY%"
     echo Results: >> "%CRITICAL_SUMMARY%"
     echo   Total Critical Issues: !CRITICAL_COUNT! >> "%CRITICAL_SUMMARY%"
@@ -100,7 +92,7 @@ REM Analysis 2: Full Analysis
 echo === ANALYSIS 2: Full Analysis ===
 echo Running full analysis...
 
-cppcheck --enable=warning,style,performance,portability,information --library=std,posix --library="%LIBRARY_CONFIG%" --suppressions-list="%SUPPRESSIONS%" --include-path=..\..\include --include-path=..\..\src --platform=win64 --std=c++20 --verbose --xml ..\..\src\ ..\..\include\ 2>"%FULL_OUTPUT%"
+cppcheck --enable=warning,style,performance,portability,information --library=std,posix --library="%LIBRARY_CONFIG%" --include-path=..\..\include --include-path=..\..\src --platform=win64 --std=c++20 --verbose --xml ..\..\src\ ..\..\include\ 2>"%FULL_OUTPUT%"
 
 if exist "%FULL_OUTPUT%" (
     REM Count errors in full analysis
@@ -115,7 +107,6 @@ if exist "%FULL_OUTPUT%" (
     echo === Cppcheck Full Analysis Summary === > "%FULL_SUMMARY%"
     echo Generated: %date% %time% >> "%FULL_SUMMARY%"
     echo Configuration: %LIBRARY_CONFIG% >> "%FULL_SUMMARY%"
-    echo Suppressions: %SUPPRESSIONS% >> "%FULL_SUMMARY%"
     echo. >> "%FULL_SUMMARY%"
     echo Results: >> "%FULL_SUMMARY%"
     echo   Total Issues: !FULL_COUNT! >> "%FULL_SUMMARY%"
@@ -138,7 +129,7 @@ REM Analysis 3: Style Analysis
 echo === ANALYSIS 3: Style and Best Practices ===
 echo Running style analysis...
 
-cppcheck --enable=style --library=std,posix --library="%LIBRARY_CONFIG%" --suppressions-list="%SUPPRESSIONS%" --include-path=..\..\include --include-path=..\..\src --platform=win64 --std=c++20 --verbose --xml --suppress=information ..\..\src\ ..\..\include\ 2>"%STYLE_OUTPUT%"
+cppcheck --enable=style --library=std,posix --library="%LIBRARY_CONFIG%" --include-path=..\..\include --include-path=..\..\src --platform=win64 --std=c++20 --verbose --xml --suppress=information ..\..\src\ ..\..\include\ 2>"%STYLE_OUTPUT%"
 
 if exist "%STYLE_OUTPUT%" (
     REM Count errors in style analysis
@@ -153,7 +144,6 @@ if exist "%STYLE_OUTPUT%" (
     echo === Cppcheck Style Analysis Summary === > "%STYLE_SUMMARY%"
     echo Generated: %date% %time% >> "%STYLE_SUMMARY%"
     echo Configuration: %LIBRARY_CONFIG% >> "%STYLE_SUMMARY%"
-    echo Suppressions: %SUPPRESSIONS% >> "%STYLE_SUMMARY%"
     echo. >> "%STYLE_SUMMARY%"
     echo Results: >> "%STYLE_SUMMARY%"
     echo   Total Style Issues: !STYLE_COUNT! >> "%STYLE_SUMMARY%"
@@ -175,7 +165,7 @@ echo.
 REM Generate final summary
 echo === FINAL CPPCHECK SUMMARY === > "%FINAL_SUMMARY%"
 echo Generated: %date% %time% >> "%FINAL_SUMMARY%"
-echo Project: SDL3_HammerEngine_Template >> "%FINAL_SUMMARY%"
+echo Project: VoidLight-Framework >> "%FINAL_SUMMARY%"
 echo. >> "%FINAL_SUMMARY%"
 echo Analysis Results: >> "%FINAL_SUMMARY%"
 echo   Critical Issues: !CRITICAL_COUNT! >> "%FINAL_SUMMARY%"
@@ -201,8 +191,7 @@ echo. >> "%FINAL_SUMMARY%"
 echo Next Steps: >> "%FINAL_SUMMARY%"
 echo 1. Review critical issues first (highest priority) >> "%FINAL_SUMMARY%"
 echo 2. Consider style improvements for code quality >> "%FINAL_SUMMARY%"
-echo 3. Update suppressions file if false positives are found >> "%FINAL_SUMMARY%"
-echo 4. Re-run analysis after fixes >> "%FINAL_SUMMARY%"
+echo 3. Re-run analysis after fixes >> "%FINAL_SUMMARY%"
 
 REM Display final summary
 echo === FINAL SUMMARY ===

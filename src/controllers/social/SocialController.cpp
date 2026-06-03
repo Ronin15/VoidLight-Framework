@@ -6,20 +6,23 @@
 #include "controllers/social/SocialController.hpp"
 #include "ai/BehaviorExecutors.hpp"
 #include "core/Logger.hpp"
-#include "managers/AIManager.hpp"
 #include "entities/Player.hpp"
+
 #include "events/EntityEvents.hpp"
+#include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
-#include "managers/GameTimeManager.hpp"
+
+#include "managers/InputManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include "managers/UIConstants.hpp"
 #include "managers/UIManager.hpp"
 #include <algorithm>
 #include <cmath>
 #include <format>
 
 namespace {
-    constexpr const char* GAMEPLAY_EVENT_LOG = "gameplay_event_log";
+    constexpr const char* EVENT_LOG = "event_log";
 
     AIManager::SocialInteractionType toAISocialInteractionType(InteractionType type) {
         switch (type) {
@@ -58,6 +61,12 @@ void SocialController::update(float) {
         return;
     }
 
+    if (!m_merchantHandle.isValid() ||
+        EntityDataManager::Instance().getIndex(m_merchantHandle) == SIZE_MAX) {
+        closeTrade();
+        return;
+    }
+
     updatePriceDisplay();
 }
 
@@ -92,11 +101,16 @@ bool SocialController::openTrade(EntityHandle npcHandle) {
     m_selectedMerchantIndex = -1;
     m_selectedPlayerIndex = -1;
     m_quantity = 1;
+    m_merchantPaneActive = true;
     m_priceDisplayDirty = true;
 
     refreshMerchantItems();
     refreshPlayerItems();
     createTradeUI();
+    normalizeTradeSelections();
+    ensurePaneSelection();
+    updateSelectionHighlight();
+    updatePriceDisplay();
 
     SOCIAL_INFO("Trade session opened");
     return true;
@@ -118,9 +132,52 @@ void SocialController::closeTrade() {
     m_selectedMerchantIndex = -1;
     m_selectedPlayerIndex = -1;
     m_quantity = 1;
+    m_merchantPaneActive = true;
     m_priceDisplayDirty = true;
 
     SOCIAL_INFO("Trade session closed");
+}
+
+void SocialController::handleTradeInput(const InputManager& inputMgr) {
+    if (!m_isTrading) {
+        return;
+    }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::MenuCancel) ||
+        inputMgr.isCommandPressed(InputManager::Command::Interact)) {
+        closeTrade();
+        return;
+    }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::MenuLeft)) {
+        setActivePaneToMerchant();
+    }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::MenuRight)) {
+        setActivePaneToPlayer();
+    }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::MenuUp)) {
+        moveActiveSelection(-1);
+    }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::MenuDown)) {
+        moveActiveSelection(1);
+    }
+
+    if (inputMgr.wasKeyPressed(SDL_SCANCODE_MINUS) ||
+        inputMgr.wasKeyPressed(SDL_SCANCODE_KP_MINUS)) {
+        adjustQuantityBy(-1);
+    }
+
+    if (inputMgr.wasKeyPressed(SDL_SCANCODE_EQUALS) ||
+        inputMgr.wasKeyPressed(SDL_SCANCODE_KP_PLUS)) {
+        adjustQuantityBy(1);
+    }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::MenuConfirm)) {
+        executeActiveTrade();
+    }
 }
 
 // ============================================================================
@@ -131,8 +188,10 @@ void SocialController::selectMerchantItem(size_t index) {
     if (index < m_merchantItems.size()) {
         m_selectedMerchantIndex = static_cast<int>(index);
         m_selectedPlayerIndex = -1;
+        m_merchantPaneActive = true;
         m_quantity = 1;
         m_priceDisplayDirty = true;
+        updateSelectionHighlight();
         SOCIAL_DEBUG(std::format("Selected merchant item: {}", m_merchantItems[index].name));
     }
 }
@@ -141,8 +200,10 @@ void SocialController::selectPlayerItem(size_t index) {
     if (index < m_playerItems.size()) {
         m_selectedPlayerIndex = static_cast<int>(index);
         m_selectedMerchantIndex = -1;
+        m_merchantPaneActive = false;
         m_quantity = 1;
         m_priceDisplayDirty = true;
+        updateSelectionHighlight();
         SOCIAL_DEBUG(std::format("Selected player item: {}", m_playerItems[index].name));
     }
 }
@@ -159,6 +220,7 @@ void SocialController::setQuantity(int qty) {
     }
 
     m_priceDisplayDirty = true;
+    updatePriceDisplay();
 }
 
 TradeResult SocialController::executeBuy() {
@@ -171,22 +233,27 @@ TradeResult SocialController::executeBuy() {
     }
 
     const auto& item = m_merchantItems[m_selectedMerchantIndex];
-    TradeResult result = tryBuy(m_merchantHandle, item.handle, m_quantity);
+    const auto itemHandle = item.handle;
+    const std::string itemName = item.name;
+    TradeResult result = tryBuy(m_merchantHandle, itemHandle, m_quantity);
 
     if (result == TradeResult::Success) {
-        float price = calculateBuyPrice(m_merchantHandle, item.handle, m_quantity);
+        float price = calculateBuyPrice(m_merchantHandle, itemHandle, m_quantity);
         int savedQty = m_quantity;
 
         refreshMerchantItems();
         refreshPlayerItems();
-        m_selectedMerchantIndex = -1;
+        normalizeTradeSelections();
+        ensurePaneSelection();
         m_quantity = 1;
         m_priceDisplayDirty = true;
-        SOCIAL_INFO(std::format("Bought {} x{}", item.name, savedQty));
+        rebuildTradeListsUI();
+        updateSelectionHighlight();
+        SOCIAL_INFO(std::format("Bought {} x{}", itemName, savedQty));
 
         UIManager::Instance().addEventLogEntry(
-            "gameplay_event_log",
-            std::format("Bought {} x{} for {:.0f} gold", item.name, savedQty, price));
+            EVENT_LOG,
+            std::format("Bought {} x{} for {:.0f} gold", itemName, savedQty, price));
     }
 
     return result;
@@ -202,22 +269,27 @@ TradeResult SocialController::executeSell() {
     }
 
     const auto& item = m_playerItems[m_selectedPlayerIndex];
-    TradeResult result = trySell(m_merchantHandle, item.handle, m_quantity);
+    const auto itemHandle = item.handle;
+    const std::string itemName = item.name;
+    TradeResult result = trySell(m_merchantHandle, itemHandle, m_quantity);
 
     if (result == TradeResult::Success) {
-        float price = calculateSellPrice(m_merchantHandle, item.handle, m_quantity);
+        float price = calculateSellPrice(m_merchantHandle, itemHandle, m_quantity);
         int savedQty = m_quantity;
 
         refreshMerchantItems();
         refreshPlayerItems();
-        m_selectedPlayerIndex = -1;
+        normalizeTradeSelections();
+        ensurePaneSelection();
         m_quantity = 1;
         m_priceDisplayDirty = true;
-        SOCIAL_INFO(std::format("Sold {} x{}", item.name, savedQty));
+        rebuildTradeListsUI();
+        updateSelectionHighlight();
+        SOCIAL_INFO(std::format("Sold {} x{}", itemName, savedQty));
 
         UIManager::Instance().addEventLogEntry(
-            "gameplay_event_log",
-            std::format("Sold {} x{} for {:.0f} gold", item.name, savedQty, price));
+            EVENT_LOG,
+            std::format("Sold {} x{} for {:.0f} gold", itemName, savedQty, price));
     }
 
     return result;
@@ -313,19 +385,41 @@ TradeResult SocialController::tryBuy(EntityHandle npcHandle,
         return TradeResult::InsufficientFunds;
     }
 
+    const auto goldHandle = getGoldHandle();
+    const int npcOldGoldQuantity = edm.getInventoryQuantity(npcInvIdx, goldHandle);
+    if (!edm.addToInventory(npcInvIdx, goldHandle, priceInt)) {
+        SOCIAL_DEBUG("tryBuy: NPC inventory cannot accept payment");
+        return TradeResult::InventoryFull;
+    }
+
+    const int npcOldItemQuantity = edm.getInventoryQuantity(npcInvIdx, itemHandle);
     if (!edm.removeFromInventory(npcInvIdx, itemHandle, quantity)) {
+        edm.removeFromInventory(npcInvIdx, goldHandle, priceInt);
         SOCIAL_ERROR("tryBuy: Failed to remove item from NPC inventory");
         return TradeResult::InsufficientStock;
     }
 
     if (!player->addToInventory(itemHandle, quantity)) {
         edm.addToInventory(npcInvIdx, itemHandle, quantity);
+        edm.removeFromInventory(npcInvIdx, goldHandle, priceInt);
         SOCIAL_DEBUG("tryBuy: Player inventory full");
         return TradeResult::InventoryFull;
     }
 
-    player->removeGold(priceInt);
-    edm.addToInventory(npcInvIdx, ResourceTemplateManager::Instance().getHandleByName("gold"), priceInt);
+    if (!player->removeGold(priceInt)) {
+        edm.addToInventory(npcInvIdx, itemHandle, quantity);
+        player->removeFromInventory(itemHandle, quantity);
+        edm.removeFromInventory(npcInvIdx, goldHandle, priceInt);
+        SOCIAL_ERROR("tryBuy: Failed to remove payment from player");
+        return TradeResult::InsufficientFunds;
+    }
+
+    dispatchResourceChange(npcHandle, itemHandle, npcOldItemQuantity,
+                           edm.getInventoryQuantity(npcInvIdx, itemHandle),
+                           "traded");
+    dispatchResourceChange(npcHandle, goldHandle, npcOldGoldQuantity,
+                           edm.getInventoryQuantity(npcInvIdx, goldHandle),
+                           "traded");
 
     recordTrade(npcHandle, totalPrice, true);
 
@@ -378,25 +472,46 @@ TradeResult SocialController::trySell(EntityHandle npcHandle,
     int priceInt = static_cast<int>(std::floor(totalPrice));
 
     uint32_t npcInvIdx = getNPCInventoryIndex(npcHandle);
-    auto goldHandle = ResourceTemplateManager::Instance().getHandleByName("gold");
+    auto goldHandle = getGoldHandle();
     if (!edm.hasInInventory(npcInvIdx, goldHandle, priceInt)) {
         SOCIAL_DEBUG(std::format("trySell: NPC doesn't have {} gold to pay", priceInt));
         return TradeResult::InsufficientFunds;
     }
 
-    if (!player->removeFromInventory(itemHandle, quantity)) {
-        SOCIAL_ERROR("trySell: Failed to remove item from player inventory");
-        return TradeResult::InsufficientStock;
-    }
-
+    const int npcOldItemQuantity = edm.getInventoryQuantity(npcInvIdx, itemHandle);
     if (!edm.addToInventory(npcInvIdx, itemHandle, quantity)) {
-        player->addToInventory(itemHandle, quantity);
         SOCIAL_DEBUG("trySell: NPC inventory full");
         return TradeResult::InventoryFull;
     }
 
-    edm.removeFromInventory(npcInvIdx, goldHandle, priceInt);
-    player->addGold(priceInt);
+    if (!player->addGold(priceInt)) {
+        edm.removeFromInventory(npcInvIdx, itemHandle, quantity);
+        SOCIAL_DEBUG("trySell: Player inventory cannot accept payment");
+        return TradeResult::InventoryFull;
+    }
+
+    if (!player->removeFromInventory(itemHandle, quantity)) {
+        player->removeGold(priceInt);
+        edm.removeFromInventory(npcInvIdx, itemHandle, quantity);
+        SOCIAL_ERROR("trySell: Failed to remove item from player inventory");
+        return TradeResult::InsufficientStock;
+    }
+
+    const int npcOldGoldQuantity = edm.getInventoryQuantity(npcInvIdx, goldHandle);
+    if (!edm.removeFromInventory(npcInvIdx, goldHandle, priceInt)) {
+        player->addToInventory(itemHandle, quantity);
+        player->removeGold(priceInt);
+        edm.removeFromInventory(npcInvIdx, itemHandle, quantity);
+        SOCIAL_ERROR("trySell: Failed to remove payment from NPC inventory");
+        return TradeResult::InsufficientFunds;
+    }
+
+    dispatchResourceChange(npcHandle, itemHandle, npcOldItemQuantity,
+                           edm.getInventoryQuantity(npcInvIdx, itemHandle),
+                           "traded");
+    dispatchResourceChange(npcHandle, goldHandle, npcOldGoldQuantity,
+                           edm.getInventoryQuantity(npcInvIdx, goldHandle),
+                           "traded");
 
     recordTrade(npcHandle, totalPrice, true);
 
@@ -444,7 +559,7 @@ bool SocialController::tryGift(EntityHandle npcHandle,
         return false;
     }
 
-    const auto& edm = EntityDataManager::Instance();
+    auto& edm = EntityDataManager::Instance();
     size_t npcIdx = edm.getIndex(npcHandle);
     if (npcIdx == SIZE_MAX) {
         SOCIAL_DEBUG("tryGift: NPC not found in EDM");
@@ -460,10 +575,27 @@ bool SocialController::tryGift(EntityHandle npcHandle,
         return false;
     }
 
+    const uint32_t npcInvIdx = getNPCInventoryIndex(npcHandle);
+    if (npcInvIdx == INVALID_INVENTORY_INDEX) {
+        SOCIAL_DEBUG("tryGift: NPC does not have an inventory");
+        return false;
+    }
+
+    const int npcOldItemQuantity = edm.getInventoryQuantity(npcInvIdx, itemHandle);
+    if (!edm.addToInventory(npcInvIdx, itemHandle, quantity)) {
+        SOCIAL_DEBUG("tryGift: NPC inventory full");
+        return false;
+    }
+
     if (!player->removeFromInventory(itemHandle, quantity)) {
+        edm.removeFromInventory(npcInvIdx, itemHandle, quantity);
         SOCIAL_ERROR("tryGift: Failed to remove item from player inventory");
         return false;
     }
+
+    dispatchResourceChange(npcHandle, itemHandle, npcOldItemQuantity,
+                           edm.getInventoryQuantity(npcInvIdx, itemHandle),
+                           "gifted");
 
     float giftValue = getItemBaseValue(itemHandle) * quantity;
     recordGift(npcHandle, giftValue);
@@ -545,7 +677,7 @@ void SocialController::alertNearbyGuards(const Vector2D& location, EntityHandle)
                                 guardsAlerted, location.getX(), location.getY()));
 
         UIManager::Instance().addEventLogEntry(
-            GAMEPLAY_EVENT_LOG,
+            EVENT_LOG,
             std::format("Guards alerted! {} guards responding to crime.", guardsAlerted));
     }
 }
@@ -614,6 +746,20 @@ void SocialController::recordGift(EntityHandle npcHandle, float giftValue) {
     recordInteraction(npcHandle, InteractionType::Gift, value);
 }
 
+void SocialController::dispatchResourceChange(EntityHandle ownerHandle,
+                                              VoidLight::ResourceHandle resourceHandle,
+                                              int oldQuantity,
+                                              int newQuantity,
+                                              const std::string& reason) const {
+    if (oldQuantity == newQuantity) {
+        return;
+    }
+
+    EventManager::Instance().triggerResourceChange(
+        ownerHandle, resourceHandle, oldQuantity, newQuantity, reason,
+        EventManager::DispatchMode::Deferred);
+}
+
 float SocialController::getItemBaseValue(VoidLight::ResourceHandle itemHandle) const {
     if (!itemHandle.isValid()) {
         return 0.0f;
@@ -633,32 +779,47 @@ void SocialController::createTradeUI() {
     constexpr int panelH = 450;
     constexpr int halfW = panelW / 2;
     constexpr int halfH = panelH / 2;
+    constexpr int lowerInfoRowY = 332;
+    constexpr int quantityButtonRowY = 376;
+    constexpr int actionButtonRowY = 408;
 
-    ui.createPanel(UI_PANEL, UIRect{0, 0, panelW, panelH});
+    auto disableAutoSizing = [&ui](const std::string& id) {
+        ui.enableAutoSizing(id, false);
+    };
+
+    ui.createModal(UI_PANEL, UIRect{0, 0, panelW, panelH}, "",
+                   UIConstants::BASELINE_WIDTH,
+                   UIConstants::BASELINE_HEIGHT);
     ui.setComponentPositioning(UI_PANEL, {UIPositionMode::CENTERED_BOTH, 0, 0, panelW, panelH});
 
-    ui.createTitle(UI_TITLE, UIRect{0, 0, 560, 30}, "Trading");
+    ui.createTitle(UI_TITLE, UIRect{0, 0, 560, 30}, "Trading", UI_PANEL);
+    disableAutoSizing(UI_TITLE);
     ui.setComponentPositioning(UI_TITLE, {UIPositionMode::CENTERED_BOTH, 0, 10 + 15 - halfH, 560, 30});
 
     std::string relStr = std::format("Relationship: {}  (Price: {:.0f}%)",
                                      getCurrentTradeRelationshipDescription(),
                                      getCurrentTradePriceModifier() * 100.0f);
-    ui.createLabel(UI_RELATIONSHIP, UIRect{0, 0, 560, 20}, relStr);
+    ui.createLabel(UI_RELATIONSHIP, UIRect{0, 0, 560, 20}, relStr, UI_PANEL);
+    disableAutoSizing(UI_RELATIONSHIP);
     ui.setComponentPositioning(UI_RELATIONSHIP, {UIPositionMode::CENTERED_BOTH, 0, 45 + 10 - halfH, 560, 20});
 
-    ui.createLabel("trade_merchant_label", UIRect{0, 0, 270, 20}, "Merchant Inventory");
+    ui.createLabel("trade_merchant_label", UIRect{0, 0, 270, 20}, "Merchant Inventory", UI_PANEL);
+    disableAutoSizing("trade_merchant_label");
     ui.setComponentPositioning("trade_merchant_label", {UIPositionMode::CENTERED_BOTH,
         20 + 135 - halfW, 75 + 10 - halfH, 270, 20});
 
-    ui.createList(UI_MERCHANT_LIST, UIRect{0, 0, 270, 200});
+    ui.createList(UI_MERCHANT_LIST, UIRect{0, 0, 270, 200}, UI_PANEL);
+    disableAutoSizing(UI_MERCHANT_LIST);
     ui.setComponentPositioning(UI_MERCHANT_LIST, {UIPositionMode::CENTERED_BOTH,
         20 + 135 - halfW, 100 + 100 - halfH, 270, 200});
 
-    ui.createLabel("trade_player_label", UIRect{0, 0, 270, 20}, "Your Inventory");
+    ui.createLabel("trade_player_label", UIRect{0, 0, 270, 20}, "Your Inventory", UI_PANEL);
+    disableAutoSizing("trade_player_label");
     ui.setComponentPositioning("trade_player_label", {UIPositionMode::CENTERED_BOTH,
         310 + 135 - halfW, 75 + 10 - halfH, 270, 20});
 
-    ui.createList(UI_PLAYER_LIST, UIRect{0, 0, 270, 200});
+    ui.createList(UI_PLAYER_LIST, UIRect{0, 0, 270, 200}, UI_PANEL);
+    disableAutoSizing(UI_PLAYER_LIST);
     ui.setComponentPositioning(UI_PLAYER_LIST, {UIPositionMode::CENTERED_BOTH,
         310 + 135 - halfW, 100 + 100 - halfH, 270, 200});
 
@@ -672,41 +833,62 @@ void SocialController::createTradeUI() {
         ui.addListItem(UI_PLAYER_LIST, itemStr);
     }
 
-    ui.createLabel(UI_QUANTITY_LABEL, UIRect{0, 0, 150, 25}, "Quantity: 1");
+    ui.createLabel(UI_QUANTITY_LABEL, UIRect{0, 0, 150, 25}, "Quantity: 1", UI_PANEL);
+    disableAutoSizing(UI_QUANTITY_LABEL);
     ui.setComponentPositioning(UI_QUANTITY_LABEL, {UIPositionMode::CENTERED_BOTH,
-        20 + 75 - halfW, 320 + 12 - halfH, 150, 25});
+        20 + 75 - halfW, lowerInfoRowY + 12 - halfH, 150, 25});
 
-    ui.createLabel(UI_PRICE_LABEL, UIRect{0, 0, 200, 25}, "Select an item");
+    ui.createButton(UI_QUANTITY_DEC_BTN, UIRect{0, 0, 35, 30}, "-", UI_PANEL);
+    disableAutoSizing(UI_QUANTITY_DEC_BTN);
+    ui.setComponentPositioning(UI_QUANTITY_DEC_BTN, {UIPositionMode::CENTERED_BOTH,
+        -205, quantityButtonRowY - halfH, 35, 30});
+    ui.setOnClick(UI_QUANTITY_DEC_BTN, [this]() {
+        adjustQuantityBy(-1);
+    });
+
+    ui.createButton(UI_QUANTITY_INC_BTN, UIRect{0, 0, 35, 30}, "+", UI_PANEL);
+    disableAutoSizing(UI_QUANTITY_INC_BTN);
+    ui.setComponentPositioning(UI_QUANTITY_INC_BTN, {UIPositionMode::CENTERED_BOTH,
+        -145, quantityButtonRowY - halfH, 35, 30});
+    ui.setOnClick(UI_QUANTITY_INC_BTN, [this]() {
+        adjustQuantityBy(1);
+    });
+
+    ui.createLabel(UI_PRICE_LABEL, UIRect{0, 0, 200, 25}, "Select an item", UI_PANEL);
+    disableAutoSizing(UI_PRICE_LABEL);
     ui.setComponentPositioning(UI_PRICE_LABEL, {UIPositionMode::CENTERED_BOTH,
-        180 + 100 - halfW, 320 + 12 - halfH, 200, 25});
+        180 + 100 - halfW, lowerInfoRowY + 12 - halfH, 200, 25});
 
     auto player = mp_player.lock();
     int gold = player ? player->getGold() : 0;
-    ui.createLabel(UI_GOLD_LABEL, UIRect{0, 0, 180, 25}, std::format("Your Gold: {}", gold));
+    ui.createLabel(UI_GOLD_LABEL, UIRect{0, 0, 180, 25}, std::format("Your Gold: {}", gold), UI_PANEL);
+    disableAutoSizing(UI_GOLD_LABEL);
     ui.setComponentPositioning(UI_GOLD_LABEL, {UIPositionMode::CENTERED_BOTH,
-        400 + 90 - halfW, 320 + 12 - halfH, 180, 25});
+        400 + 90 - halfW, lowerInfoRowY + 12 - halfH, 180, 25});
 
-    constexpr int btnY = 360;
     constexpr int btnW = 100;
     constexpr int btnH = 35;
 
-    ui.createButtonSuccess(UI_BUY_BTN, UIRect{0, 0, btnW, btnH}, "Buy");
+    ui.createButtonSuccess(UI_BUY_BTN, UIRect{0, 0, btnW, btnH}, "Buy", UI_PANEL);
+    disableAutoSizing(UI_BUY_BTN);
     ui.setComponentPositioning(UI_BUY_BTN, {UIPositionMode::CENTERED_BOTH,
-        -175, btnY + btnH/2 - halfH, btnW, btnH});
+        -175, actionButtonRowY + btnH/2 - halfH, btnW, btnH});
     ui.setOnClick(UI_BUY_BTN, [this]() {
         executeBuy();
     });
 
-    ui.createButtonSuccess(UI_SELL_BTN, UIRect{0, 0, btnW, btnH}, "Sell");
+    ui.createButtonSuccess(UI_SELL_BTN, UIRect{0, 0, btnW, btnH}, "Sell", UI_PANEL);
+    disableAutoSizing(UI_SELL_BTN);
     ui.setComponentPositioning(UI_SELL_BTN, {UIPositionMode::CENTERED_BOTH,
-        0, btnY + btnH/2 - halfH, btnW, btnH});
+        0, actionButtonRowY + btnH/2 - halfH, btnW, btnH});
     ui.setOnClick(UI_SELL_BTN, [this]() {
         executeSell();
     });
 
-    ui.createButtonDanger(UI_CLOSE_BTN, UIRect{0, 0, btnW, btnH}, "Close");
+    ui.createButtonDanger(UI_CLOSE_BTN, UIRect{0, 0, btnW, btnH}, "Close", UI_PANEL);
+    disableAutoSizing(UI_CLOSE_BTN);
     ui.setComponentPositioning(UI_CLOSE_BTN, {UIPositionMode::CENTERED_BOTH,
-        175, btnY + btnH/2 - halfH, btnW, btnH});
+        175, actionButtonRowY + btnH/2 - halfH, btnW, btnH});
     ui.setOnClick(UI_CLOSE_BTN, [this]() {
         closeTrade();
     });
@@ -726,11 +908,67 @@ void SocialController::createTradeUI() {
             selectPlayerItem(static_cast<size_t>(idx));
         }
     });
+
+    rebuildTradeListsUI();
 }
 
 void SocialController::destroyTradeUI() {
     auto& ui = UIManager::Instance();
+    ui.clearKeyboardSelection();
     ui.removeComponentsWithPrefix("trade_");
+    ui.removeOverlay();
+}
+
+void SocialController::rebuildTradeListsUI() {
+    auto& ui = UIManager::Instance();
+    if (!ui.hasComponent(UI_MERCHANT_LIST) || !ui.hasComponent(UI_PLAYER_LIST)) {
+        return;
+    }
+
+    ui.clearList(UI_MERCHANT_LIST);
+    for (const auto& item : m_merchantItems) {
+        ui.addListItem(UI_MERCHANT_LIST,
+                       std::format("{} x{} ({:.0f}g)", item.name, item.quantity, item.unitPrice));
+    }
+
+    ui.clearList(UI_PLAYER_LIST);
+    for (const auto& item : m_playerItems) {
+        ui.addListItem(UI_PLAYER_LIST, std::format("{} x{}", item.name, item.quantity));
+    }
+}
+
+void SocialController::normalizeTradeSelections() {
+    if (m_selectedMerchantIndex >= static_cast<int>(m_merchantItems.size())) {
+        m_selectedMerchantIndex = m_merchantItems.empty() ? -1
+                                                          : static_cast<int>(m_merchantItems.size()) - 1;
+    }
+
+    if (m_selectedPlayerIndex >= static_cast<int>(m_playerItems.size())) {
+        m_selectedPlayerIndex = m_playerItems.empty() ? -1
+                                                      : static_cast<int>(m_playerItems.size()) - 1;
+    }
+
+    if (m_selectedMerchantIndex < 0 && m_selectedPlayerIndex < 0) {
+        m_merchantPaneActive = !m_merchantItems.empty() || m_playerItems.empty();
+    }
+}
+
+void SocialController::ensurePaneSelection() {
+    if (m_merchantPaneActive) {
+        if (m_selectedMerchantIndex < 0 && !m_merchantItems.empty()) {
+            m_selectedMerchantIndex = 0;
+        }
+        if (m_selectedMerchantIndex >= 0) {
+            m_selectedPlayerIndex = -1;
+        }
+    } else {
+        if (m_selectedPlayerIndex < 0 && !m_playerItems.empty()) {
+            m_selectedPlayerIndex = 0;
+        }
+        if (m_selectedPlayerIndex >= 0) {
+            m_selectedMerchantIndex = -1;
+        }
+    }
 }
 
 void SocialController::refreshMerchantItems() {
@@ -758,6 +996,11 @@ void SocialController::refreshMerchantItems() {
         m_merchantItems.push_back(info);
     }
 
+    std::sort(m_merchantItems.begin(), m_merchantItems.end(),
+              [](const TradeItemInfo& lhs, const TradeItemInfo& rhs) {
+                  return lhs.name < rhs.name;
+              });
+
     m_priceDisplayDirty = true;
 }
 
@@ -777,7 +1020,7 @@ void SocialController::refreshPlayerItems() {
         return;
     }
 
-    auto goldHandle = rtm.getHandleByName("gold");
+    auto goldHandle = getGoldHandle();
     auto resources = edm.getInventoryResources(invIdx);
     for (const auto& [handle, qty] : resources) {
         if (qty <= 0) continue;
@@ -792,6 +1035,11 @@ void SocialController::refreshPlayerItems() {
 
         m_playerItems.push_back(info);
     }
+
+    std::sort(m_playerItems.begin(), m_playerItems.end(),
+              [](const TradeItemInfo& lhs, const TradeItemInfo& rhs) {
+                  return lhs.name < rhs.name;
+              });
 
     m_priceDisplayDirty = true;
 }
@@ -810,6 +1058,10 @@ void SocialController::updatePriceDisplay() {
     auto& ui = UIManager::Instance();
 
     ui.setText(UI_QUANTITY_LABEL, std::format("Quantity: {}", m_quantity));
+    ui.setText(UI_RELATIONSHIP,
+               std::format("Relationship: {}  (Price: {:.0f}%)",
+                           getCurrentTradeRelationshipDescription(),
+                           getCurrentTradePriceModifier() * 100.0f));
 
     if (m_selectedMerchantIndex >= 0) {
         float price = getCurrentBuyPrice();
@@ -827,5 +1079,72 @@ void SocialController::updatePriceDisplay() {
 }
 
 void SocialController::updateSelectionHighlight() {
-    // Future: highlight selected items in lists
+    auto& ui = UIManager::Instance();
+    if (ui.hasComponent(UI_MERCHANT_LIST)) {
+        ui.clearKeyboardSelection();
+        ui.setSelectedListItem(UI_MERCHANT_LIST, m_selectedMerchantIndex);
+        ui.setSelectedListItem(UI_PLAYER_LIST, m_selectedPlayerIndex);
+
+        ui.setKeyboardSelection(m_merchantPaneActive ? UI_MERCHANT_LIST : UI_PLAYER_LIST);
+    }
+}
+
+void SocialController::setActivePaneToMerchant() {
+    m_merchantPaneActive = true;
+    ensurePaneSelection();
+    updateSelectionHighlight();
+    m_priceDisplayDirty = true;
+}
+
+void SocialController::setActivePaneToPlayer() {
+    m_merchantPaneActive = false;
+    ensurePaneSelection();
+    updateSelectionHighlight();
+    m_priceDisplayDirty = true;
+}
+
+void SocialController::moveActiveSelection(int delta) {
+    if (delta == 0) {
+        return;
+    }
+
+    if (m_merchantPaneActive) {
+        if (m_merchantItems.empty()) {
+            return;
+        }
+
+        int nextIndex = m_selectedMerchantIndex < 0 ? 0 : m_selectedMerchantIndex + delta;
+        nextIndex = std::clamp(nextIndex, 0, static_cast<int>(m_merchantItems.size()) - 1);
+        selectMerchantItem(static_cast<size_t>(nextIndex));
+        return;
+    }
+
+    if (m_playerItems.empty()) {
+        return;
+    }
+
+    int nextIndex = m_selectedPlayerIndex < 0 ? 0 : m_selectedPlayerIndex + delta;
+    nextIndex = std::clamp(nextIndex, 0, static_cast<int>(m_playerItems.size()) - 1);
+    selectPlayerItem(static_cast<size_t>(nextIndex));
+}
+
+void SocialController::adjustQuantityBy(int delta) {
+    setQuantity(m_quantity + delta);
+}
+
+void SocialController::executeActiveTrade() {
+    if (m_merchantPaneActive) {
+        executeBuy();
+        return;
+    }
+
+    executeSell();
+}
+
+VoidLight::ResourceHandle SocialController::getGoldHandle() const {
+    auto player = mp_player.lock();
+    if (!player) {
+        return VoidLight::ResourceHandle{};
+    }
+    return player->getGoldHandle();
 }

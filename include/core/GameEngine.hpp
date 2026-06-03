@@ -203,16 +203,16 @@ public:
   int getWindowHeight() const noexcept { return m_windowHeight; }
 
   /**
-   * @brief Gets the logical rendering width used for UI positioning
-   * @return Logical rendering width in pixels
+   * @brief Gets the width in pixels (from SDL_GetWindowSizeInPixels)
+   * @return Width in pixels — drives swapchain, viewport, and UI space
    */
-  int getLogicalWidth() const noexcept { return m_logicalWidth; }
+  int getWidthInPixels() const noexcept { return m_widthInPixels; }
 
   /**
-   * @brief Gets the logical rendering height used for UI positioning
-   * @return Logical rendering height in pixels
+   * @brief Gets the height in pixels (from SDL_GetWindowSizeInPixels)
+   * @return Height in pixels — drives swapchain, viewport, and UI space
    */
-  int getLogicalHeight() const noexcept { return m_logicalHeight; }
+  int getHeightInPixels() const noexcept { return m_heightInPixels; }
 
   /**
    * @brief Sets the window size
@@ -232,13 +232,13 @@ public:
   }
 
   /**
-   * @brief Sets the logical rendering size
-   * @param width New logical width in pixels
-   * @param height New logical height in pixels
+   * @brief Sets the size in pixels (from SDL_GetWindowSizeInPixels)
+   * @param width New width in pixels
+   * @param height New height in pixels
    */
-  void setLogicalSize(int width, int height) {
-    m_logicalWidth = width;
-    m_logicalHeight = height;
+  void setSizeInPixels(int width, int height) {
+    m_widthInPixels = width;
+    m_heightInPixels = height;
   }
 
   /**
@@ -348,6 +348,12 @@ private:
   void refreshWindowMetrics(std::string_view reason);
 
   /**
+   * @brief Calculates the font DPI scale from current window metrics.
+   */
+  float calculateFontDPIScale(int logicalWidth, int logicalHeight,
+                              int pixelWidth, int pixelHeight) const;
+
+  /**
    * @brief Refreshes TimestepManager's view of the active display cadence.
    * @details Reads the window's current display refresh via SDL and pushes it
    *          into TimestepManager so VSync-paced frame deltas can be quantized
@@ -363,8 +369,8 @@ private:
   int m_windowHeight{0};
   int m_windowedWidth{0};   // Windowed mode width (set from window, for restoring from fullscreen)
   int m_windowedHeight{0};  // Windowed mode height (set from window, for restoring from fullscreen)
-  int m_logicalWidth{0};    // Logical rendering width (set from window size)
-  int m_logicalHeight{0};   // Logical rendering height (set from window size)
+  int m_widthInPixels{0};   // Width in pixels (SDL_GetWindowSizeInPixels)
+  int m_heightInPixels{0};  // Height in pixels (SDL_GetWindowSizeInPixels)
 
   // Cached manager references for zero-overhead performance
   // Step 2: Re-implementing manager caching with proper initialization order

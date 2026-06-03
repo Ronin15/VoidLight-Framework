@@ -10,7 +10,7 @@ The CollisionManager is a high-performance collision detection and response syst
 - **Singleton Pattern**: Ensures single instance with global access
 - **Hierarchical Spatial Hash**: Two-tier adaptive spatial hash system optimized for 10K+ bodies
 - **SOA Storage**: Structure-of-Arrays layout for cache-friendly collision processing
-- **Event-Driven**: Integrates with EventManager for collision notifications
+- **Explicit Event Channels**: Emits world-trigger and obstacle-change events; general non-projectile collision pairs stay on the collision hot path
 - **Batch Processing**: Optimized batch updates for AI entity kinematics
 - **Hybrid Threading**: Dual-path (single/multi-threaded) for both broadphase and narrowphase
 
@@ -153,7 +153,8 @@ enum class BodyType {
 
 Important runtime exception:
 - Small projectiles are detected as dynamic overlap bodies, but they do **not** use blocking position resolution.
-- Projectile contacts still produce `CollisionEvent`s, and projectile hit gameplay is resolved later by `ProjectileManager`.
+- Projectile contacts are delivered directly as `CollisionInfo` to the projectile hit sink registered by `ProjectileManager`.
+- Projectile damage is then emitted as a deferred `DamageEvent`; there is no collision-event object subscription API for this path.
 
 The collision system groups KINEMATIC + DYNAMIC as "movable" bodies for broadphase optimization, since both require collision detection against static geometry and each other.
 
@@ -222,18 +223,18 @@ CollisionManager queries WorkerBudgetManager for optimal batch configuration:
 
 ```cpp
 // Dispatcher in broadphaseSOA()
-auto& budgetMgr = VoidLight-Framework::WorkerBudgetManager::Instance();
+auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 size_t optimalWorkers = budgetMgr.getOptimalWorkers(
-    VoidLight-Framework::SystemType::Collision, movableIndices.size());
+    VoidLight::SystemType::Collision, movableIndices.size());
 
 auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-    VoidLight-Framework::SystemType::Collision,
+    VoidLight::SystemType::Collision,
     movableIndices.size(),
     optimalWorkers);
 
 // Adaptive threshold learns optimal cutoff based on measured throughput
 bool useThreading = batchCount > 1 &&
-    budgetMgr.shouldUseThreading(VoidLight-Framework::SystemType::Collision, movableIndices.size());
+    budgetMgr.shouldUseThreading(VoidLight::SystemType::Collision, movableIndices.size());
 
 if (!useThreading) {
     broadphaseSingleThreaded(indexPairs);
@@ -514,7 +515,7 @@ Zero-contention batch updates where each AI batch has its own buffer.
 // Create water trigger area
 EntityID waterTriggerId = CollisionManager::Instance().createTriggerArea(
     AABB(100.0f, 100.0f, 50.0f, 50.0f),
-    VoidLight-Framework::TriggerTag::Water,
+    VoidLight::TriggerTag::Water,
     CollisionLayer::Layer_Environment,
     CollisionLayer::Layer_Player | CollisionLayer::Layer_NPC
 );
@@ -522,7 +523,7 @@ EntityID waterTriggerId = CollisionManager::Instance().createTriggerArea(
 // Create trigger at specific coordinates
 EntityID triggerId = CollisionManager::Instance().createTriggerAreaAt(
     x, y, halfWidth, halfHeight,
-    VoidLight-Framework::TriggerTag::Portal,
+    VoidLight::TriggerTag::Portal,
     CollisionLayer::Layer_Trigger,
     CollisionLayer::Layer_Player
 );
@@ -660,14 +661,18 @@ for (const auto& entity : m_activeEntities) {
 CollisionManager::Instance().updateKinematicBatchSOA(kinematicUpdates);
 ```
 
-### Collision Event Handling
+### Event Integration
+
+Collision-to-event traffic is limited to explicit event channels such as world triggers and obstacle changes. Projectile gameplay uses the projectile hit sink instead:
+
 ```cpp
-EventManager::Instance().subscribe<CollisionEvent>(
-    [](const CollisionEvent& event) {
-        handleEntityCollision(event.entityA, event.entityB);
-    }
-);
+CollisionManager::Instance().setProjectileHitSink(
+    [](const CollisionInfo& info) {
+        ProjectileManager::Instance().handleProjectileCollision(info);
+    });
 ```
+
+General non-projectile collision pairs are not forwarded through `EventManager`. If a future system needs collision-derived behavior, add a narrow manager-owned sink or explicit event contract instead of restoring broad per-collision forwarding.
 
 ### AI Obstacle Avoidance
 ```cpp

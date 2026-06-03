@@ -35,6 +35,23 @@ BOOST_GLOBAL_FIXTURE(GlobalThreadSystemFixture);
 
 BOOST_AUTO_TEST_SUITE(WorldManagerEventIntegrationTests)
 
+namespace {
+
+void drainWorldLoadEvents()
+{
+    for (int i = 0; i < 100; ++i) {
+        EventManager::Instance().update();
+        if (!VoidLight::ThreadSystem::Instance().isBusy()) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    EventManager::Instance().drainAllDeferredEvents();
+}
+
+} // namespace
+
 // Verify WorldLoadedEvent payload matches WorldManager dimensions
 BOOST_AUTO_TEST_CASE(TestWorldLoadedEventPayload) {
     // ThreadSystem is initialized by global fixture
@@ -192,11 +209,21 @@ BOOST_AUTO_TEST_CASE(TestBasicWorldManagerEventIntegration) {
     WORLD_MANAGER_INFO("Basic WorldManager event integration test completed successfully");
 }
 
-BOOST_AUTO_TEST_CASE(TestSeasonChangeSubscriptionThroughSetup) {
+BOOST_AUTO_TEST_CASE(TestSeasonChangeSubscriptionThroughWorldLoad) {
     BOOST_REQUIRE(EventManager::Instance().init());
     BOOST_REQUIRE(WorldManager::Instance().init());
 
-    WorldManager::Instance().setupEventHandlers();
+    WorldGenerationConfig config{};
+    config.width = 5;
+    config.height = 5;
+    config.seed = 13579;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.3f;
+    config.mountainLevel = 0.7f;
+
+    BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(config));
+    drainWorldLoadEvents();
 
     BOOST_CHECK(WorldManager::Instance().getCurrentSeason() == Season::Spring);
 
@@ -216,7 +243,17 @@ BOOST_AUTO_TEST_CASE(TestSeasonSubscriptionRestoredAfterStateTransitionAndWorldL
     BOOST_REQUIRE(EventManager::Instance().init());
     BOOST_REQUIRE(WorldManager::Instance().init());
 
-    WorldManager::Instance().setupEventHandlers();
+    WorldGenerationConfig firstConfig{};
+    firstConfig.width = 5;
+    firstConfig.height = 5;
+    firstConfig.seed = 13579;
+    firstConfig.elevationFrequency = 0.1f;
+    firstConfig.humidityFrequency = 0.1f;
+    firstConfig.waterLevel = 0.3f;
+    firstConfig.mountainLevel = 0.7f;
+
+    BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(firstConfig));
+    drainWorldLoadEvents();
     BOOST_CHECK(WorldManager::Instance().getCurrentSeason() == Season::Spring);
 
     WorldManager::Instance().prepareForStateTransition();
@@ -232,6 +269,7 @@ BOOST_AUTO_TEST_CASE(TestSeasonSubscriptionRestoredAfterStateTransitionAndWorldL
     config.mountainLevel = 0.7f;
 
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(config));
+    drainWorldLoadEvents();
 
     auto seasonEvent = std::make_shared<SeasonChangedEvent>(
         Season::Summer, Season::Spring, "Summer");

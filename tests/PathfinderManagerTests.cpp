@@ -17,6 +17,27 @@
 
 using namespace VoidLight;
 
+namespace {
+
+template <typename Predicate>
+bool waitForPathfinder(PathfinderManager& manager,
+                       Predicate&& predicate,
+                       int maxPolls = 100,
+                       std::chrono::milliseconds pollInterval = std::chrono::milliseconds(10)) {
+    for (int i = 0; i < maxPolls; ++i) {
+        manager.update();
+        if (predicate()) {
+            return true;
+        }
+        std::this_thread::sleep_for(pollInterval);
+    }
+
+    manager.update();
+    return predicate();
+}
+
+} // namespace
+
 // Initialize ThreadSystem for async pathfinding in this test module
 struct PFThreadFixture {
     PFThreadFixture() {
@@ -89,15 +110,9 @@ BOOST_AUTO_TEST_CASE(TestAsyncPathfinding) {
     
     BOOST_CHECK(requestId > 0); // Valid request ID
     
-    // Update to process requests
-    manager.update(); // ~60 FPS
-    
-    // Give it some time to process (async operation)
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    manager.update();
-    
-    // The callback should have been called (even if path is empty due to no world)
-    // Note: This might not always be true in a real environment without proper world setup
+    BOOST_CHECK(waitForPathfinder(manager, [&callbackCalled] {
+        return callbackCalled;
+    }));
     
     manager.clean();
 }
@@ -239,10 +254,9 @@ BOOST_AUTO_TEST_CASE(TestNoInfiniteRetryLoop) {
     manager.requestPath(entityId, start, goal, PathfinderManager::Priority::High, callback);
     manager.requestPath(entityId, start, goal, PathfinderManager::Priority::High, callback);
     
-    for (int i = 0; i < 50 && callbackCount.load(std::memory_order_acquire) < 4; ++i) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    waitForPathfinder(manager, [&callbackCount] {
+        return callbackCount.load(std::memory_order_acquire) >= 4;
+    });
     
     BOOST_CHECK_EQUAL(callbackCount.load(std::memory_order_acquire), 4);
 
@@ -273,20 +287,18 @@ BOOST_AUTO_TEST_CASE(TestFailedRequestsDoNotPopulateCache) {
             firstCallbackCount.fetch_add(1, std::memory_order_release);
         });
     
-    for (int i = 0; i < 40 && firstCallbackCount.load(std::memory_order_acquire) == 0; ++i) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    waitForPathfinder(manager, [&firstCallbackCount] {
+        return firstCallbackCount.load(std::memory_order_acquire) > 0;
+    });
     
     manager.requestPath(entityId, start, goal, PathfinderManager::Priority::High,
         [&secondCallbackCount](EntityID, const std::vector<Vector2D>&) {
             secondCallbackCount.fetch_add(1, std::memory_order_release);
         });
     
-    for (int i = 0; i < 40 && secondCallbackCount.load(std::memory_order_acquire) == 0; ++i) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    waitForPathfinder(manager, [&secondCallbackCount] {
+        return secondCallbackCount.load(std::memory_order_acquire) > 0;
+    });
     
     BOOST_CHECK_EQUAL(firstCallbackCount.load(std::memory_order_acquire), 1);
     BOOST_CHECK_EQUAL(secondCallbackCount.load(std::memory_order_acquire), 1);
@@ -378,7 +390,10 @@ BOOST_FIXTURE_TEST_CASE(TestPathfinderCacheInvalidationOnCollisionChange, Pathfi
         [](EntityID, const std::vector<Vector2D>&){ /* no-op */ });
     
     // Let processing complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    const auto submittedStats = PathfinderManager::Instance().getStats();
+    waitForPathfinder(PathfinderManager::Instance(), [submittedStats] {
+        return PathfinderManager::Instance().getStats().totalRequests >= submittedStats.totalRequests + 2U;
+    });
     
     // Get initial stats
     auto initialStats = PathfinderManager::Instance().getStats();
@@ -402,7 +417,9 @@ BOOST_FIXTURE_TEST_CASE(TestPathfinderCacheInvalidationOnCollisionChange, Pathfi
             cacheInvalidationCount++; 
         });
     
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    waitForPathfinder(PathfinderManager::Instance(), [this] {
+        return cacheInvalidationCount.load(std::memory_order_acquire) > 0;
+    });
     
     // Verify the system is still functioning (no crashes from event handling)
     auto finalStats = PathfinderManager::Instance().getStats();
@@ -521,11 +538,9 @@ BOOST_AUTO_TEST_CASE(TestBurstRequestHandling) {
         );
     }
 
-    const int maxFrames = 40;
-    for (int frame = 0; frame < maxFrames && completedCount.load() < burstSize; ++frame) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
-    }
+    waitForPathfinder(manager, [&completedCount] {
+        return completedCount.load(std::memory_order_acquire) >= burstSize;
+    }, 120, std::chrono::milliseconds(10));
 
     BOOST_TEST_MESSAGE("Completed " << completedCount.load() << " / " << burstSize << " requests");
     BOOST_CHECK_EQUAL(completedCount.load(), burstSize);
@@ -563,10 +578,9 @@ BOOST_AUTO_TEST_CASE(TestDirectSubmissionHasNoInternalQueue) {
     BOOST_CHECK_EQUAL(manager.getQueueSize(), 0U);
     BOOST_CHECK(!manager.hasPendingWork());
 
-    for (int frame = 0; frame < 50 && completed.load() < testRequests; ++frame) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
-    }
+    waitForPathfinder(manager, [&completed] {
+        return completed.load(std::memory_order_acquire) >= testRequests;
+    }, 120, std::chrono::milliseconds(10));
 
     BOOST_TEST_MESSAGE("Completed " << completed.load() << " / " << testRequests << " requests");
     BOOST_CHECK_EQUAL(completed.load(), testRequests);
@@ -613,10 +627,9 @@ BOOST_AUTO_TEST_CASE(TestWorkerBudgetCoordination) {
         );
     }
 
-    for (int i = 0; i < 30 && completed.load() < batchWorkload; ++i) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    waitForPathfinder(manager, [&completed] {
+        return completed.load(std::memory_order_acquire) >= batchWorkload;
+    });
 
     BOOST_TEST_MESSAGE("Completed " << completed.load() << " / " << batchWorkload << " batch requests");
     BOOST_CHECK_EQUAL(completed.load(), batchWorkload);
@@ -647,14 +660,13 @@ BOOST_AUTO_TEST_CASE(TestRequestsRunWithoutFrameRateLimiting) {
         );
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    const size_t completedBeforeUpdate = completed.load(std::memory_order_acquire);
-    BOOST_CHECK_GT(completedBeforeUpdate, 0U);
+    BOOST_CHECK(waitForPathfinder(manager, [&completed] {
+        return completed.load(std::memory_order_acquire) > 0U;
+    }, 100, std::chrono::milliseconds(10)));
 
-    for (int i = 0; i < 30 && completed.load() < requestsSubmitted; ++i) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-    }
+    waitForPathfinder(manager, [&completed] {
+        return completed.load(std::memory_order_acquire) >= requestsSubmitted;
+    }, 120, std::chrono::milliseconds(10));
 
     BOOST_TEST_MESSAGE("Final: " << completed.load() << " / " << requestsSubmitted << " completed");
     BOOST_CHECK_EQUAL(completed.load(), requestsSubmitted);
@@ -687,8 +699,9 @@ BOOST_AUTO_TEST_CASE(TestPriorityStratification) {
     BOOST_CHECK_GT(requestId, 0);
 
     // Process
-    manager.update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    waitForPathfinder(manager, [&completed] {
+        return completed.load(std::memory_order_acquire) > 0;
+    });
 
     BOOST_CHECK_GE(completed.load(), 0); // Should process successfully
 
@@ -720,10 +733,9 @@ BOOST_AUTO_TEST_CASE(TestDirectSubmissionStatsRemainStableAcrossIdenticalFailedR
     BOOST_CHECK_EQUAL(manager.getQueueSize(), 0U);
     BOOST_CHECK(!manager.hasPendingWork());
 
-    for (int i = 0; i < 40 && callbackCount.load() < 3; ++i) {
-        manager.update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    waitForPathfinder(manager, [&callbackCount] {
+        return callbackCount.load(std::memory_order_acquire) >= 3;
+    });
 
     const auto stats = manager.getStats();
     BOOST_CHECK_EQUAL(callbackCount.load(), 3U);

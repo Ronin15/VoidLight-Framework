@@ -7,12 +7,12 @@
 The `ResourceTemplateManager` is a singleton responsible for registering, indexing, and instantiating resource templates (such as item, loot, or resource blueprints) in the game. It provides **high-performance resource handle-based lookups** at runtime, supports thread-safe operations, statistics tracking, and **JSON-based resource loading** for extensible content creation.
 
 **Important Architecture Note:** The system uses a **two-phase approach**:
-- **Data Load/Validation Phase**: Uses name-based lookups for JSON loading, validation, and tooling
+- **Data Load/Validation Phase**: Uses stable JSON IDs and name-based lookups for JSON loading, validation, and tooling
 - **Runtime Phase**: Uses ResourceHandle-based operations for optimal performance and cache-friendliness
 
 ## Key Features
 - **Resource Handle System**: Fast, cache-friendly lookups using 64-bit handles instead of strings
-- **Duplicate Name Detection**: Prevents resource name conflicts during data loading
+- **Duplicate ID and Name Detection**: Prevents resource conflicts during data loading
 - **Performance Optimized**: SoA (Structure of Arrays) data layout for frequently accessed properties
 - Singleton access pattern
 - Register and retrieve resource templates by ResourceHandle
@@ -27,7 +27,7 @@ The `ResourceTemplateManager` is a singleton responsible for registering, indexi
 
 ### ResourceHandle Overview
 ```cpp
-namespace VoidLight-Framework {
+namespace VoidLight {
     class ResourceHandle {
         // 32-bit ID + 16-bit generation for stale reference detection
         // Lightweight, cache-friendly, type-safe resource identification
@@ -70,7 +70,7 @@ bool registerResourceTemplate(const ResourcePtr& resource);
     // Registers a new resource template. Returns true on success.
     // Automatically detects duplicate names and rejects them.
 
-ResourcePtr getResourceTemplate(VoidLight-Framework::ResourceHandle handle) const;
+ResourcePtr getResourceTemplate(VoidLight::ResourceHandle handle) const;
     // Retrieves a resource template by handle, or nullptr if not found.
 
 std::vector<ResourcePtr> getResourcesByCategory(ResourceCategory category) const;
@@ -80,14 +80,14 @@ std::vector<ResourcePtr> getResourcesByType(ResourceType type) const;
     // Returns all templates of a given type.
 
 // Fast property access (cache-optimized)
-int getMaxStackSize(VoidLight-Framework::ResourceHandle handle) const;
-float getValue(VoidLight-Framework::ResourceHandle handle) const;
-ResourceCategory getCategory(VoidLight-Framework::ResourceHandle handle) const;
-ResourceType getType(VoidLight-Framework::ResourceHandle handle) const;
+int getMaxStackSize(VoidLight::ResourceHandle handle) const;
+float getValue(VoidLight::ResourceHandle handle) const;
+ResourceCategory getCategory(VoidLight::ResourceHandle handle) const;
+ResourceType getType(VoidLight::ResourceHandle handle) const;
 
 // Bulk operations for better performance
-std::vector<int> getMaxStackSizes(const std::vector<VoidLight-Framework::ResourceHandle>& handles) const;
-std::vector<float> getValues(const std::vector<VoidLight-Framework::ResourceHandle>& handles) const;
+std::vector<int> getMaxStackSizes(const std::vector<VoidLight::ResourceHandle>& handles) const;
+std::vector<float> getValues(const std::vector<VoidLight::ResourceHandle>& handles) const;
 ```
 
 ### Resource Template Management (Data Load/Validation - Name-based)
@@ -100,22 +100,22 @@ ResourcePtr getResourceById(const std::string& id) const;
     // Use ONLY during data loading, validation, or development tools
     // Returns resource template by JSON ID, or nullptr if not found.
 
-VoidLight-Framework::ResourceHandle getHandleByName(const std::string& name) const;
+VoidLight::ResourceHandle getHandleByName(const std::string& name) const;
     // Convert name to handle during initialization/validation phase.
 
-VoidLight-Framework::ResourceHandle getHandleById(const std::string& id) const;
+VoidLight::ResourceHandle getHandleById(const std::string& id) const;
     // Convert JSON ID to handle during initialization/validation phase.
 ```
 
 ### Handle Management
 ```cpp
-VoidLight-Framework::ResourceHandle generateHandle();
+VoidLight::ResourceHandle generateHandle();
     // Generates a new unique handle for resource creation.
 
-bool isValidHandle(VoidLight-Framework::ResourceHandle handle) const;
+bool isValidHandle(VoidLight::ResourceHandle handle) const;
     // Checks if a handle is valid and points to an existing resource.
 
-void releaseHandle(VoidLight-Framework::ResourceHandle handle);
+void releaseHandle(VoidLight::ResourceHandle handle);
     // Marks handle as freed for reuse (use with caution).
 ```
 
@@ -123,16 +123,16 @@ void releaseHandle(VoidLight-Framework::ResourceHandle handle);
 ```cpp
 bool loadResourcesFromJson(const std::string& filename);
     // Loads resources from a JSON file. Returns true if all resources loaded successfully.
-    // Automatically detects and rejects duplicate resource names.
+    // Automatically detects and rejects duplicate resource IDs and names.
 
 bool loadResourcesFromJsonString(const std::string& jsonString);
     // Loads resources from a JSON string. Returns true if all resources loaded successfully.
-    // Automatically detects and rejects duplicate resource names.
+    // Automatically detects and rejects duplicate resource IDs and names.
 ```
 
 ### Resource Creation
 ```cpp
-ResourcePtr createResource(VoidLight-Framework::ResourceHandle handle) const;
+ResourcePtr createResource(VoidLight::ResourceHandle handle) const;
     // Creates a new resource instance from a template by handle.
 ```
 
@@ -147,7 +147,7 @@ void resetStats();
 size_t getResourceTemplateCount() const;
     // Returns the number of registered templates.
 
-bool hasResourceTemplate(VoidLight-Framework::ResourceHandle handle) const;
+bool hasResourceTemplate(VoidLight::ResourceHandle handle) const;
     // Checks if a template exists.
 
 size_t getMemoryUsage() const;
@@ -166,13 +166,15 @@ Resources are defined in JSON files with the following structure:
     {
       "id": "unique_resource_id",
       "name": "Display Name",
-      "category": "Item|Material|Currency|GameResource",
-      "type": "Equipment|Consumable|QuestItem|CraftingComponent|RawResource|Gold|Gem|FactionToken|Energy|Mana|BuildingMaterial|Ammunition",
+      "category": "Item|Material|Currency",
+      "type": "Equipment|Consumable|QuestItem|Ammunition|CraftingComponent|RawResource|Gold|Gem|FactionToken|CraftingCurrency",
       "description": "Resource description",
       "value": 100.0,
       "maxStackSize": 1,
       "consumable": false,
-      "iconTextureId": "texture_id",
+      "textureId": "texture_id",
+      "worldTextureId": "world_texture_override",
+      "iconTextureId": "icon_texture_override",
       "properties": {
         // Type-specific properties (see below)
       }
@@ -181,24 +183,38 @@ Resources are defined in JSON files with the following structure:
 }
 ```
 
+`id` is the stable data identifier. If it is missing, the loader derives a
+deterministic ID from the display name during validation. Duplicate IDs are
+rejected across loaded catalogs. `textureId` supplies both world and icon
+texture identity unless `worldTextureId` or `iconTextureId` override it.
+Atlas coordinates are applied from `res/data/atlas.json` when a matching texture
+entry exists.
+
 ### Type-Specific Properties
 
 #### Equipment
 ```json
 "properties": {
-  "slot": "Weapon|Helmet|Chest|Legs|Boots|Gloves|Ring|Necklace",
+  "slot": "Weapon|Shield|Helmet|Chest|Legs|Boots|Gloves|Ring|Necklace",
   "attackBonus": 15,
   "defenseBonus": 5,
   "speedBonus": 0,
+  "handsRequired": 1,
+  "weaponMode": "melee|ranged",
+  "attackRange": 50,
+  "projectileSpeed": 0,
+  "ammoTypeRequired": "Arrow",
   "durability": 100,
   "maxDurability": 100
 }
 ```
 
+Equipment slots must match the current `EquipmentSlot` enum. Unknown or missing slot values are intentionally left as `COUNT` by resource creation and rejected by equip paths; they do not silently default to `Weapon`.
+
 #### Consumable
 ```json
 "properties": {
-  "effect": "HealHP|RestoreMP|BoostAttack|BoostDefense|BoostSpeed|Teleport",
+  "effect": "HealHP|RestoreMP|BoostAttack|BoostDefense|BoostSpeed|RestoreStamina|Teleport",
   "effectPower": 50,
   "effectDuration": 0
 }
@@ -214,7 +230,7 @@ Resources are defined in JSON files with the following structure:
 #### CraftingComponent
 ```json
 "properties": {
-  "componentType": "Metal|Wood|Leather|Fabric|Gem|Essence|Crystal",
+  "componentType": "Metal|Wood|Leather|Fabric|Gem|Essence|Crystal|Stone",
   "tier": 3,
   "purity": 0.8
 }
@@ -229,7 +245,14 @@ Resources are defined in JSON files with the following structure:
 }
 ```
 
-#### Currency (Gold/Gem/FactionToken)
+#### Ammunition
+```json
+"properties": {
+  "ammoType": "Arrow"
+}
+```
+
+#### Currency (Gold/Gem/FactionToken/CraftingCurrency)
 ```json
 "properties": {
   "exchangeRate": 100.0,
@@ -240,20 +263,6 @@ Resources are defined in JSON files with the following structure:
 }
 ```
 
-#### GameResource (Energy/Mana/BuildingMaterial/Ammunition)
-```json
-"properties": {
-  "regenerationRate": 1.5,
-  "maxEnergy": 200,                              // Energy only
-  "manaType": "Arcane|Divine|Nature|Dark",       // Mana only
-  "maxMana": 150,                                // Mana only
-  "materialType": "Wood|Stone|Metal|Crystal",    // BuildingMaterial only
-  "durability": 100,                             // BuildingMaterial only
-  "ammoType": "Arrow|Bolt|Bullet|ThrowingKnife|MagicMissile",  // Ammunition only
-  "damage": 25                                   // Ammunition only
-}
-```
-
 ### Loading Examples
 
 #### Programmatic Loading
@@ -261,8 +270,8 @@ Resources are defined in JSON files with the following structure:
 auto& rtm = ResourceTemplateManager::Instance();
 rtm.init();
 
-// Load from file
-bool success = rtm.loadResourcesFromJson("res/data/items.json");
+// init() loads the built-in catalogs. Load only custom catalogs explicitly.
+bool success = rtm.loadResourcesFromJson("res/data/custom_weapons.json");
 if (success) {
     std::cout << "All resources loaded successfully!" << std::endl;
 }
@@ -295,7 +304,7 @@ if (magicSwordTemplate) {
     std::cout << "Found: " << magicSwordTemplate->getName() << std::endl;
     
     // Convert to handle for runtime use
-    VoidLight-Framework::ResourceHandle swordHandle = magicSwordTemplate->getHandle();
+    VoidLight::ResourceHandle swordHandle = magicSwordTemplate->getHandle();
     
     // Check if it's an Equipment
     auto equipment = std::dynamic_pointer_cast<Equipment>(magicSwordTemplate);
@@ -305,7 +314,7 @@ if (magicSwordTemplate) {
 }
 
 // Phase 2: Runtime Operations (handle-based only)
-VoidLight-Framework::ResourceHandle swordHandle = rtm.getHandleByName("Magic Sword");
+VoidLight::ResourceHandle swordHandle = rtm.getHandleByName("Magic Sword");
 if (swordHandle.isValid()) {
     // Fast property access
     int stackSize = rtm.getMaxStackSize(swordHandle);
@@ -343,25 +352,23 @@ ResourceFactory::registerCreator("MyCustomType", [](const JsonValue& json) -> Re
 auto& rtm = ResourceTemplateManager::Instance();
 rtm.init();
 
-// Phase 1: Data Loading (name-based lookups allowed)
-rtm.loadResourcesFromJson("res/data/resources.json");
-
-// Convert names to handles during initialization
-VoidLight-Framework::ResourceHandle goldHandle = rtm.getHandleByName("Gold");
-VoidLight-Framework::ResourceHandle healthPotionHandle = rtm.getHandleByName("Health Potion");
-VoidLight-Framework::ResourceHandle swordHandle = rtm.getHandleByName("Magic Sword");
+// Built-in catalogs are already loaded. Convert stable resource IDs to handles
+// during initialization.
+VoidLight::ResourceHandle goldHandle = rtm.getHandleById("gold_coins");
+VoidLight::ResourceHandle healthPotionHandle = rtm.getHandleById("health_potion");
+VoidLight::ResourceHandle swordHandle = rtm.getHandleById("magic_sword");
 
 // Phase 2: Runtime Operations (handle-based only)
 class GameLogic {
 private:
-    VoidLight-Framework::ResourceHandle m_goldHandle;
-    VoidLight-Framework::ResourceHandle m_healthPotionHandle;
+    VoidLight::ResourceHandle m_goldHandle;
+    VoidLight::ResourceHandle m_healthPotionHandle;
     
 public:
     void init() {
         auto& rtm = ResourceTemplateManager::Instance();
-        m_goldHandle = rtm.getHandleByName("Gold");  // One-time lookup
-        m_healthPotionHandle = rtm.getHandleByName("Health Potion");
+        m_goldHandle = rtm.getHandleById("gold_coins");  // One-time lookup
+        m_healthPotionHandle = rtm.getHandleById("health_potion");
     }
     
     void gameplayOperation() {
@@ -375,7 +382,7 @@ public:
         }
         
         // Bulk operations for better performance
-        std::vector<VoidLight-Framework::ResourceHandle> handles = {m_goldHandle, m_healthPotionHandle};
+        std::vector<VoidLight::ResourceHandle> handles = {m_goldHandle, m_healthPotionHandle};
         auto values = rtm.getValues(handles);  // Single optimized call
         auto stackSizes = rtm.getMaxStackSizes(handles);
     }
@@ -389,7 +396,7 @@ void slowGameplayOperation() {
     auto& rtm = ResourceTemplateManager::Instance();
     
     // SLOW: String-based lookup every frame
-    ResourcePtr gold = rtm.getResourceByName("Gold");  // Hash lookup, string comparison
+    ResourcePtr gold = rtm.getResourceById("gold_coins");  // Hash lookup, string comparison
     if (gold) {
         float value = gold->getValue();  // Shared_ptr dereferencing
     }
@@ -416,7 +423,7 @@ All public methods are thread-safe via internal locking. For best performance, b
 ### Data Loading Best Practices
 - **Load JSON resources at game startup** after initializing the manager
 - Use unique, descriptive names for each resource template (enforced by duplicate detection)
-- Organize resources into logical JSON files (items.json, materials.json, etc.)
+- Organize resources into the focused catalogs: `items.json`, `weapons.json`, `equipment.json`, `materials.json`, and `currency.json`
 - **Validate JSON files** before deploying to catch syntax errors and duplicate names early
 - Use the `properties` object for type-specific data to keep the schema extensible
 
@@ -432,6 +439,8 @@ All public methods are thread-safe via internal locking. For best performance, b
 ## Error Handling
 - JSON loading methods return `false` if any resource fails to load
 - **Duplicate resource names are automatically detected and rejected** during loading
+- **Duplicate resource IDs are rejected before a catalog is registered**
+- Missing resource IDs are generated deterministically from the display name
 - Invalid resources are skipped but valid ones are still loaded  
 - Detailed error messages are logged for debugging
 - Unknown resource types fall back to base `Resource` class
@@ -460,7 +469,7 @@ All public methods are thread-safe via internal locking. For best performance, b
 - **Index locality**: Related data stored contiguously for better prefetching
 
 ## See Also
-- `Resource` (resource base class)
-- `ResourceFactory` (JSON deserialization)
-- `WorldResourceManager` (for tracking resource quantities)
-- `JsonReader` (JSON parsing utility)
+- [Resource](../entities/Resource.md)
+- [ResourceFactory](ResourceFactory.md)
+- [WorldResourceManager](WorldResourceManager.md)
+- [JsonReader](../utils/JsonReader.md)

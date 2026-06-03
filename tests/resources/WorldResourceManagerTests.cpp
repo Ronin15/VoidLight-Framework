@@ -43,7 +43,7 @@ getOrLoadResourceByName(ResourceTemplateManager *manager,
     return handle;
   }
 
-  manager->loadResourcesFromJson("res/data/resources.json");
+  manager->loadResourcesFromJson("res/data/materials.json");
 
   handle = findResourceByName(manager, name);
   return handle;
@@ -192,8 +192,40 @@ BOOST_AUTO_TEST_CASE(TestRemoveWorldClearsSpatialIndices) {
 
   BOOST_CHECK(worldManager->getActiveWorld().empty());
   BOOST_CHECK_EQUAL(worldManager->queryDroppedItemsInRadius(Vector2D(64.0f, 64.0f), 32.0f, indices), 0);
+  BOOST_CHECK(indices.empty());
+  indices.push_back(999);
   BOOST_CHECK_EQUAL(worldManager->queryHarvestablesInRadius(Vector2D(96.0f, 64.0f), 32.0f, indices), 0);
+  BOOST_CHECK(indices.empty());
+  indices.push_back(999);
   BOOST_CHECK_EQUAL(worldManager->queryContainersInRadius(Vector2D(128.0f, 64.0f), 32.0f, indices), 0);
+  BOOST_CHECK(indices.empty());
+}
+
+BOOST_AUTO_TEST_CASE(TestDestroyContainerUnregistersInventory) {
+  const std::string worldId = "container_inventory_cleanup_world";
+  BOOST_REQUIRE(worldManager->createWorld(worldId));
+  worldManager->setActiveWorld(worldId);
+
+  EntityHandle container = entityDataManager->createContainer(
+      Vector2D(128.0f, 64.0f), ContainerType::Chest, 8, 0, worldId);
+  BOOST_REQUIRE(container.isValid());
+
+  std::vector<size_t> containerIndices;
+  BOOST_REQUIRE_EQUAL(
+      worldManager->queryContainersInRadius(Vector2D(128.0f, 64.0f), 32.0f, containerIndices),
+      1);
+  const size_t staticIndex = containerIndices.front();
+  BOOST_REQUIRE_NE(staticIndex, SIZE_MAX);
+  const auto& hot = entityDataManager->getStaticHotDataByIndex(staticIndex);
+  const uint32_t inventoryIndex =
+      entityDataManager->getContainerData(hot.typeLocalIndex).inventoryIndex;
+  BOOST_REQUIRE_NE(inventoryIndex, INVALID_INVENTORY_INDEX);
+  BOOST_CHECK_EQUAL(worldManager->getInventoryCount(worldId), 1);
+
+  entityDataManager->destroyEntity(container);
+
+  BOOST_CHECK_EQUAL(worldManager->getInventoryCount(worldId), 0);
+  BOOST_CHECK(!entityDataManager->isValidInventoryIndex(inventoryIndex));
 }
 
 //==============================================================================
@@ -571,12 +603,9 @@ BOOST_AUTO_TEST_CASE(TestConcurrentInventoryOperations) {
   BOOST_CHECK(successfulAdds.load() > 0);
   BOOST_CHECK_EQUAL(successfulQueries.load(), NUM_THREADS * OPERATIONS_PER_THREAD);
 
-  // Verify final state is consistent
-  // Note: Due to potential race conditions in concurrent access, we allow some tolerance
-  // The important thing is that the inventory doesn't corrupt and the total is reasonable
+  // Verify supported concurrent inventory adds preserve every successful mutation.
   auto finalQty = worldManager->queryInventoryTotal(worldId, goldHandle);
-  BOOST_CHECK_GE(finalQty, successfulAdds.load() * 95 / 100);  // Allow up to 5% loss
-  BOOST_CHECK_LE(finalQty, successfulAdds.load());
+  BOOST_CHECK_EQUAL(finalQty, successfulAdds.load());
 
   // Cleanup
   entityDataManager->destroyInventory(invIndex);

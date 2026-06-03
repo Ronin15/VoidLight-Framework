@@ -1,4 +1,4 @@
-# clang-tidy Configuration for SDL3_VoidLight-Framework
+# clang-tidy Configuration for VoidLight-Framework
 
 This directory contains clang-tidy configuration for comprehensive static analysis.
 clang-tidy uses the Clang compiler frontend for accurate cross-translation-unit analysis.
@@ -20,11 +20,14 @@ echo 'export PATH="/opt/homebrew/opt/llvm/bin:$PATH"' >> ~/.zshrc
 
 ### Running Analysis
 
-#### Focused Analysis (Changed Files Only) - Recommended for Development
+#### Focused Analysis (Project `src/` Files) - Recommended for Development
 ```bash
 cd tests/clang-tidy
 ./clang_tidy_focused.sh
 ```
+
+The focused script filters the compile database to first-party project files under
+`src/`. It is not a git-diff changed-file runner.
 
 #### Full Analysis (All Source Files) - Comprehensive but Slower
 ```bash
@@ -32,9 +35,9 @@ cd tests/clang-tidy
 ./run_clang_tidy.sh
 ```
 
-#### Via test_scripts Wrapper
+#### Via repository root
 ```bash
-./tests/test_scripts/run_clang_tidy.sh
+./tests/clang-tidy/run_clang_tidy.sh
 ```
 
 ## Configuration
@@ -43,7 +46,7 @@ cd tests/clang-tidy
 Main configuration file with:
 - Enabled check categories (bugprone, performance, modernize, etc.)
 - Disabled checks that conflict with project style
-- Naming conventions matching CLAUDE.md standards
+- Naming conventions matching `AGENTS.md` standards
 
 ### Check Categories
 | Category | Purpose |
@@ -67,7 +70,7 @@ Main configuration file with:
 | `bugprone-easily-swappable-parameters` | Too many false positives |
 
 ### Naming Convention Enforcement
-Configured to match CLAUDE.md standards:
+Configured to match `AGENTS.md` standards:
 - **Classes/Structs/Enums**: `CamelCase`
 - **Functions/Methods**: `camelBack`
 - **Variables/Parameters**: `camelBack`

@@ -1,0 +1,4 @@
+interface:
+  display_name: "VoidLight Systems Reviewer"
+  short_description: "Review system coherency and production risk"
+  default_prompt: "Use $voidlight-systems-reviewer to review this C++20 game engine change for system coherency, lifecycle completeness, integration risks, and production readiness."

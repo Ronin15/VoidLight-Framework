@@ -92,6 +92,21 @@ void GameStateManager::changeState(GameStateId stateId) {
   pushState(stateId);
 }
 
+void GameStateManager::changeStateClearingStack(GameStateId stateId) {
+  if (!m_activeStates.empty()) {
+    // Suppress profiler hitch detection during state transition
+    VoidLight::FrameProfiler::Instance().suppressFrames(5);
+  }
+
+  while (!m_activeStates.empty()) {
+    auto currentState = m_activeStates.back();
+    currentState->exit();
+    m_activeStates.pop_back();
+  }
+
+  pushState(stateId);
+}
+
 void GameStateManager::update(float deltaTime) {
   m_lastDeltaTime = deltaTime; // Store deltaTime for render
 
@@ -164,10 +179,11 @@ void GameStateManager::removeState(GameStateId stateId) {
 }
 
 void GameStateManager::clearAllStates() {
-  // Exit all active states
-  for (const auto &state : m_activeStates) {
-    state->exit();
+  // Exit active states from top to bottom without resuming intermediate states.
+  while (!m_activeStates.empty()) {
+    auto currentState = m_activeStates.back();
+    currentState->exit();
+    m_activeStates.pop_back();
   }
-  m_activeStates.clear();
   m_registeredStates.clear();
 }

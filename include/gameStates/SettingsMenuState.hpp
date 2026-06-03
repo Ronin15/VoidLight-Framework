@@ -7,7 +7,12 @@
 #define SETTINGS_MENU_STATE_HPP
 
 #include "gameStates/GameState.hpp"
+#include "managers/InputManager.hpp"
+
+#include <cstddef>
 #include <string>
+#include <string_view>
+#include <vector>
 
 /**
  * @brief Settings menu state for editing game settings
@@ -61,9 +66,14 @@ private:
     enum class SettingsTab {
         Graphics,
         Audio,
-        Gameplay
+        Gameplay,
+        Controls
     };
     SettingsTab m_currentTab = SettingsTab::Graphics;
+
+    // Track the command whose binding label we need to refresh after capture
+    InputManager::Command m_pendingRefreshCommand{InputManager::Command::COUNT};
+    InputManager::BindingSnapshot m_bindingSnapshot{};
 
     /**
      * @brief Load current settings from SettingsManager into temp storage
@@ -97,6 +107,16 @@ private:
     void createGameplayUI();
 
     /**
+     * @brief Create controls (key-binding) settings UI
+     */
+    void createControlsUI();
+
+    /**
+     * @brief Refresh the button labels for a single command row on the Controls tab
+     */
+    void refreshBindingLabels(InputManager::Command c);
+
+    /**
      * @brief Switch to a different settings tab
      */
     void switchTab(SettingsTab tab);
@@ -110,6 +130,26 @@ private:
      * @brief Create common buttons (Apply, Cancel, Back)
      */
     void createActionButtons();
+
+    // Returns the stable UI component ID for a binding button
+    static std::string bindingButtonId(InputManager::Command c,
+                                       InputManager::DeviceCategory cat);
+
+    // Keyboard/gamepad navigation — the focus ring is rebuilt per-tab in
+    // rebuildNavOrder() so body controls (checkboxes, sliders, binding rows)
+    // are reachable via MenuUp/MenuDown. Sliders accept MenuLeft/MenuRight.
+    //
+    // m_navBacking owns the Controls-tab binding-button IDs that are generated
+    // dynamically (bindingButtonId returns a std::string). m_navOrder holds
+    // string_views into either string literals (static tabs/apply/back IDs) or
+    // into m_navBacking's entries. Rebuilt atomically on tab switch.
+    std::vector<std::string> m_navBacking{};
+    std::vector<std::string_view> m_navOrder{};
+    size_t m_selectedIndex{0};
+    void rebuildNavOrder();
+    // Reads MenuLeft/MenuRight when the selected component is a slider and
+    // nudges its value by the given delta fraction of the slider's range.
+    void handleSliderAdjust();
 };
 
 #endif  // SETTINGS_MENU_STATE_HPP

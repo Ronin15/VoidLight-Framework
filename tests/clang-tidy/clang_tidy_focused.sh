@@ -1,5 +1,5 @@
 #!/bin/bash
-# Focused clang-tidy analysis for SDL3_VoidLight-Framework
+# Focused clang-tidy analysis for VoidLight-Framework
 # Shows only important safety and bug issues
 
 # Don't exit on error - clang-tidy returns non-zero when it finds issues
@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-echo -e "${BLUE}=== SDL3 VoidLight-Framework - clang-tidy Analysis ===${NC}"
+echo -e "${BLUE}=== VoidLight-Framework - clang-tidy Analysis ===${NC}"
 echo ""
 
 # Check if clang-tidy is available

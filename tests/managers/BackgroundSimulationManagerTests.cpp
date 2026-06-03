@@ -6,12 +6,15 @@
 #define BOOST_TEST_MODULE BackgroundSimulationManagerTests
 #include <boost/test/unit_test.hpp>
 
+#include "core/ThreadSystem.hpp"
+#include "core/WorkerBudget.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "entities/Entity.hpp"  // For AnimationConfig
 #include "entities/EntityHandle.hpp"
 #include "utils/Vector2D.hpp"
 #include <cmath>
+#include <stdexcept>
 
 // Test tolerance for floating-point comparisons
 constexpr float EPSILON = 0.001f;
@@ -25,24 +28,54 @@ bool approxEqual(float a, float b, float epsilon = EPSILON) {
 // Test Fixture
 // ============================================================================
 
+struct BackgroundSimThreadFixture {
+    BackgroundSimThreadFixture() {
+        if (!VoidLight::ThreadSystem::Instance().init()) {
+            throw std::runtime_error("ThreadSystem::init() failed");
+        }
+    }
+
+    ~BackgroundSimThreadFixture() {
+        VoidLight::ThreadSystem::Instance().clean();
+    }
+};
+
+BOOST_GLOBAL_FIXTURE(BackgroundSimThreadFixture);
+
 class BackgroundSimManagerTestFixture {
 public:
     BackgroundSimManagerTestFixture() {
+        BOOST_REQUIRE(VoidLight::ThreadSystem::Exists());
+        VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
+
         // Initialize EntityDataManager first (dependency)
         edm = &EntityDataManager::Instance();
         BOOST_REQUIRE(edm->init());
 
         // Then initialize BackgroundSimulationManager
         bgsm = &BackgroundSimulationManager::Instance();
-        bgsm->init();
+        BOOST_REQUIRE(bgsm->init());
     }
 
     ~BackgroundSimManagerTestFixture() {
         bgsm->clean();
         edm->clean();
+        VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
     }
 
 protected:
+    void primeBackgroundThreadingDecision(size_t workloadSize) {
+        auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+        budgetMgr.prepareForStateTransition();
+        for (int sample = 0; sample < 10; ++sample) {
+            budgetMgr.reportExecution(
+                VoidLight::SystemType::BackgroundSim, workloadSize, false, 1, 5.0);
+        }
+        BOOST_REQUIRE(
+            budgetMgr.shouldUseThreading(
+                VoidLight::SystemType::BackgroundSim, workloadSize).shouldThread);
+    }
+
     EntityDataManager* edm;
     BackgroundSimulationManager* bgsm;
 };
@@ -664,6 +697,8 @@ BOOST_AUTO_TEST_CASE(TestManyBackgroundEntities) {
 
     // First update to trigger tier recalc and set hasNonActiveEntities flag
     bgsm->update(Vector2D(0.0f, 0.0f), 0.0f);
+    BOOST_REQUIRE_EQUAL(edm->getBackgroundIndices().size(), handles.size());
+    primeBackgroundThreadingDecision(handles.size());
     bgsm->resetPerfStats();  // Reset again after tier update
 
     // Process - 50 updates of 100ms = 5000ms = should trigger 50 updates at 10Hz
@@ -673,6 +708,8 @@ BOOST_AUTO_TEST_CASE(TestManyBackgroundEntities) {
 
     const auto& stats = bgsm->getPerfStats();
     BOOST_CHECK(stats.totalUpdates > 0);
+    BOOST_CHECK(stats.lastWasThreaded);
+    BOOST_CHECK_GT(stats.lastBatchCount, 1u);
 
     // Clean up
     for (const auto& handle : handles) {

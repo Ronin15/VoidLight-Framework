@@ -8,6 +8,7 @@
 #include "utils/ResourcePath.hpp"
 #include "utils/FrameProfiler.hpp"
 #include <SDL3/SDL.h>
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <format>
@@ -251,7 +252,7 @@ void writeUISprites(VoidLight::GPUVertexPool& pool,
         return;
     }
 
-    const uint32_t maxQuads = static_cast<uint32_t>(pool.getMaxVertices() / 4);
+    const uint32_t maxQuads = static_cast<uint32_t>(pool.getMaxVertices() / 6);
     quadCount = std::min(quadCount, maxQuads);
     const float columns = 30.0f;
     const float quadSize = 18.0f;
@@ -265,12 +266,16 @@ void writeUISprites(VoidLight::GPUVertexPool& pool,
             break;
         }
 
+        const float top = height - y;
+        const float bottom = top - quadSize;
         const uint8_t a = static_cast<uint8_t>(128 + (i % 128));
-        vertices[offset + 0] = {x,            y,            0.0f, 0.0f, 255, 255, 255, a};
-        vertices[offset + 1] = {x + quadSize, y,            1.0f, 0.0f, 255, 255, 255, a};
-        vertices[offset + 2] = {x + quadSize, y + quadSize, 1.0f, 1.0f, 255, 255, 255, a};
-        vertices[offset + 3] = {x,            y + quadSize, 0.0f, 1.0f, 255, 255, 255, a};
-        offset += 4;
+        vertices[offset + 0] = {x,            top,    0.0f, 0.0f, 255, 255, 255, a};
+        vertices[offset + 1] = {x + quadSize, top,    1.0f, 0.0f, 255, 255, 255, a};
+        vertices[offset + 2] = {x + quadSize, bottom, 1.0f, 1.0f, 255, 255, 255, a};
+        vertices[offset + 3] = {x + quadSize, bottom, 1.0f, 1.0f, 255, 255, 255, a};
+        vertices[offset + 4] = {x,            bottom, 0.0f, 1.0f, 255, 255, 255, a};
+        vertices[offset + 5] = {x,            top,    0.0f, 0.0f, 255, 255, 255, a};
+        offset += 6;
     }
 
     pool.setWrittenVertexCount(offset);
@@ -289,32 +294,14 @@ void renderUISprites(VoidLight::GPURenderer& renderer,
         return;
     }
 
-    float orthoMatrix[16];
-    VoidLight::GPURenderer::createOrthoMatrix(
-        0.0f, static_cast<float>(renderer.getViewportWidth()),
-        static_cast<float>(renderer.getViewportHeight()), 0.0f,
-        orthoMatrix);
-
-    renderer.pushViewProjection(pass, orthoMatrix);
-    SDL_BindGPUGraphicsPipeline(pass, renderer.getUISpritePipeline());
-
-    SDL_GPUTextureSamplerBinding texSampler{};
-    texSampler.texture = atlasData.texture->get();
-    texSampler.sampler = renderer.getLinearSampler();
-    SDL_BindGPUFragmentSamplers(pass, 0, &texSampler, 1);
-
-    SDL_GPUBufferBinding vertexBinding{};
-    vertexBinding.buffer = pool.getGPUBuffer();
-    vertexBinding.offset = 0;
-    SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
-
-    SDL_GPUBufferBinding indexBinding{};
-    indexBinding.buffer = renderer.getSpriteBatch().getIndexBuffer();
-    indexBinding.offset = 0;
-    SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-
-    const uint32_t indexCount = static_cast<uint32_t>((vertexCount / 4) * 6);
-    SDL_DrawGPUIndexedPrimitives(pass, indexCount, 1, 0, 0, 0);
+    const std::array imageBatches{
+        VoidLight::UITextureDrawBatch{
+            .texture = atlasData.texture->get(),
+            .vertexOffset = 0,
+            .vertexCount = static_cast<uint32_t>(vertexCount)
+        }
+    };
+    renderer.renderUIBatches(pass, 0, imageBatches, {});
 }
 
 } // namespace

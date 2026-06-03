@@ -8,6 +8,7 @@
 #include "managers/EntityDataManager.hpp"
 #include "gpu/SpriteBatch.hpp"
 #include "utils/GPUSceneRecorder.hpp"
+#include <cmath>
 
 void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx)
 {
@@ -68,10 +69,27 @@ void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx
             alphaByte = static_cast<uint8_t>(255.0f * fadeRatio);
         }
 
+        // Compute rotation angle from velocity (or stored angle for embedded)
+        float angle = 0.0f;
+        if (projectile.isEmbedded())
+        {
+            angle = projectile.embeddedAngle;
+        }
+        else
+        {
+            float vx = hot.transform.velocity.getX();
+            float vy = hot.transform.velocity.getY();
+            if (vx != 0.0f || vy != 0.0f)
+            {
+                angle = std::atan2(vy, vx);
+            }
+        }
+
         // Solid green placeholder: sample atlas center (guaranteed opaque in packed atlas)
         // using degenerate UV (single texel) so tint dominates the output color
-        ctx.spriteBatch->drawUV(0.5f, 0.5f, 0.5f, 0.5f,
-                                dstX, dstY, PROJECTILE_WIDTH, PROJECTILE_HEIGHT,
-                                0, 255, 0, alphaByte);
+        ctx.spriteBatch->drawUVRotated(0.5f, 0.5f, 0.5f, 0.5f,
+                                       dstX, dstY, PROJECTILE_WIDTH, PROJECTILE_HEIGHT,
+                                       angle,
+                                       0, 255, 0, alphaByte);
     }
 }

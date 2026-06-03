@@ -10,7 +10,6 @@
 #include "entities/EntityStateManager.hpp"
 #include "utils/ResourceHandle.hpp"
 #include <cstdint>
-#include <unordered_map>
 
 namespace VoidLight {
 class Camera;
@@ -63,7 +62,7 @@ public:
   void playAnimation(const std::string& animName) override;
 
   // Movement speed accessor
-  float getMovementSpeed() const { return m_movementSpeed; }
+  float getMovementSpeed() const;
 
   // Inventory management - uses EDM inventory directly
   [[nodiscard]] uint32_t getInventoryIndex() const { return m_inventoryIndex; }
@@ -127,6 +126,9 @@ public:
   bool removeGold(int amount);
   [[nodiscard]] bool hasGold(int amount) const;
 
+  // Cached gold resource handle — avoids repeated ResourceTemplateManager lookups
+  [[nodiscard]] VoidLight::ResourceHandle getGoldHandle() const noexcept { return m_goldHandle; }
+
 private:
   void handleMovementInput(float deltaTime);
   void handleStateTransitions();
@@ -144,10 +146,6 @@ private:
   // Note: Animation timing uses m_animationAccumulator inherited from Entity
   float m_movementSpeed{120.0f};      // Movement speed in pixels per second 120 run (2 px/frame at 60 FPS running speed)
   // m_animationMap and m_animationLoops inherited from Entity
-
-  // Equipment slots - store handles instead of item IDs
-  std::unordered_map<std::string, VoidLight::ResourceHandle>
-      m_equippedItems; // slot -> itemHandle
 
   // PERFORMANCE: Cached world bounds to avoid WorldManager::Instance() call every frame
   // Refreshed automatically when bounds are invalid or world version changes

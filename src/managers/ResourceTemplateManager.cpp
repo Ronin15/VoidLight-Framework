@@ -9,11 +9,42 @@
 #include "utils/JsonReader.hpp"
 #include "utils/ResourcePath.hpp"
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <format>
+#include <string_view>
+#include <unordered_set>
 
 using VoidLight::JsonReader;
 using VoidLight::JsonValue;
 using VoidLight::ResourceFactory;
+
+namespace {
+
+constexpr std::string_view RESOURCE_ATLAS_TEXTURE_ID = "atlas";
+constexpr std::string_view FALLBACK_RESOURCE_TEXTURE_ID = "default";
+
+std::string normalizeResourceId(std::string_view source) {
+  std::string id;
+  id.reserve(source.size());
+
+  bool needsSeparator = false;
+  for (const unsigned char ch : source) {
+    if (std::isalnum(ch) != 0) {
+      if (needsSeparator && !id.empty()) {
+        id.push_back('_');
+      }
+      id.push_back(static_cast<char>(std::tolower(ch)));
+      needsSeparator = false;
+    } else {
+      needsSeparator = !id.empty();
+    }
+  }
+
+  return id;
+}
+
+} // namespace
 
 ResourceTemplateManager &ResourceTemplateManager::Instance() {
   static ResourceTemplateManager instance;
@@ -43,6 +74,12 @@ bool ResourceTemplateManager::init() {
     m_resourceTemplates.clear();
     m_categoryIndex.clear();
     m_typeIndex.clear();
+    m_maxStackSizes.clear();
+    m_values.clear();
+    m_categories.clear();
+    m_types.clear();
+    m_nameIndex.clear();
+    m_idIndex.clear();
 
     // PERFORMANCE OPTIMIZATION: Reserve capacity to avoid hashtable rehashing
     const size_t expectedResourceCount = 100; // Adjust based on typical usage
@@ -67,8 +104,19 @@ bool ResourceTemplateManager::init() {
     // Initialize ResourceFactory
     ResourceFactory::initialize();
 
-    // Create default resources
-    createDefaultResources();
+    if (!createDefaultResources()) {
+      RESOURCE_ERROR("ResourceTemplateManager::init - Failed to load default resource catalogs");
+      m_resourceTemplates.clear();
+      m_categoryIndex.clear();
+      m_typeIndex.clear();
+      m_maxStackSizes.clear();
+      m_values.clear();
+      m_categories.clear();
+      m_types.clear();
+      m_nameIndex.clear();
+      m_idIndex.clear();
+      return false;
+    }
 
     m_initialized.store(true, std::memory_order_release);
     m_isShutdown = false; // Reset shutdown flag on successful init
@@ -409,6 +457,40 @@ ResourceTemplateManager::getResourceById(const std::string &id) const {
   return nullptr;
 }
 
+TextureSource ResourceTemplateManager::getIconTextureSource(
+    VoidLight::ResourceHandle handle) const {
+  std::shared_lock<std::shared_mutex> lock(m_resourceMutex);
+
+  auto resourceIt = m_resourceTemplates.find(handle);
+  if (resourceIt == m_resourceTemplates.end() || !resourceIt->second) {
+    return {};
+  }
+
+  const ResourcePtr &resource = resourceIt->second;
+  if (resource->getAtlasW() > 0 && resource->getAtlasH() > 0) {
+    return TextureSource{
+        std::string(RESOURCE_ATLAS_TEXTURE_ID),
+        resource->getAtlasX(),
+        resource->getAtlasY(),
+        resource->getAtlasW(),
+        resource->getAtlasH(),
+        true};
+  }
+
+  const std::string &iconTextureId = !resource->getIconTextureId().empty()
+      ? resource->getIconTextureId()
+      : resource->getWorldTextureId();
+
+  return TextureSource{
+      iconTextureId.empty() ? std::string(FALLBACK_RESOURCE_TEXTURE_ID)
+                            : iconTextureId,
+      0,
+      0,
+      0,
+      0,
+      false};
+}
+
 VoidLight::ResourceHandle
 ResourceTemplateManager::getHandleByName(const std::string &name) const {
   std::shared_lock<std::shared_mutex> lock(m_resourceMutex);
@@ -481,7 +563,7 @@ bool ResourceTemplateManager::loadResourcesFromJsonString(
     return false;
   }
 
-  const JsonValue &root = reader.getRoot();
+  JsonValue root = reader.getRoot();
 
   if (!root.isObject()) {
     RESOURCE_ERROR("ResourceTemplateManager::loadResourcesFromJsonString - "
@@ -496,7 +578,58 @@ bool ResourceTemplateManager::loadResourcesFromJsonString(
     return false;
   }
 
-  const JsonValue &resourcesArray = root["resources"];
+  JsonValue &resourcesArray = root["resources"];
+  std::unordered_set<std::string> batchIds;
+  batchIds.reserve(resourcesArray.size());
+
+  for (size_t i = 0; i < resourcesArray.size(); ++i) {
+    JsonValue &resourceJson = resourcesArray[i];
+    if (!resourceJson.isObject()) {
+      RESOURCE_ERROR(std::format(
+          "ResourceTemplateManager::loadResourcesFromJsonString - "
+          "Resource at index {} is not an object", i));
+      return false;
+    }
+    if (!resourceJson.hasKey("name") || !resourceJson["name"].isString()) {
+      RESOURCE_ERROR(std::format(
+          "ResourceTemplateManager::loadResourcesFromJsonString - "
+          "Resource at index {} missing or invalid 'name' field", i));
+      return false;
+    }
+    if (resourceJson.hasKey("id") && !resourceJson["id"].isString()) {
+      RESOURCE_ERROR(std::format(
+          "ResourceTemplateManager::loadResourcesFromJsonString - "
+          "Resource at index {} has non-string 'id' field", i));
+      return false;
+    }
+
+    const std::string explicitId =
+        resourceJson.hasKey("id") ? resourceJson["id"].asString() : "";
+    const std::string idSource =
+        explicitId.empty() ? resourceJson["name"].asString() : explicitId;
+    const std::string resolvedId = normalizeResourceId(idSource);
+    if (resolvedId.empty()) {
+      RESOURCE_ERROR(std::format(
+          "ResourceTemplateManager::loadResourcesFromJsonString - "
+          "Resource at index {} has no usable ID source", i));
+      return false;
+    }
+    if (!batchIds.insert(resolvedId).second) {
+      RESOURCE_ERROR(std::format(
+          "ResourceTemplateManager::loadResourcesFromJsonString - "
+          "Duplicate resource id '{}' in current catalog", resolvedId));
+      return false;
+    }
+    if (m_idIndex.find(resolvedId) != m_idIndex.end()) {
+      RESOURCE_ERROR(std::format(
+          "ResourceTemplateManager::loadResourcesFromJsonString - "
+          "Duplicate resource id '{}' already registered", resolvedId));
+      return false;
+    }
+
+    resourceJson["id"] = JsonValue(resolvedId);
+  }
+
   size_t loadedCount = 0;
   size_t failedCount = 0;
 
@@ -685,19 +818,32 @@ bool ResourceTemplateManager::checkForDuplicateName(
   return false;
 }
 
-void ResourceTemplateManager::createDefaultResources() {
+bool ResourceTemplateManager::createDefaultResources() {
   RESOURCE_INFO(
       "ResourceTemplateManager::createDefaultResources - Creating default "
       "resource templates");
 
   try {
-    // Load resources from unified JSON file
-    const std::string resourcesPath = VoidLight::ResourcePath::resolve("res/data/resources.json");
-    bool resourcesLoaded = loadResourcesFromJson(resourcesPath);
+    // Load resource catalogs before atlas mapping so all entries share one
+    // texture-coordinate pass.
+    constexpr std::array<std::string_view, 5> resourceCatalogs{
+        "items.json", "weapons.json", "equipment.json", "materials.json",
+        "currency.json"};
+    bool allCatalogsLoaded = true;
+    for (std::string_view catalog : resourceCatalogs) {
+      const std::string catalogPath = VoidLight::ResourcePath::resolve(
+          std::format("res/data/{}", catalog));
+      const bool catalogLoaded = loadResourcesFromJson(catalogPath);
+      allCatalogsLoaded = allCatalogsLoaded && catalogLoaded;
 
-    RESOURCE_WARN_IF(!resourcesLoaded,
-        "ResourceTemplateManager::createDefaultResources - "
-        "Failed to load resources.json");
+      RESOURCE_WARN_IF(!catalogLoaded,
+          std::format("ResourceTemplateManager::createDefaultResources - "
+                      "Failed to load {}", catalog));
+    }
+
+    if (!allCatalogsLoaded) {
+      return false;
+    }
 
     // Apply atlas coordinates from atlas.json (following WorldManager pattern)
     JsonReader atlasReader;
@@ -730,10 +876,12 @@ void ResourceTemplateManager::createDefaultResources() {
 
     RESOURCE_INFO("ResourceTemplateManager::createDefaultResources - Default "
                   "resources loaded from JSON files");
+    return true;
   } catch (const std::exception &ex) {
     RESOURCE_ERROR(
         "ResourceTemplateManager::createDefaultResources - Exception: " +
         std::string(ex.what()));
+    return false;
   }
 }
 

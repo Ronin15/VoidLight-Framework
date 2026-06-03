@@ -509,9 +509,9 @@ BOOST_AUTO_TEST_SUITE(ConfigValidationTests)
 
 BOOST_AUTO_TEST_CASE(TestValidConfigAccepted) {
     Camera::Config config;
-    config.followSpeed = 5.0f;
+    config.followLag = 0.25f;
     config.deadZoneRadius = 32.0f;
-    config.smoothingFactor = 0.85f;
+    config.maxCatchupDistance = 800.0f;
     config.clampToWorldBounds = true;
     config.zoomLevels = {1.0f, 2.0f, 3.0f};
     config.defaultZoomLevel = 0;
@@ -520,24 +520,31 @@ BOOST_AUTO_TEST_CASE(TestValidConfigAccepted) {
 
     Camera camera(config);
     auto retrievedConfig = camera.getConfig();
-    BOOST_CHECK(approxEqual(retrievedConfig.followSpeed, 5.0f));
+    BOOST_CHECK(approxEqual(retrievedConfig.followLag, 0.25f));
     BOOST_CHECK(approxEqual(retrievedConfig.deadZoneRadius, 32.0f));
+    BOOST_CHECK(approxEqual(retrievedConfig.maxCatchupDistance, 800.0f));
 }
 
 BOOST_AUTO_TEST_CASE(TestInvalidConfigRejected) {
     Camera camera;
 
-    // Negative follow speed
+    // Negative follow lag
     Camera::Config config1;
-    config1.followSpeed = -1.0f;
+    config1.followLag = -1.0f;
     BOOST_CHECK(!config1.isValid());
     BOOST_CHECK(!camera.setConfig(config1));
 
-    // Invalid smoothing factor (out of 0-1 range)
+    // Negative dead zone
     Camera::Config config2;
-    config2.smoothingFactor = 1.5f;
+    config2.deadZoneRadius = -1.0f;
     BOOST_CHECK(!config2.isValid());
     BOOST_CHECK(!camera.setConfig(config2));
+
+    // Negative catchup distance
+    Camera::Config config2b;
+    config2b.maxCatchupDistance = -1.0f;
+    BOOST_CHECK(!config2b.isValid());
+    BOOST_CHECK(!camera.setConfig(config2b));
 
     // Empty zoom levels
     Camera::Config config3;

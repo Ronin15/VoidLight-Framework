@@ -111,11 +111,14 @@ public:
   JsonValue &operator[](size_t index);
   size_t size() const;
 
-  // Utility
-  std::string toString() const;
+  // Utility. When pretty==true, objects/arrays are broken across lines with
+  // two-space indentation and a space after ':' — suitable for human-edited
+  // config files. Default (compact) output is unchanged.
+  std::string toString(bool pretty = false) const;
 
 private:
-  void writeToStream(std::ostream &stream) const;
+  // depth >= 0 enables pretty printing; depth < 0 emits compact JSON.
+  void writeToStream(std::ostream &stream, int depth = -1) const;
 };
 
 enum class JsonTokenType {

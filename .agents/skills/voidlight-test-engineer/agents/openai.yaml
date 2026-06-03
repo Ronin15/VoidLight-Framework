@@ -1,0 +1,4 @@
+interface:
+  display_name: "VoidLight Test Engineer"
+  short_description: "Create focused repros and regression tests"
+  default_prompt: "Use $voidlight-test-engineer to reproduce this bug, identify the production contract, add the narrowest regression coverage, and run the targeted Boost.Test or sanitizer check."

@@ -6,6 +6,7 @@
 #include "managers/EntityDataManager.hpp"
 #include "core/Logger.hpp"
 #include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/resources/EquipmentResources.hpp"
 #include "managers/AIManager.hpp"  // For auto-registering NPCs with AI
 #include "managers/ResourceTemplateManager.hpp"  // For getMaxStackSize in inventory
 #include "managers/WorldResourceManager.hpp"  // For unregister on harvestable destruction
@@ -15,12 +16,16 @@
 
 using VoidLight::JsonReader;
 using VoidLight::JsonValue;
+#include <array>
 #include <algorithm>
 #include <cassert>
 #include <format>
+#include <functional>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <ranges>
+#include <string_view>
 
 namespace {
 
@@ -62,6 +67,87 @@ AtlasRegion lookupAtlasRegion(const std::string& regionId) {
         .h     = static_cast<uint16_t>(region["h"].asInt()),
         .found = true
     };
+}
+
+float blendPersonalityTrait(float currentValue, float classBias) {
+    constexpr float CLASS_BIAS_WEIGHT = 0.35f;
+    return std::clamp(currentValue * (1.0f - CLASS_BIAS_WEIGHT) +
+                          classBias * CLASS_BIAS_WEIGHT,
+                      0.0f, 1.0f);
+}
+
+void applyClassPersonalityBias(NPCMemoryData& memoryData, const ClassInfo& classInfo) {
+    if (!memoryData.isValid()) {
+        return;
+    }
+
+    auto& personality = memoryData.personality;
+    personality.bravery =
+        blendPersonalityTrait(personality.bravery, classInfo.personalityBraveryBias);
+    personality.aggression =
+        blendPersonalityTrait(personality.aggression, classInfo.personalityAggressionBias);
+    personality.composure =
+        blendPersonalityTrait(personality.composure, classInfo.personalityComposureBias);
+    personality.loyalty =
+        blendPersonalityTrait(personality.loyalty, classInfo.personalityLoyaltyBias);
+}
+
+[[nodiscard]] bool sameInventorySlot(const InventorySlotData& lhs,
+                                     const InventorySlotData& rhs) noexcept {
+    return lhs.resourceHandle == rhs.resourceHandle &&
+           lhs.quantity == rhs.quantity;
+}
+
+[[nodiscard]] std::optional<std::reference_wrapper<const InventorySlotData>>
+getInventorySlotRef(
+    const InventoryData& inv,
+    const std::optional<std::reference_wrapper<const InventoryOverflow>>& overflow,
+    size_t slotIndex) noexcept {
+    if (slotIndex >= inv.maxSlots) {
+        return std::nullopt;
+    }
+
+    if (slotIndex < InventoryData::INLINE_SLOT_COUNT) {
+        return std::cref(inv.slots[slotIndex]);
+    }
+
+    if (!overflow.has_value()) {
+        return std::nullopt;
+    }
+
+    const size_t overflowIndex = slotIndex - InventoryData::INLINE_SLOT_COUNT;
+    const auto& extraSlots = overflow->get().extraSlots;
+    if (overflowIndex >= extraSlots.size()) {
+        return std::nullopt;
+    }
+
+    return std::cref(extraSlots[overflowIndex]);
+}
+
+[[nodiscard]] std::optional<std::reference_wrapper<InventorySlotData>>
+getInventorySlotRef(
+    InventoryData& inv,
+    const std::optional<std::reference_wrapper<InventoryOverflow>>& overflow,
+    size_t slotIndex) noexcept {
+    if (slotIndex >= inv.maxSlots) {
+        return std::nullopt;
+    }
+
+    if (slotIndex < InventoryData::INLINE_SLOT_COUNT) {
+        return std::ref(inv.slots[slotIndex]);
+    }
+
+    if (!overflow.has_value()) {
+        return std::nullopt;
+    }
+
+    const size_t overflowIndex = slotIndex - InventoryData::INLINE_SLOT_COUNT;
+    auto& extraSlots = overflow->get().extraSlots;
+    if (overflowIndex >= extraSlots.size()) {
+        return std::nullopt;
+    }
+
+    return std::ref(extraSlots[overflowIndex]);
 }
 
 } // namespace
@@ -115,8 +201,18 @@ bool EntityDataManager::init() {
         // Behavior data (indexed by edmIndex, pre-allocated alongside hotData)
         m_behaviorData.reserve(CHARACTER_CAPACITY);
 
-        // Behavior config (indexed by edmIndex, pre-allocated alongside behaviorData)
-        m_behaviorConfig.reserve(CHARACTER_CAPACITY);
+        // Archetype behavior config refs (one per entity slot)
+        m_behaviorConfigRef.reserve(CHARACTER_CAPACITY);
+
+        // Per-variant dense pools — pre-reserved to avoid hot-path allocation
+        m_idleConfigs.reserve(CHARACTER_CAPACITY);   m_idleOwners.reserve(CHARACTER_CAPACITY);   m_idleStates.reserve(CHARACTER_CAPACITY);
+        m_wanderConfigs.reserve(CHARACTER_CAPACITY); m_wanderOwners.reserve(CHARACTER_CAPACITY); m_wanderStates.reserve(CHARACTER_CAPACITY);
+        m_chaseConfigs.reserve(CHARACTER_CAPACITY);  m_chaseOwners.reserve(CHARACTER_CAPACITY);  m_chaseStates.reserve(CHARACTER_CAPACITY);
+        m_patrolConfigs.reserve(CHARACTER_CAPACITY); m_patrolOwners.reserve(CHARACTER_CAPACITY); m_patrolStates.reserve(CHARACTER_CAPACITY);
+        m_fleeConfigs.reserve(CHARACTER_CAPACITY);   m_fleeOwners.reserve(CHARACTER_CAPACITY);   m_fleeStates.reserve(CHARACTER_CAPACITY);
+        m_followConfigs.reserve(CHARACTER_CAPACITY); m_followOwners.reserve(CHARACTER_CAPACITY); m_followStates.reserve(CHARACTER_CAPACITY);
+        m_guardConfigs.reserve(CHARACTER_CAPACITY);  m_guardOwners.reserve(CHARACTER_CAPACITY);  m_guardStates.reserve(CHARACTER_CAPACITY);
+        m_attackConfigs.reserve(CHARACTER_CAPACITY); m_attackOwners.reserve(CHARACTER_CAPACITY); m_attackStates.reserve(CHARACTER_CAPACITY);
 
         // NPC Memory data (indexed by edmIndex, pre-allocated alongside hotData)
         m_memoryData.reserve(CHARACTER_CAPACITY);
@@ -155,6 +251,22 @@ bool EntityDataManager::init() {
             count.store(0, std::memory_order_relaxed);
         }
 
+        // Sidecar coordination registration — each sidecar registers its grow,
+        // per-entity cleanup, and full reset behavior here once.
+        m_sidecarGrowHooks.emplace_back(
+            [this](size_t n) { m_knockback.resizeSparse(n); });
+        m_sidecarPerEntityHooks.emplace_back(
+            [this](uint32_t i) { m_knockback.removeAllFor(i); });
+        m_sidecarResetHooks.emplace_back(
+            [this]() { m_knockback = SparseSidecar<KnockbackData>{}; });
+
+        m_sidecarGrowHooks.emplace_back(
+            [this](size_t n) { m_memoryOverflow.resizeSparse(n); });
+        m_sidecarPerEntityHooks.emplace_back(
+            [this](uint32_t i) { m_memoryOverflow.removeAllFor(i); });
+        m_sidecarResetHooks.emplace_back(
+            [this]() { m_memoryOverflow = SparseSidecar<MemoryOverflow>{}; });
+
         m_initialized.store(true, std::memory_order_release);
         ENTITY_INFO("EntityDataManager initialized successfully");
         return true;
@@ -162,6 +274,82 @@ bool EntityDataManager::init() {
     } catch (const std::exception& e) {
         ENTITY_ERROR(std::format("Failed to initialize EntityDataManager: {}", e.what()));
         return false;
+    }
+}
+
+void EntityDataManager::clearAllEntityStorage() {
+    // Dynamic entity storage
+    m_hotData.clear();
+    m_entityIds.clear();
+    m_generations.clear();
+    m_idToIndex.clear();
+    m_behaviorConfigRef.clear();
+    m_idleConfigs.clear();   m_idleOwners.clear();   m_idleStates.clear();
+    m_wanderConfigs.clear(); m_wanderOwners.clear(); m_wanderStates.clear();
+    m_chaseConfigs.clear();  m_chaseOwners.clear();  m_chaseStates.clear();
+    m_patrolConfigs.clear(); m_patrolOwners.clear(); m_patrolStates.clear();
+    m_fleeConfigs.clear();   m_fleeOwners.clear();   m_fleeStates.clear();
+    m_followConfigs.clear(); m_followOwners.clear(); m_followStates.clear();
+    m_guardConfigs.clear();  m_guardOwners.clear();  m_guardStates.clear();
+    m_attackConfigs.clear(); m_attackOwners.clear(); m_attackStates.clear();
+
+    // Static entity storage
+    m_staticHotData.clear();
+    m_staticEntityIds.clear();
+    m_staticGenerations.clear();
+    m_staticIdToIndex.clear();
+    m_freeStaticSlots.clear();
+
+    // Type-specific data
+    m_characterData.clear();
+    m_npcRenderData.clear();
+    m_itemData.clear();
+    m_itemRenderData.clear();
+    m_projectileData.clear();
+    m_containerData.clear();
+    m_containerRenderData.clear();
+    m_harvestableData.clear();
+    m_areaEffectData.clear();
+    m_pathData.clear();
+    m_waypointSlots.clear();
+    m_behaviorData.clear();
+    m_memoryData.clear();
+
+    // Transient state sidecars — must be reset alongside m_hotData.
+    for (auto& hook : m_sidecarResetHooks) hook();
+
+    // Type-specific free-lists
+    m_freeCharacterSlots.clear();
+    m_freeItemSlots.clear();
+    m_freeProjectileSlots.clear();
+    m_freeContainerSlots.clear();
+    m_freeHarvestableSlots.clear();
+    m_freeAreaEffectSlots.clear();
+
+    // Inventory storage
+    m_inventoryData.clear();
+    m_inventoryOverflow.clear();
+    m_freeInventorySlots.clear();
+    m_nextOverflowId = 1;
+
+    // Tier and kind indices
+    m_activeIndices.clear();
+    m_backgroundIndices.clear();
+    m_hibernatedIndices.clear();
+
+    for (auto& kindVec : m_kindIndices) {
+        kindVec.clear();
+    }
+
+    m_freeSlots.clear();
+
+    // Entity counts
+    m_totalEntityCount.store(0, std::memory_order_relaxed);
+    for (auto& count : m_countByKind) {
+        count.store(0, std::memory_order_relaxed);
+    }
+    for (auto& count : m_countByTier) {
+        count.store(0, std::memory_order_relaxed);
     }
 }
 
@@ -174,58 +362,7 @@ void EntityDataManager::clean() {
 
     m_initialized.store(false, std::memory_order_release);
 
-    // Clear all entity data (main thread only - no lock needed)
-    m_hotData.clear();
-    m_entityIds.clear();
-    m_generations.clear();
-    m_idToIndex.clear();
-
-    // Clear static entity storage
-    m_staticHotData.clear();
-    m_staticEntityIds.clear();
-    m_staticGenerations.clear();
-    m_staticIdToIndex.clear();
-    m_freeStaticSlots.clear();
-
-    m_characterData.clear();
-    m_npcRenderData.clear();
-    m_itemData.clear();
-    m_itemRenderData.clear();
-    m_projectileData.clear();
-    m_containerData.clear();
-    m_containerRenderData.clear();
-    m_harvestableData.clear();
-    m_areaEffectData.clear();
-    m_pathData.clear();
-    m_waypointSlots.clear();  // Clear per-entity waypoint slots
-    m_behaviorData.clear();
-    m_memoryData.clear();
-    m_memoryOverflow.clear();
-    m_nextMemoryOverflowId = 1;
-
-    // Clear type-specific free-lists
-    m_freeCharacterSlots.clear();
-    m_freeItemSlots.clear();
-    m_freeProjectileSlots.clear();
-    m_freeContainerSlots.clear();
-    m_freeHarvestableSlots.clear();
-    m_freeAreaEffectSlots.clear();
-
-    // Clear inventory storage
-    m_inventoryData.clear();
-    m_inventoryOverflow.clear();
-    m_freeInventorySlots.clear();
-    m_nextOverflowId = 1;
-
-    m_activeIndices.clear();
-    m_backgroundIndices.clear();
-    m_hibernatedIndices.clear();
-
-    for (auto& kindVec : m_kindIndices) {
-        kindVec.clear();
-    }
-
-    m_freeSlots.clear();
+    clearAllEntityStorage();
 
     {
         std::lock_guard<std::mutex> lock(m_destructionMutex);
@@ -233,13 +370,9 @@ void EntityDataManager::clean() {
     }
     m_destroyBuffer.clear();
 
-    m_totalEntityCount.store(0, std::memory_order_relaxed);
-    for (auto& count : m_countByKind) {
-        count.store(0, std::memory_order_relaxed);
-    }
-    for (auto& count : m_countByTier) {
-        count.store(0, std::memory_order_relaxed);
-    }
+    m_sidecarGrowHooks.clear();
+    m_sidecarPerEntityHooks.clear();
+    m_sidecarResetHooks.clear();
 
     ENTITY_INFO("EntityDataManager shutdown complete");
 }
@@ -247,80 +380,19 @@ void EntityDataManager::clean() {
 void EntityDataManager::prepareForStateTransition() {
     ENTITY_INFO("Preparing EntityDataManager for state transition...");
 
-    // Process any pending destructions first
     processDestructionQueue();
 
-    // Clear all entity data (main thread only - no lock needed)
-    m_hotData.clear();
-    m_entityIds.clear();
-    m_generations.clear();
-    m_idToIndex.clear();
-    m_behaviorConfig.clear();
+    clearAllEntityStorage();
 
-    // Clear static entity storage
-    m_staticHotData.clear();
-    m_staticEntityIds.clear();
-    m_staticGenerations.clear();
-    m_staticIdToIndex.clear();
-    m_freeStaticSlots.clear();
-
-    m_characterData.clear();
-    m_npcRenderData.clear();
-    m_itemData.clear();
-    m_itemRenderData.clear();
-    m_projectileData.clear();
-    m_containerData.clear();
-    m_containerRenderData.clear();
-    m_harvestableData.clear();
-    m_areaEffectData.clear();
-    m_pathData.clear();
-    m_waypointSlots.clear();  // Clear per-entity waypoint slots
-    m_behaviorData.clear();
-    m_memoryData.clear();
-    m_memoryOverflow.clear();
-    m_nextMemoryOverflowId = 1;
-
-    // Clear type-specific free-lists
-    m_freeCharacterSlots.clear();
-    m_freeItemSlots.clear();
-    m_freeProjectileSlots.clear();
-    m_freeContainerSlots.clear();
-    m_freeHarvestableSlots.clear();
-    m_freeAreaEffectSlots.clear();
-
-    // Clear inventory storage
-    m_inventoryData.clear();
-    m_inventoryOverflow.clear();
-    m_freeInventorySlots.clear();
-    m_nextOverflowId = 1;
-
-    m_activeIndices.clear();
-    m_backgroundIndices.clear();
-    m_hibernatedIndices.clear();
-
-    // CRITICAL: Clear ALL cached indices to prevent stale access
-    // Each cached index vector can cause crashes if not cleared
+    // Invalidate cached indices to prevent stale access
     m_activeCollisionIndices.clear();
     m_activeCollisionDirty = true;
 
     m_triggerDetectionIndices.clear();
     m_triggerDetectionDirty = true;
 
-    for (auto& kindVec : m_kindIndices) {
-        kindVec.clear();
-    }
-
-    m_freeSlots.clear();
     m_tierIndicesDirty = true;
     markAllKindsDirty();
-
-    m_totalEntityCount.store(0, std::memory_order_relaxed);
-    for (auto& count : m_countByKind) {
-        count.store(0, std::memory_order_relaxed);
-    }
-    for (auto& count : m_countByTier) {
-        count.store(0, std::memory_order_relaxed);
-    }
 
     ENTITY_INFO("EntityDataManager prepared for state transition");
 }
@@ -344,12 +416,14 @@ size_t EntityDataManager::allocateSlot() {
         m_hotData.emplace_back();
         m_entityIds.emplace_back(0);
         m_generations.emplace_back(0);
-        // Pre-allocate PathData, WaypointSlot, BehaviorData, BehaviorConfig, MemoryData to match - avoids concurrent resize during AI processing
+        // Pre-allocate PathData, WaypointSlot, BehaviorData, BehaviorConfigRef, MemoryData to match - avoids concurrent resize during AI processing
         m_pathData.emplace_back();
         m_waypointSlots.emplace_back();  // Per-entity waypoint slot (256 bytes)
         m_behaviorData.emplace_back();
-        m_behaviorConfig.emplace_back(); // Behavior config (read-only during execution)
+        // New entity starts with no active behavior config — ref is {None, UINT32_MAX}
+        m_behaviorConfigRef.emplace_back(BehaviorConfigRef{BehaviorType::None, {0, 0, 0}, std::numeric_limits<uint32_t>::max()});
         m_memoryData.emplace_back();     // NPC memory data
+        for (auto& hook : m_sidecarGrowHooks) hook(m_hotData.size());
     }
 
     m_tierIndicesDirty = true;
@@ -370,8 +444,12 @@ void EntityDataManager::freeSlot(size_t index) {
 
     // Clear path, behavior, and memory data for AI entities
     clearPathData(index);
+    clearBehaviorConfig(index);
     clearBehaviorData(index);
     clearMemoryData(index);
+
+    // Clear transient sidecar state — must be cleared before the slot is reused.
+    for (auto& hook : m_sidecarPerEntityHooks) hook(static_cast<uint32_t>(index));
 
     // Clear the slot
     m_hotData[index] = EntityHotData{};
@@ -451,11 +529,22 @@ void EntityDataManager::freeSlot(size_t index) {
     markKindDirty(kind);  // Only mark the freed entity's kind dirty
 }
 
-uint8_t EntityDataManager::nextGeneration(size_t index) {
+uint32_t EntityDataManager::nextGeneration(size_t index) {
     if (index >= m_generations.size()) {
         return 1;
     }
-    return static_cast<uint8_t>((m_generations[index] + 1) % 256);
+    return (m_generations[index] == std::numeric_limits<uint32_t>::max())
+        ? static_cast<uint32_t>(1)
+        : m_generations[index] + 1;
+}
+
+uint32_t EntityDataManager::nextStaticGeneration(size_t index) {
+    if (index >= m_staticGenerations.size()) {
+        return 1;
+    }
+    return (m_staticGenerations[index] == std::numeric_limits<uint32_t>::max())
+        ? static_cast<uint32_t>(1)
+        : m_staticGenerations[index] + 1;
 }
 
 uint32_t EntityDataManager::allocateCharacterSlot() {
@@ -488,7 +577,7 @@ EntityHandle EntityDataManager::createNPC(const Vector2D& position,
 
     size_t index = allocateSlot();
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = nextGeneration(index);
+    uint32_t generation = nextGeneration(index);
 
     // Initialize hot data
     auto& hot = m_hotData[index];
@@ -502,11 +591,10 @@ EntityHandle EntityDataManager::createNPC(const Vector2D& position,
     markKindDirty(EntityKind::NPC);
     hot.tier = SimulationTier::Active;
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Allocate character data first (needed for faction-based collision setup)
     uint32_t charIndex = allocateCharacterSlot();
-    m_characterData[charIndex].stateFlags = CharacterData::STATE_ALIVE;
+    m_characterData[charIndex].stateFlags = 0;
     // faction defaults to 0 (Friendly) in CharacterData
 
     // All NPCs get an inventory (20 slots, not world-tracked)
@@ -607,20 +695,27 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
     charData.typeId = m_raceNameToId.count(race) ? m_raceNameToId[race] : 0;
     charData.subtypeId = m_classNameToId.count(charClass) ? m_classNameToId[charClass] : 0;
     charData.maxHealth = raceInfo.baseHealth * classInfo.healthMult;
+    charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
     charData.maxStamina = raceInfo.baseStamina * classInfo.staminaMult;
     charData.stamina = charData.maxStamina;
     charData.attackDamage = raceInfo.baseAttackDamage * classInfo.attackDamageMult;
+    charData.baseAttackDamage = charData.attackDamage;
     charData.attackRange = raceInfo.baseAttackRange * classInfo.attackRangeMult;
+    charData.baseAttackRange = charData.attackRange;
     charData.moveSpeed = raceInfo.baseMoveSpeed * classInfo.moveSpeedMult;
+    charData.baseMoveSpeed = charData.moveSpeed;
     charData.priority = classInfo.basePriority;
     charData.faction = (factionOverride != 0xFF) ? factionOverride : classInfo.defaultFaction;
     charData.emotionalResilience = classInfo.emotionalResilience;
     charData.combatStyle = (classInfo.combatStyle == "ranged")
         ? CharacterData::CombatStyle::Ranged
         : CharacterData::CombatStyle::Melee;
+    charData.baseCombatStyle = charData.combatStyle;
     charData.projectileSpeed = classInfo.projectileSpeed;
+    charData.baseProjectileSpeed = charData.projectileSpeed;
     charData.mass = raceInfo.sizeMultiplier * raceInfo.sizeMultiplier;  // Mass scales with area
+    applyClassPersonalityBias(m_memoryData[index], classInfo);
 
     // Apply faction-based collision layers
     applyFactionCollision(index, charData.faction);
@@ -658,7 +753,7 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
 
     // Set merchant flag based on class
     if (classInfo.isMerchant) {
-        charData.stateFlags |= CharacterData::STATE_MERCHANT;
+        charData.stateFlags |= CharacterData::FLAG_MERCHANT;
     }
 
     // Add starting items from class definition
@@ -673,6 +768,10 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
                                         itemId, classInfo.name));
             }
         }
+    }
+
+    if (!classInfo.isMerchant) {
+        autoEquipCharacterEquipment(handle);
     }
 
     ENTITY_DEBUG(std::format("Created {} {} at ({},{}) HP:{:.0f} DMG:{:.1f} SPD:{:.0f}{}",
@@ -733,12 +832,16 @@ EntityHandle EntityDataManager::createMonster(const Vector2D& position,
     charData.typeId = m_monsterTypeNameToId.count(monsterType) ? m_monsterTypeNameToId[monsterType] : 0;
     charData.subtypeId = m_monsterVariantNameToId.count(variant) ? m_monsterVariantNameToId[variant] : 0;
     charData.maxHealth = typeInfo.baseHealth * variantInfo.healthMult;
+    charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
     charData.maxStamina = typeInfo.baseStamina * variantInfo.staminaMult;
     charData.stamina = charData.maxStamina;
     charData.attackDamage = typeInfo.baseAttackDamage * variantInfo.attackDamageMult;
+    charData.baseAttackDamage = charData.attackDamage;
     charData.attackRange = typeInfo.baseAttackRange * variantInfo.attackRangeMult;
+    charData.baseAttackRange = charData.attackRange;
     charData.moveSpeed = typeInfo.baseMoveSpeed * variantInfo.moveSpeedMult;
+    charData.baseMoveSpeed = charData.moveSpeed;
     charData.priority = variantInfo.basePriority;
     charData.faction = (factionOverride != 0xFF) ? factionOverride : typeInfo.defaultFaction;
     charData.mass = typeInfo.sizeMultiplier * typeInfo.sizeMultiplier;  // Mass scales with area
@@ -829,12 +932,16 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     charData.typeId = m_speciesNameToId.count(species) ? m_speciesNameToId[species] : 0;
     charData.subtypeId = m_animalRoleNameToId.count(role) ? m_animalRoleNameToId[role] : 0;
     charData.maxHealth = speciesInfo.baseHealth * roleInfo.healthMult;
+    charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
     charData.maxStamina = speciesInfo.baseStamina * roleInfo.staminaMult;
     charData.stamina = charData.maxStamina;
     charData.attackDamage = speciesInfo.baseAttackDamage * roleInfo.attackDamageMult;
+    charData.baseAttackDamage = charData.attackDamage;
     charData.attackRange = speciesInfo.baseAttackRange;  // Animals don't have range multiplier
+    charData.baseAttackRange = charData.attackRange;
     charData.moveSpeed = speciesInfo.baseMoveSpeed * roleInfo.moveSpeedMult;
+    charData.baseMoveSpeed = charData.moveSpeed;
     charData.priority = roleInfo.basePriority;
     charData.faction = (factionOverride != 0xFF) ? factionOverride : roleInfo.defaultFaction;
     charData.mass = speciesInfo.sizeMultiplier * speciesInfo.sizeMultiplier;  // Mass scales with area
@@ -1053,7 +1160,8 @@ EntityHandle EntityDataManager::createDroppedItem(const Vector2D& position,
     }
 
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = ++m_staticGenerations[index];
+    uint32_t generation = nextStaticGeneration(index);
+    m_staticGenerations[index] = generation;
 
     // Initialize hot data in STATIC pool
     auto& hot = m_staticHotData[index];
@@ -1066,7 +1174,6 @@ EntityHandle EntityDataManager::createDroppedItem(const Vector2D& position,
     hot.kind = EntityKind::DroppedItem;
     markKindDirty(EntityKind::DroppedItem);
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // DroppedItems use WRM spatial index for pickup detection, not collision system
     hot.collisionLayers = 0;  // No collision layers
@@ -1192,7 +1299,8 @@ EntityHandle EntityDataManager::createContainer(const Vector2D& position,
     }
 
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = ++m_staticGenerations[index];
+    uint32_t generation = nextStaticGeneration(index);
+    m_staticGenerations[index] = generation;
 
     // Initialize hot data in STATIC pool
     auto& hot = m_staticHotData[index];
@@ -1205,7 +1313,6 @@ EntityHandle EntityDataManager::createContainer(const Vector2D& position,
     hot.kind = EntityKind::Container;
     markKindDirty(EntityKind::Container);
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Container - no collision (use WRM spatial queries for interaction)
     hot.collisionLayers = 0;
@@ -1351,7 +1458,8 @@ EntityHandle EntityDataManager::createHarvestable(const Vector2D& position,
     }
 
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = ++m_staticGenerations[index];
+    uint32_t generation = nextStaticGeneration(index);
+    m_staticGenerations[index] = generation;
 
     // Initialize hot data in STATIC pool
     auto& hot = m_staticHotData[index];
@@ -1364,7 +1472,6 @@ EntityHandle EntityDataManager::createHarvestable(const Vector2D& position,
     hot.kind = EntityKind::Harvestable;
     markKindDirty(EntityKind::Harvestable);
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Harvestable - no collision (use WRM spatial queries for interaction)
     hot.collisionLayers = 0;
@@ -1424,7 +1531,7 @@ EntityHandle EntityDataManager::createProjectile(const Vector2D& position,
 
     size_t index = allocateSlot();
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = nextGeneration(index);
+    uint32_t generation = nextGeneration(index);
 
     // Initialize hot data
     auto& hot = m_hotData[index];
@@ -1438,7 +1545,6 @@ EntityHandle EntityDataManager::createProjectile(const Vector2D& position,
     markKindDirty(EntityKind::Projectile);
     hot.tier = SimulationTier::Active;  // Projectiles always active
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Initialize collision data.
     // Small projectiles register hits against any non-owner gameplay body,
@@ -1496,7 +1602,7 @@ EntityHandle EntityDataManager::createAreaEffect(const Vector2D& position,
 
     size_t index = allocateSlot();
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = nextGeneration(index);
+    uint32_t generation = nextGeneration(index);
 
     // Initialize hot data
     auto& hot = m_hotData[index];
@@ -1510,7 +1616,6 @@ EntityHandle EntityDataManager::createAreaEffect(const Vector2D& position,
     markKindDirty(EntityKind::AreaEffect);
     hot.tier = SimulationTier::Active;
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Allocate area effect data (reuse freed slot if available)
     uint32_t effectIndex;
@@ -1566,7 +1671,8 @@ EntityHandle EntityDataManager::createStaticBody(const Vector2D& position,
     }
 
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = ++m_staticGenerations[index];
+    uint32_t generation = nextStaticGeneration(index);
+    m_staticGenerations[index] = generation;
 
     // Initialize static hot data
     auto& hot = m_staticHotData[index];
@@ -1579,7 +1685,7 @@ EntityHandle EntityDataManager::createStaticBody(const Vector2D& position,
     hot.kind = EntityKind::StaticObstacle;
     markKindDirty(EntityKind::StaticObstacle);
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
+
     hot.typeLocalIndex = 0;
 
     // Store ID and mapping (separate from dynamic entities)
@@ -1614,7 +1720,8 @@ EntityHandle EntityDataManager::createTrigger(const Vector2D& position,
     }
 
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
-    uint8_t generation = ++m_staticGenerations[index];
+    uint32_t generation = nextStaticGeneration(index);
+    m_staticGenerations[index] = generation;
 
     // Initialize trigger hot data
     auto& hot = m_staticHotData[index];
@@ -1627,7 +1734,7 @@ EntityHandle EntityDataManager::createTrigger(const Vector2D& position,
     hot.kind = EntityKind::Trigger;
     markKindDirty(EntityKind::Trigger);
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
+
     hot.typeLocalIndex = 0;
 
     // Set collision data for trigger
@@ -1671,7 +1778,7 @@ EntityHandle EntityDataManager::registerPlayer(EntityHandle::IDType entityId,
     }
 
     size_t index = allocateSlot();
-    uint8_t generation = nextGeneration(index);
+    uint32_t generation = nextGeneration(index);
 
     // Initialize hot data
     auto& hot = m_hotData[index];
@@ -1685,7 +1792,6 @@ EntityHandle EntityDataManager::registerPlayer(EntityHandle::IDType entityId,
     markKindDirty(EntityKind::Player);
     hot.tier = SimulationTier::Active;  // Player always active
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Initialize collision data (Player collides with gameplay bodies, environment, triggers)
     hot.collisionLayers = VoidLight::CollisionLayer::Layer_Player;
@@ -1697,16 +1803,12 @@ EntityHandle EntityDataManager::registerPlayer(EntityHandle::IDType entityId,
     hot.collisionFlags = EntityHotData::COLLISION_ENABLED | EntityHotData::NEEDS_TRIGGER_DETECTION;
     hot.triggerTag = 0;
 
-    // Allocate character data (CharacterData + NPCRenderData stay in sync)
+    // Allocate character data. Player-specific base stats are configured by
+    // Player after registration so the bolt-on player module owns that policy.
     uint32_t charIndex = allocateCharacterSlot();
     auto& charData = m_characterData[charIndex];
-    charData.health = 100.0f;
-    charData.maxHealth = 100.0f;
-    charData.stamina = 100.0f;
-    charData.maxStamina = 100.0f;
-    charData.attackDamage = 25.0f;
-    charData.attackRange = 50.0f;
-    charData.stateFlags = CharacterData::STATE_ALIVE;
+    charData.category = CreatureCategory::NPC;
+    charData.stateFlags = 0;
     hot.typeLocalIndex = charIndex;
 
     // Store ID and mapping
@@ -1754,11 +1856,7 @@ EntityHandle EntityDataManager::registerDroppedItem(EntityHandle::IDType entityI
         m_staticGenerations.push_back(0);
     }
 
-    const uint8_t previousGeneration = m_staticGenerations[index];
-    const uint8_t generation =
-        (previousGeneration == std::numeric_limits<uint8_t>::max())
-            ? static_cast<uint8_t>(1)
-            : static_cast<uint8_t>(previousGeneration + 1);
+    uint32_t generation = nextStaticGeneration(index);
     m_staticGenerations[index] = generation;
 
     // Initialize hot data in static pool
@@ -1772,7 +1870,6 @@ EntityHandle EntityDataManager::registerDroppedItem(EntityHandle::IDType entityI
     hot.kind = EntityKind::DroppedItem;
     hot.tier = SimulationTier::Active;  // Not used for static, but set for consistency
     hot.flags = EntityHotData::FLAG_ALIVE;
-    hot.generation = generation;
 
     // Allocate item data and render data (reuse freed slot if available)
     uint32_t itemIndex;
@@ -1833,6 +1930,11 @@ void EntityDataManager::unregisterEntity(EntityHandle::IDType entityId) {
 
     EntityKind kind = m_hotData[index].kind;
     SimulationTier tier = m_hotData[index].tier;
+    const EntityHandle handle{entityId, kind, m_generations[index]};
+
+    if (EntityTraits::hasAI(kind) && AIManager::Instance().isInitialized()) {
+        AIManager::Instance().unregisterEntity(handle);
+    }
 
     // Update counters
     m_totalEntityCount.fetch_sub(1, std::memory_order_relaxed);
@@ -1899,7 +2001,18 @@ void EntityDataManager::destroyStaticResource(EntityHandle handle) {
             break;
         case EntityKind::Container:
             wrm.unregisterContainerSpatial(index);
+            if (m_staticHotData[index].typeLocalIndex < m_containerData.size()) {
+                auto& container = m_containerData[m_staticHotData[index].typeLocalIndex];
+                if (container.inventoryIndex != INVALID_INVENTORY_INDEX) {
+                    wrm.unregisterInventory(container.inventoryIndex);
+                    destroyInventory(container.inventoryIndex);
+                    container.inventoryIndex = INVALID_INVENTORY_INDEX;
+                }
+            }
             m_freeContainerSlots.push_back(m_staticHotData[index].typeLocalIndex);
+            if (m_staticHotData[index].typeLocalIndex < m_containerRenderData.size()) {
+                m_containerRenderData[m_staticHotData[index].typeLocalIndex].clear();
+            }
             break;
         default:
             break;
@@ -1950,6 +2063,10 @@ void EntityDataManager::processDestructionQueue() {
 
         EntityKind kind = m_hotData[index].kind;
         SimulationTier tier = m_hotData[index].tier;
+
+        if (EntityTraits::hasAI(kind) && AIManager::Instance().isInitialized()) {
+            AIManager::Instance().unregisterEntity(handle);
+        }
 
         // Update counters
         m_totalEntityCount.fetch_sub(1, std::memory_order_relaxed);
@@ -2054,10 +2171,13 @@ bool EntityDataManager::initNPCAsMerchant(EntityHandle handle, uint16_t maxSlots
     // Get character data
     auto& charData = getCharacterDataByIndex(idx);
 
-    // Check if already has inventory
+    // Modern NPC creation gives every NPC an inventory; merchant status is the
+    // capability flag layered on top of that storage.
     if (charData.hasInventory()) {
-        ENTITY_WARN("initNPCAsMerchant: NPC already has inventory");
-        return true;  // Already set up
+        charData.stateFlags |= CharacterData::FLAG_MERCHANT;
+        ENTITY_INFO(std::format("NPC {} initialized as merchant with existing inventory",
+                                handle.getId()));
+        return true;
     }
 
     // Create inventory
@@ -2069,7 +2189,7 @@ bool EntityDataManager::initNPCAsMerchant(EntityHandle handle, uint16_t maxSlots
 
     // Store inventory index and set merchant flag
     charData.inventoryIndex = invIdx;
-    charData.stateFlags |= CharacterData::STATE_MERCHANT;
+    charData.stateFlags |= CharacterData::FLAG_MERCHANT;
 
     ENTITY_INFO(std::format("NPC {} initialized as merchant with {} slots",
                             handle.getId(), maxSlots));
@@ -2104,6 +2224,419 @@ uint32_t EntityDataManager::getNPCInventoryIndex(EntityHandle handle) const {
     return charData.inventoryIndex;
 }
 
+bool EntityDataManager::equipCharacterItem(EntityHandle handle,
+                                           VoidLight::ResourceHandle itemHandle)
+{
+    if (!handle.isValid() || !handle.hasHealth()) {
+        ENTITY_ERROR("equipCharacterItem: Invalid character handle");
+        return false;
+    }
+    if (!itemHandle.isValid()) {
+        ENTITY_ERROR("equipCharacterItem: Invalid resource handle");
+        return false;
+    }
+
+    const size_t idx = getIndex(handle);
+    if (idx == SIZE_MAX) {
+        ENTITY_ERROR("equipCharacterItem: Character not found in EDM");
+        return false;
+    }
+
+    auto& charData = getCharacterDataByIndex(idx);
+    if (!charData.hasInventory()) {
+        ENTITY_WARN("equipCharacterItem: Character has no inventory");
+        return false;
+    }
+    if (!hasInInventory(charData.inventoryIndex, itemHandle, 1)) {
+        ENTITY_WARN(std::format("equipCharacterItem: Item {} is not in inventory",
+                                itemHandle.toString()));
+        return false;
+    }
+
+    auto resourceTemplate =
+        ResourceTemplateManager::Instance().getResourceTemplate(itemHandle);
+    if (!resourceTemplate || resourceTemplate->getType() != ResourceType::Equipment) {
+        ENTITY_WARN(std::format("equipCharacterItem: Item {} is not equipment",
+                                itemHandle.toString()));
+        return false;
+    }
+
+    const auto equipment = std::dynamic_pointer_cast<Equipment>(resourceTemplate);
+    if (!equipment) {
+        ENTITY_ERROR(std::format("equipCharacterItem: Equipment template {} has wrong type",
+                                 itemHandle.toString()));
+        return false;
+    }
+
+    const auto slotIndex = Equipment::equipmentSlotIndex(equipment->getEquipmentSlot());
+    if (!slotIndex.has_value()) {
+        ENTITY_ERROR(std::format("equipCharacterItem: Unknown equipment slot for {}",
+                                 itemHandle.toString()));
+        return false;
+    }
+
+    const auto weaponSlotIndex =
+        Equipment::equipmentSlotIndex(Equipment::EquipmentSlot::Weapon);
+    const auto shieldSlotIndex =
+        Equipment::equipmentSlotIndex(Equipment::EquipmentSlot::Shield);
+
+    if (equipment->getEquipmentSlot() == Equipment::EquipmentSlot::Shield &&
+        weaponSlotIndex.has_value()) {
+        const VoidLight::ResourceHandle equippedWeapon =
+            charData.equippedItems[*weaponSlotIndex];
+        if (equippedWeapon.isValid()) {
+            auto equippedWeaponTemplate =
+                ResourceTemplateManager::Instance().getResourceTemplate(equippedWeapon);
+            const auto equippedWeaponResource =
+                std::dynamic_pointer_cast<Equipment>(equippedWeaponTemplate);
+            if (equippedWeaponResource &&
+                equippedWeaponResource->getHandsRequired() >= 2) {
+                ENTITY_WARN(std::format(
+                    "equipCharacterItem: Cannot equip shield {} while two-handed weapon {} is equipped",
+                    itemHandle.toString(), equippedWeapon.toString()));
+                return false;
+            }
+        }
+    }
+
+    VoidLight::ResourceHandle previouslyEquipped =
+        charData.equippedItems[*slotIndex];
+    if (previouslyEquipped == itemHandle) {
+        return true;
+    }
+
+    VoidLight::ResourceHandle displacedShield;
+    if (equipment->getEquipmentSlot() == Equipment::EquipmentSlot::Weapon &&
+        equipment->getHandsRequired() >= 2 && shieldSlotIndex.has_value()) {
+        displacedShield = charData.equippedItems[*shieldSlotIndex];
+    }
+
+    int returnedItemCount = previouslyEquipped.isValid() ? 1 : 0;
+    returnedItemCount += displacedShield.isValid() ? 1 : 0;
+    if (returnedItemCount > 0) {
+        const size_t maxSlots = getInventoryData(charData.inventoryIndex).maxSlots;
+        int emptySlots = 0;
+        bool equippedItemSlotWillEmpty = false;
+        for (size_t inventorySlot = 0; inventorySlot < maxSlots; ++inventorySlot) {
+            const InventorySlotData slot =
+                getInventorySlot(charData.inventoryIndex, inventorySlot);
+            if (slot.isEmpty()) {
+                ++emptySlots;
+            } else if (slot.resourceHandle == itemHandle && slot.quantity <= 1) {
+                equippedItemSlotWillEmpty = true;
+            }
+        }
+
+        if (emptySlots + (equippedItemSlotWillEmpty ? 1 : 0) < returnedItemCount) {
+            ENTITY_WARN(std::format(
+                "equipCharacterItem: Not enough inventory space to equip {}",
+                itemHandle.toString()));
+            return false;
+        }
+    }
+
+    if (!removeFromInventory(charData.inventoryIndex, itemHandle, 1)) {
+        return false;
+    }
+
+    if (previouslyEquipped.isValid() &&
+        !addToInventory(charData.inventoryIndex, previouslyEquipped, 1)) {
+        addToInventory(charData.inventoryIndex, itemHandle, 1);
+        ENTITY_WARN(std::format("equipCharacterItem: Could not return previous item {}",
+                                previouslyEquipped.toString()));
+        return false;
+    }
+
+    if (displacedShield.isValid() &&
+        !addToInventory(charData.inventoryIndex, displacedShield, 1)) {
+        if (previouslyEquipped.isValid()) {
+            removeFromInventory(charData.inventoryIndex, previouslyEquipped, 1);
+        }
+        addToInventory(charData.inventoryIndex, itemHandle, 1);
+        ENTITY_WARN(std::format("equipCharacterItem: Could not return shield item {}",
+                                displacedShield.toString()));
+        return false;
+    }
+
+    charData.equippedItems[*slotIndex] = itemHandle;
+    if (displacedShield.isValid()) {
+        charData.equippedItems[*shieldSlotIndex] = VoidLight::ResourceHandle{};
+    }
+    recalculateCharacterEquipmentStats(m_hotData[idx].typeLocalIndex);
+    return true;
+}
+
+bool EntityDataManager::unequipCharacterItem(EntityHandle handle,
+                                             const std::string& slotName)
+{
+    if (slotName.empty()) {
+        ENTITY_ERROR("unequipCharacterItem: Slot name cannot be empty");
+        return false;
+    }
+    if (!handle.isValid() || !handle.hasHealth()) {
+        ENTITY_ERROR("unequipCharacterItem: Invalid character handle");
+        return false;
+    }
+
+    const auto slotIndex = Equipment::equipmentSlotIndex(slotName);
+    if (!slotIndex.has_value()) {
+        ENTITY_ERROR(std::format("unequipCharacterItem: Unknown equipment slot '{}'",
+                                 slotName));
+        return false;
+    }
+
+    const size_t idx = getIndex(handle);
+    if (idx == SIZE_MAX) {
+        return false;
+    }
+
+    auto& charData = getCharacterDataByIndex(idx);
+    if (!charData.hasInventory()) {
+        return false;
+    }
+
+    const VoidLight::ResourceHandle itemHandle = charData.equippedItems[*slotIndex];
+    if (!itemHandle.isValid()) {
+        return false;
+    }
+
+    if (!addToInventory(charData.inventoryIndex, itemHandle, 1)) {
+        ENTITY_WARN(std::format("unequipCharacterItem: Could not return item {}",
+                                itemHandle.toString()));
+        return false;
+    }
+
+    charData.equippedItems[*slotIndex] = VoidLight::ResourceHandle{};
+    recalculateCharacterEquipmentStats(m_hotData[idx].typeLocalIndex);
+    return true;
+}
+
+VoidLight::ResourceHandle
+EntityDataManager::getEquippedCharacterItem(EntityHandle handle,
+                                            const std::string& slotName) const
+{
+    if (slotName.empty() || !handle.isValid() || !handle.hasHealth()) {
+        return VoidLight::ResourceHandle{};
+    }
+
+    const auto slotIndex = Equipment::equipmentSlotIndex(slotName);
+    if (!slotIndex.has_value()) {
+        return VoidLight::ResourceHandle{};
+    }
+
+    const size_t idx = getIndex(handle);
+    if (idx == SIZE_MAX) {
+        return VoidLight::ResourceHandle{};
+    }
+
+    return getCharacterDataByIndex(idx).equippedItems[*slotIndex];
+}
+
+bool EntityDataManager::autoEquipCharacterEquipment(EntityHandle handle)
+{
+    if (!handle.isValid() || !handle.hasHealth()) {
+        return false;
+    }
+
+    const size_t idx = getIndex(handle);
+    if (idx == SIZE_MAX) {
+        return false;
+    }
+
+    const auto& charData = getCharacterDataByIndex(idx);
+    if (!charData.hasInventory()) {
+        return false;
+    }
+
+    const size_t maxSlots = getInventoryData(charData.inventoryIndex).maxSlots;
+    bool equippedAny = false;
+    for (size_t slot = 0; slot < maxSlots; ++slot) {
+        const InventorySlotData inventorySlot =
+            getInventorySlot(charData.inventoryIndex, slot);
+        if (inventorySlot.isEmpty()) {
+            continue;
+        }
+
+        auto resourceTemplate =
+            ResourceTemplateManager::Instance().getResourceTemplate(
+                inventorySlot.resourceHandle);
+        auto equipment = std::dynamic_pointer_cast<Equipment>(resourceTemplate);
+        if (!equipment) {
+            continue;
+        }
+
+        const auto slotIndex =
+            Equipment::equipmentSlotIndex(equipment->getEquipmentSlot());
+        if (!slotIndex.has_value() ||
+            getCharacterDataByIndex(idx).equippedItems[*slotIndex].isValid()) {
+            continue;
+        }
+
+        equippedAny =
+            equipCharacterItem(handle, inventorySlot.resourceHandle) || equippedAny;
+    }
+
+    return equippedAny;
+}
+
+VoidLight::ResourceHandle
+EntityDataManager::findCompatibleAmmo(uint32_t inventoryIndex,
+                                      std::string_view ammoType) const
+{
+    if (ammoType.empty() || !isValidInventoryIndex(inventoryIndex)) {
+        return VoidLight::ResourceHandle{};
+    }
+
+    const size_t maxSlots = getInventoryData(inventoryIndex).maxSlots;
+    for (size_t slot = 0; slot < maxSlots; ++slot) {
+        const InventorySlotData inventorySlot = getInventorySlot(inventoryIndex, slot);
+        if (inventorySlot.isEmpty()) {
+            continue;
+        }
+
+        auto resourceTemplate =
+            ResourceTemplateManager::Instance().getResourceTemplate(
+                inventorySlot.resourceHandle);
+        const auto ammunition =
+            std::dynamic_pointer_cast<Ammunition>(resourceTemplate);
+        if (ammunition && ammunition->getAmmoType() == ammoType) {
+            return inventorySlot.resourceHandle;
+        }
+    }
+
+    return VoidLight::ResourceHandle{};
+}
+
+bool EntityDataManager::consumeRequiredAmmoForRangedAttack(
+    EntityHandle handle, InventoryResourceChange* outChange)
+{
+    if (outChange) {
+        *outChange = InventoryResourceChange{};
+    }
+    if (!handle.isValid() || !handle.hasHealth()) {
+        return false;
+    }
+
+    const size_t idx = getIndex(handle);
+    if (idx == SIZE_MAX) {
+        return false;
+    }
+
+    const auto& charData = getCharacterDataByIndex(idx);
+    const auto weaponSlotIndex =
+        Equipment::equipmentSlotIndex(Equipment::EquipmentSlot::Weapon);
+    if (!weaponSlotIndex.has_value()) {
+        return true;
+    }
+
+    const VoidLight::ResourceHandle weaponHandle =
+        charData.equippedItems[*weaponSlotIndex];
+    if (!weaponHandle.isValid()) {
+        return true;
+    }
+
+    auto resourceTemplate =
+        ResourceTemplateManager::Instance().getResourceTemplate(weaponHandle);
+    const auto weapon = std::dynamic_pointer_cast<Equipment>(resourceTemplate);
+    if (!weapon || weapon->getWeaponMode() != Equipment::WeaponMode::Ranged ||
+        weapon->getAmmoTypeRequired().empty()) {
+        return true;
+    }
+
+    if (!charData.hasInventory()) {
+        return false;
+    }
+
+    const VoidLight::ResourceHandle ammoHandle =
+        findCompatibleAmmo(charData.inventoryIndex, weapon->getAmmoTypeRequired());
+    if (!ammoHandle.isValid()) {
+        return false;
+    }
+
+    const int oldQuantity = getInventoryQuantity(charData.inventoryIndex, ammoHandle);
+    if (!removeFromInventory(charData.inventoryIndex, ammoHandle, 1)) {
+        return false;
+    }
+    if (outChange) {
+        *outChange = InventoryResourceChange{ammoHandle, oldQuantity,
+                                             oldQuantity - 1};
+    }
+    return true;
+}
+
+float EntityDataManager::getEffectiveAttackDamage(EntityHandle handle) const
+{
+    return getCharacterData(handle).attackDamage;
+}
+
+float EntityDataManager::getEffectiveDefense(EntityHandle handle) const
+{
+    return getCharacterData(handle).armorDefense;
+}
+
+float EntityDataManager::getEffectiveMoveSpeed(EntityHandle handle) const
+{
+    return getCharacterData(handle).moveSpeed;
+}
+
+void EntityDataManager::recalculateCharacterEquipmentStats(uint32_t characterIndex)
+{
+    if (characterIndex >= m_characterData.size()) {
+        return;
+    }
+
+    auto& charData = m_characterData[characterIndex];
+    float attackBonus = 0.0f;
+    float defenseBonus = 0.0f;
+    float speedBonus = 0.0f;
+    float attackRange = charData.baseAttackRange;
+    float projectileSpeed = charData.baseProjectileSpeed;
+    uint8_t combatStyle = charData.baseCombatStyle;
+
+    for (const auto& itemHandle : charData.equippedItems) {
+        if (!itemHandle.isValid()) {
+            continue;
+        }
+
+        auto resourceTemplate =
+            ResourceTemplateManager::Instance().getResourceTemplate(itemHandle);
+        auto equipment = std::dynamic_pointer_cast<Equipment>(resourceTemplate);
+        if (!equipment) {
+            continue;
+        }
+
+        attackBonus += static_cast<float>(equipment->getAttackBonus());
+        defenseBonus += static_cast<float>(equipment->getDefenseBonus());
+        speedBonus += static_cast<float>(equipment->getSpeedBonus());
+
+        if (equipment->getEquipmentSlot() == Equipment::EquipmentSlot::Weapon) {
+            if (equipment->getWeaponMode() == Equipment::WeaponMode::Melee) {
+                combatStyle = CharacterData::CombatStyle::Melee;
+                projectileSpeed = 0.0f;
+            } else if (equipment->getWeaponMode() == Equipment::WeaponMode::Ranged) {
+                combatStyle = CharacterData::CombatStyle::Ranged;
+            }
+
+            if (equipment->getAttackRangeOverride() > 0.0f) {
+                attackRange = equipment->getAttackRangeOverride();
+            }
+            if (equipment->getProjectileSpeedOverride() > 0.0f) {
+                projectileSpeed = equipment->getProjectileSpeedOverride();
+            }
+        }
+    }
+
+    charData.attackDamage = std::max(0.0f, charData.baseAttackDamage + attackBonus);
+    charData.attackRange = std::max(0.0f, attackRange);
+    charData.armorDefense = std::max(0.0f, defenseBonus);
+    charData.moveSpeed = std::max(1.0f, charData.baseMoveSpeed + speedBonus);
+    charData.combatStyle = combatStyle;
+    charData.projectileSpeed =
+        (combatStyle == CharacterData::CombatStyle::Ranged)
+            ? std::max(0.0f, projectileSpeed)
+            : 0.0f;
+}
+
 bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
                                        VoidLight::ResourceHandle handle,
                                        int quantity) {
@@ -2136,7 +2669,36 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
     std::lock_guard<std::mutex> lock(m_inventoryMutex);
 
     auto& inv = m_inventoryData[inventoryIndex];
-    InventoryOverflow* overflow = (inv.overflowId > 0) ? &m_inventoryOverflow[inv.overflowId] : nullptr;
+    std::optional<std::reference_wrapper<InventoryOverflow>> overflow;
+    if (inv.overflowId > 0) {
+        overflow = std::ref(m_inventoryOverflow[inv.overflowId]);
+    }
+
+    int availableCapacity = 0;
+    for (size_t i = 0; i < InventoryData::INLINE_SLOT_COUNT; ++i) {
+        const auto& slot = inv.slots[i];
+        if (!slot.isEmpty() && slot.resourceHandle == handle) {
+            availableCapacity += std::max(0, maxStack - static_cast<int>(slot.quantity));
+        } else if (slot.isEmpty()) {
+            availableCapacity += maxStack;
+        }
+    }
+
+    if (overflow.has_value()) {
+        for (const auto& slot : overflow->get().extraSlots) {
+            if (!slot.isEmpty() && slot.resourceHandle == handle) {
+                availableCapacity += std::max(0, maxStack - static_cast<int>(slot.quantity));
+            } else if (slot.isEmpty()) {
+                availableCapacity += maxStack;
+            }
+        }
+    }
+
+    if (availableCapacity < quantity) {
+        ENTITY_WARN(std::format("addToInventory: Could not add {} items (inventory full)",
+                                quantity - availableCapacity));
+        return false;
+    }
 
     int remaining = quantity;
 
@@ -2155,8 +2717,8 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
     }
 
     // Check overflow slots
-    if (overflow) {
-        for (auto& slot : overflow->extraSlots) {
+    if (overflow.has_value()) {
+        for (auto& slot : overflow->get().extraSlots) {
             if (remaining <= 0) break;
             if (!slot.isEmpty() && slot.resourceHandle == handle) {
                 int canAdd = maxStack - slot.quantity;
@@ -2183,8 +2745,8 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
     }
 
     // Check overflow slots
-    if (overflow) {
-        for (auto& slot : overflow->extraSlots) {
+    if (overflow.has_value()) {
+        for (auto& slot : overflow->get().extraSlots) {
             if (remaining <= 0) break;
             if (slot.isEmpty()) {
                 int toAdd = std::min(maxStack, remaining);
@@ -2226,7 +2788,10 @@ bool EntityDataManager::removeFromInventory(uint32_t inventoryIndex,
     }
 
     auto& inv = m_inventoryData[inventoryIndex];
-    InventoryOverflow* overflow = (inv.overflowId > 0) ? &m_inventoryOverflow[inv.overflowId] : nullptr;
+    std::optional<std::reference_wrapper<InventoryOverflow>> overflow;
+    if (inv.overflowId > 0) {
+        overflow = std::ref(m_inventoryOverflow[inv.overflowId]);
+    }
 
     int remaining = quantity;
 
@@ -2245,8 +2810,8 @@ bool EntityDataManager::removeFromInventory(uint32_t inventoryIndex,
     }
 
     // Remove from overflow slots
-    if (overflow) {
-        for (auto& slot : overflow->extraSlots) {
+    if (overflow.has_value()) {
+        for (auto& slot : overflow->get().extraSlots) {
             if (remaining <= 0) break;
             if (!slot.isEmpty() && slot.resourceHandle == handle) {
                 int toRemove = std::min(static_cast<int>(slot.quantity), remaining);
@@ -2262,6 +2827,193 @@ bool EntityDataManager::removeFromInventory(uint32_t inventoryIndex,
 
     inv.flags |= InventoryData::FLAG_DIRTY;
     return true;
+}
+
+std::optional<InventoryTransferResult> EntityDataManager::transferInventoryItem(
+    uint32_t sourceInventoryIndex,
+    uint32_t targetInventoryIndex,
+    VoidLight::ResourceHandle handle,
+    int quantity) {
+    if (!handle.isValid() || quantity <= 0) {
+        return std::nullopt;
+    }
+
+    auto& rtm = ResourceTemplateManager::Instance();
+    int maxStack = rtm.isInitialized() ? rtm.getMaxStackSize(handle) : 99;
+    if (maxStack <= 0) {
+        maxStack = 99;
+    }
+
+    std::lock_guard<std::mutex> lock(m_inventoryMutex);
+
+    if (sourceInventoryIndex == INVALID_INVENTORY_INDEX ||
+        targetInventoryIndex == INVALID_INVENTORY_INDEX ||
+        sourceInventoryIndex >= m_inventoryData.size() ||
+        targetInventoryIndex >= m_inventoryData.size()) {
+        return std::nullopt;
+    }
+
+    auto& source = m_inventoryData[sourceInventoryIndex];
+    auto& target = m_inventoryData[targetInventoryIndex];
+    if (!source.isValid() || !target.isValid()) {
+        return std::nullopt;
+    }
+
+    const int sourceOldQuantity =
+        getInventoryQuantityLocked(sourceInventoryIndex, handle);
+    if (sourceOldQuantity < quantity) {
+        return std::nullopt;
+    }
+
+    if (sourceInventoryIndex == targetInventoryIndex) {
+        return InventoryTransferResult{};
+    }
+
+    const int targetOldQuantity =
+        getInventoryQuantityLocked(targetInventoryIndex, handle);
+
+    auto inventoryOverflow =
+        [this](InventoryData& inv)
+        -> std::optional<std::reference_wrapper<InventoryOverflow>> {
+        if (inv.overflowId == 0) {
+            return std::nullopt;
+        }
+
+        auto it = m_inventoryOverflow.find(inv.overflowId);
+        if (it == m_inventoryOverflow.end()) {
+            return std::nullopt;
+        }
+
+        return std::ref(it->second);
+    };
+
+    auto inlineSlotCountFor = [](const InventoryData& inv) {
+        return std::min(InventoryData::INLINE_SLOT_COUNT,
+                        static_cast<size_t>(inv.maxSlots));
+    };
+
+    auto availableCapacityFor =
+        [maxStack, handle, &inlineSlotCountFor](
+            const InventoryData& inv,
+            const std::optional<
+                std::reference_wrapper<InventoryOverflow>>& overflow) {
+        int availableCapacity = 0;
+        const size_t inlineSlotCount = inlineSlotCountFor(inv);
+        for (size_t i = 0; i < inlineSlotCount; ++i) {
+            const auto& slot = inv.slots[i];
+            if (!slot.isEmpty() && slot.resourceHandle == handle) {
+                availableCapacity +=
+                    std::max(0, maxStack - static_cast<int>(slot.quantity));
+            } else if (slot.isEmpty()) {
+                availableCapacity += maxStack;
+            }
+        }
+
+        if (overflow.has_value()) {
+            for (const auto& slot : overflow->get().extraSlots) {
+                if (!slot.isEmpty() && slot.resourceHandle == handle) {
+                    availableCapacity +=
+                        std::max(0, maxStack - static_cast<int>(slot.quantity));
+                } else if (slot.isEmpty()) {
+                    availableCapacity += maxStack;
+                }
+            }
+        }
+
+        return availableCapacity;
+    };
+
+    auto sourceOverflow = inventoryOverflow(source);
+    auto targetOverflow = inventoryOverflow(target);
+    if (availableCapacityFor(target, targetOverflow) < quantity) {
+        return std::nullopt;
+    }
+
+    int remainingToRemove = quantity;
+    auto removeFromSlot = [&remainingToRemove, handle, &source](InventorySlotData& slot) {
+        if (remainingToRemove <= 0 || slot.isEmpty() || slot.resourceHandle != handle) {
+            return;
+        }
+
+        const int toRemove =
+            std::min(static_cast<int>(slot.quantity), remainingToRemove);
+        slot.quantity -= static_cast<int16_t>(toRemove);
+        remainingToRemove -= toRemove;
+        if (slot.quantity <= 0) {
+            slot.clear();
+            --source.usedSlots;
+        }
+    };
+
+    const size_t sourceInlineSlotCount = inlineSlotCountFor(source);
+    for (size_t i = 0; i < sourceInlineSlotCount; ++i) {
+        removeFromSlot(source.slots[i]);
+    }
+    if (sourceOverflow.has_value()) {
+        for (auto& slot : sourceOverflow->get().extraSlots) {
+            removeFromSlot(slot);
+        }
+    }
+
+    int remainingToAdd = quantity;
+    auto stackIntoSlot = [&remainingToAdd, maxStack, handle](InventorySlotData& slot) {
+        if (remainingToAdd <= 0 || slot.isEmpty() || slot.resourceHandle != handle) {
+            return;
+        }
+
+        const int canAdd = maxStack - static_cast<int>(slot.quantity);
+        if (canAdd <= 0) {
+            return;
+        }
+
+        const int toAdd = std::min(canAdd, remainingToAdd);
+        slot.quantity += static_cast<int16_t>(toAdd);
+        remainingToAdd -= toAdd;
+    };
+
+    const size_t targetInlineSlotCount = inlineSlotCountFor(target);
+    for (size_t i = 0; i < targetInlineSlotCount; ++i) {
+        stackIntoSlot(target.slots[i]);
+    }
+    if (targetOverflow.has_value()) {
+        for (auto& slot : targetOverflow->get().extraSlots) {
+            stackIntoSlot(slot);
+        }
+    }
+
+    auto fillEmptySlot = [&remainingToAdd, maxStack, handle, &target](
+                             InventorySlotData& slot) {
+        if (remainingToAdd <= 0 || !slot.isEmpty()) {
+            return;
+        }
+
+        const int toAdd = std::min(maxStack, remainingToAdd);
+        slot.resourceHandle = handle;
+        slot.quantity = static_cast<int16_t>(toAdd);
+        remainingToAdd -= toAdd;
+        ++target.usedSlots;
+    };
+
+    for (size_t i = 0; i < targetInlineSlotCount; ++i) {
+        fillEmptySlot(target.slots[i]);
+    }
+    if (targetOverflow.has_value()) {
+        for (auto& slot : targetOverflow->get().extraSlots) {
+            fillEmptySlot(slot);
+        }
+    }
+
+    source.flags |= InventoryData::FLAG_DIRTY;
+    target.flags |= InventoryData::FLAG_DIRTY;
+
+    return InventoryTransferResult{
+        .sourceChange =
+            InventoryResourceChange{handle, sourceOldQuantity,
+                                    sourceOldQuantity - quantity},
+        .targetChange =
+            InventoryResourceChange{handle, targetOldQuantity,
+                                    targetOldQuantity + quantity}
+    };
 }
 
 int EntityDataManager::getInventoryQuantity(uint32_t inventoryIndex,
@@ -2355,6 +3107,123 @@ EntityDataManager::getInventoryResources(uint32_t inventoryIndex) const {
     }
 
     return result;
+}
+
+InventorySlotData EntityDataManager::getInventorySlot(uint32_t inventoryIndex,
+                                                      size_t slotIndex) const {
+    std::lock_guard<std::mutex> lock(m_inventoryMutex);
+
+    if (inventoryIndex == INVALID_INVENTORY_INDEX ||
+        inventoryIndex >= m_inventoryData.size()) {
+        return {};
+    }
+
+    const auto& inv = m_inventoryData[inventoryIndex];
+    if (!inv.isValid() || slotIndex >= inv.maxSlots) {
+        return {};
+    }
+
+    std::optional<std::reference_wrapper<const InventoryOverflow>> overflow;
+    if (inv.overflowId > 0) {
+        const auto it = m_inventoryOverflow.find(inv.overflowId);
+        if (it != m_inventoryOverflow.end()) {
+            overflow = std::cref(it->second);
+        }
+    }
+
+    const auto slot = getInventorySlotRef(inv, overflow, slotIndex);
+    return slot.has_value() ? slot->get() : InventorySlotData{};
+}
+
+size_t EntityDataManager::getInventorySlots(uint32_t inventoryIndex,
+                                            std::span<InventorySlotData> outSlots) const {
+    if (outSlots.empty()) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(m_inventoryMutex);
+
+    if (inventoryIndex == INVALID_INVENTORY_INDEX ||
+        inventoryIndex >= m_inventoryData.size()) {
+        return 0;
+    }
+
+    const auto& inv = m_inventoryData[inventoryIndex];
+    if (!inv.isValid()) {
+        return 0;
+    }
+
+    const size_t slotsToCopy = std::min(outSlots.size(), static_cast<size_t>(inv.maxSlots));
+    const size_t inlineCount = std::min(slotsToCopy, InventoryData::INLINE_SLOT_COUNT);
+    std::copy_n(inv.slots, inlineCount, outSlots.begin());
+
+    if (slotsToCopy <= InventoryData::INLINE_SLOT_COUNT) {
+        return slotsToCopy;
+    }
+
+    if (inv.overflowId == 0) {
+        return 0;
+    }
+
+    const auto it = m_inventoryOverflow.find(inv.overflowId);
+    if (it == m_inventoryOverflow.end()) {
+        return 0;
+    }
+
+    const size_t overflowCount = slotsToCopy - InventoryData::INLINE_SLOT_COUNT;
+    if (overflowCount > it->second.extraSlots.size()) {
+        return 0;
+    }
+
+    std::copy_n(it->second.extraSlots.begin(),
+                overflowCount,
+                outSlots.begin() + static_cast<std::ptrdiff_t>(InventoryData::INLINE_SLOT_COUNT));
+    return slotsToCopy;
+}
+
+bool EntityDataManager::swapInventorySlots(uint32_t inventoryIndex,
+                                           size_t sourceSlot,
+                                           size_t targetSlot) {
+    std::lock_guard<std::mutex> lock(m_inventoryMutex);
+
+    if (inventoryIndex == INVALID_INVENTORY_INDEX ||
+        inventoryIndex >= m_inventoryData.size()) {
+        return false;
+    }
+
+    auto& inv = m_inventoryData[inventoryIndex];
+    if (!inv.isValid() || sourceSlot >= inv.maxSlots || targetSlot >= inv.maxSlots) {
+        return false;
+    }
+
+    std::optional<std::reference_wrapper<InventoryOverflow>> overflow;
+    if (inv.needsOverflow()) {
+        if (inv.overflowId == 0) {
+            return false;
+        }
+
+        const auto it = m_inventoryOverflow.find(inv.overflowId);
+        if (it == m_inventoryOverflow.end() ||
+            it->second.extraSlots.size() !=
+                inv.maxSlots - InventoryData::INLINE_SLOT_COUNT) {
+            return false;
+        }
+        overflow = std::ref(it->second);
+    }
+
+    auto source = getInventorySlotRef(inv, overflow, sourceSlot);
+    auto target = getInventorySlotRef(inv, overflow, targetSlot);
+    if (!source.has_value() || !target.has_value()) {
+        return false;
+    }
+
+    if (sourceSlot == targetSlot || sameInventorySlot(source->get(), target->get())) {
+        return true;
+    }
+
+    std::swap(source->get(), target->get());
+    inv.flags |= InventoryData::FLAG_DIRTY;
+    return true;
 }
 
 InventoryData& EntityDataManager::getInventoryData(uint32_t inventoryIndex) {
@@ -2527,6 +3396,50 @@ const EntityHotData& EntityDataManager::getStaticHotDataByIndex(size_t index) co
     return m_staticHotData[index];
 }
 
+// ============================================================================
+// KNOCKBACK SIDECAR ACCESS
+// ============================================================================
+
+KnockbackData& EntityDataManager::applyKnockback(size_t edmIdx)
+{
+    return m_knockback.apply(static_cast<uint32_t>(edmIdx));
+}
+
+KnockbackData* EntityDataManager::getKnockback(size_t edmIdx) noexcept
+{
+    return m_knockback.get(static_cast<uint32_t>(edmIdx));
+}
+
+const KnockbackData* EntityDataManager::getKnockback(size_t edmIdx) const noexcept
+{
+    return m_knockback.get(static_cast<uint32_t>(edmIdx));
+}
+
+bool EntityDataManager::hasKnockback(size_t edmIdx) const noexcept
+{
+    return m_knockback.has(static_cast<uint32_t>(edmIdx));
+}
+
+void EntityDataManager::clearKnockback(size_t edmIdx) noexcept
+{
+    m_knockback.remove(static_cast<uint32_t>(edmIdx));
+}
+
+size_t EntityDataManager::knockbackActiveCount() const noexcept
+{
+    return m_knockback.activeCount();
+}
+
+SparseSidecar<KnockbackData>& EntityDataManager::knockbackSidecar() noexcept
+{
+    return m_knockback;
+}
+
+const SparseSidecar<KnockbackData>& EntityDataManager::knockbackSidecar() const noexcept
+{
+    return m_knockback;
+}
+
 size_t EntityDataManager::getStaticIndex(EntityHandle handle) const {
     if (handle.kind != EntityKind::StaticObstacle) {
         return SIZE_MAX;
@@ -2555,7 +3468,7 @@ EntityHandle EntityDataManager::getStaticHandle(size_t staticIndex) const {
     return EntityHandle{
         m_staticEntityIds[staticIndex],
         hot.kind,
-        hot.generation
+        m_staticGenerations[staticIndex]
     };
 }
 
@@ -2579,6 +3492,63 @@ const CharacterData& EntityDataManager::getCharacterData(EntityHandle handle) co
     uint32_t typeIndex = m_hotData[index].typeLocalIndex;
     assert(typeIndex < m_characterData.size() && "Type index out of bounds");
     return m_characterData[typeIndex];
+}
+
+void EntityDataManager::setCharacterBaseStats(EntityHandle handle,
+                                              float maxHealth,
+                                              float maxStamina,
+                                              float attackDamage,
+                                              float attackRange,
+                                              float moveSpeed)
+{
+    if (!handle.isValid() || !handle.hasHealth()) {
+        ENTITY_ERROR("setCharacterBaseStats: Invalid character handle");
+        return;
+    }
+
+    const size_t index = getIndex(handle);
+    if (index == SIZE_MAX) {
+        ENTITY_ERROR("setCharacterBaseStats: Character not found in EDM");
+        return;
+    }
+
+    const uint32_t typeIndex = m_hotData[index].typeLocalIndex;
+    if (typeIndex >= m_characterData.size()) {
+        ENTITY_ERROR("setCharacterBaseStats: Type index out of bounds");
+        return;
+    }
+
+    auto& charData = m_characterData[typeIndex];
+    charData.baseMaxHealth = std::max(1.0f, maxHealth);
+    charData.maxHealth = charData.baseMaxHealth;
+    charData.health = std::min(std::max(0.0f, charData.health),
+                               charData.maxHealth);
+    if (charData.health <= 0.0f) {
+        charData.health = charData.maxHealth;
+    }
+    charData.maxStamina = std::max(0.0f, maxStamina);
+    charData.stamina = std::min(charData.stamina, charData.maxStamina);
+    charData.baseAttackDamage = std::max(0.0f, attackDamage);
+    charData.baseAttackRange = std::max(0.0f, attackRange);
+    charData.baseMoveSpeed = std::max(1.0f, moveSpeed);
+    recalculateCharacterEquipmentStats(typeIndex);
+}
+
+void EntityDataManager::setCharacterInventoryIndex(EntityHandle handle,
+                                                   uint32_t inventoryIndex)
+{
+    if (!handle.isValid() || !handle.hasHealth()) {
+        ENTITY_ERROR("setCharacterInventoryIndex: Invalid character handle");
+        return;
+    }
+    if (!isValidInventoryIndex(inventoryIndex)) {
+        ENTITY_ERROR(std::format("setCharacterInventoryIndex: Invalid inventory index {}",
+                                 inventoryIndex));
+        return;
+    }
+
+    auto& charData = getCharacterData(handle);
+    charData.inventoryIndex = inventoryIndex;
 }
 
 // getCharacterDataByIndex() is now inline in EntityDataManager.hpp
@@ -2781,11 +3751,12 @@ void EntityDataManager::advanceWaypointWithCache(size_t index) {
 
 // getBehaviorData() is now inline in EntityDataManager.hpp
 
-void EntityDataManager::initBehaviorData(size_t index, BehaviorType behaviorType) {
+void EntityDataManager::initBehaviorData(size_t index, BehaviorType) {
+    // BehaviorType parameter is retained in the signature for backward-compatible call sites
+    // but the type now lives exclusively in BehaviorConfigRef — not in BehaviorData.
     assert(index < m_behaviorData.size() && "BehaviorData index out of bounds");
     auto& data = m_behaviorData[index];
     data.clear();
-    data.behaviorType = behaviorType;
     data.setValid(true);
 }
 
@@ -2793,6 +3764,131 @@ void EntityDataManager::clearBehaviorData(size_t index) {
     if (index < m_behaviorData.size()) {
         m_behaviorData[index].clear();
     }
+}
+
+// ============================================================================
+// ARCHETYPE BEHAVIOR CONFIG MANAGEMENT
+// ============================================================================
+
+void EntityDataManager::clearBehaviorConfig(size_t edmIdx) {
+    if (edmIdx >= m_behaviorConfigRef.size()) {
+        return;
+    }
+
+    auto& ref = m_behaviorConfigRef[edmIdx];
+    if (ref.type == BehaviorType::None || ref.index == std::numeric_limits<uint32_t>::max()) {
+        // Nothing in any pool — just ensure ref is clean
+        ref.type  = BehaviorType::None;
+        ref.index = std::numeric_limits<uint32_t>::max();
+        return;
+    }
+
+    // Lockstep swap-with-back removal for both config and state pools.
+    // The owner patch applies to the displaced entity's ref (config and state share
+    // the same index, so patching once is sufficient).
+    auto popFromPool = [&](auto& configs, auto& states, auto& owners, uint32_t slotIdx) {
+        assert(slotIdx < configs.size() && "Pool slot index out of bounds");
+        const size_t lastPos = configs.size() - 1;
+        if (static_cast<size_t>(slotIdx) != lastPos) {
+            // Move last elements into the vacated slot (lockstep)
+            configs[slotIdx] = std::move(configs[lastPos]);
+            states[slotIdx]  = std::move(states[lastPos]);
+            owners[slotIdx]  = owners[lastPos];
+            // Patch the displaced entity's ref to point at the new position
+            size_t movedOwner = owners[slotIdx];
+            if (movedOwner < m_behaviorConfigRef.size()) {
+                m_behaviorConfigRef[movedOwner].index = slotIdx;
+            }
+        }
+        configs.pop_back();
+        states.pop_back();
+        owners.pop_back();
+    };
+
+    switch (ref.type) {
+        case BehaviorType::Idle:   popFromPool(m_idleConfigs,   m_idleStates,   m_idleOwners,   ref.index); break;
+        case BehaviorType::Wander: popFromPool(m_wanderConfigs, m_wanderStates, m_wanderOwners, ref.index); break;
+        case BehaviorType::Chase:  popFromPool(m_chaseConfigs,  m_chaseStates,  m_chaseOwners,  ref.index); break;
+        case BehaviorType::Patrol: popFromPool(m_patrolConfigs, m_patrolStates, m_patrolOwners, ref.index); break;
+        case BehaviorType::Flee:   popFromPool(m_fleeConfigs,   m_fleeStates,   m_fleeOwners,   ref.index); break;
+        case BehaviorType::Follow: popFromPool(m_followConfigs, m_followStates, m_followOwners, ref.index); break;
+        case BehaviorType::Guard:  popFromPool(m_guardConfigs,  m_guardStates,  m_guardOwners,  ref.index); break;
+        case BehaviorType::Attack: popFromPool(m_attackConfigs, m_attackStates, m_attackOwners, ref.index); break;
+        default: break; // Custom/None/COUNT — no pool slot to remove
+    }
+
+    ref.type  = BehaviorType::None;
+    ref.index = std::numeric_limits<uint32_t>::max();
+}
+
+void EntityDataManager::reassignBehaviorConfig(size_t edmIdx, const VoidLight::BehaviorConfigData& newConfig) {
+    assert(newConfig.type != BehaviorType::None && "reassignBehaviorConfig: type must not be None");
+    assert(edmIdx < m_behaviorConfigRef.size() && "reassignBehaviorConfig: edmIdx out of bounds");
+
+    // Pop old slot first (no-op if entity had no prior config)
+    clearBehaviorConfig(edmIdx);
+
+    // Push into the correct variant pool and record owner
+    auto& ref = m_behaviorConfigRef[edmIdx];
+
+    // Push config + default-constructed state into the matching pools (lockstep invariant).
+    // Behaviors::init*() will populate the state slot immediately after this call.
+    switch (newConfig.type) {
+        case BehaviorType::Idle:
+            ref.index = static_cast<uint32_t>(m_idleConfigs.size());
+            m_idleConfigs.push_back(newConfig.params.idle);
+            m_idleStates.emplace_back();
+            m_idleOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Wander:
+            ref.index = static_cast<uint32_t>(m_wanderConfigs.size());
+            m_wanderConfigs.push_back(newConfig.params.wander);
+            m_wanderStates.emplace_back();
+            m_wanderOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Chase:
+            ref.index = static_cast<uint32_t>(m_chaseConfigs.size());
+            m_chaseConfigs.push_back(newConfig.params.chase);
+            m_chaseStates.emplace_back();
+            m_chaseOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Patrol:
+            ref.index = static_cast<uint32_t>(m_patrolConfigs.size());
+            m_patrolConfigs.push_back(newConfig.params.patrol);
+            m_patrolStates.emplace_back();
+            m_patrolOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Flee:
+            ref.index = static_cast<uint32_t>(m_fleeConfigs.size());
+            m_fleeConfigs.push_back(newConfig.params.flee);
+            m_fleeStates.emplace_back();
+            m_fleeOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Follow:
+            ref.index = static_cast<uint32_t>(m_followConfigs.size());
+            m_followConfigs.push_back(newConfig.params.follow);
+            m_followStates.emplace_back();
+            m_followOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Guard:
+            ref.index = static_cast<uint32_t>(m_guardConfigs.size());
+            m_guardConfigs.push_back(newConfig.params.guard);
+            m_guardStates.emplace_back();
+            m_guardOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Attack:
+            ref.index = static_cast<uint32_t>(m_attackConfigs.size());
+            m_attackConfigs.push_back(newConfig.params.attack);
+            m_attackStates.emplace_back();
+            m_attackOwners.push_back(edmIdx);
+            break;
+        default:
+            // Custom/COUNT — no pool; type is stored only in the ref for the execute switch
+            ref.index = std::numeric_limits<uint32_t>::max();
+            break;
+    }
+
+    ref.type = newConfig.type;
 }
 
 // ============================================================================
@@ -2818,9 +3914,9 @@ void EntityDataManager::clearMemoryData(size_t index) {
     }
     auto& data = m_memoryData[index];
 
-    // Clean up overflow if present
-    if (data.hasOverflow() && data.overflowId > 0) {
-        m_memoryOverflow.erase(data.overflowId);
+    // Clean up overflow sidecar entry if present
+    if (data.hasOverflow()) {
+        m_memoryOverflow.removeAllFor(static_cast<uint32_t>(index));
     }
 
     data.clear();
@@ -2846,14 +3942,12 @@ void EntityDataManager::addMemory(size_t index, const MemoryEntry& entry, bool u
         data.nextInlineSlot = (data.nextInlineSlot + 1) % NPCMemoryData::INLINE_MEMORY_COUNT;
         data.memoryCount++;
     } else if (useOverflow) {
-        // Allocate overflow if needed
+        // Allocate overflow sidecar entry if needed
         if (!data.hasOverflow()) {
-            data.overflowId = m_nextMemoryOverflowId++;
             data.flags |= NPCMemoryData::FLAG_HAS_OVERFLOW;
-            m_memoryOverflow[data.overflowId] = MemoryOverflow{};
         }
 
-        auto& overflow = m_memoryOverflow[data.overflowId];
+        auto& overflow = m_memoryOverflow.apply(static_cast<uint32_t>(index));
         overflow.extraMemories.push_back(entry);
         overflow.trimToMax();
         data.memoryCount = static_cast<uint16_t>(
@@ -2891,10 +3985,10 @@ void EntityDataManager::findMemoriesByType(size_t index, MemoryType type,
     }
 
     // Search overflow if present
-    if (data.hasOverflow() && data.overflowId > 0) {
-        auto it = m_memoryOverflow.find(data.overflowId);
-        if (it != m_memoryOverflow.end()) {
-            for (const auto& mem : it->second.extraMemories) {
+    if (data.hasOverflow()) {
+        const auto* overflow = m_memoryOverflow.get(static_cast<uint32_t>(index));
+        if (overflow) {
+            for (const auto& mem : overflow->extraMemories) {
                 if (mem.isValid() && mem.type == type) {
                     outMemories.push_back(&mem);
                     if (maxResults > 0 && outMemories.size() >= maxResults) {
@@ -2926,10 +4020,10 @@ void EntityDataManager::findMemoriesOfEntity(size_t index, EntityHandle subject,
     }
 
     // Search overflow
-    if (data.hasOverflow() && data.overflowId > 0) {
-        auto it = m_memoryOverflow.find(data.overflowId);
-        if (it != m_memoryOverflow.end()) {
-            for (const auto& mem : it->second.extraMemories) {
+    if (data.hasOverflow()) {
+        const auto* overflow = m_memoryOverflow.get(static_cast<uint32_t>(index));
+        if (overflow) {
+            for (const auto& mem : overflow->extraMemories) {
                 if (mem.isValid() && mem.subject == subject) {
                     outMemories.push_back(&mem);
                 }
@@ -2978,7 +4072,6 @@ void EntityDataManager::recordCombatEvent(size_t index, EntityHandle attacker,
 
     memData.lastCombatTime = 0.0f;  // Delta semantics: starts at 0, incremented by updateEmotionalDecay
     memData.combatEncounters++;
-    memData.flags |= NPCMemoryData::FLAG_IN_COMBAT;
 
     // Create memory entry
     MemoryEntry mem;
@@ -3260,7 +4353,7 @@ void EntityDataManager::queryEntitiesInRadius(const Vector2D& center,
         float distSq = dx * dx + dy * dy;
 
         if (distSq <= radiusSq) {
-            outHandles.emplace_back(m_entityIds[i], hot.kind, hot.generation);
+            outHandles.emplace_back(m_entityIds[i], hot.kind, m_generations[i]);
         }
     }
 }
@@ -3298,7 +4391,7 @@ EntityHandle EntityDataManager::getHandle(size_t index) const {
     return EntityHandle{
         m_entityIds[index],
         m_hotData[index].kind,
-        m_hotData[index].generation
+        m_generations[index]
     };
 }
 
@@ -3463,6 +4556,14 @@ void EntityDataManager::initializeClassRegistry() {
                 // Emotional resilience (0.0 = very emotional, 1.0 = stoic)
                 info.emotionalResilience = c.hasKey("emotionalResilience") ?
                     static_cast<float>(c["emotionalResilience"].asNumber()) : 0.5f;
+                info.personalityBraveryBias = c.hasKey("personalityBraveryBias") ?
+                    static_cast<float>(c["personalityBraveryBias"].asNumber()) : 0.5f;
+                info.personalityAggressionBias = c.hasKey("personalityAggressionBias") ?
+                    static_cast<float>(c["personalityAggressionBias"].asNumber()) : 0.5f;
+                info.personalityComposureBias = c.hasKey("personalityComposureBias") ?
+                    static_cast<float>(c["personalityComposureBias"].asNumber()) : 0.5f;
+                info.personalityLoyaltyBias = c.hasKey("personalityLoyaltyBias") ?
+                    static_cast<float>(c["personalityLoyaltyBias"].asNumber()) : 0.5f;
 
                 // Starting items
                 if (c.hasKey("startingItems") && c["startingItems"].isArray()) {
@@ -3493,22 +4594,22 @@ void EntityDataManager::initializeClassRegistry() {
     ENTITY_WARN(std::format("Failed to load classes from {}, using defaults", jsonPath));
 
     // emotionalResilience: 0.7 for warriors, 0.8 for guards, 0.3 for merchants, etc.
-    m_classRegistry["Warrior"] = {"Warrior", 1.3f, 1.0f, 0.9f, 1.5f, 1.0f, "melee", 0.0f, "Chase", 7, 1, false, 0.7f, {}};
+    m_classRegistry["Warrior"] = {"Warrior", 1.3f, 1.0f, 0.9f, 1.5f, 1.0f, "melee", 0.0f, "Chase", 7, 1, false, 0.7f, 0.7f, 0.75f, 0.6f, 0.55f, {}};
     m_classNameToId["Warrior"] = 0; m_classIdToName.push_back("Warrior");
 
-    m_classRegistry["Guard"] = {"Guard", 1.2f, 1.1f, 0.8f, 1.2f, 1.0f, "melee", 0.0f, "Guard", 6, 0, false, 0.8f, {}};
+    m_classRegistry["Guard"] = {"Guard", 1.2f, 1.1f, 0.8f, 1.2f, 1.0f, "melee", 0.0f, "Guard", 6, 0, false, 0.8f, 0.75f, 0.55f, 0.75f, 0.8f, {}};
     m_classNameToId["Guard"] = 1; m_classIdToName.push_back("Guard");
 
-    m_classRegistry["GeneralMerchant"] = {"GeneralMerchant", 0.7f, 0.8f, 0.9f, 0.3f, 0.5f, "melee", 0.0f, "Idle", 2, 0, true, 0.3f, {}};
+    m_classRegistry["GeneralMerchant"] = {"GeneralMerchant", 0.7f, 0.8f, 0.9f, 0.3f, 0.5f, "melee", 0.0f, "Idle", 2, 0, true, 0.3f, 0.35f, 0.25f, 0.55f, 0.45f, {}};
     m_classNameToId["GeneralMerchant"] = 2; m_classIdToName.push_back("GeneralMerchant");
 
-    m_classRegistry["Rogue"] = {"Rogue", 0.8f, 1.3f, 1.3f, 1.2f, 0.8f, "melee", 0.0f, "Chase", 8, 1, false, 0.5f, {}};
+    m_classRegistry["Rogue"] = {"Rogue", 0.8f, 1.3f, 1.3f, 1.2f, 0.8f, "melee", 0.0f, "Chase", 8, 1, false, 0.5f, 0.55f, 0.7f, 0.55f, 0.35f, {}};
     m_classNameToId["Rogue"] = 3; m_classIdToName.push_back("Rogue");
 
-    m_classRegistry["Mage"] = {"Mage", 0.6f, 1.5f, 0.85f, 1.8f, 3.0f, "ranged", 200.0f, "Attack", 7, 2, false, 0.4f, {}};
+    m_classRegistry["Mage"] = {"Mage", 0.6f, 1.5f, 0.85f, 1.8f, 3.0f, "ranged", 200.0f, "Attack", 7, 2, false, 0.4f, 0.45f, 0.6f, 0.7f, 0.45f, {}};
     m_classNameToId["Mage"] = 4; m_classIdToName.push_back("Mage");
 
-    m_classRegistry["Farmer"] = {"Farmer", 0.9f, 1.1f, 1.0f, 0.5f, 0.5f, "melee", 0.0f, "Wander", 3, 0, true, 0.4f, {}};
+    m_classRegistry["Farmer"] = {"Farmer", 0.9f, 1.1f, 1.0f, 0.5f, 0.5f, "melee", 0.0f, "Wander", 3, 0, true, 0.4f, 0.45f, 0.35f, 0.55f, 0.45f, {}};
     m_classNameToId["Farmer"] = 5; m_classIdToName.push_back("Farmer");
 
     ENTITY_INFO(std::format("Initialized class registry with {} classes (fallback)", m_classRegistry.size()));

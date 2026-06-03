@@ -15,7 +15,7 @@
  * @brief Event fired when a resource quantity changes in an inventory
  *
  * This event is triggered whenever resources are added, removed, or modified
- * in any InventoryComponent. It allows systems to react to inventory changes
+ * in any EDM-backed inventory. It allows systems to react to inventory changes
  * such as updating UI displays, triggering achievements, or logging
  * transactions.
  */

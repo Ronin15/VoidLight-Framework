@@ -82,24 +82,39 @@ endif()
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 
-option(USE_MOLD_LINKER "Use mold linker if available" ON)
+option(USE_MOLD_LINKER "Use mold linker if available (Linux only)" ON)
 
-if(USE_MOLD_LINKER)
+if(USE_MOLD_LINKER AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_program(MOLD_LINKER mold)
-    
+
     if(MOLD_LINKER)
-        message(STATUS "Using mold linker")
-        
+        message(STATUS "Using mold linker: ${MOLD_LINKER}")
+
         if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.29")
             set(CMAKE_LINKER_TYPE MOLD)
-        else()
-            if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-                add_link_options("-fuse-ld=mold")
-            endif()
+        elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+            add_link_options("-fuse-ld=mold")
         endif()
     else()
         message(WARNING "mold linker requested but not found")
+    endif()
+endif()
+
+# Use ccache as a compiler launcher when available to speed up rebuilds.
+# Applies to our code and FetchContent dependencies (SDL3, SDL3_ttf, SDL3_mixer).
+option(USE_CCACHE "Use ccache compiler launcher if available" ON)
+
+if(USE_CCACHE)
+    find_program(CCACHE_PROGRAM ccache)
+
+    if(CCACHE_PROGRAM)
+        message(STATUS "Using ccache: ${CCACHE_PROGRAM}")
+        set(CMAKE_C_COMPILER_LAUNCHER   "${CCACHE_PROGRAM}")
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    else()
+        message(STATUS "ccache not found - compiling without ccache")
     endif()
 endif()
 
@@ -145,7 +160,7 @@ message(STATUS
 
 # Specify the stable release tags for each SDL3 component
 # SDL3 3.4.0 is first stable release - includes native PNG loading (SDL_LoadPNG)
-set(SDL3_GIT_TAG "release-3.4.4")          # SDL3 3.4.0 stable release
+set(SDL3_GIT_TAG "release-3.4.10")          # SDL3 3.4.0 stable release
 set(SDL3_TTF_GIT_TAG "release-3.2.2")      # SDL3_ttf stable release
 set(SDL3_MIXER_GIT_TAG "release-3.2.0")    # SDL3_mixer stable release
 

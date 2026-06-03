@@ -141,19 +141,6 @@ void ProjectileManager::prepareForStateTransition()
 }
 
 
-void ProjectileManager::queueProjectileDestroy(size_t projectileIndex)
-{
-    auto& edm = EntityDataManager::Instance();
-    auto& projectileHot = edm.getHotDataByIndex(projectileIndex);
-    projectileHot.transform.velocity = Vector2D(0.0f, 0.0f);
-
-    EntityHandle projHandle = edm.getHandle(projectileIndex);
-    if (projHandle.isValid())
-    {
-        edm.destroyEntity(projHandle);
-    }
-}
-
 void ProjectileManager::embedProjectile(size_t projectileIndex, const Vector2D& impactNormal,
                                         EntityHandle embeddedTarget)
 {
@@ -199,6 +186,10 @@ void ProjectileManager::embedProjectile(size_t projectileIndex, const Vector2D& 
         projectile.embeddedOffsetX = impactNormal.getX() * projectileHot.halfWidth;
         projectile.embeddedOffsetY = impactNormal.getY() * projectileHot.halfHeight;
     }
+
+    // Preserve flight angle so the renderer can orient the embedded sprite
+    const auto& vel = projectileHot.transform.velocity;
+    projectile.embeddedAngle = std::atan2(vel.getY(), vel.getX());
 
     projectileHot.transform.velocity = Vector2D(0.0f, 0.0f);
     projectileHot.transform.acceleration = Vector2D(0.0f, 0.0f);

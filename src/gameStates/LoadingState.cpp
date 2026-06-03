@@ -224,8 +224,8 @@ bool LoadingState::hasError() const {
 void LoadingState::initializeUI() {
   auto &ui = UIManager::Instance();
   auto &gameEngine = GameEngine::Instance();
-  int windowWidth = gameEngine.getLogicalWidth();
-  int windowHeight = gameEngine.getLogicalHeight();
+  int windowWidth = gameEngine.getWidthInPixels();
+  int windowHeight = gameEngine.getHeightInPixels();
 
   // Create loading overlay
   ui.createOverlay();

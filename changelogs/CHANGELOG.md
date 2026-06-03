@@ -4,6 +4,7 @@ This folder contains **branch-scoped changelogs**. Prefer the most specific chan
 
 ## Branch Changelogs
 
+- [`CHANGELOG_ITEMS_UPDATE.md`](CHANGELOG_ITEMS_UPDATE.md) — `items` (2026-04-13 → 2026-06-03): inventory/container UI path consolidation, GPU/UI cleanup, and validation/tooling fixes.
 - [`CHANGELOG_PROJECTILES_UPDATE.md`](CHANGELOG_PROJECTILES_UPDATE.md) — `projectiles` (2026-04-03 → 2026-04-10): ProjectileManager + HUD ownership refactor + `[[nodiscard]]`/state enum standardization.
 - [`CHANGELOG_AUDIT_REFACTOR.md`](CHANGELOG_AUDIT_REFACTOR.md) — `audit` (2026-03-30 → 2026-04-01): GPU-only audit/refactor, safety + ownership pass.
 - [`CHANGELOG_ARCHITECTURE_UPDATE.md`](CHANGELOG_ARCHITECTURE_UPDATE.md) — `architecture_update` (2025-12-26): execution model + WorkerBudget + collision architecture update.

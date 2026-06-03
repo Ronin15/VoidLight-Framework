@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace VoidLight {
 
@@ -209,9 +210,9 @@ private:
     FrameProfiler(const FrameProfiler&) = delete;
     FrameProfiler& operator=(const FrameProfiler&) = delete;
 
-    static const char* getPhaseName(FramePhase phase);
-    static const char* getManagerName(ManagerPhase mgr);
-    static const char* getRenderPhaseName(RenderPhase phase);
+    std::string_view getPhaseName(FramePhase phase) const;
+    std::string_view getManagerName(ManagerPhase mgr) const;
+    std::string_view getRenderPhaseName(RenderPhase phase) const;
     ManagerPhase findWorstManager() const;
     RenderPhase findWorstRenderPhase() const;
 

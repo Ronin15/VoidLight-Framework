@@ -818,6 +818,29 @@ BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffect, ParticleManagerCoreFixture) {
               activeEffects.end());
 }
 
+BOOST_FIXTURE_TEST_CASE(TestStoppedIndependentEffectsAreCompactedOnUpdate,
+                        ParticleManagerCoreFixture) {
+  manager->init();
+  manager->registerBuiltInEffects();
+
+  constexpr int EFFECT_CYCLES = 32;
+  for (int i = 0; i < EFFECT_CYCLES; ++i) {
+    uint32_t effectId = manager->playIndependentEffect(
+        ParticleEffectType::AmbientDust, {100.0f, 100.0f}, 1.0f, -1.0f,
+        "ambient");
+    BOOST_REQUIRE_NE(effectId, 0);
+    BOOST_CHECK(manager->isIndependentEffect(effectId));
+
+    manager->stopIndependentEffect(effectId);
+    manager->update(0.016f);
+
+    BOOST_CHECK(!manager->isEffectPlaying(effectId));
+    BOOST_CHECK(!manager->isIndependentEffect(effectId));
+  }
+
+  BOOST_CHECK(manager->getActiveIndependentEffects().empty());
+}
+
 // Test stopping all independent effects
 BOOST_FIXTURE_TEST_CASE(TestStopAllIndependentEffects, ParticleManagerCoreFixture) {
   manager->init();
@@ -900,7 +923,8 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) 
     manager->update(0.016f);
   }
 
-
+  const size_t countBeforePause = manager->getActiveParticleCount();
+  BOOST_CHECK_GT(countBeforePause, 0);
 
   // Pause the effect
   manager->pauseIndependentEffect(effectId, true);
@@ -912,6 +936,7 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) 
 
   // Effect should still be playing (paused != stopped)
   BOOST_CHECK(manager->isEffectPlaying(effectId));
+  BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), countBeforePause);
 
   // Resume the effect
   manager->pauseIndependentEffect(effectId, false);
@@ -919,6 +944,7 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) 
   // Should continue working normally
   manager->update(0.016f);
   BOOST_CHECK(manager->isEffectPlaying(effectId));
+  BOOST_CHECK_GT(manager->getActiveParticleCount(), countBeforePause);
 
   // Clean up
   manager->stopIndependentEffect(effectId);

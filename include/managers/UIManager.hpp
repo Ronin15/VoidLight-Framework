@@ -7,9 +7,9 @@
 #define UI_MANAGER_HPP
 
 #include "utils/Vector2D.hpp"
+#include "gpu/UIRenderBatches.hpp"
+#include "utils/TextureSource.hpp"
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_gpu.h>
-#include <SDL3_ttf/SDL_ttf.h>
 #include <array>
 #include <functional>
 #include <memory>
@@ -27,28 +27,11 @@ struct SDL_GPURenderPass;
 
 namespace VoidLight {
 class GPURenderer;
-class GPUTexture;
 }
 
-// GPU draw command for batching UI rendering
-struct UIGPUDrawCommand {
-    enum class Type { Rect, Text, Image };
-    Type type{Type::Rect};
-    std::shared_ptr<VoidLight::GPUTexture> textureOwner{};
-    SDL_GPUTexture* texture{nullptr};  // For text/image
-    TTF_ImageType imageType{TTF_IMAGE_INVALID};
-    uint32_t vertexOffset{0};
-    uint32_t vertexCount{0};
-};
-
-// GPU command buffer capacities (avoids per-frame reallocations)
-constexpr size_t GPU_PRIMITIVE_COMMAND_CAPACITY = 256;
-constexpr size_t GPU_TEXT_COMMAND_CAPACITY = 256;
-constexpr size_t GPU_IMAGE_COMMAND_CAPACITY = 32;
-
-// GPU vertex safety limits
-constexpr uint32_t GPU_PRIMITIVE_VERTEX_LIMIT = 10000;
-constexpr uint32_t GPU_UI_VERTEX_LIMIT = 4000;
+// UI render batch capacities (avoids per-frame reallocations)
+constexpr size_t UI_TEXT_BATCH_CAPACITY = 256;
+constexpr size_t UI_IMAGE_BATCH_CAPACITY = 32;
 
 // UI Component Types
 enum class UIComponentType {
@@ -151,6 +134,10 @@ struct UIStyle {
                                 128}; // Semi-transparent black by default
   bool useTextBackground{false};      // Enable text background for readability
   int textBackgroundPadding{UIConstants::DEFAULT_TEXT_BG_PADDING};       // Extra padding around text background
+  // Passive mouse-hover effects are opt-in. Hit testing still runs for all
+  // visible/enabled components regardless of these flags.
+  bool highlightOnMouseHover{false};
+  bool showTooltipOnMouseHover{false};
 
   int borderWidth{UIConstants::BORDER_WIDTH_NORMAL};
   int padding{UIConstants::DEFAULT_COMPONENT_PADDING};
@@ -174,6 +161,15 @@ struct UIComponent {
   bool m_visible{true};
   bool m_enabled{true};
   int m_zOrder{0};
+  // When true, this component swallows mouse hover/press for any lower-z component
+  // that shares the cursor position. Used by modal overlays to block click-through
+  // to UI beneath them. Non-interactive types (PANEL etc.) otherwise let input
+  // fall through to whatever is underneath.
+  bool m_blocksInputBelow{false};
+  // Render occlusion is separate from input blocking. Modal overlays set both:
+  // input uses this component as a hit barrier, while rendering skips lower
+  // normal UI before fixed render-family submission begins.
+  bool m_occludesRenderingBelow{false};
 
   // Auto-repositioning properties
   UIPositioning m_positioning{};
@@ -194,6 +190,8 @@ struct UIComponent {
   std::function<std::string()> m_textBinding{}; // For data-bound text
   bool m_bindingDirty{true}; // Skip binding callbacks when false (perf optimization)
   std::string m_textureID{};
+  UIRect m_imageSourceRect{};
+  bool m_useImageSourceRect{false};
   float m_value{0.0f};
   float m_minValue{0.0f};
   float m_maxValue{1.0f};
@@ -215,6 +213,14 @@ struct UIComponent {
   std::function<void()> m_onFocus{};
   std::function<void()>
       m_onContentChanged{}; // Called when content changes and resize is needed
+
+  // Parent/child relationship — parents are PANEL/DIALOG containers that
+  // provide a backdrop. Children inherit that backdrop so default glyph
+  // text-backgrounds (redundant over a parent backdrop) are suppressed.
+  // Empty parent id means top-level component.
+  std::string m_parentId{};
+  std::vector<std::string> m_childIds{};
+  bool m_hasBackdropAncestor{false};
 
   virtual ~UIComponent() = default;
 };
@@ -292,37 +298,59 @@ public:
   void renderGPU(VoidLight::GPURenderer& gpuRenderer, SDL_GPURenderPass* pass);
 
   // Window resize notification (called by InputManager on SDL_EVENT_WINDOW_RESIZED)
-  void onWindowResize(int newLogicalWidth, int newLogicalHeight);
+  void onWindowResize(int newWidthInPixels, int newHeightInPixels);
 
-  // UI Component creation methods
+  // UI Component creation methods. The optional `parentId` attaches the new
+  // component to a parent container (typically a PANEL or DIALOG) so that
+  // visibility cascades and the child inherits the parent's backdrop —
+  // suppressing redundant text-backgrounds that would otherwise bleed past
+  // the parent's edges at small scale.
   void createButton(const std::string &id, const UIRect &bounds,
-                    const std::string &text = "");
+                    const std::string &text = "",
+                    const std::string &parentId = "");
   void createButtonDanger(const std::string &id, const UIRect &bounds,
-                          const std::string &text = "");
+                          const std::string &text = "",
+                          const std::string &parentId = "");
   void createButtonSuccess(const std::string &id, const UIRect &bounds,
-                           const std::string &text = "");
+                           const std::string &text = "",
+                           const std::string &parentId = "");
   void createButtonWarning(const std::string &id, const UIRect &bounds,
-                           const std::string &text = "");
+                           const std::string &text = "",
+                           const std::string &parentId = "");
   void createLabel(const std::string &id, const UIRect &bounds,
-                   const std::string &text = "");
+                   const std::string &text = "",
+                   const std::string &parentId = "");
   void createTitle(const std::string &id, const UIRect &bounds,
-                   const std::string &text);
-  void createPanel(const std::string &id, const UIRect &bounds);
+                   const std::string &text,
+                   const std::string &parentId = "");
+  void createPanel(const std::string &id, const UIRect &bounds,
+                   const std::string &parentId = "");
   void createProgressBar(const std::string &id, const UIRect &bounds,
-                         float minVal = 0.0f, float maxVal = 1.0f);
+                         float minVal = 0.0f, float maxVal = 1.0f,
+                         const std::string &parentId = "");
   void createInputField(const std::string &id, const UIRect &bounds,
-                        const std::string &placeholder = "");
+                        const std::string &placeholder = "",
+                        const std::string &parentId = "");
   void createImage(const std::string &id, const UIRect &bounds,
-                   const std::string &textureID = "");
+                   const std::string &textureID = "",
+                   const std::string &parentId = "");
+  void createAtlasImage(const std::string &id, const UIRect &bounds,
+                        const std::string &textureID,
+                        const UIRect &sourceRect,
+                        const std::string &parentId = "");
   void createSlider(const std::string &id, const UIRect &bounds,
-                    float minVal = 0.0f, float maxVal = 1.0f);
+                    float minVal = 0.0f, float maxVal = 1.0f,
+                    const std::string &parentId = "");
   void createCheckbox(const std::string &id, const UIRect &bounds,
-                      const std::string &text = "");
-  void createList(const std::string &id, const UIRect &bounds);
+                      const std::string &text = "",
+                      const std::string &parentId = "");
+  void createList(const std::string &id, const UIRect &bounds,
+                  const std::string &parentId = "");
   void createTooltip(const std::string &id, const std::string &text = "");
   void createEventLog(const std::string &id, const UIRect &bounds,
                       int maxEntries = UIConstants::DEFAULT_EVENT_LOG_MAX_ENTRIES);
-  void createDialog(const std::string &id, const UIRect &bounds);
+  void createDialog(const std::string &id, const UIRect &bounds,
+                    const std::string &parentId = "");
 
   // Modal creation helper - combines theme + overlay + dialog
   void createModal(const std::string &dialogId, const UIRect &bounds,
@@ -344,6 +372,9 @@ public:
   // Component property setters
   void setText(const std::string &id, const std::string &text);
   void setTexture(const std::string &id, const std::string &textureID);
+  void setImageSource(const std::string &id, const TextureSource &source);
+  void setImageSourceRect(const std::string &id, const UIRect &sourceRect);
+  void clearImageSourceRect(const std::string &id);
   void setValue(const std::string &id, float value);
   void setChecked(const std::string &id, bool checked);
   void setStyle(const std::string &id, const UIStyle &style);
@@ -357,6 +388,8 @@ public:
 
   // Component property getters
   std::string getText(const std::string &id) const;
+  std::string getTexture(const std::string &id) const;
+  UIRect getImageSourceRect(const std::string &id) const;
   float getValue(const std::string &id) const;
   bool getChecked(const std::string &id) const;
   UIRect getBounds(const std::string &id) const;
@@ -367,6 +400,18 @@ public:
   bool isButtonPressed(const std::string &id) const;
   bool isButtonHovered(const std::string &id) const;
   bool isComponentFocused(const std::string &id) const;
+
+  // Keyboard/gamepad selection — game states use this to highlight a button
+  // when driving menus with MenuUp/MenuDown instead of the mouse. When set,
+  // the selected component renders in HOVERED state provided the mouse is not
+  // over any other interactive component. Mouse hover always wins.
+  void setKeyboardSelection(const std::string &id);
+  void clearKeyboardSelection();
+  const std::string &getKeyboardSelection() const { return m_keyboardSelection; }
+
+  // Synthesizes a click on the named component — queues its onClick callback
+  // just like a mouse click would. Used by MenuConfirm keyboard/gamepad input.
+  void simulateClick(const std::string &id);
 
   // Callback setters
   void setOnClick(const std::string &id, std::function<void()> callback);
@@ -491,8 +536,8 @@ public:
                            const UIRect &maxBounds); // Set size constraints
 
   // Auto-detection and convenience methods
-  int getLogicalWidth() const;  // Auto-detect logical width from GameEngine
-  int getLogicalHeight() const; // Auto-detect logical height from GameEngine
+  int getWidthInPixels() const;   // Auto-detect width in pixels from GameEngine
+  int getHeightInPixels() const;  // Auto-detect height in pixels from GameEngine
   void createTitleAtTop(const std::string &id, const std::string &text,
                         int height = UIConstants::DEFAULT_TITLE_HEIGHT);
   void createButtonAtBottom(const std::string &id, const std::string &text,
@@ -569,7 +614,9 @@ private:
   std::vector<std::string> m_clickedButtons{};
   std::vector<std::string> m_hoveredComponents{};
   std::string m_focusedComponent{};
+  std::string m_keyboardSelection{};
   std::string m_hoveredTooltip{};
+  std::string m_hoveredTooltipCandidate{};
   float m_tooltipTimer{0.0f};
 
   // Theme and styling
@@ -592,8 +639,8 @@ private:
   bool m_isShutdown{false};
 
   // Window resize tracking for auto-repositioning
-  int m_currentLogicalWidth{0};
-  int m_currentLogicalHeight{0};
+  int m_currentWidthInPixels{0};
+  int m_currentHeightInPixels{0};
 
   // Input state
   Vector2D m_lastMousePosition{};
@@ -612,10 +659,25 @@ private:
   std::shared_ptr<UIComponent> getComponent(const std::string &id);
   std::shared_ptr<const UIComponent> getComponent(const std::string &id) const;
   std::shared_ptr<UILayout> getLayout(const std::string &id);
+  void registerComponent(const std::shared_ptr<UIComponent> &component,
+                         const std::string &parentId,
+                         bool autoSize = false);
+
+  // Parent/child linkage — called from every create* method after the
+  // component is fully initialized. Registers the child with the parent,
+  // computes backdrop inheritance, and suppresses the child's default
+  // text-background when the parent already provides one (PANEL/DIALOG or
+  // any descendant of one).
+  void linkToParent(const std::shared_ptr<UIComponent> &component,
+                    const std::string &parentId);
+  void applyThemeStyle(const std::shared_ptr<UIComponent> &component,
+                       UIComponentType type) const;
+  void applyCurrentThemeToComponents() const;
 
   // Auto-repositioning system (private helpers)
   void repositionAllComponents(int width, int height);
   void applyPositioning(std::shared_ptr<UIComponent> component, int width, int height);
+  int calculateListItemHeight(const std::shared_ptr<UIComponent> &component) const;
 
   void handleInput();
   void updateAnimations(float deltaTime);
@@ -626,6 +688,7 @@ private:
 
   // Performance optimization helper
   void invalidateComponentCache();
+  void clearFrameRenderBatches();
 
   // Layout helpers
   void applyAbsoluteLayout(const std::shared_ptr<UILayout> &layout);
@@ -646,10 +709,12 @@ private:
   // PERFORMANCE: Track active bindings to skip iteration when none exist
   size_t m_activeBindingCount{0};
 
-  // GPU rendering state
-  std::vector<UIGPUDrawCommand> m_gpuPrimitiveCommands{};  // Filled rects (backgrounds, borders)
-  std::vector<UIGPUDrawCommand> m_gpuTextCommands{};      // Text rendering
-  std::vector<UIGPUDrawCommand> m_gpuImageCommands{};     // Images/textures
+  // Frame-local render batch state. Render order is fixed by family: primitives, images,
+  // then text. Component z-order controls input priority and ordering inside
+  // each family, not cross-family visual interleaving.
+  uint32_t m_uiPrimitiveVertexCount{0};                  // Filled rects, borders, text backgrounds
+  std::vector<VoidLight::UITextureDrawBatch> m_imageRenderBatches{}; // Images/textures
+  std::vector<VoidLight::UITextDrawBatch> m_textRenderBatches{};     // SDL3_ttf atlas-backed text
 
   // Delete copy constructor and assignment operator
   UIManager(const UIManager &) = delete;

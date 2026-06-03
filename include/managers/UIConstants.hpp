@@ -33,11 +33,12 @@ namespace UIConstants {
   constexpr int LIST_ITEM_PADDING = 8;
   constexpr int SCROLLBAR_WIDTH = 20;
 
-  // Z-Order Layering Constants
-  // Controls the render order of UI components (lower values render first/behind)
-  constexpr int ZORDER_OVERLAY = -10;         // Overlay backgrounds render behind everything
+  // Z-Order Priority Constants
+  // Controls input priority and same-family render order. UIManager submits
+  // fixed render families for GPU performance: primitives, images, then text.
+  constexpr int ZORDER_OVERLAY = -10;         // Lowest priority overlay backgrounds
   constexpr int ZORDER_PANEL = 0;             // Background panels
-  constexpr int ZORDER_DIALOG = 2;            // Dialogs render above overlays and panels
+  constexpr int ZORDER_DIALOG = 2;            // Non-modal dialog priority
   constexpr int ZORDER_IMAGE = 1;             // Background images
   constexpr int ZORDER_PROGRESS_BAR = 5;      // Progress indicators
   constexpr int ZORDER_EVENT_LOG = 6;         // Event log displays
@@ -48,7 +49,9 @@ namespace UIConstants {
   constexpr int ZORDER_INPUT_FIELD = 15;      // Text input fields
   constexpr int ZORDER_LABEL = 20;            // Text labels
   constexpr int ZORDER_TITLE = 25;            // Title text
-  constexpr int ZORDER_TOOLTIP = 1000;        // Tooltips always on top
+  constexpr int ZORDER_MODAL_OVERLAY = 500;   // Modal overlay render/input cutoff
+  constexpr int ZORDER_MODAL_DIALOG = 600;    // Modal dialog content priority
+  constexpr int ZORDER_TOOLTIP = 1000;        // Highest tooltip priority
 
   // Border Width Constants
   constexpr int BORDER_WIDTH_NONE = 0;        // No border
@@ -111,6 +114,7 @@ namespace UIConstants {
   // Full-Width Status Bar Constants
   constexpr int STATUS_BAR_HEIGHT = 40;           // Height of full-width status bar
   constexpr int STATUS_BAR_LABEL_PADDING = 12;    // Label text inset from panel edges
+  constexpr int FPS_COUNTER_WIDTH = 160;           // Width for high-DPI FPS badge
 
   // Timing and Animation Constants
   constexpr float DEFAULT_TOOLTIP_DELAY = 1.0f; // Default tooltip hover delay in seconds
@@ -154,10 +158,10 @@ namespace UIConstants {
   constexpr int MAX_COMPONENT_BATCH_SIZE = 64;      // Reserve size for bulk component clearing
 
   // Debug Profiler Overlay Constants (Debug builds only)
-  constexpr int PROFILER_OVERLAY_WIDTH = 300;       // Width of profiler overlay panel
-  constexpr int PROFILER_OVERLAY_HEIGHT = 172;      // Height of profiler overlay panel (7 lines)
+  constexpr int PROFILER_OVERLAY_WIDTH = 500;       // Width of profiler overlay panel
+  constexpr int PROFILER_OVERLAY_HEIGHT = 210;      // Height of profiler overlay panel (7 lines)
   constexpr int PROFILER_OVERLAY_MARGIN = 10;       // Margin from screen edge
-  constexpr int PROFILER_LINE_HEIGHT = 22;          // Height per profiler text line
+  constexpr int PROFILER_LINE_HEIGHT = 27;          // Height per profiler text line
   constexpr int PROFILER_LABEL_COUNT = 7;           // Number of profiler labels
   constexpr int PROFILER_ZORDER_PANEL = 9000;       // Z-order for profiler panel (high priority)
   constexpr int PROFILER_ZORDER_LABEL = 9001;       // Z-order for profiler labels

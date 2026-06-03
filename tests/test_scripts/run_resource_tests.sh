@@ -88,6 +88,7 @@ for arg in "$@"; do
       echo -e "  ./run_resource_tests.sh                          # Run all resource tests"
       echo -e "  ./run_resource_tests.sh --verbose                # Run with detailed output"
       echo -e "  ./run_resource_tests.sh --world-resource-test    # Run only world resource tests"
+      echo -e "  ./bin/debug/resource_template_manager_json_tests --run_test=\"ResourceTemplateManagerJsonTestSuite/TestLoadDefaultResources\" # Run default catalog test"
       exit 0
       ;;
   esac

@@ -7,6 +7,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "core/ThreadSystem.hpp"
+#include "entities/resources/EquipmentResources.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
@@ -17,6 +18,7 @@
 #include "entities/EntityHandle.hpp"
 #include "utils/Vector2D.hpp"
 #include <cmath>
+#include <limits>
 #include <vector>
 
 // Test tolerance for floating-point comparisons
@@ -137,6 +139,63 @@ BOOST_AUTO_TEST_CASE(TestPrepareForStateTransition) {
     BOOST_CHECK(edm->isInitialized());
 }
 
+BOOST_AUTO_TEST_CASE(TestDirectDestroyClearsBehaviorConfigForSlotReuse) {
+    EntityHandle npc = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
+    BOOST_REQUIRE(npc.isValid());
+
+    const size_t npcIdx = edm->getIndex(npc);
+    BOOST_REQUIRE(npcIdx != SIZE_MAX);
+
+    const BehaviorConfigRef initialRef = edm->getBehaviorConfigRef(npcIdx);
+    BOOST_REQUIRE(initialRef.type == BehaviorType::Guard);
+    BOOST_REQUIRE(initialRef.index != std::numeric_limits<uint32_t>::max());
+
+    edm->destroyEntity(npc);
+    edm->processDestructionQueue();
+
+    const BehaviorConfigRef destroyedRef = edm->getBehaviorConfigRef(npcIdx);
+    BOOST_CHECK(destroyedRef.type == BehaviorType::None);
+    BOOST_CHECK_EQUAL(destroyedRef.index, std::numeric_limits<uint32_t>::max());
+    BOOST_CHECK(!AIManager::Instance().hasBehavior(npc));
+
+    EntityHandle player = edm->registerPlayer(1, Vector2D(200.0f, 200.0f));
+    BOOST_REQUIRE(player.isValid());
+
+    const size_t playerIdx = edm->getIndex(player);
+    BOOST_REQUIRE_EQUAL(playerIdx, npcIdx);
+
+    const BehaviorConfigRef playerRef = edm->getBehaviorConfigRef(playerIdx);
+    BOOST_CHECK(playerRef.type == BehaviorType::None);
+    BOOST_CHECK_EQUAL(playerRef.index, std::numeric_limits<uint32_t>::max());
+}
+
+BOOST_AUTO_TEST_CASE(TestStateTransitionClearsBehaviorStatePools) {
+    EntityHandle firstGuard = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
+    BOOST_REQUIRE(firstGuard.isValid());
+
+    const size_t firstIdx = edm->getIndex(firstGuard);
+    BOOST_REQUIRE(firstIdx != SIZE_MAX);
+
+    const BehaviorConfigRef firstRef = edm->getBehaviorConfigRef(firstIdx);
+    BOOST_REQUIRE(firstRef.type == BehaviorType::Guard);
+    edm->getGuardState(firstRef.index).currentAlertLevel = 3;
+
+    AIManager::Instance().prepareForStateTransition();
+    edm->prepareForStateTransition();
+    BOOST_REQUIRE_EQUAL(edm->getEntityCount(), 0);
+
+    EntityHandle secondGuard = edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
+    BOOST_REQUIRE(secondGuard.isValid());
+
+    const size_t secondIdx = edm->getIndex(secondGuard);
+    BOOST_REQUIRE(secondIdx != SIZE_MAX);
+
+    const BehaviorConfigRef secondRef = edm->getBehaviorConfigRef(secondIdx);
+    BOOST_REQUIRE(secondRef.type == BehaviorType::Guard);
+    BOOST_CHECK_EQUAL(secondRef.index, 0u);
+    BOOST_CHECK_EQUAL(edm->getGuardState(secondRef.index).currentAlertLevel, 0);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================
@@ -182,7 +241,7 @@ BOOST_AUTO_TEST_CASE(TestCreatePlayer) {
     const auto& charData = edm->getCharacterData(handle);
     BOOST_CHECK(approxEqual(charData.health, 100.0f));
     BOOST_CHECK(approxEqual(charData.maxHealth, 100.0f));
-    BOOST_CHECK(charData.isCharacterAlive());
+    BOOST_CHECK(edm->isValidHandle(handle));
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateDroppedItem) {
@@ -394,7 +453,7 @@ BOOST_AUTO_TEST_CASE(TestDestroyInvalidHandle) {
 BOOST_AUTO_TEST_CASE(TestGenerationIncrementAfterDestruction) {
     // Create and destroy, then create again - should get different generation
     EntityHandle handle1 = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
-    [[maybe_unused]] uint8_t gen1 = handle1.generation;
+    [[maybe_unused]] uint32_t gen1 = handle1.generation;
 
     edm->destroyEntity(handle1);
     edm->processDestructionQueue();
@@ -601,7 +660,7 @@ BOOST_AUTO_TEST_CASE(TestGetCharacterData) {
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
 
     auto& charData = edm->getCharacterData(handle);
-    BOOST_CHECK(charData.isCharacterAlive());
+    BOOST_CHECK(edm->isValidHandle(handle));
 
     // Modify health
     charData.health = 50.0f;
@@ -613,8 +672,8 @@ BOOST_AUTO_TEST_CASE(TestGetCharacterDataByIndex) {
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     size_t index = edm->getIndex(handle);
 
-    const auto& charData = edm->getCharacterDataByIndex(index);
-    BOOST_CHECK(charData.isCharacterAlive());
+    BOOST_CHECK_NO_THROW(static_cast<void>(edm->getCharacterDataByIndex(index)));
+    BOOST_CHECK(edm->isValidHandle(handle));
 }
 
 BOOST_AUTO_TEST_CASE(TestGetItemData) {
@@ -909,10 +968,10 @@ BOOST_AUTO_TEST_CASE(TestTypeSpecificSlotReuse) {
     BOOST_CHECK(edm->isValidHandle(npc3));
 
     // Verify character data is accessible
-    const auto& charData2 = edm->getCharacterData(npc2);
-    const auto& charData3 = edm->getCharacterData(npc3);
-    BOOST_CHECK(charData2.isCharacterAlive());
-    BOOST_CHECK(charData3.isCharacterAlive());
+    BOOST_CHECK_NO_THROW(static_cast<void>(edm->getCharacterData(npc2)));
+    BOOST_CHECK_NO_THROW(static_cast<void>(edm->getCharacterData(npc3)));
+    BOOST_CHECK(edm->isValidHandle(npc2));
+    BOOST_CHECK(edm->isValidHandle(npc3));
 }
 
 BOOST_AUTO_TEST_CASE(TestMassCreationAndDestruction) {
@@ -1375,6 +1434,243 @@ BOOST_AUTO_TEST_CASE(TestNPCRenderDataClearedOnDestroy) {
     // Handle should be invalid
     BOOST_CHECK(!edm->isValidHandle(handle));
     BOOST_CHECK_EQUAL(edm->getEntityCount(EntityKind::NPC), 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestCharacterEquipmentRecalculatesCachedStats) {
+    EntityHandle player = edm->registerPlayer(40001, Vector2D(10.0f, 10.0f));
+    BOOST_REQUIRE(player.isValid());
+    edm->setCharacterBaseStats(player, 100.0f, 100.0f, 25.0f, 50.0f, 120.0f);
+
+    const uint32_t inventory = edm->createInventory(10, false);
+    BOOST_REQUIRE_NE(inventory, INVALID_INVENTORY_INDEX);
+    edm->setCharacterInventoryIndex(player, inventory);
+
+    auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
+    auto ironArmor = ResourceTemplateManager::Instance().getHandleById("iron_armor");
+    BOOST_REQUIRE(ironSword.isValid());
+    BOOST_REQUIRE(ironArmor.isValid());
+    BOOST_REQUIRE(edm->addToInventory(inventory, ironSword, 1));
+    BOOST_REQUIRE(edm->addToInventory(inventory, ironArmor, 1));
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, ironSword));
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).attackDamage, 35.0f, 0.001f);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, ironSword), 0);
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, ironArmor));
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).armorDefense, 20.0f, 0.001f);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).moveSpeed, 115.0f, 0.001f);
+
+    BOOST_REQUIRE(edm->unequipCharacterItem(player, "weapon"));
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).attackDamage, 25.0f, 0.001f);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, ironSword), 1);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventoryTransferMovesFullQuantityAtomically) {
+    const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
+    BOOST_REQUIRE(ironSword.isValid());
+
+    const uint32_t sourceInventory = edm->createInventory(2, false);
+    const uint32_t targetInventory = edm->createInventory(2, false);
+    BOOST_REQUIRE_NE(sourceInventory, INVALID_INVENTORY_INDEX);
+    BOOST_REQUIRE_NE(targetInventory, INVALID_INVENTORY_INDEX);
+    BOOST_REQUIRE(edm->addToInventory(sourceInventory, ironSword, 1));
+
+    const auto transfer =
+        edm->transferInventoryItem(sourceInventory, targetInventory, ironSword, 1);
+    BOOST_REQUIRE(transfer.has_value());
+
+    BOOST_CHECK_EQUAL(transfer->sourceChange.oldQuantity, 1);
+    BOOST_CHECK_EQUAL(transfer->sourceChange.newQuantity, 0);
+    BOOST_CHECK_EQUAL(transfer->targetChange.oldQuantity, 0);
+    BOOST_CHECK_EQUAL(transfer->targetChange.newQuantity, 1);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(sourceInventory, ironSword), 0);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(targetInventory, ironSword), 1);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventoryTransferRejectsFullTargetWithoutMutation) {
+    const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
+    const auto ironArmor = ResourceTemplateManager::Instance().getHandleById("iron_armor");
+    BOOST_REQUIRE(ironSword.isValid());
+    BOOST_REQUIRE(ironArmor.isValid());
+
+    const uint32_t sourceInventory = edm->createInventory(2, false);
+    const uint32_t targetInventory = edm->createInventory(1, false);
+    BOOST_REQUIRE_NE(sourceInventory, INVALID_INVENTORY_INDEX);
+    BOOST_REQUIRE_NE(targetInventory, INVALID_INVENTORY_INDEX);
+    BOOST_REQUIRE(edm->addToInventory(sourceInventory, ironSword, 1));
+    BOOST_REQUIRE(edm->addToInventory(targetInventory, ironArmor, 1));
+
+    const auto transfer =
+        edm->transferInventoryItem(sourceInventory, targetInventory, ironSword, 1);
+    BOOST_CHECK(!transfer.has_value());
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(sourceInventory, ironSword), 1);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(targetInventory, ironSword), 0);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(targetInventory, ironArmor), 1);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventoryTransferRejectsSourceShortageWithoutMutation) {
+    const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
+    BOOST_REQUIRE(ironSword.isValid());
+
+    const uint32_t sourceInventory = edm->createInventory(2, false);
+    const uint32_t targetInventory = edm->createInventory(2, false);
+    BOOST_REQUIRE_NE(sourceInventory, INVALID_INVENTORY_INDEX);
+    BOOST_REQUIRE_NE(targetInventory, INVALID_INVENTORY_INDEX);
+    BOOST_REQUIRE(edm->addToInventory(sourceInventory, ironSword, 1));
+
+    const auto transfer =
+        edm->transferInventoryItem(sourceInventory, targetInventory, ironSword, 2);
+    BOOST_CHECK(!transfer.has_value());
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(sourceInventory, ironSword), 1);
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(targetInventory, ironSword), 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestRangedWeaponConsumesCompatibleAmmunition) {
+    EntityHandle player = edm->registerPlayer(40004, Vector2D(10.0f, 10.0f));
+    BOOST_REQUIRE(player.isValid());
+    edm->setCharacterBaseStats(player, 100.0f, 100.0f, 25.0f, 50.0f, 120.0f);
+
+    const uint32_t inventory = edm->createInventory(10, false);
+    BOOST_REQUIRE_NE(inventory, INVALID_INVENTORY_INDEX);
+    edm->setCharacterInventoryIndex(player, inventory);
+
+    const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
+    const auto arrows = ResourceTemplateManager::Instance().getHandleById("arrows");
+    BOOST_REQUIRE(bow.isValid());
+    BOOST_REQUIRE(arrows.isValid());
+    BOOST_REQUIRE(edm->addToInventory(inventory, bow, 1));
+    BOOST_REQUIRE(edm->addToInventory(inventory, arrows, 2));
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
+    BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
+                      CharacterData::CombatStyle::Ranged);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).attackRange, 400.0f, 0.001f);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).projectileSpeed, 300.0f, 0.001f);
+
+    InventoryResourceChange ammoChange{};
+    BOOST_CHECK(edm->consumeRequiredAmmoForRangedAttack(player, &ammoChange));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, arrows), 1);
+    BOOST_CHECK(ammoChange.resourceHandle == arrows);
+    BOOST_CHECK_EQUAL(ammoChange.oldQuantity, 2);
+    BOOST_CHECK_EQUAL(ammoChange.newQuantity, 1);
+}
+
+BOOST_AUTO_TEST_CASE(TestRangedWeaponWithoutAmmoDoesNotConsumeInventory) {
+    EntityHandle player = edm->registerPlayer(40005, Vector2D(10.0f, 10.0f));
+    BOOST_REQUIRE(player.isValid());
+    edm->setCharacterBaseStats(player, 100.0f, 100.0f, 25.0f, 50.0f, 120.0f);
+
+    const uint32_t inventory = edm->createInventory(10, false);
+    BOOST_REQUIRE_NE(inventory, INVALID_INVENTORY_INDEX);
+    edm->setCharacterInventoryIndex(player, inventory);
+
+    const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
+    BOOST_REQUIRE(bow.isValid());
+    BOOST_REQUIRE(edm->addToInventory(inventory, bow, 1));
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
+    InventoryResourceChange ammoChange{};
+    BOOST_CHECK(!edm->consumeRequiredAmmoForRangedAttack(player, &ammoChange));
+
+    BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
+                      CharacterData::CombatStyle::Ranged);
+    BOOST_CHECK(!ammoChange.isValid());
+}
+
+BOOST_AUTO_TEST_CASE(TestTwoHandedWeaponClearsShieldSlot) {
+    EntityHandle player = edm->registerPlayer(40002, Vector2D(10.0f, 10.0f));
+    BOOST_REQUIRE(player.isValid());
+    edm->setCharacterBaseStats(player, 100.0f, 100.0f, 25.0f, 50.0f, 120.0f);
+
+    const uint32_t inventory = edm->createInventory(10, false);
+    BOOST_REQUIRE_NE(inventory, INVALID_INVENTORY_INDEX);
+    edm->setCharacterInventoryIndex(player, inventory);
+
+    const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
+    const auto ironShield = ResourceTemplateManager::Instance().getHandleById("iron_shield");
+    BOOST_REQUIRE(bow.isValid());
+    BOOST_REQUIRE(ironShield.isValid());
+    BOOST_REQUIRE(edm->addToInventory(inventory, ironShield, 1));
+    BOOST_REQUIRE(edm->addToInventory(inventory, bow, 1));
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, ironShield));
+    BOOST_CHECK(edm->getEquippedCharacterItem(player, "shield") == ironShield);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).armorDefense, 15.0f, 0.001f);
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
+    BOOST_CHECK(edm->getEquippedCharacterItem(player, "weapon") == bow);
+    BOOST_CHECK(!edm->getEquippedCharacterItem(player, "shield").isValid());
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, ironShield), 1);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).attackDamage, 33.0f, 0.001f);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).armorDefense, 0.0f, 0.001f);
+}
+
+BOOST_AUTO_TEST_CASE(TestShieldCannotEquipOverTwoHandedWeapon) {
+    EntityHandle player = edm->registerPlayer(40003, Vector2D(10.0f, 10.0f));
+    BOOST_REQUIRE(player.isValid());
+    edm->setCharacterBaseStats(player, 100.0f, 100.0f, 25.0f, 50.0f, 120.0f);
+
+    const uint32_t inventory = edm->createInventory(10, false);
+    BOOST_REQUIRE_NE(inventory, INVALID_INVENTORY_INDEX);
+    edm->setCharacterInventoryIndex(player, inventory);
+
+    const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
+    const auto ironShield = ResourceTemplateManager::Instance().getHandleById("iron_shield");
+    BOOST_REQUIRE(bow.isValid());
+    BOOST_REQUIRE(ironShield.isValid());
+    BOOST_REQUIRE(edm->addToInventory(inventory, bow, 1));
+    BOOST_REQUIRE(edm->addToInventory(inventory, ironShield, 1));
+
+    BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
+    BOOST_CHECK(!edm->equipCharacterItem(player, ironShield));
+    BOOST_CHECK(edm->getEquippedCharacterItem(player, "weapon") == bow);
+    BOOST_CHECK(!edm->getEquippedCharacterItem(player, "shield").isValid());
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, ironShield), 1);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(player).armorDefense, 0.0f, 0.001f);
+}
+
+BOOST_AUTO_TEST_CASE(TestNPCStartingEquipmentAutoEquipsNonMerchants) {
+    EntityHandle guard = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
+    BOOST_REQUIRE(guard.isValid());
+
+    const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
+    const auto ironShield = ResourceTemplateManager::Instance().getHandleById("iron_shield");
+    BOOST_REQUIRE(ironSword.isValid());
+    BOOST_REQUIRE(ironShield.isValid());
+
+    BOOST_CHECK(edm->getEquippedCharacterItem(guard, "weapon") == ironSword);
+    BOOST_CHECK(edm->getEquippedCharacterItem(guard, "shield") == ironShield);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(guard).attackDamage, 22.0f, 0.001f);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(guard).armorDefense, 15.0f, 0.001f);
+}
+
+BOOST_AUTO_TEST_CASE(TestNPCStartingEquipmentPreservesClassOrderForSameSlot) {
+    EntityHandle ranger = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Ranger");
+    BOOST_REQUIRE(ranger.isValid());
+
+    const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
+    const auto dagger = ResourceTemplateManager::Instance().getHandleById("dagger");
+    BOOST_REQUIRE(bow.isValid());
+    BOOST_REQUIRE(dagger.isValid());
+
+    BOOST_CHECK(edm->getEquippedCharacterItem(ranger, "weapon") == bow);
+    BOOST_CHECK_EQUAL(
+        edm->getInventoryQuantity(edm->getCharacterData(ranger).inventoryIndex, dagger),
+        1);
+    BOOST_CHECK_CLOSE(edm->getCharacterData(ranger).attackDamage, 21.0f, 0.001f);
+}
+
+BOOST_AUTO_TEST_CASE(TestMerchantStartingEquipmentRemainsInventoryStock) {
+    EntityHandle blacksmith = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Blacksmith");
+    BOOST_REQUIRE(blacksmith.isValid());
+
+    const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
+    BOOST_REQUIRE(ironSword.isValid());
+
+    BOOST_CHECK(!edm->getEquippedCharacterItem(blacksmith, "weapon").isValid());
+    BOOST_CHECK_EQUAL(
+        edm->getInventoryQuantity(edm->getNPCInventoryIndex(blacksmith), ironSword),
+        3);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

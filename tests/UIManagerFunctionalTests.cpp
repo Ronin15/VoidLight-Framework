@@ -9,7 +9,31 @@
 #include <memory>
 #include <atomic>
 
+#include "managers/InputManager.hpp"
 #include "managers/UIManager.hpp"
+
+namespace {
+
+void moveMouseTo(float x, float y) {
+    SDL_Event event{};
+    event.motion.x = x;
+    event.motion.y = y;
+    InputManager::Instance().onMouseMove(event);
+}
+
+void setLeftMouseButton(float x, float y, bool pressed) {
+    SDL_Event event{};
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = x;
+    event.button.y = y;
+    if (pressed) {
+        InputManager::Instance().onMouseButtonDown(event);
+    } else {
+        InputManager::Instance().onMouseButtonUp(event);
+    }
+}
+
+} // namespace
 
 // ============================================================================
 // FIXTURE: UIManagerFixture
@@ -18,13 +42,15 @@
 struct UIManagerFixture {
     UIManagerFixture() {
         UIManager::Instance().init();
+        InputManager::Instance().reset();
 
         // Set initial window size
         UIManager::Instance().onWindowResize(800, 600);
     }
 
     ~UIManagerFixture() {
-        UIManager::Instance().clean();
+        InputManager::Instance().reset();
+        UIManager::Instance().prepareForStateTransition();
     }
 };
 
@@ -271,10 +297,9 @@ BOOST_AUTO_TEST_CASE(TestOnClickCallback) {
         buttonClicked.store(true, std::memory_order_release);
     });
 
-    // Simulate click by calling processEvent with mouse down/up
-    // (In actual usage, UIManager::handleInput processes SDL events)
-    // For testing, we verify the callback was set successfully
-    BOOST_CHECK(ui.hasComponent("click_button"));
+    ui.simulateClick("click_button");
+    ui.update(0.016f);
+    BOOST_CHECK(buttonClicked.load(std::memory_order_acquire));
 
     // Clean up
     ui.removeComponent("click_button");
@@ -299,32 +324,34 @@ BOOST_AUTO_TEST_CASE(TestOnValueChangedCallback) {
     // Update progress bar value
     ui.updateProgressBar("progress", 0.5f); // 50%
 
-    // Verify callback was set
-    BOOST_CHECK(ui.hasComponent("progress"));
+    BOOST_CHECK_CLOSE(lastValue.load(std::memory_order_acquire), 0.5f, 0.001f);
 
     ui.removeComponent("progress");
 }
 
 // ----------------------------------------------------------------------------
-// Test: onTextChanged callback for input field
+// Test: onTextChanged callback for text updates
 // ----------------------------------------------------------------------------
 
 BOOST_AUTO_TEST_CASE(TestOnTextChangedCallback) {
     auto& ui = UIManager::Instance();
 
-    ui.createInputField("input", UIRect{100, 100, 200, 30}, "Enter text...");
+    ui.createLabel("label", UIRect{100, 100, 200, 30}, "Initial");
 
     // Set up callback to track text changes
     std::atomic<bool> textChanged{false};
 
-    ui.setOnTextChanged("input", [&textChanged](const std::string&) {
+    ui.setOnTextChanged("label", [&textChanged](const std::string&) {
         textChanged.store(true, std::memory_order_release);
     });
 
-    // Verify callback was set
-    BOOST_CHECK(ui.hasComponent("input"));
+    ui.setText("label", "Initial");
+    BOOST_CHECK(!textChanged.load(std::memory_order_acquire));
 
-    ui.removeComponent("input");
+    ui.setText("label", "Updated");
+    BOOST_CHECK(textChanged.load(std::memory_order_acquire));
+
+    ui.removeComponent("label");
 }
 
 // ----------------------------------------------------------------------------
@@ -348,9 +375,13 @@ BOOST_AUTO_TEST_CASE(TestMultipleIndependentCallbacks) {
         button2Clicks.fetch_add(1, std::memory_order_relaxed);
     });
 
-    // Verify both buttons exist with independent callbacks
-    BOOST_CHECK(ui.hasComponent("button1"));
-    BOOST_CHECK(ui.hasComponent("button2"));
+    ui.simulateClick("button1");
+    ui.simulateClick("button2");
+    ui.simulateClick("button2");
+    ui.update(0.016f);
+
+    BOOST_CHECK_EQUAL(button1Clicks.load(std::memory_order_relaxed), 1);
+    BOOST_CHECK_EQUAL(button2Clicks.load(std::memory_order_relaxed), 2);
 
     ui.removeComponent("button1");
     ui.removeComponent("button2");
@@ -405,6 +436,115 @@ BOOST_AUTO_TEST_CASE(TestCreateTextComponents) {
     ui.removeComponent("title1");
 }
 
+BOOST_AUTO_TEST_CASE(TestLateCreatedTextComponentParticipatesInInputOrder) {
+    auto& ui = UIManager::Instance();
+    ui.setGlobalScale(1.0f);
+
+    ui.createButton("seed_button", UIRect{10, 10, 80, 30}, "Seed");
+    moveMouseTo(20.0f, 20.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("seed_button") == UIState::HOVERED);
+
+    ui.createLabel("late_label", UIRect{200, 200, 100, 30}, "Late");
+    moveMouseTo(210.0f, 210.0f);
+    ui.update(0.0f);
+
+    BOOST_CHECK(ui.getComponentState("late_label") == UIState::NORMAL);
+
+    ui.removeComponent("seed_button");
+    ui.removeComponent("late_label");
+}
+
+BOOST_AUTO_TEST_CASE(TestMouseHoverHighlightOnlyAppliesToButtons) {
+    auto& ui = UIManager::Instance();
+    ui.setGlobalScale(1.0f);
+
+    ui.createButton("hover_button", UIRect{10, 10, 90, 30}, "Button");
+    ui.createLabel("hover_label", UIRect{10, 60, 90, 30}, "Label");
+    ui.createPanel("hover_panel", UIRect{10, 110, 90, 30});
+    ui.createCheckbox("hover_checkbox", UIRect{10, 160, 90, 30}, "Check");
+    ui.createSlider("hover_slider", UIRect{10, 210, 90, 30}, 0.0f, 1.0f);
+    ui.createInputField("hover_input", UIRect{10, 260, 90, 30}, "Input");
+    ui.createList("hover_list", UIRect{10, 310, 90, 60});
+
+    moveMouseTo(20.0f, 20.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_button") == UIState::HOVERED);
+
+    moveMouseTo(20.0f, 70.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_label") == UIState::NORMAL);
+
+    moveMouseTo(20.0f, 120.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_panel") == UIState::NORMAL);
+
+    moveMouseTo(20.0f, 170.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_checkbox") == UIState::NORMAL);
+
+    moveMouseTo(20.0f, 220.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_slider") == UIState::NORMAL);
+
+    moveMouseTo(20.0f, 270.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_input") == UIState::NORMAL);
+
+    moveMouseTo(20.0f, 320.0f);
+    ui.update(0.0f);
+    BOOST_CHECK(ui.getComponentState("hover_list") == UIState::NORMAL);
+
+    ui.removeComponent("hover_button");
+    ui.removeComponent("hover_label");
+    ui.removeComponent("hover_panel");
+    ui.removeComponent("hover_checkbox");
+    ui.removeComponent("hover_slider");
+    ui.removeComponent("hover_input");
+    ui.removeComponent("hover_list");
+}
+
+BOOST_AUTO_TEST_CASE(TestNonButtonMouseInteractionsStillWorkWithoutHoverHighlight) {
+    auto& ui = UIManager::Instance();
+    ui.setGlobalScale(1.0f);
+
+    ui.createCheckbox("click_checkbox", UIRect{100, 100, 120, 30}, "Check");
+    setLeftMouseButton(110.0f, 110.0f, true);
+    ui.update(0.0f);
+    setLeftMouseButton(110.0f, 110.0f, false);
+    ui.update(0.0f);
+
+    BOOST_CHECK(ui.getChecked("click_checkbox"));
+    BOOST_CHECK(ui.getComponentState("click_checkbox") == UIState::NORMAL);
+
+    ui.createSlider("drag_slider", UIRect{100, 150, 100, 30}, 0.0f, 1.0f);
+    setLeftMouseButton(150.0f, 165.0f, true);
+    ui.update(0.0f);
+    setLeftMouseButton(150.0f, 165.0f, false);
+    ui.update(0.0f);
+
+    BOOST_CHECK_CLOSE(ui.getValue("drag_slider"), 0.5f, 0.001f);
+    BOOST_CHECK(ui.getComponentState("drag_slider") == UIState::NORMAL);
+
+    ui.removeComponent("click_checkbox");
+    ui.removeComponent("drag_slider");
+}
+
+BOOST_AUTO_TEST_CASE(TestKeyboardSelectionCanStillHighlightNonButtonControls) {
+    auto& ui = UIManager::Instance();
+    ui.setGlobalScale(1.0f);
+
+    ui.createSlider("keyboard_slider", UIRect{100, 100, 100, 30}, 0.0f, 1.0f);
+    ui.setKeyboardSelection("keyboard_slider");
+    moveMouseTo(400.0f, 400.0f);
+    ui.update(0.0f);
+
+    BOOST_CHECK(ui.getComponentState("keyboard_slider") == UIState::HOVERED);
+
+    ui.clearKeyboardSelection();
+    ui.removeComponent("keyboard_slider");
+}
+
 // ----------------------------------------------------------------------------
 // Test: Create panel container
 // ----------------------------------------------------------------------------
@@ -448,6 +588,97 @@ BOOST_AUTO_TEST_CASE(TestCreateInputField) {
     BOOST_CHECK(ui.hasComponent("input1"));
 
     ui.removeComponent("input1");
+}
+
+BOOST_AUTO_TEST_CASE(TestCreateAtlasImage) {
+    auto& ui = UIManager::Instance();
+
+    const UIRect sourceRect{16, 32, 24, 24};
+    ui.createPanel("image_parent", UIRect{80, 80, 80, 80});
+    ui.createAtlasImage("atlas_image", UIRect{100, 100, 32, 32},
+                        "atlas", sourceRect, "image_parent");
+
+    BOOST_CHECK(ui.hasComponent("atlas_image"));
+    BOOST_CHECK_EQUAL(ui.getTexture("atlas_image"), "atlas");
+    const UIRect storedRect = ui.getImageSourceRect("atlas_image");
+    BOOST_CHECK_EQUAL(storedRect.x, sourceRect.x);
+    BOOST_CHECK_EQUAL(storedRect.y, sourceRect.y);
+    BOOST_CHECK_EQUAL(storedRect.width, sourceRect.width);
+    BOOST_CHECK_EQUAL(storedRect.height, sourceRect.height);
+
+    const UIRect updatedRect{48, 64, 16, 16};
+    ui.setImageSourceRect("atlas_image", updatedRect);
+    const UIRect newRect = ui.getImageSourceRect("atlas_image");
+    BOOST_CHECK_EQUAL(newRect.x, updatedRect.x);
+    BOOST_CHECK_EQUAL(newRect.y, updatedRect.y);
+    BOOST_CHECK_EQUAL(newRect.width, updatedRect.width);
+    BOOST_CHECK_EQUAL(newRect.height, updatedRect.height);
+
+    ui.setTexture("atlas_image", "");
+    BOOST_CHECK(ui.getTexture("atlas_image").empty());
+
+    ui.setComponentVisible("image_parent", false);
+    BOOST_CHECK(ui.hasComponent("atlas_image"));
+
+    ui.removeComponent("image_parent");
+    BOOST_CHECK(!ui.hasComponent("atlas_image"));
+}
+
+BOOST_AUTO_TEST_CASE(TestSetImageSourceAppliesTextureAndSourceRectTogether) {
+    auto& ui = UIManager::Instance();
+
+    ui.createImage("image_source", UIRect{100, 100, 32, 32});
+
+    ui.setImageSource("image_source", TextureSource{"atlas", 4, 8, 16, 20, true});
+    BOOST_CHECK_EQUAL(ui.getTexture("image_source"), "atlas");
+    UIRect storedRect = ui.getImageSourceRect("image_source");
+    BOOST_CHECK_EQUAL(storedRect.x, 4);
+    BOOST_CHECK_EQUAL(storedRect.y, 8);
+    BOOST_CHECK_EQUAL(storedRect.width, 16);
+    BOOST_CHECK_EQUAL(storedRect.height, 20);
+
+    ui.setImageSource("image_source", TextureSource{"bow_icon", 0, 0, 0, 0, false});
+    BOOST_CHECK_EQUAL(ui.getTexture("image_source"), "bow_icon");
+    storedRect = ui.getImageSourceRect("image_source");
+    BOOST_CHECK_EQUAL(storedRect.x, 0);
+    BOOST_CHECK_EQUAL(storedRect.y, 0);
+    BOOST_CHECK_EQUAL(storedRect.width, 0);
+    BOOST_CHECK_EQUAL(storedRect.height, 0);
+
+    ui.setImageSource("image_source", TextureSource{});
+    BOOST_CHECK(ui.getTexture("image_source").empty());
+    storedRect = ui.getImageSourceRect("image_source");
+    BOOST_CHECK_EQUAL(storedRect.x, 0);
+    BOOST_CHECK_EQUAL(storedRect.y, 0);
+    BOOST_CHECK_EQUAL(storedRect.width, 0);
+    BOOST_CHECK_EQUAL(storedRect.height, 0);
+
+    ui.removeComponent("image_source");
+}
+
+BOOST_AUTO_TEST_CASE(TestCombatHUDHelperOwnsExpectedComponents) {
+    auto& ui = UIManager::Instance();
+
+    ui.createCombatHUD();
+
+    BOOST_CHECK(ui.hasComponent("hud_health_label"));
+    BOOST_CHECK(ui.hasComponent("hud_health_bar"));
+    BOOST_CHECK(ui.hasComponent("hud_stamina_label"));
+    BOOST_CHECK(ui.hasComponent("hud_stamina_bar"));
+    BOOST_CHECK(ui.hasComponent("hud_target_name"));
+    BOOST_CHECK(ui.hasComponent("hud_target_hp_label"));
+    BOOST_CHECK(ui.hasComponent("hud_target_health"));
+
+    ui.updateCombatHUD(75.0f, 40.0f, true, "Training Target", 25.0f);
+    BOOST_CHECK_CLOSE(ui.getValue("hud_health_bar"), 75.0f, 0.001f);
+    BOOST_CHECK_CLOSE(ui.getValue("hud_stamina_bar"), 40.0f, 0.001f);
+    BOOST_CHECK_EQUAL(ui.getText("hud_target_name"), "Training Target");
+    BOOST_CHECK_CLOSE(ui.getValue("hud_target_health"), 25.0f, 0.001f);
+
+    ui.destroyCombatHUD();
+    BOOST_CHECK(!ui.hasComponent("hud_health_label"));
+    BOOST_CHECK(!ui.hasComponent("hud_health_bar"));
+    BOOST_CHECK(!ui.hasComponent("hud_target_name"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -582,13 +813,26 @@ BOOST_AUTO_TEST_CASE(TestWindowResizeTriggersRepositioning) {
     // Resize window
     ui.onWindowResize(1024, 768);
 
-    // Component should still exist after resize
     BOOST_CHECK(ui.hasComponent("centered"));
+    UIRect bounds = ui.getBounds("centered");
+    int expectedWidth = static_cast<int>(positioning.fixedWidth * ui.getGlobalScale());
+    int expectedHeight = static_cast<int>(positioning.fixedHeight * ui.getGlobalScale());
+    BOOST_CHECK_EQUAL(bounds.width, expectedWidth);
+    BOOST_CHECK_EQUAL(bounds.height, expectedHeight);
+    BOOST_CHECK_EQUAL(bounds.x, (1024 - expectedWidth) / 2);
+    BOOST_CHECK_EQUAL(bounds.y, (768 - expectedHeight) / 2);
 
     // Resize again to different dimensions
     ui.onWindowResize(1280, 720);
 
     BOOST_CHECK(ui.hasComponent("centered"));
+    bounds = ui.getBounds("centered");
+    expectedWidth = static_cast<int>(positioning.fixedWidth * ui.getGlobalScale());
+    expectedHeight = static_cast<int>(positioning.fixedHeight * ui.getGlobalScale());
+    BOOST_CHECK_EQUAL(bounds.width, expectedWidth);
+    BOOST_CHECK_EQUAL(bounds.height, expectedHeight);
+    BOOST_CHECK_EQUAL(bounds.x, (1280 - expectedWidth) / 2);
+    BOOST_CHECK_EQUAL(bounds.y, (720 - expectedHeight) / 2);
 
     ui.removeComponent("centered");
 }

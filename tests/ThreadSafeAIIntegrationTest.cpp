@@ -18,6 +18,7 @@
 #include "managers/PathfinderManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "core/ThreadSystem.hpp"
+#include "core/WorkerBudget.hpp"
 
 // Test helper for data-driven NPCs (NPCs are purely data, no Entity class)
 class IntegrationTestNPC {
@@ -65,9 +66,16 @@ struct GlobalTestFixture {
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
+        if (!CollisionManager::Instance().init()) {
+            throw std::runtime_error("CollisionManager::init() failed");
+        }
+        if (!PathfinderManager::Instance().init()) {
+            throw std::runtime_error("PathfinderManager::init() failed");
+        }
+        VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
+        if (!AIManager::Instance().init()) {
+            throw std::runtime_error("AIManager::init() failed");
+        }
         #ifndef NDEBUG
         AIManager::Instance().enableThreading(true);
         #endif
@@ -75,6 +83,7 @@ struct GlobalTestFixture {
 
     ~GlobalTestFixture() {
         AIManager::Instance().clean();
+        VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
         PathfinderManager::Instance().clean();
         CollisionManager::Instance().clean();
         EntityDataManager::Instance().clean();
@@ -108,17 +117,20 @@ struct AIIntegrationTestFixture {
     }
 
     ~AIIntegrationTestFixture() {
-        // Unregister entities
+        auto& edm = EntityDataManager::Instance();
         for (auto& entity : entities) {
             if (entity) {
-                AIManager::Instance().unassignBehavior(entity->getHandle());
+                const EntityHandle handle = entity->getHandle();
+                AIManager::Instance().unassignBehavior(handle);
+                edm.destroyEntity(handle);
             }
         }
+        edm.processDestructionQueue();
         entities.clear();
         behaviorNames.clear();
     }
 
-    static constexpr int NUM_ENTITIES = 20;
+    static constexpr int NUM_ENTITIES = 128;
     static constexpr int NUM_UPDATES = 10;
 
     std::vector<std::string> behaviorNames;
@@ -135,6 +147,15 @@ void updateAI(float deltaTime, const Vector2D& referencePoint = Vector2D(100.0f,
     AIManager::Instance().update(deltaTime);
 }
 
+void primeAIThreadingDecision(size_t workloadSize) {
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+    budgetMgr.prepareForStateTransition();
+    for (int sample = 0; sample < 10; ++sample) {
+        budgetMgr.reportExecution(VoidLight::SystemType::AI, workloadSize, false, 1, 5.0);
+    }
+    BOOST_REQUIRE(budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, workloadSize).shouldThread);
+}
+
 BOOST_FIXTURE_TEST_SUITE(AIIntegrationTests, AIIntegrationTestFixture)
 
 // Test that updates work properly
@@ -143,6 +164,7 @@ BOOST_AUTO_TEST_CASE(TestConcurrentUpdates) {
     size_t initialCount = AIManager::Instance().getBehaviorUpdateCount();
 
     // Update the AI system multiple times
+    primeAIThreadingDecision(entities.size());
     for (int i = 0; i < NUM_UPDATES; ++i) {
         updateAI(0.016f);
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -228,6 +250,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleSameBehavior) {
     }
 
     // Process multiple updates
+    primeAIThreadingDecision(entities.size());
     for (int i = 0; i < 5; ++i) {
         updateAI(0.016f);
         std::this_thread::sleep_for(std::chrono::milliseconds(2));

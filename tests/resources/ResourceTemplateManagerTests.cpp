@@ -375,8 +375,6 @@ BOOST_AUTO_TEST_CASE(TestMultipleResourceCategories) {
       "Test Iron Ore", ResourceCategory::Material, ResourceType::RawResource));
   resources.push_back(createTestResource(
       "Test Gold Coin", ResourceCategory::Currency, ResourceType::Gold));
-  resources.push_back(createTestResource(
-      "Test Mana Crystal", ResourceCategory::GameResource, ResourceType::Mana));
 
   auto initialCount = manager->getResourceTemplateCount();
 
@@ -384,7 +382,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleResourceCategories) {
     BOOST_CHECK(manager->registerResourceTemplate(resource));
   }
 
-  BOOST_CHECK_EQUAL(manager->getResourceTemplateCount(), initialCount + 5);
+  BOOST_CHECK_EQUAL(manager->getResourceTemplateCount(), initialCount + 4);
 
   // Check categories have at least our added resources (may have defaults too)
   BOOST_CHECK(manager->getResourcesByCategory(ResourceCategory::Item).size() >=
@@ -393,9 +391,6 @@ BOOST_AUTO_TEST_CASE(TestMultipleResourceCategories) {
       manager->getResourcesByCategory(ResourceCategory::Material).size() >= 1);
   BOOST_CHECK(
       manager->getResourcesByCategory(ResourceCategory::Currency).size() >= 1);
-  BOOST_CHECK(
-      manager->getResourcesByCategory(ResourceCategory::GameResource).size() >=
-      1);
 }
 
 // Test duplicate name detection

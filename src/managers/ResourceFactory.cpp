@@ -5,13 +5,29 @@
 
 #include "managers/ResourceFactory.hpp"
 #include "core/Logger.hpp"
-#include "entities/resources/CurrencyAndGameResources.hpp"
+#include "entities/resources/CurrencyResources.hpp"
+#include "entities/resources/EquipmentResources.hpp"
 #include "entities/resources/ItemResources.hpp"
 #include "entities/resources/MaterialResources.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include <algorithm>
 #include <format>
 
 namespace VoidLight {
+
+namespace {
+
+int defaultHandsRequiredForSlot(Equipment::EquipmentSlot slot) {
+  switch (slot) {
+  case Equipment::EquipmentSlot::Weapon:
+  case Equipment::EquipmentSlot::Shield:
+    return 1;
+  default:
+    return 0;
+  }
+}
+
+} // namespace
 
 ResourcePtr ResourceFactory::createFromJson(const JsonValue &json) {
   if (!json.isObject()) {
@@ -127,6 +143,10 @@ void ResourceFactory::initialize() {
     return createQuestItem(ResourceTemplateManager::Instance().generateHandle(),
                            json);
   });
+  registerCreator("Ammunition", [](const JsonValue &json) -> ResourcePtr {
+    return createAmmunition(
+        ResourceTemplateManager::Instance().generateHandle(), json);
+  });
   registerCreator(
       "CraftingComponent", [](const JsonValue &json) -> ResourcePtr {
         return createMaterial(
@@ -148,21 +168,9 @@ void ResourceFactory::initialize() {
     return createCurrency(ResourceTemplateManager::Instance().generateHandle(),
                           json);
   });
-  registerCreator("Energy", [](const JsonValue &json) -> ResourcePtr {
-    return createGameResource(
-        ResourceTemplateManager::Instance().generateHandle(), json);
-  });
-  registerCreator("Mana", [](const JsonValue &json) -> ResourcePtr {
-    return createGameResource(
-        ResourceTemplateManager::Instance().generateHandle(), json);
-  });
-  registerCreator("BuildingMaterial", [](const JsonValue &json) -> ResourcePtr {
-    return createGameResource(
-        ResourceTemplateManager::Instance().generateHandle(), json);
-  });
-  registerCreator("Ammunition", [](const JsonValue &json) -> ResourcePtr {
-    return createGameResource(
-        ResourceTemplateManager::Instance().generateHandle(), json);
+  registerCreator("CraftingCurrency", [](const JsonValue &json) -> ResourcePtr {
+    return createCurrency(ResourceTemplateManager::Instance().generateHandle(),
+                          json);
   });
 
   RESOURCE_INFO(std::format("ResourceFactory::initialize - Registered {} resource creators",
@@ -182,27 +190,13 @@ ResourceFactory::createEquipment(VoidLight::ResourceHandle handle,
   std::string id = json["id"].asString();
   std::string name = json["name"].asString();
 
-  // Determine equipment slot from JSON or default to Weapon
-  Equipment::EquipmentSlot slot = Equipment::EquipmentSlot::Weapon;
+  Equipment::EquipmentSlot slot = Equipment::EquipmentSlot::COUNT;
   if (json.hasKey("properties") && json["properties"].isObject()) {
     const JsonValue &props = json["properties"];
     if (props.hasKey("slot")) {
-      std::string slotStr = props["slot"].tryAsString().value_or("Weapon");
-      // Simple mapping - could be enhanced with a conversion utility
-      if (slotStr == "Helmet")
-        slot = Equipment::EquipmentSlot::Helmet;
-      else if (slotStr == "Chest")
-        slot = Equipment::EquipmentSlot::Chest;
-      else if (slotStr == "Legs")
-        slot = Equipment::EquipmentSlot::Legs;
-      else if (slotStr == "Boots")
-        slot = Equipment::EquipmentSlot::Boots;
-      else if (slotStr == "Gloves")
-        slot = Equipment::EquipmentSlot::Gloves;
-      else if (slotStr == "Ring")
-        slot = Equipment::EquipmentSlot::Ring;
-      else if (slotStr == "Necklace")
-        slot = Equipment::EquipmentSlot::Necklace;
+      std::string slotStr = props["slot"].tryAsString().value_or("Unknown");
+      slot = Equipment::equipmentSlotFromString(slotStr)
+                 .value_or(Equipment::EquipmentSlot::COUNT);
     }
   }
 
@@ -215,6 +209,19 @@ ResourceFactory::createEquipment(VoidLight::ResourceHandle handle,
     equipment->setAttackBonus(props["attackBonus"].tryAsInt().value_or(0));
     equipment->setDefenseBonus(props["defenseBonus"].tryAsInt().value_or(0));
     equipment->setSpeedBonus(props["speedBonus"].tryAsInt().value_or(0));
+    equipment->setHandsRequired(std::clamp(
+        props["handsRequired"].tryAsInt().value_or(defaultHandsRequiredForSlot(slot)),
+        0, 2));
+    equipment->setWeaponMode(
+        Equipment::weaponModeFromString(
+            props["weaponMode"].tryAsString().value_or("None"))
+            .value_or(Equipment::WeaponMode::None));
+    equipment->setAttackRangeOverride(
+        static_cast<float>(props["attackRange"].tryAsNumber().value_or(0.0)));
+    equipment->setProjectileSpeedOverride(
+        static_cast<float>(props["projectileSpeed"].tryAsNumber().value_or(0.0)));
+    equipment->setAmmoTypeRequired(
+        props["ammoTypeRequired"].tryAsString().value_or(""));
 
     if (props.hasKey("durability") && props.hasKey("maxDurability")) {
       equipment->setDurability(props["durability"].tryAsInt().value_or(100),
@@ -252,6 +259,8 @@ ResourceFactory::createConsumable(VoidLight::ResourceHandle handle,
         effect = Consumable::ConsumableEffect::BoostDefense;
       else if (effectStr == "BoostSpeed")
         effect = Consumable::ConsumableEffect::BoostSpeed;
+      else if (effectStr == "RestoreStamina")
+        effect = Consumable::ConsumableEffect::RestoreStamina;
       else if (effectStr == "Teleport")
         effect = Consumable::ConsumableEffect::Teleport;
 
@@ -284,6 +293,25 @@ ResourceFactory::createQuestItem(VoidLight::ResourceHandle handle,
   return questItem;
 }
 
+ResourcePtr
+ResourceFactory::createAmmunition(VoidLight::ResourceHandle handle,
+                                  const JsonValue &json) {
+  std::string id = json["id"].asString();
+  std::string name = json["name"].asString();
+  std::string ammoType = "Unknown";
+
+  if (json.hasKey("properties") && json["properties"].isObject()) {
+    const JsonValue &props = json["properties"];
+    ammoType = props["ammoType"].tryAsString().value_or("Unknown");
+  }
+
+  auto ammunition = std::make_shared<Ammunition>(handle, id, name, ammoType);
+  setCommonProperties(ammunition, json);
+  ammunition->setConsumable(false);
+  ammunition->setAmmoType(ammoType);
+  return ammunition;
+}
+
 ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
                                             const JsonValue &json) {
   std::string id = json["id"].asString();
@@ -313,6 +341,8 @@ ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
           componentType = CraftingComponent::ComponentType::Essence;
         else if (compTypeStr == "Crystal")
           componentType = CraftingComponent::ComponentType::Crystal;
+        else if (compTypeStr == "Stone")
+          componentType = CraftingComponent::ComponentType::Stone;
       }
     }
 
@@ -443,6 +473,17 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
     }
 
     return factionToken;
+  } else if (type == ResourceType::CraftingCurrency) {
+    auto craftingCurrency = std::make_shared<CraftingCurrency>(handle, id, name);
+    setCommonProperties(craftingCurrency, json);
+
+    if (json.hasKey("properties") && json["properties"].isObject()) {
+      const JsonValue &props = json["properties"];
+      craftingCurrency->setExchangeRate(static_cast<float>(
+          props["exchangeRate"].tryAsNumber().value_or(0.0)));
+    }
+
+    return craftingCurrency;
   }
 
   // Fallback to base Currency class
@@ -456,134 +497,6 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
   }
 
   return currency;
-}
-ResourcePtr
-ResourceFactory::createGameResource(VoidLight::ResourceHandle handle,
-                                    const JsonValue &json) {
-  std::string id = json["id"].asString();
-  std::string name = json["name"].asString();
-  std::string typeStr = json["type"].asString();
-
-  ResourceType type = Resource::stringToType(typeStr);
-
-  if (type == ResourceType::Energy) {
-    auto energy = std::make_shared<Energy>(handle, id, name);
-    setCommonProperties(energy, json);
-
-    // Set energy-specific properties
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      energy->setRegenerationRate(static_cast<float>(
-          props["regenerationRate"].tryAsNumber().value_or(0.0)));
-      energy->setMaxEnergy(props["maxEnergy"].tryAsInt().value_or(100));
-    }
-
-    return energy;
-  } else if (type == ResourceType::Mana) {
-    // Determine mana type from JSON or default to Arcane
-    Mana::ManaType manaType = Mana::ManaType::Arcane;
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      if (props.hasKey("manaType")) {
-        std::string manaTypeStr =
-            props["manaType"].tryAsString().value_or("Arcane");
-        if (manaTypeStr == "Divine")
-          manaType = Mana::ManaType::Divine;
-        else if (manaTypeStr == "Nature")
-          manaType = Mana::ManaType::Nature;
-        else if (manaTypeStr == "Dark")
-          manaType = Mana::ManaType::Dark;
-      }
-    }
-
-    auto mana = std::make_shared<Mana>(handle, id, name, manaType);
-    setCommonProperties(mana, json);
-
-    // Set mana-specific properties
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      mana->setRegenerationRate(static_cast<float>(
-          props["regenerationRate"].tryAsNumber().value_or(0.0)));
-      mana->setMaxMana(props["maxMana"].tryAsInt().value_or(100));
-    }
-
-    return mana;
-  } else if (type == ResourceType::BuildingMaterial) {
-    // Determine material type from JSON or default to Wood
-    BuildingMaterial::MaterialType materialType =
-        BuildingMaterial::MaterialType::Wood;
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      if (props.hasKey("materialType")) {
-        std::string matTypeStr =
-            props["materialType"].tryAsString().value_or("Wood");
-        if (matTypeStr == "Stone")
-          materialType = BuildingMaterial::MaterialType::Stone;
-        else if (matTypeStr == "Metal")
-          materialType = BuildingMaterial::MaterialType::Metal;
-        else if (matTypeStr == "Crystal")
-          materialType = BuildingMaterial::MaterialType::Crystal;
-      }
-    }
-
-    auto buildingMaterial =
-        std::make_shared<BuildingMaterial>(handle, id, name, materialType);
-    setCommonProperties(buildingMaterial, json);
-
-    // Set building material specific properties
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      buildingMaterial->setRegenerationRate(static_cast<float>(
-          props["regenerationRate"].tryAsNumber().value_or(0.0)));
-      buildingMaterial->setDurability(
-          props["durability"].tryAsInt().value_or(100));
-    }
-
-    return buildingMaterial;
-  } else if (type == ResourceType::Ammunition) {
-    // Determine ammo type from JSON or default to Arrow
-    Ammunition::AmmoType ammoType = Ammunition::AmmoType::Arrow;
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      if (props.hasKey("ammoType")) {
-        std::string ammoTypeStr =
-            props["ammoType"].tryAsString().value_or("Arrow");
-        if (ammoTypeStr == "Bolt")
-          ammoType = Ammunition::AmmoType::Bolt;
-        else if (ammoTypeStr == "Bullet")
-          ammoType = Ammunition::AmmoType::Bullet;
-        else if (ammoTypeStr == "ThrowingKnife")
-          ammoType = Ammunition::AmmoType::ThrowingKnife;
-        else if (ammoTypeStr == "MagicMissile")
-          ammoType = Ammunition::AmmoType::MagicMissile;
-      }
-    }
-
-    auto ammunition = std::make_shared<Ammunition>(handle, id, name, ammoType);
-    setCommonProperties(ammunition, json);
-
-    // Set ammunition-specific properties
-    if (json.hasKey("properties") && json["properties"].isObject()) {
-      const JsonValue &props = json["properties"];
-      ammunition->setRegenerationRate(static_cast<float>(
-          props["regenerationRate"].tryAsNumber().value_or(0.0)));
-      ammunition->setDamage(props["damage"].tryAsInt().value_or(10));
-    }
-
-    return ammunition;
-  }
-
-  // Fallback to base GameResource class
-  auto gameResource = std::make_shared<GameResource>(handle, id, name, type);
-  setCommonProperties(gameResource, json);
-
-  if (json.hasKey("properties") && json["properties"].isObject()) {
-    const JsonValue &props = json["properties"];
-    gameResource->setRegenerationRate(static_cast<float>(
-        props["regenerationRate"].tryAsNumber().value_or(0.0)));
-  }
-
-  return gameResource;
 }
 void ResourceFactory::setCommonProperties(const ResourcePtr& resource,
                                           const JsonValue &json) {

@@ -35,10 +35,10 @@ bool OverlayDemoState::enter() {
     // Control buttons that persist across all modes using auto-detected dimensions
     ui.createButtonAtBottom("overlay_control_back_btn", "Back", 100, 40);
 
-    ui.createButton("overlay_control_next_mode_btn", {140, ui.getLogicalHeight() - 60, 150, 40}, "Next Mode");
+    ui.createButton("overlay_control_next_mode_btn", {140, ui.getHeightInPixels() - 60, 150, 40}, "Next Mode");
     ui.setComponentPositioning("overlay_control_next_mode_btn", {UIPositionMode::BOTTOM_ALIGNED, 140, 20, 150, 40});
 
-    ui.createLabel("overlay_control_instructions", {310, ui.getLogicalHeight() - 55, 400, 30}, "Space = Next Mode, B = Back");
+    ui.createLabel("overlay_control_instructions", {310, ui.getHeightInPixels() - 55, 400, 30}, "Space = Next Mode, B = Back");
     ui.setComponentPositioning("overlay_control_instructions", {UIPositionMode::BOTTOM_ALIGNED, 310, 15, 400, 30});
 
     // Set up button callbacks
@@ -155,7 +155,7 @@ void OverlayDemoState::setupNoOverlayMode() {
                                             400, UIConstants::INFO_LABEL_HEIGHT});
 
     ui.createLabel(DESCRIPTION_LABEL, {UIConstants::INFO_LABEL_MARGIN_X, descY,
-                                        std::min(600, ui.getLogicalWidth() - 2*UIConstants::INFO_LABEL_MARGIN_X),
+                                        std::min(600, ui.getWidthInPixels() - 2*UIConstants::INFO_LABEL_MARGIN_X),
                                         UIConstants::INFO_LABEL_HEIGHT},
                    "Perfect for: Health bars, Score, Minimap, Chat\nGame content remains fully visible");
     ui.setComponentPositioning(DESCRIPTION_LABEL, {UIPositionMode::TOP_ALIGNED, UIConstants::INFO_LABEL_MARGIN_X, descY,
@@ -174,7 +174,7 @@ void OverlayDemoState::setupNoOverlayMode() {
     ui.setComponentPositioning(SCORE_LABEL, {UIPositionMode::TOP_ALIGNED, 20, 185, 150, 20});
 
     // Minimap simulation with right-alignment for fullscreen compatibility
-    ui.createPanel(MINIMAP_PANEL, {ui.getLogicalWidth() - 160, 20, 140, 140});
+    ui.createPanel(MINIMAP_PANEL, {ui.getWidthInPixels() - 160, 20, 140, 140});
     ui.setComponentPositioning(MINIMAP_PANEL, {UIPositionMode::RIGHT_ALIGNED, 20, 20, 140, 140});
 
     // HUD elements and minimap use theme styling - no custom colors needed
@@ -197,7 +197,7 @@ void OverlayDemoState::setupLightOverlayMode() {
                                             400, UIConstants::INFO_LABEL_HEIGHT});
 
     ui.createLabel(DESCRIPTION_LABEL, {UIConstants::INFO_LABEL_MARGIN_X, descY,
-                                        std::min(600, ui.getLogicalWidth() - 2*UIConstants::INFO_LABEL_MARGIN_X),
+                                        std::min(600, ui.getWidthInPixels() - 2*UIConstants::INFO_LABEL_MARGIN_X),
                                         UIConstants::INFO_LABEL_HEIGHT},
                    "Perfect for: Main menus, Settings screens\nSubtle separation from background");
     ui.setComponentPositioning(DESCRIPTION_LABEL, {UIPositionMode::TOP_ALIGNED, UIConstants::INFO_LABEL_MARGIN_X, descY,
@@ -236,7 +236,7 @@ void OverlayDemoState::setupDarkOverlayMode() {
                                             400, UIConstants::INFO_LABEL_HEIGHT});
 
     ui.createLabel(DESCRIPTION_LABEL, {UIConstants::INFO_LABEL_MARGIN_X, descY,
-                                        std::min(600, ui.getLogicalWidth() - 2*UIConstants::INFO_LABEL_MARGIN_X),
+                                        std::min(600, ui.getWidthInPixels() - 2*UIConstants::INFO_LABEL_MARGIN_X),
                                         UIConstants::INFO_LABEL_HEIGHT},
                    "Perfect for: Pause menus, In-game menus\nDarker theme for focus during gameplay");
     ui.setComponentPositioning(DESCRIPTION_LABEL, {UIPositionMode::TOP_ALIGNED, UIConstants::INFO_LABEL_MARGIN_X, descY,
@@ -268,7 +268,7 @@ void OverlayDemoState::setupModalOverlayMode() {
                                             400, UIConstants::INFO_LABEL_HEIGHT});
 
     ui.createLabel(DESCRIPTION_LABEL, {UIConstants::INFO_LABEL_MARGIN_X, descY,
-                                        std::min(600, ui.getLogicalWidth() - 2*UIConstants::INFO_LABEL_MARGIN_X),
+                                        std::min(600, ui.getWidthInPixels() - 2*UIConstants::INFO_LABEL_MARGIN_X),
                                         UIConstants::INFO_LABEL_HEIGHT},
                    "Perfect for: Confirmation dialogs, Settings panels\nStrong overlay demands attention");
     ui.setComponentPositioning(DESCRIPTION_LABEL, {UIPositionMode::TOP_ALIGNED, UIConstants::INFO_LABEL_MARGIN_X, descY,
@@ -283,16 +283,17 @@ void OverlayDemoState::setupModalOverlayMode() {
     // Create centered dialog with standardized dimensions
     ui.createCenteredDialog("overlay_demo_dialog_panel", dialogWidth, dialogHeight, "dark");
 
-    // Position child components using absolute baseline coordinates relative to dialog
-    ui.createLabel("overlay_demo_dialog_title", {dialogX + 20, dialogY + 20, 360, 30}, "Confirm Action");
-    ui.createLabel("overlay_demo_dialog_text", {dialogX + 20, dialogY + 60, 360, 40}, "Are you sure you want to quit?");
+    // Position child components linked to the dialog panel — linkToParent auto-elevates
+    // z-order and suppresses redundant text backgrounds.
+    ui.createLabel("overlay_demo_dialog_title", {dialogX + 20, dialogY + 20, 360, 30}, "Confirm Action",
+                   "overlay_demo_dialog_panel");
+    ui.createLabel("overlay_demo_dialog_text", {dialogX + 20, dialogY + 60, 360, 40}, "Are you sure you want to quit?",
+                   "overlay_demo_dialog_panel");
 
-    // Disable text backgrounds for labels inside modal (they have solid modal background)
-    ui.enableTextBackground("overlay_demo_dialog_title", false);
-    ui.enableTextBackground("overlay_demo_dialog_text", false);
-
-    ui.createButtonSuccess("overlay_demo_modal_yes_btn", {dialogX + 50, dialogY + 120, 100, 40}, "Yes");
-    ui.createButtonWarning("overlay_demo_modal_cancel_btn", {dialogX + 250, dialogY + 120, 100, 40}, "Cancel");
+    ui.createButtonSuccess("overlay_demo_modal_yes_btn", {dialogX + 50, dialogY + 120, 100, 40}, "Yes",
+                           "overlay_demo_dialog_panel");
+    ui.createButtonWarning("overlay_demo_modal_cancel_btn", {dialogX + 250, dialogY + 120, 100, 40}, "Cancel",
+                           "overlay_demo_dialog_panel");
 
     // Set CENTERED_BOTH positioning for all dialog children to move with dialog during fullscreen toggle
     // Offsets calculated from baseline center (960, 540)
@@ -317,7 +318,7 @@ void OverlayDemoState::setupLightModalOverlayMode() {
                                             400, UIConstants::INFO_LABEL_HEIGHT});
 
     ui.createLabel(DESCRIPTION_LABEL, {UIConstants::INFO_LABEL_MARGIN_X, descY,
-                                        std::min(600, ui.getLogicalWidth() - 2*UIConstants::INFO_LABEL_MARGIN_X),
+                                        std::min(600, ui.getWidthInPixels() - 2*UIConstants::INFO_LABEL_MARGIN_X),
                                         UIConstants::INFO_LABEL_HEIGHT},
                    "Perfect for: Light-themed dialogs, Settings panels\nLight strong overlay with good contrast");
     ui.setComponentPositioning(DESCRIPTION_LABEL, {UIPositionMode::TOP_ALIGNED, UIConstants::INFO_LABEL_MARGIN_X, descY,
@@ -332,16 +333,17 @@ void OverlayDemoState::setupLightModalOverlayMode() {
     // Create centered dialog with standardized dimensions
     ui.createCenteredDialog("overlay_demo_dialog_panel", dialogWidth, dialogHeight, "light");
 
-    // Position child components using absolute baseline coordinates relative to dialog
-    ui.createLabel("overlay_demo_dialog_title", {dialogX + 20, dialogY + 20, 360, 30}, "Confirm Action");
-    ui.createLabel("overlay_demo_dialog_text", {dialogX + 20, dialogY + 60, 360, 40}, "Save changes before closing?");
+    // Position child components linked to the dialog panel — linkToParent auto-elevates
+    // z-order and suppresses redundant text backgrounds.
+    ui.createLabel("overlay_demo_dialog_title", {dialogX + 20, dialogY + 20, 360, 30}, "Confirm Action",
+                   "overlay_demo_dialog_panel");
+    ui.createLabel("overlay_demo_dialog_text", {dialogX + 20, dialogY + 60, 360, 40}, "Save changes before closing?",
+                   "overlay_demo_dialog_panel");
 
-    // Disable text backgrounds for labels inside modal (they have solid modal background)
-    ui.enableTextBackground("overlay_demo_dialog_title", false);
-    ui.enableTextBackground("overlay_demo_dialog_text", false);
-
-    ui.createButtonSuccess("overlay_demo_modal_save_btn", {dialogX + 50, dialogY + 120, 100, 40}, "Save");
-    ui.createButtonWarning("overlay_demo_modal_cancel_btn", {dialogX + 250, dialogY + 120, 100, 40}, "Cancel");
+    ui.createButtonSuccess("overlay_demo_modal_save_btn", {dialogX + 50, dialogY + 120, 100, 40}, "Save",
+                           "overlay_demo_dialog_panel");
+    ui.createButtonWarning("overlay_demo_modal_cancel_btn", {dialogX + 250, dialogY + 120, 100, 40}, "Cancel",
+                           "overlay_demo_dialog_panel");
 
     // Set CENTERED_BOTH positioning for all dialog children to move with dialog during fullscreen toggle
     // Offsets calculated from baseline center (960, 540)

@@ -9,6 +9,7 @@
 #include "managers/UIConstants.hpp"
 #include "managers/GameStateManager.hpp"
 #include "core/GameEngine.hpp"
+#include "utils/MenuNavigation.hpp"
 
 #include "gpu/GPURenderer.hpp"
 
@@ -17,12 +18,14 @@ bool PauseState::enter() {
   auto& gameEngine = GameEngine::Instance();
   auto& ui = UIManager::Instance();
 
+  VoidLight::MenuNavigation::reset();
+
   // Pause all game managers via GameEngine (collision, pathfinding, AI, particles, GameTime)
   gameEngine.setGlobalPause(true);
 
   // Create pause state UI
-  int windowWidth = gameEngine.getLogicalWidth();
-  int windowHeight = gameEngine.getLogicalHeight();
+  int windowWidth = gameEngine.getWidthInPixels();
+  int windowHeight = gameEngine.getHeightInPixels();
 
   // Create overlay background to dim the game behind the pause menu
   ui.createOverlay(windowWidth, windowHeight);
@@ -50,8 +53,11 @@ bool PauseState::enter() {
   });
 
   ui.setOnClick("pause_mainmenu_btn", [this]() {
-      mp_stateManager->changeState(GameStateId::MAIN_MENU);
+      mp_stateManager->changeStateClearingStack(GameStateId::MAIN_MENU);
   });
+
+  m_selectedIndex = 0;
+  VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
 
   return true;
 }
@@ -62,6 +68,7 @@ void PauseState::update(float) {
     if (!ui.isShutdown()) {
         ui.update(0.0f);
     }
+    VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
 }
 
 bool PauseState::exit() {
@@ -71,6 +78,7 @@ bool PauseState::exit() {
   // Only clean up PauseState-specific UI components
   // Do NOT use prepareForStateTransition() as it would clear GamePlayState's preserved UI
   auto& ui = UIManager::Instance();
+  ui.clearKeyboardSelection();
   ui.removeComponent("pause_title");
   ui.removeComponent("pause_resume_btn");
   ui.removeComponent("pause_mainmenu_btn");
@@ -83,13 +91,18 @@ bool PauseState::exit() {
 void PauseState::handleInput() {
   const auto& inputMgr = InputManager::Instance();
 
-  // Use InputManager's new event-driven key press detection
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
+  VoidLight::MenuNavigation::readInputs(kNavOrder, m_selectedIndex);
+  // MenuCancel or Pause both resume gameplay — symmetric with GamePlayState
+  // which uses Command::Pause to enter PauseState. Both use isCommandPressed
+  // (rising-edge) to avoid re-pausing on the same frame.
+  if (VoidLight::MenuNavigation::cancelPressed() ||
+      inputMgr.isCommandPressed(InputManager::Command::Pause)) {
       mp_stateManager->popState();
   }
 
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_ESCAPE)) {
-      GameEngine::Instance().setRunning(false);
+  // Developer debug shortcut — R also resumes. Intentionally not rebindable.
+  if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
+      mp_stateManager->popState();
   }
 }
 

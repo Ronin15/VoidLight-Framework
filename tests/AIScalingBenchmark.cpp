@@ -27,8 +27,10 @@
 #include <algorithm>
 #include <thread>
 
+#include "ai/BehaviorConfig.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
+#include "managers/EventManager.hpp"
 #include "entities/Entity.hpp"  // For AnimationConfig
 #include "managers/PathfinderManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -50,6 +52,7 @@ public:
             VOIDLIGHT_ENABLE_BENCHMARK_MODE();
             BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
             BOOST_REQUIRE(EntityDataManager::Instance().init());
+            EventManager::Instance().init();
             PathfinderManager::Instance().init();
             PathfinderManager::Instance().rebuildGrid();
             CollisionManager::Instance().init();
@@ -70,6 +73,7 @@ public:
     void prepareForTest() {
         AIManager::Instance().prepareForStateTransition();
         BackgroundSimulationManager::Instance().prepareForStateTransition();
+        EventManager::Instance().prepareForStateTransition();
         CollisionManager::Instance().prepareForStateTransition();
         PathfinderManager::Instance().prepareForStateTransition();
         EntityDataManager::Instance().prepareForStateTransition();
@@ -129,6 +133,156 @@ public:
         }
     }
 
+    enum class AttackScenario {
+        Pressure,
+        TacticalReset,
+        BurstResolve,
+        CadencedResolve
+    };
+
+    // Create attacker/target pairs that exercise Attack behavior without
+    // target-acquisition scan noise. Only attackers receive AI behaviors.
+    size_t createAttackPairs(size_t attackerCount, float worldSize, AttackScenario scenario) {
+        auto& edm = EntityDataManager::Instance();
+        auto& aim = AIManager::Instance();
+        std::uniform_real_distribution<float> posDist(200.0f, worldSize - 200.0f);
+        std::uniform_real_distribution<float> angleDist(0.0f, TWO_PI);
+
+        constexpr float MELEE_ATTACK_RANGE = 60.0f;
+        constexpr float RANGED_ATTACK_RANGE = 180.0f;
+        constexpr float MELEE_TARGET_OFFSET = 45.0f;
+        constexpr float RANGED_TARGET_OFFSET = 130.0f;
+        constexpr float DAMAGE_FREE_COOLDOWN_SECONDS = 1000.0f;
+        constexpr float CADENCED_COOLDOWN_SECONDS = 0.25f;
+        constexpr float PROJECTILE_SPEED = 300.0f;
+        constexpr float RESOLVE_TARGET_HEALTH = 1000000000.0f;
+
+        for (size_t i = 0; i < attackerCount; ++i) {
+            const bool rangedAttacker = (i % 2) != 0;
+            const float attackRange = rangedAttacker ? RANGED_ATTACK_RANGE : MELEE_ATTACK_RANGE;
+            const float targetOffset = rangedAttacker ? RANGED_TARGET_OFFSET : MELEE_TARGET_OFFSET;
+            const float angle = angleDist(m_rng);
+            Vector2D attackerPos(posDist(m_rng), posDist(m_rng));
+            Vector2D targetPos(
+                attackerPos.getX() + (std::cos(angle) * targetOffset),
+                attackerPos.getY() + (std::sin(angle) * targetOffset));
+
+            EntityHandle attacker = edm.createNPCWithRaceClass(attackerPos, "Human", "Warrior");
+            EntityHandle target = edm.createNPCWithRaceClass(targetPos, "Human", "Guard");
+            const size_t attackerIdx = edm.getIndex(attacker);
+            const size_t targetIdx = edm.getIndex(target);
+            BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+            BOOST_REQUIRE(targetIdx != SIZE_MAX);
+
+            edm.setFaction(attacker, 1);
+            edm.setFaction(target, 2);
+
+            auto& attackerHot = edm.getHotDataByIndex(attackerIdx);
+            attackerHot.collisionLayers = CollisionLayer::Layer_Enemy;
+            attackerHot.collisionMask = 0xFFFF;
+            attackerHot.setCollisionEnabled(true);
+
+            auto& targetHot = edm.getHotDataByIndex(targetIdx);
+            targetHot.collisionLayers = CollisionLayer::Layer_Player;
+            targetHot.collisionMask = 0xFFFF;
+            targetHot.setCollisionEnabled(true);
+
+            auto& attackerChar = edm.getCharacterDataByIndex(attackerIdx);
+            auto& targetChar = edm.getCharacterDataByIndex(targetIdx);
+            attackerChar.attackRange = attackRange;
+            attackerChar.baseAttackRange = attackRange;
+            attackerChar.combatStyle = rangedAttacker
+                ? CharacterData::CombatStyle::Ranged
+                : CharacterData::CombatStyle::Melee;
+            attackerChar.baseCombatStyle = attackerChar.combatStyle;
+            attackerChar.projectileSpeed = rangedAttacker ? PROJECTILE_SPEED : 0.0f;
+            attackerChar.baseProjectileSpeed = attackerChar.projectileSpeed;
+
+            if (scenario == AttackScenario::TacticalReset) {
+                attackerChar.health = attackerChar.maxHealth * 0.20f;
+            }
+            if (scenario == AttackScenario::BurstResolve ||
+                scenario == AttackScenario::CadencedResolve) {
+                targetChar.health = RESOLVE_TARGET_HEALTH;
+                targetChar.maxHealth = RESOLVE_TARGET_HEALTH;
+                targetChar.baseMaxHealth = RESOLVE_TARGET_HEALTH;
+            }
+
+            auto attackConfig = rangedAttacker
+                ? VoidLight::AttackBehaviorConfig::createRangedConfig(attackRange)
+                : VoidLight::AttackBehaviorConfig::createMeleeConfig(attackRange);
+            attackConfig.attackCooldown = (scenario == AttackScenario::BurstResolve)
+                ? 0.0f
+                : (scenario == AttackScenario::CadencedResolve
+                    ? CADENCED_COOLDOWN_SECONDS
+                    : DAMAGE_FREE_COOLDOWN_SECONDS);
+            attackConfig.attackSpeed = (scenario == AttackScenario::BurstResolve)
+                ? 1000.0f
+                : attackConfig.attackSpeed;
+            attackConfig.recoveryTime = (scenario == AttackScenario::BurstResolve)
+                ? 0.0f
+                : attackConfig.recoveryTime;
+            attackConfig.projectileSpeed = PROJECTILE_SPEED;
+            attackConfig.specialAttackChance = 0.0f;
+            attackConfig.teamwork = false;
+            aim.assignBehavior(attacker, VoidLight::BehaviorConfigData::makeAttack(attackConfig));
+
+            const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+            BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+
+            auto& attackState = edm.getAttackState(ref.index);
+            attackState.currentState = (scenario == AttackScenario::BurstResolve)
+                ? 3  // Attacking: immediately resolves melee/ranged attack actions.
+                : 1; // Assessing: immediately enters decision logic.
+            attackState.attackTimer = (scenario == AttackScenario::BurstResolve ||
+                                       scenario == AttackScenario::CadencedResolve)
+                ? 10.0f
+                : 0.0f;
+            attackState.hasExplicitTarget = true;
+            attackState.explicitTarget = target;
+
+            auto& memoryData = edm.getMemoryData(attackerIdx);
+            memoryData.setValid(true);
+            memoryData.lastTarget = target;
+            memoryData.personality.aggression = 0.5f;
+            memoryData.personality.composure = 0.8f;
+            memoryData.personality.bravery = 0.7f;
+            if (scenario == AttackScenario::TacticalReset) {
+                memoryData.combatEncounters = 1;
+            }
+
+            m_handles.push_back(attacker);
+            m_passiveHandles.push_back(target);
+        }
+
+        if (!m_handles.empty()) {
+            aim.setPlayerHandle(m_passiveHandles.front());
+        }
+
+        return attackerCount;
+    }
+
+    void primeAttackersForBurstResolve() {
+        auto& edm = EntityDataManager::Instance();
+        for (const auto& handle : m_handles) {
+            const size_t attackerIdx = edm.getIndex(handle);
+            if (attackerIdx == SIZE_MAX) {
+                continue;
+            }
+
+            const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+            if (ref.type != BehaviorType::Attack) {
+                continue;
+            }
+
+            auto& attackState = edm.getAttackState(ref.index);
+            attackState.currentState = 3;
+            attackState.attackTimer = 10.0f;
+            attackState.stateChangeTimer = 0.0f;
+            attackState.specialAttackReady = false;
+        }
+    }
+
     // Set up world bounds and simulation tiers
     // CRITICAL: All spawned entities MUST be in Active tier for accurate benchmarking
     // spawnWorldSize = the worldSize passed to createEntities (entities spawn in [100, spawnWorldSize-100])
@@ -136,7 +290,7 @@ public:
         // World bounds can be larger than spawn area
         float worldBoundsSize = spawnWorldSize * 2.0f;
         CollisionManager::Instance().setWorldBounds(0.0f, 0.0f, worldBoundsSize, worldBoundsSize);
-        CollisionManager::Instance().prepareCollisionBuffers(m_handles.size());
+        CollisionManager::Instance().prepareCollisionBuffers(m_handles.size() + m_passiveHandles.size());
 
         // Entities spawn in [100, spawnWorldSize - 100]
         // Center of spawn area is at (spawnWorldSize/2, spawnWorldSize/2)
@@ -157,14 +311,21 @@ public:
         return EntityDataManager::Instance().getActiveIndices().size();
     }
 
-    // Run benchmark with median-of-N-runs for stable results.
-    // Returns median time per iteration in ms.
-    // Uses multiple measurement passes to reject outliers from CPU jitter,
-    // thermal fluctuation, and cache effects.
+    // Wall-time-bounded benchmark. Returns median per-frame ms across NUM_MEASUREMENT_RUNS passes.
+    // Each pass runs aim.update() until at least TARGET_WALL_MS has elapsed (and at least
+    // MIN_ITERATIONS have run, so noise can't run away at very high entity counts).
+    // Sanity-checks that AIManager actually executed expected behavior count per pass.
+    //
+    // TARGET_WALL_MS tuned for ctest cadence: 30 ms per pass × 5 runs × ~7 entity counts
+    // ≈ 1 s of actual measurement time (plus warmup + setup). 30 ms is well above timer
+    // resolution noise (microseconds) without ballooning regular regression runs.
     static constexpr int NUM_MEASUREMENT_RUNS = 5;
     static constexpr int WARMUP_FRAMES = 100;
+    static constexpr int MIN_ITERATIONS = 50;
+    static constexpr int MAX_ITERATIONS = 50000; // safety cap (matches ~30ms at 0.0006ms/frame)
+    static constexpr double TARGET_WALL_MS = 30.0;
 
-    double runBenchmark(int iterations) {
+    double runBenchmark(size_t expectedExecutionsPerFrame) {
         auto& aim = AIManager::Instance();
 
         // Extended warmup for WorkerBudget hill-climb convergence
@@ -175,22 +336,98 @@ public:
             aim.update(0.016f);
         }
 
-        // Multiple measurement passes — median is robust to outliers
         std::vector<double> runTimes;
         runTimes.reserve(NUM_MEASUREMENT_RUNS);
 
         for (int run = 0; run < NUM_MEASUREMENT_RUNS; ++run) {
-            auto start = std::chrono::high_resolution_clock::now();
-            for (int i = 0; i < iterations; ++i) {
+            const size_t executionsBefore = aim.getBehaviorUpdateCount();
+            const auto start = std::chrono::high_resolution_clock::now();
+
+            int iterations = 0;
+            double elapsedMs = 0.0;
+            while (iterations < MIN_ITERATIONS ||
+                   (elapsedMs < TARGET_WALL_MS && iterations < MAX_ITERATIONS)) {
                 aim.update(0.016f);
+                ++iterations;
+                elapsedMs = std::chrono::duration<double, std::milli>(
+                    std::chrono::high_resolution_clock::now() - start).count();
             }
-            auto end = std::chrono::high_resolution_clock::now();
-            runTimes.push_back(
-                std::chrono::duration<double, std::milli>(end - start).count() / iterations);
+
+            // Sanity check: confirm AIManager actually executed the expected work per frame
+            // (catches early-returns, paused state, or any path that times-fast-but-does-nothing).
+            const size_t executionsAfter = aim.getBehaviorUpdateCount();
+            const size_t actualExecutions = executionsAfter - executionsBefore;
+            const size_t expectedTotal = expectedExecutionsPerFrame * static_cast<size_t>(iterations);
+            // Allow 1% slack — first frame after warmup may have minor variance
+            const size_t minExpected = expectedTotal - (expectedTotal / 100);
+            BOOST_REQUIRE_GE(actualExecutions, minExpected);
+
+            runTimes.push_back(elapsedMs / iterations);
         }
 
         std::sort(runTimes.begin(), runTimes.end());
         return runTimes[NUM_MEASUREMENT_RUNS / 2];
+    }
+
+    double runAttackBurstResolveFrame(size_t expectedExecutionsPerFrame) {
+        auto& aim = AIManager::Instance();
+        auto& edm = EntityDataManager::Instance();
+        auto& eventMgr = EventManager::Instance();
+
+        const size_t expectedMeleeEvents = (expectedExecutionsPerFrame + 1) / 2;
+        const size_t expectedRangedProjectiles = expectedExecutionsPerFrame / 2;
+
+        primeAttackersForBurstResolve();
+
+        const size_t projectilesBefore = edm.getEntityCount(EntityKind::Projectile);
+        const size_t executionsBefore = aim.getBehaviorUpdateCount();
+        const auto start = std::chrono::high_resolution_clock::now();
+
+        aim.update(0.016f);
+        const size_t pendingEventsAfterAI = eventMgr.getPendingEventCount();
+        eventMgr.update();
+
+        const double elapsedMs = std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - start).count();
+
+        const size_t executionsAfter = aim.getBehaviorUpdateCount();
+        const size_t projectilesAfter = edm.getEntityCount(EntityKind::Projectile);
+        BOOST_REQUIRE_GE(executionsAfter - executionsBefore, expectedExecutionsPerFrame);
+        BOOST_REQUIRE_GE(pendingEventsAfterAI, expectedMeleeEvents);
+        BOOST_REQUIRE_GE(projectilesAfter - projectilesBefore, expectedRangedProjectiles);
+
+        return elapsedMs;
+    }
+
+    double runAttackCadencedResolveBenchmark(size_t expectedExecutionsPerFrame) {
+        auto& aim = AIManager::Instance();
+        auto& edm = EntityDataManager::Instance();
+        auto& eventMgr = EventManager::Instance();
+
+        constexpr int CADENCED_FRAMES = 90;
+        const size_t projectilesBefore = edm.getEntityCount(EntityKind::Projectile);
+        const size_t executionsBefore = aim.getBehaviorUpdateCount();
+        size_t totalPendingEventsAfterAI = 0;
+
+        const auto start = std::chrono::high_resolution_clock::now();
+        for (int frame = 0; frame < CADENCED_FRAMES; ++frame) {
+            aim.update(0.016f);
+            totalPendingEventsAfterAI += eventMgr.getPendingEventCount();
+            eventMgr.update();
+        }
+
+        const double elapsedMs = std::chrono::duration<double, std::milli>(
+            std::chrono::high_resolution_clock::now() - start).count();
+
+        const size_t executionsAfter = aim.getBehaviorUpdateCount();
+        const size_t projectilesAfter = edm.getEntityCount(EntityKind::Projectile);
+        const size_t expectedTotal =
+            expectedExecutionsPerFrame * static_cast<size_t>(CADENCED_FRAMES);
+        BOOST_REQUIRE_GE(executionsAfter - executionsBefore, expectedTotal - (expectedTotal / 100));
+        BOOST_REQUIRE_GT(totalPendingEventsAfterAI, 0U);
+        BOOST_REQUIRE_GT(projectilesAfter - projectilesBefore, 0U);
+
+        return elapsedMs / static_cast<double>(CADENCED_FRAMES);
     }
 
     void cleanup() {
@@ -200,11 +437,14 @@ public:
             aim.unregisterEntity(handle);
         }
         m_handles.clear();
+        m_passiveHandles.clear();
     }
 
 private:
+    static constexpr float TWO_PI = 6.28318530717958647692f;
     std::mt19937 m_rng;
     std::vector<EntityHandle> m_handles;
+    std::vector<EntityHandle> m_passiveHandles;
     static bool s_initialized;
 };
 
@@ -220,6 +460,7 @@ struct AIScalingModuleCleanup {
         AIManager::Instance().clean();
         CollisionManager::Instance().clean();
         PathfinderManager::Instance().clean();
+        EventManager::Instance().clean();
         EntityDataManager::Instance().clean();
         VoidLight::ThreadSystem::Instance().clean();
 
@@ -264,7 +505,10 @@ BOOST_AUTO_TEST_CASE(AIEntityScaling)
               << std::setw(12) << "Threading"
               << std::setw(10) << "Status\n";
 
-    std::vector<size_t> entityCounts = {100, 500, 1000, 2000, 5000, 10000};
+    // Entity counts sized for ctest cadence. 25K covers the multi-threaded engagement point
+    // (WorkerBudget switches single→multi around there). 50K/100K are stress numbers — run
+    // those manually if needed; they add ~5–15 s of setup time each that ctest shouldn't pay.
+    std::vector<size_t> entityCounts = {100, 500, 1000, 2000, 5000, 10000, 25000};
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 
     // Track best performance for summary
@@ -285,11 +529,9 @@ BOOST_AUTO_TEST_CASE(AIEntityScaling)
                       << " entities in Active tier!\n";
         }
 
-        // Target ~300ms per measurement pass (5 passes via median)
-        // Ensures adequate wall time for stable timing at all entity counts
-        int iterations = std::max(50, 300000 / static_cast<int>(count));
-
-        double medianMs = runBenchmark(iterations);
+        // Wall-time-bounded measurement; per-frame ms returned, work-done sanity-checked
+        // against the active count via getBehaviorUpdateCount().
+        double medianMs = runBenchmark(activeCount);
 
         // Derive updates/sec from median time: count entities / medianMs * 1000
         // This is equivalent to the old behaviorUpdateCount approach but more stable
@@ -328,121 +570,11 @@ BOOST_AUTO_TEST_CASE(AIEntityScaling)
     std::cout << std::endl;
 }
 
-// ---------------------------------------------------------------------------
-// Threading Mode Comparison
-// ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(ThreadingModeComparison)
-{
-    std::cout << "--- Threading Mode Comparison ---\n";
-    std::cout << "(Threading uses adaptive threshold from WorkerBudget)\n";
-    std::cout << std::setw(10) << "Entities"
-              << std::setw(14) << "Single (ms)"
-              << std::setw(14) << "Multi (ms)"
-              << std::setw(10) << "Speedup\n";
-
-    std::vector<size_t> entityCounts = {500, 1000, 2000, 5000, 10000};
-
-    for (size_t count : entityCounts) {
-        float worldSize = std::sqrt(static_cast<float>(count)) * 100.0f;
-        int iterations = std::max(50, 300000 / static_cast<int>(count));
-
-        // Test single-threaded (disabling threading bypasses adaptive threshold)
-        prepareForTest();
-        #ifndef NDEBUG
-        AIManager::Instance().enableThreading(false);
-        #endif
-        createEntities(count, worldSize);
-        setupWorld(worldSize);
-        size_t activeCount = verifyActiveTier();
-        if (activeCount != count) {
-            std::cout << "WARNING: Single-thread test - Only " << activeCount
-                      << "/" << count << " entities in Active tier!\n";
-        }
-        double singleMs = runBenchmark(iterations);
-        cleanup();
-
-        // Test multi-threaded (adaptive threshold decides if threading is used)
-        prepareForTest();
-        #ifndef NDEBUG
-        AIManager::Instance().enableThreading(true);
-        #endif
-        createEntities(count, worldSize);
-        setupWorld(worldSize);
-        activeCount = verifyActiveTier();
-        if (activeCount != count) {
-            std::cout << "WARNING: Multi-thread test - Only " << activeCount
-                      << "/" << count << " entities in Active tier!\n";
-        }
-        double multiMs = runBenchmark(iterations);
-        cleanup();
-
-        double speedup = (multiMs > 0) ? singleMs / multiMs : 0.0;
-
-        std::cout << std::setw(10) << count
-                  << std::setw(14) << std::fixed << std::setprecision(2) << singleMs
-                  << std::setw(14) << std::fixed << std::setprecision(2) << multiMs
-                  << std::setw(9) << std::fixed << std::setprecision(2) << speedup << "x\n";
-    }
-
-    // Restore default threading mode
-    #ifndef NDEBUG
-    AIManager::Instance().enableThreading(true);
-    #endif
-    std::cout << std::endl;
-}
-
-// ---------------------------------------------------------------------------
-// Idle Behavior Threading Test (Simple behavior - pure threading test)
-// ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(IdleBehaviorThreading)
-{
-    std::cout << "--- Idle Behavior Threading ---\n";
-    std::cout << "Testing threading overhead with simple behavior\n";
-    std::cout << "(Threading uses adaptive threshold from WorkerBudget)\n";
-    std::cout << std::setw(10) << "Entities"
-              << std::setw(14) << "Single (ms)"
-              << std::setw(14) << "Multi (ms)"
-              << std::setw(10) << "Speedup\n";
-
-    std::vector<size_t> entityCounts = {500, 1000, 2000, 5000, 10000};
-
-    for (size_t count : entityCounts) {
-        float worldSize = std::sqrt(static_cast<float>(count)) * 100.0f;
-        int iterations = std::max(50, 300000 / static_cast<int>(count));
-
-        // Test single-threaded
-        prepareForTest();
-        #ifndef NDEBUG
-        AIManager::Instance().enableThreading(false);
-        #endif
-        createEntitiesWithBehaviors(count, worldSize, {"Idle"});
-        setupWorld(worldSize);
-        double singleMs = runBenchmark(iterations);
-        cleanup();
-
-        // Test multi-threaded (adaptive threshold decides if threading is used)
-        prepareForTest();
-        #ifndef NDEBUG
-        AIManager::Instance().enableThreading(true);
-        #endif
-        createEntitiesWithBehaviors(count, worldSize, {"Idle"});
-        setupWorld(worldSize);
-        double multiMs = runBenchmark(iterations);
-        cleanup();
-
-        double speedup = (multiMs > 0) ? singleMs / multiMs : 0.0;
-
-        std::cout << std::setw(10) << count
-                  << std::setw(14) << std::fixed << std::setprecision(2) << singleMs
-                  << std::setw(14) << std::fixed << std::setprecision(2) << multiMs
-                  << std::setw(9) << std::fixed << std::setprecision(2) << speedup << "x\n";
-    }
-
-    #ifndef NDEBUG
-    AIManager::Instance().enableThreading(true);
-    #endif
-    std::cout << std::endl;
-}
+// Removed ThreadingModeComparison and IdleBehaviorThreading: forcing single-vs-multi via
+// enableThreading() bypasses WorkerBudget's adaptive decision — that's the engine's actual
+// production behavior, and overriding it measures a configuration that would never ship.
+// The primary AIEntityScaling test reports which mode WorkerBudget chose per entity count,
+// which is the truth.
 
 // ---------------------------------------------------------------------------
 // Behavior Mix Test
@@ -468,14 +600,12 @@ BOOST_AUTO_TEST_CASE(BehaviorMixTest)
         {"Full Mix", {"Wander", "Guard", "Patrol", "Follow", "Chase"}}
     };
 
-    constexpr int ITERATIONS = 150;  // ~300ms measurement per pass at 2K entities
-
     for (const auto& mix : mixes) {
         prepareForTest();
         createEntitiesWithBehaviors(ENTITY_COUNT, WORLD_SIZE, mix.behaviors);
         setupWorld(WORLD_SIZE);  // Pass spawn worldSize directly
 
-        double medianMs = runBenchmark(ITERATIONS);
+        double medianMs = runBenchmark(verifyActiveTier());
         double updatesPerSec = (medianMs > 0.0)
             ? (static_cast<double>(ENTITY_COUNT) / medianMs) * 1000.0
             : 0.0;
@@ -486,6 +616,200 @@ BOOST_AUTO_TEST_CASE(BehaviorMixTest)
 
         cleanup();
     }
+    std::cout << std::endl;
+}
+
+// ---------------------------------------------------------------------------
+// Attack Behavior Scaling
+// ---------------------------------------------------------------------------
+BOOST_AUTO_TEST_CASE(AttackBehaviorPressureScaling)
+{
+    std::cout << "--- Attack Behavior Decision Pressure Scaling (50/50 melee+ranged) ---\n";
+    std::cout << "Workload: Attack AI decision and pressure movement only; "
+              << "damage/projectile resolution intentionally suppressed.\n";
+    std::cout << std::setw(10) << "Attackers"
+              << std::setw(12) << "Time (ms)"
+              << std::setw(14) << "Updates/sec"
+              << std::setw(12) << "Threading"
+              << std::setw(10) << "Status\n";
+
+    const std::vector<size_t> attackerCounts = {100, 500, 1000, 2000, 5000};
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+
+    for (size_t count : attackerCounts) {
+        prepareForTest();
+
+        const float worldSize = std::max(1000.0f, std::sqrt(static_cast<float>(count)) * 120.0f);
+        const size_t attackerCount = createAttackPairs(count, worldSize, AttackScenario::Pressure);
+        setupWorld(worldSize);
+        const size_t activeCount = verifyActiveTier();
+
+        const double medianMs = runBenchmark(attackerCount);
+        const double updatesPerSec = (medianMs > 0.0)
+            ? (static_cast<double>(attackerCount) / medianMs) * 1000.0
+            : 0.0;
+
+        // Attackers are the measured behavior work; active entities are the WorkerBudget workload.
+        const auto decision = budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, activeCount);
+        const char* threading = decision.shouldThread ? "multi" : "single";
+        const char* status = (attackerCount == count && activeCount >= attackerCount && medianMs > 0.0)
+            ? "OK"
+            : "FAIL";
+
+        std::cout << std::setw(10) << attackerCount
+                  << std::setw(12) << std::fixed << std::setprecision(2) << medianMs
+                  << std::setw(14) << std::fixed << std::setprecision(0) << updatesPerSec
+                  << std::setw(12) << threading
+                  << std::setw(10) << status << "\n";
+
+        cleanup();
+    }
+
+    std::cout << std::endl;
+}
+
+BOOST_AUTO_TEST_CASE(AttackBehaviorTacticalResetScaling)
+{
+    std::cout << "--- Attack Behavior Decision Tactical Reset Scaling (50/50 melee+ranged) ---\n";
+    std::cout << "Workload: Attack pressure scoring and tactical reset movement only; "
+              << "damage/projectile resolution intentionally suppressed.\n";
+    std::cout << std::setw(10) << "Attackers"
+              << std::setw(12) << "Time (ms)"
+              << std::setw(14) << "Updates/sec"
+              << std::setw(12) << "Threading"
+              << std::setw(10) << "Status\n";
+
+    const std::vector<size_t> attackerCounts = {100, 500, 1000, 2000, 5000};
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+
+    for (size_t count : attackerCounts) {
+        prepareForTest();
+
+        const float worldSize = std::max(1000.0f, std::sqrt(static_cast<float>(count)) * 120.0f);
+        const size_t attackerCount = createAttackPairs(count, worldSize, AttackScenario::TacticalReset);
+        setupWorld(worldSize);
+        const size_t activeCount = verifyActiveTier();
+
+        const double medianMs = runBenchmark(attackerCount);
+        const double updatesPerSec = (medianMs > 0.0)
+            ? (static_cast<double>(attackerCount) / medianMs) * 1000.0
+            : 0.0;
+
+        // Attackers are the measured behavior work; active entities are the WorkerBudget workload.
+        const auto decision = budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, activeCount);
+        const char* threading = decision.shouldThread ? "multi" : "single";
+        const char* status = (attackerCount == count && activeCount >= attackerCount && medianMs > 0.0)
+            ? "OK"
+            : "FAIL";
+
+        std::cout << std::setw(10) << attackerCount
+                  << std::setw(12) << std::fixed << std::setprecision(2) << medianMs
+                  << std::setw(14) << std::fixed << std::setprecision(0) << updatesPerSec
+                  << std::setw(12) << threading
+                  << std::setw(10) << status << "\n";
+
+        cleanup();
+    }
+
+    std::cout << std::endl;
+}
+
+BOOST_AUTO_TEST_CASE(AttackBehaviorBurstResolveScaling)
+{
+    std::cout << "--- Attack Behavior Cold Burst Resolve Scaling (50/50 melee+ranged) ---\n";
+    std::cout << "Workload: one synchronized resolve frame from fresh state; "
+              << "forces melee EventManager damage and ranged AICommandBus projectile creation "
+              << "before WorkerBudget learning can engage.\n";
+    std::cout << std::setw(10) << "Attackers"
+              << std::setw(12) << "Time (ms)"
+              << std::setw(14) << "Updates/sec"
+              << std::setw(12) << "Threading"
+              << std::setw(10) << "Status\n";
+
+    const std::vector<size_t> attackerCounts = {100, 500, 1000, 2000, 5000};
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+
+    for (size_t count : attackerCounts) {
+        std::vector<double> runTimes;
+        runTimes.reserve(3);
+        size_t activeCount = 0;
+
+        for (int run = 0; run < 3; ++run) {
+            prepareForTest();
+
+            const float worldSize = std::max(1000.0f, std::sqrt(static_cast<float>(count)) * 120.0f);
+            const size_t attackerCount = createAttackPairs(count, worldSize, AttackScenario::BurstResolve);
+            setupWorld(worldSize);
+            activeCount = verifyActiveTier();
+
+            runTimes.push_back(runAttackBurstResolveFrame(attackerCount));
+            cleanup();
+        }
+
+        std::sort(runTimes.begin(), runTimes.end());
+        const double medianMs = runTimes[runTimes.size() / 2];
+        const double updatesPerSec = (medianMs > 0.0)
+            ? (static_cast<double>(count) / medianMs) * 1000.0
+            : 0.0;
+
+        // Attackers are the measured behavior work; active entities are the WorkerBudget workload.
+        const auto decision = budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, activeCount);
+        const char* threading = decision.shouldThread ? "multi" : "single";
+        const char* status = (activeCount >= count && medianMs > 0.0) ? "OK" : "FAIL";
+
+        std::cout << std::setw(10) << count
+                  << std::setw(12) << std::fixed << std::setprecision(2) << medianMs
+                  << std::setw(14) << std::fixed << std::setprecision(0) << updatesPerSec
+                  << std::setw(12) << threading
+                  << std::setw(10) << status << "\n";
+    }
+
+    std::cout << std::endl;
+}
+
+BOOST_AUTO_TEST_CASE(AttackBehaviorCadencedResolveScaling)
+{
+    std::cout << "--- Attack Behavior Cadenced Resolve Scaling (50/50 melee+ranged) ---\n";
+    std::cout << "Workload: 90-frame cooldown-driven combat sequence; includes AI update, "
+              << "ranged command commit, melee EventManager dispatch, and projectile creation.\n";
+    std::cout << std::setw(10) << "Attackers"
+              << std::setw(12) << "Time (ms)"
+              << std::setw(14) << "Updates/sec"
+              << std::setw(12) << "Threading"
+              << std::setw(10) << "Status\n";
+
+    const std::vector<size_t> attackerCounts = {100, 500, 1000, 2000, 5000};
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+
+    for (size_t count : attackerCounts) {
+        prepareForTest();
+
+        const float worldSize = std::max(1000.0f, std::sqrt(static_cast<float>(count)) * 120.0f);
+        const size_t attackerCount = createAttackPairs(count, worldSize, AttackScenario::CadencedResolve);
+        setupWorld(worldSize);
+        const size_t activeCount = verifyActiveTier();
+
+        const double medianMs = runAttackCadencedResolveBenchmark(attackerCount);
+        const double updatesPerSec = (medianMs > 0.0)
+            ? (static_cast<double>(attackerCount) / medianMs) * 1000.0
+            : 0.0;
+
+        // Attackers are the measured behavior work; active entities are the WorkerBudget workload.
+        const auto decision = budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, activeCount);
+        const char* threading = decision.shouldThread ? "multi" : "single";
+        const char* status = (attackerCount == count && activeCount >= attackerCount && medianMs > 0.0)
+            ? "OK"
+            : "FAIL";
+
+        std::cout << std::setw(10) << attackerCount
+                  << std::setw(12) << std::fixed << std::setprecision(2) << medianMs
+                  << std::setw(14) << std::fixed << std::setprecision(0) << updatesPerSec
+                  << std::setw(12) << threading
+                  << std::setw(10) << status << "\n";
+
+        cleanup();
+    }
+
     std::cout << std::endl;
 }
 

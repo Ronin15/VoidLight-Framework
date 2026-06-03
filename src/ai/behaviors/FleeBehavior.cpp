@@ -18,28 +18,21 @@ thread_local std::mt19937 s_rng{std::random_device{}()};
 thread_local std::uniform_real_distribution<float> s_angleVariation{-0.5f, 0.5f};
 thread_local std::uniform_real_distribution<float> s_panicVariation{0.8f, 1.2f};
 
-// Note: All flee config values now come from FleeBehaviorConfig passed to functions
-// No default constants needed - config is always available during execution
+constexpr size_t MAX_SAFE_ZONES = 4;
+constexpr float CROWD_ANALYSIS_INTERVAL = 0.25f;
 
-constexpr size_t MAX_SAFE_ZONES = 4;  // Matches FleeState array size
-constexpr float CROWD_ANALYSIS_INTERVAL = 0.25f;  // Refresh cached nearby count every 0.25s
-
-// Process pending messages for Flee behavior
-void processFleeMessages(BehaviorData& data, const VoidLight::FleeBehaviorConfig& config) {
-    auto& flee = data.state.flee;
-
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i) {
-        uint8_t msgId = data.pendingMessages[i].messageId;
+void processFleeMessages(BehaviorData& shared, VoidLight::FleeStateData& flee,
+                         const VoidLight::FleeBehaviorConfig& config) {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        uint8_t msgId = shared.pendingMessages[i].messageId;
 
         switch (msgId) {
             case BehaviorMessage::PANIC:
-                // Force panic state
                 flee.isInPanic = true;
                 flee.panicTimer = config.panicDuration;
                 break;
 
             case BehaviorMessage::CALM_DOWN:
-                // Exit panic state
                 flee.isInPanic = false;
                 flee.panicTimer = 0.0f;
                 break;
@@ -48,7 +41,7 @@ void processFleeMessages(BehaviorData& data, const VoidLight::FleeBehaviorConfig
                 break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 }
 
 Vector2D normalizeVector(const Vector2D& direction) {
@@ -57,12 +50,7 @@ Vector2D normalizeVector(const Vector2D& direction) {
     return direction / magnitude;
 }
 
-/**
- * @brief Find the nearest safe zone center from current position
- * @return Vector2D of nearest safe zone center, or zero vector if no safe zones
- */
-Vector2D findNearestSafeZone(const BehaviorContext& ctx) {
-    const auto& flee = ctx.behaviorData.state.flee;
+Vector2D findNearestSafeZone(const BehaviorContext& ctx, const VoidLight::FleeStateData& flee) {
     if (flee.safeZoneCount == 0) return Vector2D{0, 0};
 
     Vector2D currentPos = ctx.transform.position;
@@ -105,10 +93,9 @@ Vector2D avoidBoundaries(const Vector2D& position, const Vector2D& direction, fl
 }
 
 Vector2D calculateFleeDirection(const Vector2D& entityPos, const Vector2D& threatPos,
-                                const BehaviorData& data, float padding,
+                                const VoidLight::FleeStateData& flee, float padding,
                                 float boundsMinX, float boundsMinY,
                                 float boundsMaxX, float boundsMaxY) {
-    const auto& flee = data.state.flee;
     Vector2D fleeDir = entityPos - threatPos;
 
     if (fleeDir.length() < 0.001f) {
@@ -124,8 +111,8 @@ Vector2D calculateFleeDirection(const Vector2D& entityPos, const Vector2D& threa
     return normalizeVector(fleeDir);
 }
 
-float calculateFleeSpeedModifier(const BehaviorData& data, const VoidLight::FleeBehaviorConfig& config) {
-    const auto& flee = data.state.flee;
+float calculateFleeSpeedModifier(const VoidLight::FleeStateData& flee,
+                                 const VoidLight::FleeBehaviorConfig& config) {
     float modifier = 1.0f;
 
     if (flee.isInPanic) modifier *= config.panicSpeedMultiplier;
@@ -139,9 +126,8 @@ float calculateFleeSpeedModifier(const BehaviorData& data, const VoidLight::Flee
     return modifier;
 }
 
-void updateStamina(BehaviorData& data, float deltaTime, bool fleeing,
+void updateStamina(VoidLight::FleeStateData& flee, float deltaTime, bool fleeing,
                    const VoidLight::FleeBehaviorConfig& config) {
-    auto& flee = data.state.flee;
     if (fleeing) {
         flee.currentStamina -= config.staminaDrain * deltaTime;
         flee.currentStamina = std::max(0.0f, flee.currentStamina);
@@ -151,11 +137,11 @@ void updateStamina(BehaviorData& data, float deltaTime, bool fleeing,
     }
 }
 
-bool tryFollowPathToGoal(BehaviorContext& ctx, const Vector2D& goal, float speed,
+bool tryFollowPathToGoal(BehaviorContext& ctx, const VoidLight::FleeStateData& flee,
+                         const Vector2D& goal, float speed,
                          const VoidLight::FleeBehaviorConfig& config) {
     if (!ctx.pathData) return false;
 
-    const auto& flee = ctx.behaviorData.state.flee;
     auto& pathData = *ctx.pathData;
     Vector2D currentPos = ctx.transform.position;
 
@@ -214,14 +200,14 @@ bool tryFollowPathToGoal(BehaviorContext& ctx, const Vector2D& goal, float speed
     return false;
 }
 
-void updatePanicFlee(BehaviorContext& ctx, const Vector2D& threatPos,
+void updatePanicFlee(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
+                     const Vector2D& threatPos,
                      const VoidLight::FleeBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& flee = data.state.flee;
+    auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.directionChangeTimer > 0.2f || flee.fleeDirection.length() < 0.001f) {
-        flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, data, config.worldPadding,
+        flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
                                            ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
         float randomAngle = s_angleVariation(s_rng) * 0.8f;
         float cos_a = std::cos(randomAngle);
@@ -232,24 +218,23 @@ void updatePanicFlee(BehaviorContext& ctx, const Vector2D& threatPos,
         flee.directionChangeTimer = 0.0f;
     }
 
-    float speedModifier = calculateFleeSpeedModifier(data, config);
-    ctx.transform.velocity = flee.fleeDirection * data.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    float speedModifier = calculateFleeSpeedModifier(flee, config);
+    ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
 }
 
-void updateStrategicRetreat(BehaviorContext& ctx, const Vector2D& threatPos,
+void updateStrategicRetreat(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
+                            const Vector2D& threatPos,
                             const VoidLight::FleeBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& flee = data.state.flee;
+    auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.directionChangeTimer > 1.0f || flee.fleeDirection.length() < 0.001f) {
-        flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, data, config.worldPadding,
+        flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
                                            ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
         flee.directionChangeTimer = 0.0f;
     }
 
-    // Use cached nearby count (refreshed by main executeFlee countdown timer)
-    int nearbyCount = data.cachedNearbyCount;
+    int nearbyCount = shared.cachedNearbyCount;
 
     float baseRetreatDistance = config.strategicRetreatDistance;
     float retreatDistance = baseRetreatDistance;
@@ -265,16 +250,16 @@ void updateStrategicRetreat(BehaviorContext& ctx, const Vector2D& threatPos,
     Vector2D dest = PathfinderManager::Instance().clampToWorldBounds(
         currentPos + flee.fleeDirection * retreatDistance, 100.0f);
 
-    float speedModifier = calculateFleeSpeedModifier(data, config) * config.strategicSpeedMultiplier;
-    if (!tryFollowPathToGoal(ctx, dest, data.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
-        ctx.transform.velocity = flee.fleeDirection * data.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    float speedModifier = calculateFleeSpeedModifier(flee, config) * config.strategicSpeedMultiplier;
+    if (!tryFollowPathToGoal(ctx, flee, dest, shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
+        ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
     }
 }
 
-void updateEvasiveManeuver(BehaviorContext& ctx, const Vector2D& threatPos,
+void updateEvasiveManeuver(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
+                           const Vector2D& threatPos,
                            const VoidLight::FleeBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& flee = data.state.flee;
+    auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.zigzagTimer > config.zigzagInterval) {
@@ -282,7 +267,7 @@ void updateEvasiveManeuver(BehaviorContext& ctx, const Vector2D& threatPos,
         flee.zigzagTimer = 0.0f;
     }
 
-    Vector2D baseFleeDir = calculateFleeDirection(currentPos, threatPos, data, config.worldPadding,
+    Vector2D baseFleeDir = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
                                            ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
 
     float zigzagAngleRad = (config.zigzagAngle * static_cast<float>(M_PI) / 180.0f) * flee.zigzagDirection;
@@ -294,18 +279,17 @@ void updateEvasiveManeuver(BehaviorContext& ctx, const Vector2D& threatPos,
 
     flee.fleeDirection = normalizeVector(zigzagDir);
 
-    float speedModifier = calculateFleeSpeedModifier(data, config);
-    ctx.transform.velocity = flee.fleeDirection * data.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    float speedModifier = calculateFleeSpeedModifier(flee, config);
+    ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
 }
 
-void updateSeekCover(BehaviorContext& ctx, const Vector2D& threatPos,
+void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
+                     const Vector2D& threatPos,
                      const VoidLight::FleeBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& flee = data.state.flee;
+    auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
-    // Use cached nearby count (refreshed by main executeFlee countdown timer)
-    int nearbyCount = data.cachedNearbyCount;
+    int nearbyCount = shared.cachedNearbyCount;
 
     float baseCoverDistance = config.coverSeekDistance;
     float coverDistance = baseCoverDistance;
@@ -315,23 +299,21 @@ void updateSeekCover(BehaviorContext& ctx, const Vector2D& threatPos,
         coverDistance = baseCoverDistance * 1.2f;
     }
 
-    flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, data, config.worldPadding,
+    flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
                                            ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
 
-    // Check for nearby safe zones and blend flee direction toward them
-    Vector2D safeZoneTarget = findNearestSafeZone(ctx);
+    Vector2D safeZoneTarget = findNearestSafeZone(ctx, flee);
     if (safeZoneTarget.lengthSquared() > 0.01f) {
         Vector2D toSafeZone = (safeZoneTarget - currentPos).normalized();
-        // Blend 40% flee direction, 60% toward safe zone
         flee.fleeDirection = (flee.fleeDirection * 0.4f + toSafeZone * 0.6f).normalized();
     }
 
     Vector2D dest = PathfinderManager::Instance().clampToWorldBounds(
         currentPos + flee.fleeDirection * coverDistance, 100.0f);
 
-    float speedModifier = calculateFleeSpeedModifier(data, config);
-    if (!tryFollowPathToGoal(ctx, dest, data.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
-        ctx.transform.velocity = flee.fleeDirection * data.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    float speedModifier = calculateFleeSpeedModifier(flee, config);
+    if (!tryFollowPathToGoal(ctx, flee, dest, shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
+        ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
     }
 }
 
@@ -339,46 +321,46 @@ void updateSeekCover(BehaviorContext& ctx, const Vector2D& threatPos,
 
 namespace Behaviors {
 
-void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config) {
+void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config,
+              VoidLight::FleeStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Flee);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& shared = edm.getBehaviorData(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    auto& flee = data.state.flee;
     auto& hotData = edm.getHotDataByIndex(edmIndex);
 
-    flee.lastThreatPosition = hotData.transform.position;
-    flee.fleeDirection = Vector2D(0, 0);
-    flee.lastKnownSafeDirection = Vector2D(0, 0);
-    flee.fleeTimer = 0.0f;
-    flee.directionChangeTimer = 0.0f;
-    flee.panicTimer = 0.0f;
-    flee.currentStamina = config.maxStamina;
-    flee.zigzagTimer = 0.0f;
-    flee.navRadius = config.navRadius;
-    flee.backoffTimer = 0.0f;
-    flee.zigzagDirection = 1;
-    flee.isFleeing = false;
-    flee.isInPanic = false;
-    flee.hasValidThreat = false;
-    flee.fearBoost = 0.0f;
-    flee.safeZoneCount = 0;  // No safe zones by default
+    state.lastThreatPosition = hotData.transform.position;
+    state.fleeDirection = Vector2D(0, 0);
+    state.lastKnownSafeDirection = Vector2D(0, 0);
+    state.fleeTimer = 0.0f;
+    state.directionChangeTimer = 0.0f;
+    state.panicTimer = 0.0f;
+    state.currentStamina = config.maxStamina;
+    state.zigzagTimer = 0.0f;
+    state.navRadius = config.navRadius;
+    state.backoffTimer = 0.0f;
+    state.zigzagDirection = 1;
+    state.isFleeing = false;
+    state.isInPanic = false;
+    state.hasValidThreat = false;
+    state.fearBoost = 0.0f;
+    state.safeZoneCount = 0;
 
-    data.setInitialized(true);
+    shared.setInitialized(true);
 }
 
-void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& config) {
-    if (!ctx.behaviorData.isValid() || !ctx.pathData) return;
+void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& config,
+                 VoidLight::FleeStateData& flee) {
+    if (!ctx.sharedState.isValid() || !ctx.pathData) return;
 
-    auto& data = ctx.behaviorData;
-    auto& flee = data.state.flee;
+    auto& shared = ctx.sharedState;
     auto& pathData = *ctx.pathData;
 
     // Process any pending messages before main logic
-    processFleeMessages(data, config);
+    processFleeMessages(shared, flee, config);
 
     // Update timers
     flee.fleeTimer += ctx.deltaTime;
@@ -388,8 +370,8 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
     if (flee.backoffTimer > 0.0f) flee.backoffTimer -= ctx.deltaTime;
 
     // Countdown timer for cached crowd analysis (decrements to trigger refresh)
-    if (data.lastCrowdAnalysis > 0.0f) {
-        data.lastCrowdAnalysis -= ctx.deltaTime;
+    if (shared.lastCrowdAnalysis > 0.0f) {
+        shared.lastCrowdAnalysis -= ctx.deltaTime;
     }
 
     // Cache fear from emotions
@@ -427,7 +409,6 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
             flee.isFleeing = false;
             flee.isInPanic = false;
             flee.hasValidThreat = false;
-            // Was actively fleeing, threat gone — return to passive behavior
             switchBehavior(ctx.edmIndex, BehaviorType::Idle);
         }
         return;
@@ -448,7 +429,6 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
         flee.hasValidThreat = true;
         flee.lastThreatPosition = threatPos;
     } else if (flee.isFleeing) {
-        // Hysteresis: exit threshold 20% larger than enter threshold to prevent oscillation
         float exitDistance = config.safeDistance * 1.2f;
         float safeDistanceSquared = exitDistance * exitDistance;
         if (distanceToThreatSquared >= safeDistanceSquared) {
@@ -464,14 +444,13 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
 
     if (flee.isFleeing) {
         // Refresh cached nearby count using countdown timer pattern
-        if (data.lastCrowdAnalysis <= 0.0f) {
-            data.cachedNearbyCount = AIInternal::CountNearbyEntities(
+        if (shared.lastCrowdAnalysis <= 0.0f) {
+            shared.cachedNearbyCount = AIInternal::CountNearbyEntities(
                 ctx.entityId, ctx.transform.position, 100.0f);
-            data.lastCrowdAnalysis = CROWD_ANALYSIS_INTERVAL;
+            shared.lastCrowdAnalysis = CROWD_ANALYSIS_INTERVAL;
         }
 
         // Broadcast distress to nearby same-faction guards while fleeing
-        // Skips first 0.5s to avoid double-alert with damage handler
         if (flee.fleeTimer > 0.5f) {
             float timeSinceLastDistress = std::fmod(flee.fleeTimer - 0.5f, config.distressBroadcastInterval);
             if (timeSinceLastDistress < ctx.deltaTime) {
@@ -489,24 +468,19 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
         }
 
         if (flee.isInPanic) {
-            // Panic mode - always use panic flee
-            updatePanicFlee(ctx, threatPos, config);
+            updatePanicFlee(ctx, flee, threatPos, config);
         } else {
-            // Select tactical mode based on cached crowd density
-            int nearbyCount = data.cachedNearbyCount;
+            int nearbyCount = shared.cachedNearbyCount;
 
             if (nearbyCount > 3) {
-                // High crowd - evasive zigzag to avoid collision with others
-                updateEvasiveManeuver(ctx, threatPos, config);
+                updateEvasiveManeuver(ctx, flee, threatPos, config);
             } else if (nearbyCount > 1) {
-                // Medium crowd - seek cover/distance
-                updateSeekCover(ctx, threatPos, config);
+                updateSeekCover(ctx, flee, threatPos, config);
             } else {
-                // Low/no crowd - direct strategic retreat
-                updateStrategicRetreat(ctx, threatPos, config);
+                updateStrategicRetreat(ctx, flee, threatPos, config);
             }
         }
-        updateStamina(data, ctx.deltaTime, true, config);
+        updateStamina(flee, ctx.deltaTime, true, config);
     }
 }
 

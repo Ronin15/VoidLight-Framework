@@ -398,19 +398,21 @@ BOOST_AUTO_TEST_CASE(TestTaskStats) {
 BOOST_AUTO_TEST_CASE(TestQueueOverflowProtection) {
     // Test submitting tasks close to queue capacity (4096)
     const size_t testTaskCount = 3500; // Safe threshold below capacity
-    std::vector<std::future<void>> futures;
+    std::vector<std::future<float>> futures;
 
     std::cout << "Testing queue capacity with " << testTaskCount << " tasks..." << std::endl;
 
     // Submit many tasks quickly to test queue limits
     for (size_t i = 0; i < testTaskCount; ++i) {
         futures.push_back(VoidLight::ThreadSystem::Instance().enqueueTaskWithResult(
-            []() -> void {
+            []() -> float {
                 // Small work to simulate AI batch processing
-                volatile float temp = 0.0f;
+                float temp = 0.0f;
                 for (int j = 0; j < 10; ++j) {
                     temp += std::sqrt(static_cast<float>(j + 1));
                 }
+
+                return temp;
             },
             VoidLight::TaskPriority::Normal,
             "Load test task"
@@ -426,10 +428,12 @@ BOOST_AUTO_TEST_CASE(TestQueueOverflowProtection) {
         }
     }
 
-    // Wait for all tasks to complete
+    // Wait for all tasks to complete and consume the computed work
+    double totalWork = 0.0;
     for (auto& future : futures) {
-        future.wait();
+        totalWork += future.get();
     }
+    BOOST_CHECK_GT(totalWork, 0.0);
 
     // Final queue size should be manageable
     size_t finalQueueSize = VoidLight::ThreadSystem::Instance().getQueueSize();

@@ -112,7 +112,6 @@ private:
                       float worldWidth, float worldHeight,
                       std::vector<EntityHandle>& outDestroyQueue);
 
-    void queueProjectileDestroy(size_t projectileIndex);
     void embedProjectile(size_t projectileIndex, const Vector2D& impactNormal,
                          EntityHandle embeddedTarget = INVALID_ENTITY_HANDLE);
 

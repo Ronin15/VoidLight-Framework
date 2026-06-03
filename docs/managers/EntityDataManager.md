@@ -49,15 +49,19 @@ struct EntityHotData {
     EntityKind kind;                // 1 byte: Entity type
     SimulationTier tier;            // 1 byte: Active/Background/Hibernated
     uint8_t flags;                  // 1 byte: alive, dirty, pending destroy
-    uint8_t generation;             // 1 byte: Handle generation
+    uint8_t reserved;               // 1 byte: padding; generation lives in m_generations
     uint32_t typeLocalIndex;        // 4 bytes: Index into type-specific array
     uint16_t collisionLayers;       // 2 bytes: Collision layer mask
     uint16_t collisionMask;         // 2 bytes: What layers to collide with
     uint8_t collisionFlags;         // 1 byte: COLLISION_ENABLED, IS_TRIGGER
-    // ... padding to 64 bytes
+    uint8_t triggerTag;             // 1 byte: TriggerTag for trigger entities
+    uint8_t triggerType;            // 1 byte: TriggerType
+    uint8_t _knockbackPad[9];       // 9 bytes: reserved; knockback moved to sidecar
 };
 static_assert(sizeof(EntityHotData) == 64, "One cache line");
 ```
+
+Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state.
 
 ### TransformData (32 bytes)
 
@@ -96,29 +100,50 @@ struct PathData {
 };
 ```
 
-### BehaviorData
+### BehaviorData (shared header)
 
-Behavior-specific state using tagged union:
+Slimmed, per-entity shared state. Behavior type lives in `BehaviorConfigRef`; variant-specific state lives in per-variant archetype pools (see below):
 
 ```cpp
 struct BehaviorData {
-    BehaviorType behaviorType;      // Which behavior is active
     uint8_t flags;                  // Valid, initialized
-
-    // Common separation state
+    float moveSpeed;                // Cached from CharacterData
     float separationTimer;
     Vector2D lastSepVelocity;
-
-    // Behavior-specific union (only ONE active at a time)
-    union StateUnion {
-        WanderState wander;         // ~64 bytes
-        IdleState idle;             // ~48 bytes
-        GuardState guard;           // ~112 bytes
-        ChaseState chase;           // ~64 bytes
-        AttackState attack;         // ~140 bytes
-        // ... etc
-    } state;
+    float lastCrowdAnalysis;
+    int cachedNearbyCount;
+    Vector2D cachedClusterCenter;
+    uint8_t pendingMessages[8];     // 4 {id, param} pairs
+    uint8_t pendingMessageCount;
 };
+```
+
+### Behavior archetype pools
+
+Config and state for each variant live in dense per-variant vectors. A per-entity `BehaviorConfigRef` (8 bytes) names the active variant and the pool index:
+
+```cpp
+struct BehaviorConfigRef {
+    BehaviorType type;              // which variant pool
+    uint32_t index;                 // slot index in that pool
+};
+
+// EDM holds one pair per variant (Idle, Wander, Chase, Patrol, Flee, Follow, Guard, Attack).
+// Config and state pools share the same index by invariant (managed lockstep by
+// reassignBehaviorConfig / clearBehaviorConfig).
+std::vector<WanderBehaviorConfig> m_wanderConfigs;
+std::vector<WanderStateData>      m_wanderStates;
+std::vector<size_t>               m_wanderOwners;   // owner edmIndex per slot
+// ... repeated for each of the 8 variants.
+```
+
+Access:
+```cpp
+auto ref = edm.getBehaviorConfigRef(edmIdx);
+if (ref.type == BehaviorType::Wander) {
+    const auto& cfg   = edm.getWanderConfig(ref.index);
+    auto&       state = edm.getWanderState(ref.index);
+}
 ```
 
 ## Simulation Tiers
@@ -157,6 +182,8 @@ void prepareForStateTransition();
 EntityHandle createNPC(const Vector2D& position, float halfWidth = 16.0f, float halfHeight = 16.0f);
 EntityHandle createPlayer(const Vector2D& position);
 EntityHandle createDroppedItem(const Vector2D& position, ResourceHandle handle, int quantity = 1);
+EntityHandle createContainer(const Vector2D& position, ContainerType type, uint16_t maxSlots = 20, uint8_t lockLevel = 0, const std::string& worldId = "");
+EntityHandle createHarvestable(const Vector2D& position, ResourceHandle yieldResource, int yieldMin = 1, int yieldMax = 3, float respawnTime = 60.0f, const std::string& worldId = "", HarvestType harvestType = HarvestType::Gathering);
 EntityHandle createProjectile(const Vector2D& position, const Vector2D& velocity, EntityHandle owner, float damage, float lifetime = 5.0f);
 EntityHandle createAreaEffect(const Vector2D& position, float radius, EntityHandle owner, float damage, float duration);
 EntityHandle createStaticBody(const Vector2D& position, float halfWidth, float halfHeight);
@@ -169,7 +196,7 @@ void processDestructionQueue();  // Call at end of frame
 
 ### Entity Registration (Legacy Support)
 
-For entities created via old patterns (Entity subclass constructors):
+For entities created via legacy `Entity` subclass constructors:
 
 ```cpp
 EntityHandle registerNPC(EntityID entityId, const Vector2D& position, float halfWidth, float halfHeight, float health, float maxHealth);
@@ -254,6 +281,46 @@ void initBehaviorData(size_t index, BehaviorType type);
 void clearBehaviorData(size_t index);
 ```
 
+Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index, and `reassignBehaviorConfig(...)` / `clearBehaviorConfig(...)` for structural changes. `BehaviorData` is shared cross-behavior state only.
+
+### Knockback Sidecar
+
+```cpp
+KnockbackData& applyKnockback(size_t edmIdx);
+KnockbackData* getKnockback(size_t edmIdx) noexcept;
+bool hasKnockback(size_t edmIdx) const noexcept;
+void clearKnockback(size_t edmIdx) noexcept;
+size_t knockbackActiveCount() const noexcept;
+SparseSidecar<KnockbackData>& knockbackSidecar() noexcept;
+```
+
+`EventManager` applies knockback when processing `DamageEvent`. `AIManager` and player movement consume and decay it during update. Expired entries are cleared on the main thread after worker batches join.
+
+### Inventory Data
+
+```cpp
+uint32_t createInventory(uint16_t maxSlots, bool worldTracked = false);
+bool initNPCAsMerchant(EntityHandle handle, uint16_t maxSlots = 20);
+uint32_t getNPCInventoryIndex(EntityHandle handle) const;
+bool addToInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity);
+bool removeFromInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity);
+int getInventoryQuantity(uint32_t inventoryIndex, ResourceHandle handle) const;
+std::unordered_map<ResourceHandle, int> getInventoryResources(uint32_t inventoryIndex) const;
+InventorySlotData getInventorySlot(uint32_t inventoryIndex, size_t slotIndex) const;
+size_t getInventorySlots(uint32_t inventoryIndex, std::span<InventorySlotData> outSlots) const;
+bool swapInventorySlots(uint32_t inventoryIndex, size_t sourceSlot, size_t targetSlot);
+```
+
+Inventories are EDM-backed data, not legacy entity-owned inventory components. Containers auto-create inventories, merchants use EDM inventory indices, and world-tracked inventories register aggregate data with `WorldResourceManager`.
+
+Inventory APIs are split by use case:
+
+- `getInventoryResources(...)` returns aggregate quantities by `ResourceHandle` for world/resource/social systems that do not care about layout.
+- `getInventorySlot(...)` and `getInventorySlots(...)` expose ordered physical slot contents. Prefer the span-based bulk read for UI refreshes so callers take one inventory lock and reuse caller-owned storage.
+- `swapInventorySlots(...)` is a storage primitive only. It validates the inventory and slot indices, works across inline and overflow slots, preserves `usedSlots`, and marks the inventory dirty only when slot contents actually change.
+
+Drag/drop, player policy, hotbar assignment, and UI feedback belong in `InventoryController`, not EDM.
+
 ### Simulation Tier Management
 
 ```cpp
@@ -318,29 +385,38 @@ if (m_framesSinceTierUpdate++ >= TIER_UPDATE_INTERVAL) {
 #### Batch Processing Pattern
 
 ```cpp
-void AIManager::update(float dt) {
+void AIManager::update(float dt)
+{
     auto& edm = EntityDataManager::Instance();
 
-    // Get pre-filtered indices (O(1) - just returns span)
-    const auto activeIndices = edm.getActiveIndices();
+    m_activeIndicesBuffer.assign(
+        edm.getActiveIndices().begin(), edm.getActiveIndices().end());
 
-    // Process in batches using WorkerBudget
-    auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-        SystemType::AI, activeIndices.size(), workers);
+    auto decision = WorkerBudgetManager::Instance().shouldUseThreading(
+        SystemType::AI, m_activeIndicesBuffer.size());
 
-    for (size_t batch = 0; batch < batchCount; ++batch) {
+    auto [batchCount, batchSize] = WorkerBudgetManager::Instance()
+        .getBatchStrategy(SystemType::AI, m_activeIndicesBuffer.size(), workers);
+
+    for (size_t batch = 0; batch < batchCount; ++batch)
+    {
         size_t start = batch * batchSize;
-        size_t end = std::min(start + batchSize, activeIndices.size());
+        size_t end = std::min(start + batchSize, m_activeIndicesBuffer.size());
 
-        threadSystem.enqueueTask([this, &activeIndices, start, end, dt] {
-            for (size_t i = start; i < end; ++i) {
-                size_t edmIndex = activeIndices[i];
-                processBehavior(edmIndex, dt);
-            }
+        threadSystem.enqueueTask([this, start, end, dt] {
+            processBatch(dt, start, end);
         });
     }
 }
 ```
+
+`AIManager::processBatch(...)` reads EDM indices from `m_activeIndicesBuffer`.
+The fused per-entity loop then builds a `BehaviorContext`, switches on the
+entity's `BehaviorConfigRef::type`, calls the typed behavior executor with the
+matching dense config/state pool entries, accumulates movement, and consumes
+knockback sidecar state. Structural outputs such as behavior transitions,
+ranged attacks, and equipment fallback requests go through `AICommandBus` and
+are committed after worker batches join.
 
 ### Queries
 
@@ -375,21 +451,30 @@ character.faction = 1;  // Enemy
 ### Batch Processing (AI/Collision)
 
 ```cpp
-void AIManager::processBatch(float dt, size_t start, size_t end) {
+void AIManager::processBatch(float dt, size_t start, size_t end)
+{
     auto& edm = EntityDataManager::Instance();
-    auto activeIndices = edm.getActiveIndices();
 
-    for (size_t i = start; i < end; ++i) {
-        size_t edmIndex = activeIndices[i];
+    for (size_t i = start; i < end; ++i)
+    {
+        size_t edmIndex = m_activeIndicesBuffer[i];
 
         // Direct index access - no map lookups
         EntityHotData& hot = edm.getHotDataByIndex(edmIndex);
         if (!hot.isAlive() || hot.kind != EntityKind::NPC) continue;
 
         BehaviorData& behavior = edm.getBehaviorData(edmIndex);
-        PathData& path = edm.getPathData(edmIndex);
+        BehaviorConfigRef ref = edm.getBehaviorConfigRef(edmIndex);
 
-        // Process behavior...
+        switch (ref.type) {
+        case BehaviorType::Wander:
+            Behaviors::executeWander(ctx,
+                edm.getWanderConfig(ref.index),
+                edm.getWanderState(ref.index));
+            break;
+        default:
+            break;
+        }
     }
 }
 ```

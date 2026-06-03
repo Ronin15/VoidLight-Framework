@@ -18,8 +18,8 @@ bool GameOverState::enter() {
 
   gameEngine.setGlobalPause(true);
 
-  const int windowWidth = gameEngine.getLogicalWidth();
-  const int windowHeight = gameEngine.getLogicalHeight();
+  const int windowWidth = gameEngine.getWidthInPixels();
+  const int windowHeight = gameEngine.getHeightInPixels();
 
   ui.createOverlay(windowWidth, windowHeight);
 

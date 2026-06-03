@@ -14,16 +14,21 @@
 #include <boost/test/unit_test.hpp>
 
 #include "controllers/social/SocialController.hpp"
+#include "entities/Player.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/ResourceChangeEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include "managers/UIManager.hpp"
 #include "../events/EventManagerTestAccess.hpp"
+#include <cmath>
 #include <memory>
+#include <vector>
 
 // ============================================================================
 // Test Fixture
@@ -34,29 +39,78 @@ public:
     SocialControllerTestFixture() {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         // Initialize managers
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
         BOOST_REQUIRE(CollisionManager::Instance().init());
         BOOST_REQUIRE(PathfinderManager::Instance().init());
         BOOST_REQUIRE(AIManager::Instance().init());
-        GameTimeManager::Instance().init();
-        UIManager::Instance().init();
+        BOOST_REQUIRE(GameTimeManager::Instance().init());
+        BOOST_REQUIRE(UIManager::Instance().init());
+
+        player = std::make_shared<Player>();
+        player->initializeInventory();
+        BOOST_REQUIRE(player->getHandle().isValid());
+
+        goldHandle = ResourceTemplateManager::Instance().getHandleById("gold_coins");
+        breadHandle = ResourceTemplateManager::Instance().getHandleById("bread");
+        BOOST_REQUIRE(goldHandle.isValid());
+        BOOST_REQUIRE(breadHandle.isValid());
     }
 
     ~SocialControllerTestFixture() {
-        UIManager::Instance().clean();
+        UIManager::Instance().prepareForStateTransition();
         AIManager::Instance().clean();
         PathfinderManager::Instance().clean();
         CollisionManager::Instance().clean();
         EntityDataManager::Instance().clean();
+        ResourceTemplateManager::Instance().clean();
         EventManager::Instance().clean();
     }
 
     // Non-copyable
     SocialControllerTestFixture(const SocialControllerTestFixture&) = delete;
     SocialControllerTestFixture& operator=(const SocialControllerTestFixture&) = delete;
+
+protected:
+    struct ResourceEventRecord {
+        EntityHandle owner;
+        VoidLight::ResourceHandle handle;
+        int delta{0};
+    };
+
+    EntityHandle spawnMerchant(const Vector2D& position = Vector2D(100.0f, 100.0f)) {
+        EntityHandle merchant = EntityDataManager::Instance().createNPCWithRaceClass(
+            position, "Human", "GeneralMerchant");
+        BOOST_REQUIRE(merchant.isValid());
+        return merchant;
+    }
+
+    EntityHandle spawnNPC(const std::string& charClass,
+                          const Vector2D& position = Vector2D(100.0f, 100.0f)) {
+        EntityHandle npc = EntityDataManager::Instance().createNPCWithRaceClass(
+            position, "Human", charClass);
+        BOOST_REQUIRE(npc.isValid());
+        return npc;
+    }
+
+    static int resourceDeltaFor(const std::vector<ResourceEventRecord>& events,
+                                EntityHandle owner,
+                                VoidLight::ResourceHandle handle) {
+        int total = 0;
+        for (const auto& event : events) {
+            if (event.owner == owner && event.handle == handle) {
+                total += event.delta;
+            }
+        }
+        return total;
+    }
+
+    std::shared_ptr<Player> player;
+    VoidLight::ResourceHandle goldHandle;
+    VoidLight::ResourceHandle breadHandle;
 };
 
 // ============================================================================
@@ -379,7 +433,7 @@ BOOST_AUTO_TEST_CASE(TestInitialTradeState) {
 }
 
 BOOST_AUTO_TEST_CASE(TestOpenTradeWithInvalidNPC) {
-    SocialController controller(nullptr);
+    SocialController controller(player);
 
     EntityHandle invalidHandle;
 
@@ -460,6 +514,186 @@ BOOST_AUTO_TEST_SUITE_END()
 // ============================================================================
 
 BOOST_FIXTURE_TEST_SUITE(TradeTransactionTests, SocialControllerTestFixture)
+
+BOOST_AUTO_TEST_CASE(TestOpenTradeWithMerchantPopulatesInventoryLists) {
+    SocialController controller(player);
+    EntityHandle merchant = spawnMerchant();
+
+    BOOST_REQUIRE(controller.openTrade(merchant));
+    BOOST_CHECK(controller.isTrading());
+    BOOST_CHECK_EQUAL(controller.getMerchantHandle(), merchant);
+    BOOST_CHECK(!controller.getMerchantItems().empty());
+    BOOST_CHECK_EQUAL(controller.getSelectedMerchantIndex(), 0);
+    BOOST_CHECK_EQUAL(controller.getSelectedPlayerIndex(), -1);
+}
+
+BOOST_AUTO_TEST_CASE(TestInventoryBearingNPCCanBePromotedToMerchant) {
+    SocialController controller(player);
+    auto& edm = EntityDataManager::Instance();
+    EntityHandle villager = spawnNPC("Villager");
+
+    BOOST_CHECK(!edm.isNPCMerchant(villager));
+    BOOST_REQUIRE(edm.initNPCAsMerchant(villager));
+    BOOST_CHECK(edm.isNPCMerchant(villager));
+
+    BOOST_REQUIRE(controller.openTrade(villager));
+    BOOST_CHECK(controller.isTrading());
+    BOOST_CHECK(!controller.getMerchantItems().empty());
+}
+
+BOOST_AUTO_TEST_CASE(TestExecuteBuyUsesGoldCoinsCurrency) {
+    SocialController controller(player);
+    EntityHandle merchant = spawnMerchant();
+    auto& edm = EntityDataManager::Instance();
+
+    BOOST_REQUIRE(player->addGold(250));
+    const int initialPlayerGold = player->getGold();
+    const uint32_t merchantInvIdx = edm.getNPCInventoryIndex(merchant);
+    BOOST_REQUIRE(merchantInvIdx != INVALID_INVENTORY_INDEX);
+    const int initialMerchantGold = edm.getInventoryQuantity(merchantInvIdx, goldHandle);
+    const int initialMerchantBread = edm.getInventoryQuantity(merchantInvIdx, breadHandle);
+    const int initialPlayerBread = player->getInventoryQuantity(breadHandle);
+    EventManager::Instance().drainAllDeferredEvents();
+    std::vector<ResourceEventRecord> resourceEvents;
+
+    EventManager::Instance().registerHandler(
+        EventTypeId::ResourceChange,
+        [&resourceEvents](const EventData& data) {
+            const auto* event = dynamic_cast<const ResourceChangeEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            resourceEvents.push_back({event->getOwnerHandle(),
+                                      event->getResourceHandle(),
+                                      event->getQuantityChange()});
+        });
+
+    BOOST_REQUIRE(controller.openTrade(merchant));
+
+    int breadIndex = -1;
+    const auto& merchantItems = controller.getMerchantItems();
+    for (size_t i = 0; i < merchantItems.size(); ++i) {
+        if (merchantItems[i].handle == breadHandle) {
+            breadIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    BOOST_REQUIRE(breadIndex >= 0);
+    controller.selectMerchantItem(static_cast<size_t>(breadIndex));
+    controller.setQuantity(2);
+
+    const int expectedCost = static_cast<int>(std::ceil(controller.getCurrentBuyPrice()));
+    BOOST_REQUIRE_GT(expectedCost, 0);
+    BOOST_CHECK(controller.executeBuy() == TradeResult::Success);
+    EventManager::Instance().drainAllDeferredEvents();
+
+    BOOST_CHECK_EQUAL(player->getGold(), initialPlayerGold - expectedCost);
+    BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread + 2);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, breadHandle),
+                      initialMerchantBread - 2);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, goldHandle),
+                      initialMerchantGold + expectedCost);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), 2);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), goldHandle), -expectedCost);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, breadHandle), -2);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, goldHandle), expectedCost);
+}
+
+BOOST_AUTO_TEST_CASE(TestExecuteSellUsesGoldCoinsCurrency) {
+    SocialController controller(player);
+    EntityHandle merchant = spawnMerchant();
+    auto& edm = EntityDataManager::Instance();
+
+    BOOST_REQUIRE(player->addGold(50));
+    BOOST_REQUIRE(player->addToInventory(breadHandle, 3));
+    const int initialPlayerGold = player->getGold();
+    const int initialPlayerBread = player->getInventoryQuantity(breadHandle);
+    const uint32_t merchantInvIdx = edm.getNPCInventoryIndex(merchant);
+    const int initialMerchantGold = edm.getInventoryQuantity(merchantInvIdx, goldHandle);
+    const int initialMerchantBread = edm.getInventoryQuantity(merchantInvIdx, breadHandle);
+    EventManager::Instance().drainAllDeferredEvents();
+    std::vector<ResourceEventRecord> resourceEvents;
+
+    EventManager::Instance().registerHandler(
+        EventTypeId::ResourceChange,
+        [&resourceEvents](const EventData& data) {
+            const auto* event = dynamic_cast<const ResourceChangeEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            resourceEvents.push_back({event->getOwnerHandle(),
+                                      event->getResourceHandle(),
+                                      event->getQuantityChange()});
+        });
+
+    BOOST_REQUIRE(controller.openTrade(merchant));
+
+    int breadIndex = -1;
+    const auto& playerItems = controller.getPlayerItems();
+    for (size_t i = 0; i < playerItems.size(); ++i) {
+        if (playerItems[i].handle == breadHandle) {
+            breadIndex = static_cast<int>(i);
+            break;
+        }
+    }
+
+    BOOST_REQUIRE(breadIndex >= 0);
+    controller.selectPlayerItem(static_cast<size_t>(breadIndex));
+    controller.setQuantity(2);
+
+    const int expectedPayout = static_cast<int>(std::floor(controller.getCurrentSellPrice()));
+    BOOST_REQUIRE_GT(expectedPayout, 0);
+    BOOST_CHECK(controller.executeSell() == TradeResult::Success);
+    EventManager::Instance().drainAllDeferredEvents();
+
+    BOOST_CHECK_EQUAL(player->getGold(), initialPlayerGold + expectedPayout);
+    BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread - 2);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, breadHandle),
+                      initialMerchantBread + 2);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, goldHandle),
+                      initialMerchantGold - expectedPayout);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), -2);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), goldHandle), expectedPayout);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, breadHandle), 2);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, goldHandle), -expectedPayout);
+}
+
+BOOST_AUTO_TEST_CASE(TestGiftTransfersItemToNPCInventoryAndDispatchesResourceChangeEvent) {
+    SocialController controller(player);
+    auto& edm = EntityDataManager::Instance();
+    EntityHandle villager = spawnNPC("Villager");
+    const uint32_t villagerInvIdx = edm.getNPCInventoryIndex(villager);
+    BOOST_REQUIRE(villagerInvIdx != INVALID_INVENTORY_INDEX);
+
+    BOOST_REQUIRE(player->addToInventory(breadHandle, 3));
+    const int initialPlayerBread = player->getInventoryQuantity(breadHandle);
+    const int initialVillagerBread = edm.getInventoryQuantity(villagerInvIdx, breadHandle);
+    EventManager::Instance().drainAllDeferredEvents();
+    std::vector<ResourceEventRecord> resourceEvents;
+
+    EventManager::Instance().registerHandler(
+        EventTypeId::ResourceChange,
+        [&resourceEvents](const EventData& data) {
+            const auto* event = dynamic_cast<const ResourceChangeEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            resourceEvents.push_back({event->getOwnerHandle(),
+                                      event->getResourceHandle(),
+                                      event->getQuantityChange()});
+        });
+
+    BOOST_CHECK(!edm.isNPCMerchant(villager));
+    BOOST_REQUIRE(controller.tryGift(villager, breadHandle, 2));
+    EventManager::Instance().drainAllDeferredEvents();
+
+    BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread - 2);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(villagerInvIdx, breadHandle),
+                      initialVillagerBread + 2);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), -2);
+    BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, villager, breadHandle), 2);
+}
 
 BOOST_AUTO_TEST_CASE(TestExecuteBuyWhenNotTrading) {
     SocialController controller(nullptr);

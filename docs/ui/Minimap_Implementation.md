@@ -8,7 +8,7 @@ This document outlines the design and implementation steps for integrating a bas
 
 ## 1. Architectural Context
 
-- **Rendering:** All rendering is performed via the active `GameState`'s `render()` function, which is called by the `GameEngine`. UI elements, including the minimap, must use the shared renderer/context.
+- **Rendering:** GPU rendering is coordinated by `GameEngine`. States record scene/UI vertices through the `GameState` GPU hooks, and `GameEngine` owns clear, pass setup, submit, and present.
 - **UI Manager:** The UI Manager orchestrates all UI widgets and overlays, including the minimap.
 - **World Discovery:** Discovery status is tracked per area/tile and updated as the player explores.
 
@@ -41,21 +41,21 @@ This document outlines the design and implementation steps for integrating a bas
 - **API Example:**
   - `void setDiscoveryData(const DiscoveryGrid&)`
   - `void setPlayerPosition(const Vec2&)`
-  - `void render(SDL_Renderer*)`
+  - `void recordGPUVertices(VoidLight::GPURenderer&)`
   - `void update(float dt)`
 
 ### 3.2 Rendering
 
 - The widget does not own or create its own renderer.
-- All drawing is performed using the renderer/context provided by the main game loop.
+- All drawing is recorded into the GPU UI vertex path provided by `UIManager` / `GPURenderer`; the widget must not own command buffers or present.
 
 ---
 
 ## 4. UI Manager Integration
 
 - **UIManager** owns and manages the minimap widget.
-- **UIManager::render(SDL_Renderer*)** is called from within `GameState::render()`.
-- **MinimapWidget::render(SDL_Renderer*)** is called as part of the UIManager's render pass.
+- **UIManager::recordGPUVertices(GPURenderer&)** records UI vertices before the swapchain UI pass.
+- **UIManager::renderGPU(GPURenderer&, SDL_GPURenderPass*)** hands recorded UI batches to `GPURenderer`.
 - UIManager handles layout, positioning, and event routing for the minimap.
 
 ---
@@ -93,19 +93,14 @@ This document outlines the design and implementation steps for integrating a bas
 ## 8. Example Render Flow
 
 ```cpp
-// Pseudocode for render flow
-void GameState::render(SDL_Renderer* renderer) {
-    // Draw world, entities, etc.
-    // ...
-    // Draw UI overlays
-    uiManager.render(renderer);
+// Pseudocode for UI render flow
+void SomeState::recordGPUVertices(VoidLight::GPURenderer& gpu, float) {
+    UIManager::Instance().recordGPUVertices(gpu);
 }
 
-void UIManager::render(SDL_Renderer* renderer) {
-    // Draw other UI elements
-    // ...
-    // Draw minimap overlay
-    minimapWidget.render(renderer);
+void SomeState::renderGPUUI(VoidLight::GPURenderer& gpu,
+                            SDL_GPURenderPass* swapchainPass) {
+    UIManager::Instance().renderGPU(gpu, swapchainPass);
 }
 ```
 
@@ -130,8 +125,8 @@ void UIManager::render(SDL_Renderer* renderer) {
 
 ## 11. References
 
-- See `docs/Camera_Refactor_Plan.md` for related UI overlay and rendering architecture.
-- See `include/core/GameEngine.hpp`, `include/ui/UIManager.hpp`, and `include/world/WorldData.hpp` for integration points.
+- See `docs/ui/UIManager_Guide.md` and `docs/utils/Camera.md` for related UI overlay and camera integration details.
+- See `include/core/GameEngine.hpp`, `include/managers/UIManager.hpp`, and `include/world/WorldData.hpp` for integration points.
 
 ---
 

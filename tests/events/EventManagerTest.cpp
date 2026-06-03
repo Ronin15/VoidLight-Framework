@@ -17,11 +17,11 @@
 #include "entities/EntityHandle.hpp"
 #include "core/Logger.hpp"
 #include "core/ThreadSystem.hpp"
-#include "collisions/CollisionInfo.hpp"
 #include "events/CameraEvent.hpp"
 #include "events/CollisionObstacleChangedEvent.hpp"
 #include "events/EntityEvents.hpp"
 #include "events/Event.hpp"
+#include "events/MerchantSpawnEvent.hpp"
 #include "events/ParticleEffectEvent.hpp"
 #include "events/ResourceChangeEvent.hpp"
 #include "events/WeatherEvent.hpp"
@@ -122,7 +122,7 @@ struct EventManagerFixture {
 // ==================== Basic Initialization Tests ====================
 
 BOOST_FIXTURE_TEST_CASE(InitAndClean, EventManagerFixture) {
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
   EventManager::Instance().clean();
 }
@@ -244,6 +244,24 @@ BOOST_FIXTURE_TEST_CASE(SpawnNPC_DispatchesToHandlers, EventManagerFixture) {
   EventManager::Instance().removeHandler(tok);
 }
 
+BOOST_FIXTURE_TEST_CASE(SpawnMerchant_DispatchesToHandlers, EventManagerFixture) {
+  std::atomic<bool> merchantHandlerCalled{false};
+  auto tok = EventManager::Instance().registerHandlerWithToken(
+      EventTypeId::MerchantSpawn, [&merchantHandlerCalled](const EventData &data) {
+        if (std::dynamic_pointer_cast<MerchantSpawnEvent>(data.event)) {
+          merchantHandlerCalled.store(true);
+        }
+      });
+
+  bool ok = EventManager::Instance().spawnMerchant(
+      "GeneralMerchant", 10.0f, 20.0f, "Human", 1, 0.0f, false,
+      EventManager::DispatchMode::Immediate);
+  BOOST_CHECK(ok);
+  BOOST_CHECK(merchantHandlerCalled.load());
+
+  EventManager::Instance().removeHandler(tok);
+}
+
 BOOST_FIXTURE_TEST_CASE(TriggerParticleEffect_DispatchesToHandlers, EventManagerFixture) {
   std::atomic<bool> particleHandlerCalled{false};
   auto tok = EventManager::Instance().registerHandlerWithToken(
@@ -273,22 +291,6 @@ BOOST_FIXTURE_TEST_CASE(TriggerResourceChange_DispatchesToHandlers, EventManager
       EventManager::DispatchMode::Immediate);
   BOOST_CHECK(ok);
   BOOST_CHECK(resourceHandlerCalled.load());
-
-  EventManager::Instance().removeHandler(tok);
-}
-
-BOOST_FIXTURE_TEST_CASE(TriggerCollision_DispatchesToHandlers, EventManagerFixture) {
-  std::atomic<bool> collisionHandlerCalled{false};
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Collision, [&collisionHandlerCalled](const EventData &data) {
-        if (data.event) collisionHandlerCalled.store(true);
-      });
-
-  VoidLight::CollisionInfo info{};
-  bool ok = EventManager::Instance().triggerCollision(info,
-                                                       EventManager::DispatchMode::Immediate);
-  BOOST_CHECK(ok);
-  BOOST_CHECK(collisionHandlerCalled.load());
 
   EventManager::Instance().removeHandler(tok);
 }
@@ -432,22 +434,6 @@ BOOST_FIXTURE_TEST_CASE(EventPoolRecycling_NPCSpawnEvents, EventManagerFixture) 
   BOOST_CHECK_EQUAL(firstNPC.get(), secondNPC.get()); // Same pooled event reused
 }
 
-BOOST_FIXTURE_TEST_CASE(EventPoolRecycling_CollisionEvents, EventManagerFixture) {
-  EventPtr firstColl = nullptr;
-  EventPtr secondColl = nullptr;
-  EventManager::Instance().registerHandler(
-      EventTypeId::Collision, [&](const EventData &data) {
-        if (!firstColl) firstColl = data.event;
-        else secondColl = data.event;
-      });
-
-  VoidLight::CollisionInfo info{};
-  EventManager::Instance().triggerCollision(info, EventManager::DispatchMode::Immediate);
-  EventManager::Instance().triggerCollision(info, EventManager::DispatchMode::Immediate);
-
-  BOOST_CHECK_EQUAL(firstColl.get(), secondColl.get()); // Same pooled event reused
-}
-
 BOOST_FIXTURE_TEST_CASE(EventPoolRecycling_ParticleEffectEvents, EventManagerFixture) {
   EventPtr firstParticle = nullptr;
   EventPtr secondParticle = nullptr;
@@ -469,7 +455,7 @@ BOOST_FIXTURE_TEST_CASE(EventPoolRecycling_ParticleEffectEvents, EventManagerFix
 
 BOOST_FIXTURE_TEST_CASE(ThreadSafety_ConcurrentTriggers, EventManagerFixture) {
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   std::atomic<int> handlerCallCount{0};
 
@@ -505,7 +491,7 @@ BOOST_FIXTURE_TEST_CASE(ThreadSafety_ConcurrentTriggers, EventManagerFixture) {
 
 BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManagerFixture) {
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   // Register a handler
   bool handlerCalled = false;
@@ -530,7 +516,7 @@ BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManage
 #ifndef NDEBUG
 BOOST_FIXTURE_TEST_CASE(DynamicThreadingControl, EventManagerFixture) {
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   std::atomic<int> handlerCallCount{0};
 
@@ -746,6 +732,28 @@ BOOST_FIXTURE_TEST_CASE(ImmediateDamageCommit_RunsBeforeCustomCombatHandlers,
   EventManager::Instance().removeHandler(tok);
 }
 
+BOOST_FIXTURE_TEST_CASE(ImmediateDamageCommit_AppliesArmorDefense,
+                        EventManagerFixture) {
+  auto& edm = EntityDataManager::Instance();
+  EntityHandle playerHandle = edm.registerPlayer(9111, Vector2D(100.0f, 100.0f));
+  BOOST_REQUIRE(playerHandle.isValid());
+
+  auto& playerData = edm.getCharacterData(playerHandle);
+  playerData.maxHealth = 100.0f;
+  playerData.health = 100.0f;
+  playerData.mass = 1.0f;
+  playerData.armorDefense = 100.0f;
+
+  auto damageEvent = std::make_shared<DamageEvent>(
+      EntityEventType::DamageIntent, EntityHandle{}, playerHandle, 40.0f,
+      Vector2D(0.0f, 0.0f));
+
+  BOOST_CHECK(EventManager::Instance().dispatchEvent(
+      damageEvent, EventManager::DispatchMode::Immediate));
+
+  BOOST_CHECK_CLOSE(edm.getCharacterData(playerHandle).health, 80.0f, 0.01f);
+}
+
 BOOST_FIXTURE_TEST_CASE(DeferredDamageCommit_RunsBeforeCustomCombatHandlers,
                         EventManagerFixture) {
   auto& edm = EntityDataManager::Instance();
@@ -829,7 +837,7 @@ BOOST_FIXTURE_TEST_CASE(CleanAndInit_DropsDeferredCombatEvents,
   BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 1);
 
   EventManager::Instance().clean();
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
 
   BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 0);
 
@@ -1147,7 +1155,7 @@ BOOST_FIXTURE_TEST_CASE(Reinitialize_WorksAfterClean, EventManagerFixture) {
   BOOST_CHECK(!EventManager::Instance().isInitialized());
 
   // Re-initialize should work
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
 
   // Should be fully functional
@@ -1165,7 +1173,7 @@ BOOST_FIXTURE_TEST_CASE(DoubleInit_WarnsAndSucceeds, EventManagerFixture) {
   BOOST_CHECK(EventManager::Instance().isInitialized());
 
   // Second init should also return true (with warning logged)
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
 }
 
@@ -1183,31 +1191,6 @@ BOOST_FIXTURE_TEST_CASE(IdempotentClean_SafeMultipleCalls, EventManagerFixture) 
   BOOST_CHECK(!EventManager::Instance().isInitialized());
 
   // Re-init should still work
-  BOOST_CHECK(EventManager::Instance().init());
+  BOOST_REQUIRE(EventManager::Instance().init());
   BOOST_CHECK(EventManager::Instance().isInitialized());
-}
-
-BOOST_FIXTURE_TEST_CASE(DeferredDispatch_FollowsFIFOEnqueueOrder, EventManagerFixture) {
-  std::vector<int> processingOrder;
-  std::mutex orderMutex;
-
-  EventManager::Instance().registerHandler(EventTypeId::Weather, [&](const EventData &) {
-    std::lock_guard<std::mutex> lock(orderMutex);
-    processingOrder.push_back(1);
-  });
-  EventManager::Instance().registerHandler(EventTypeId::Collision, [&](const EventData &) {
-    std::lock_guard<std::mutex> lock(orderMutex);
-    processingOrder.push_back(2);
-  });
-
-  // Deferred processing should preserve enqueue order even across event types.
-  EventManager::Instance().changeWeather("Test", 1.0f);
-  VoidLight::CollisionInfo info{};
-  EventManager::Instance().triggerCollision(info);
-
-  EventManager::Instance().update();
-
-  BOOST_REQUIRE_EQUAL(processingOrder.size(), 2);
-  BOOST_CHECK_EQUAL(processingOrder[0], 1);
-  BOOST_CHECK_EQUAL(processingOrder[1], 2);
 }

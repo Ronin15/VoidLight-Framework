@@ -93,6 +93,9 @@ int main(int, char*[]) {
       PROFILE_PHASE(VoidLight::FramePhase::Events);
       gameEngine.handleEvents();
     }
+    if (!gameEngine.isRunning()) {
+      break;
+    }
 
     // Fixed timestep updates - run until accumulator is drained
 #ifndef NDEBUG
@@ -102,12 +105,15 @@ int main(int, char*[]) {
 
     {
       PROFILE_PHASE(VoidLight::FramePhase::Update);
-      while (ts.shouldUpdate()) {
+      while (gameEngine.isRunning() && ts.shouldUpdate()) {
         gameEngine.update(ts.getUpdateDeltaTime());
 #ifndef NDEBUG
         ++updateIterations;
 #endif
       }
+    }
+    if (!gameEngine.isRunning()) {
+      break;
     }
 
 #ifndef NDEBUG

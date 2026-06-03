@@ -31,35 +31,27 @@ constexpr float DEFAULT_THREAT_DETECTION_RANGE = 150.0f;
 constexpr float DEFAULT_ATTACK_ENGAGE_RANGE = 80.0f;
 constexpr float PATH_TTL = 5.0f;
 constexpr float NAV_RADIUS = 18.0f;
-constexpr float THREAT_DETECTION_INTERVAL = 0.25f;  // Only check for threats 4x per second
-constexpr float CALM_POLL_INTERVAL = 2.0f;  // Calm guards poll less frequently (every 2 seconds)
+constexpr float THREAT_DETECTION_INTERVAL = 0.25f;
+constexpr float CALM_POLL_INTERVAL = 2.0f;
 
-// Speed multipliers for urgent guard movement
-constexpr float GUARD_ALERT_SPEED_MULT = 1.2f;   // Investigating suspicious activity
-constexpr float GUARD_PURSUIT_SPEED_MULT = 1.5f; // Pursuing hostile threat (alert level >= 4)
+constexpr float GUARD_ALERT_SPEED_MULT = 1.2f;
+constexpr float GUARD_PURSUIT_SPEED_MULT = 1.5f;
 
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * @brief Get mode-specific speed based on guard mode
- * @param baseSpeed Entity's base movement speed (from CharacterData)
- */
 float getModeSpeed(uint8_t currentMode, float baseSpeed, const VoidLight::GuardBehaviorConfig& config) {
     switch (currentMode) {
-        case 0: return baseSpeed * config.staticSpeedMultiplier;   // STATIC_GUARD
-        case 1: return baseSpeed * config.patrolSpeedMultiplier;   // PATROL_GUARD
-        case 2: return baseSpeed * config.areaSpeedMultiplier;     // AREA_GUARD
-        case 3: return baseSpeed * config.roamingSpeedMultiplier;  // ROAMING_GUARD
-        case 4: return baseSpeed * config.alertSpeedMultiplier;    // ALERT_GUARD
+        case 0: return baseSpeed * config.staticSpeedMultiplier;
+        case 1: return baseSpeed * config.patrolSpeedMultiplier;
+        case 2: return baseSpeed * config.areaSpeedMultiplier;
+        case 3: return baseSpeed * config.roamingSpeedMultiplier;
+        case 4: return baseSpeed * config.alertSpeedMultiplier;
         default: return baseSpeed;
     }
 }
 
-/**
- * @brief Get mode-specific detection range multiplier
- */
 float getModeAlertRadius(uint8_t currentMode, const VoidLight::GuardBehaviorConfig& config) {
     switch (currentMode) {
         case 0: return config.staticAlertRadiusMultiplier;
@@ -75,27 +67,22 @@ float getAttackEngageRange(const CharacterData* charData) {
     if (charData && charData->attackRange > 0.0f) {
         return charData->attackRange;
     }
-
     return DEFAULT_ATTACK_ENGAGE_RANGE;
 }
 
-// Process pending messages for Guard behavior
-void processGuardMessages(BehaviorData& data, const VoidLight::GuardBehaviorConfig&) {
-    auto& guard = data.state.guard;
-
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i) {
-        uint8_t msgId = data.pendingMessages[i].messageId;
+void processGuardMessages(BehaviorData& shared, VoidLight::GuardStateData& guard,
+                          const VoidLight::GuardBehaviorConfig&) {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        uint8_t msgId = shared.pendingMessages[i].messageId;
 
         switch (msgId) {
             case BehaviorMessage::RAISE_ALERT:
-                // Force HOSTILE alert level (3)
                 guard.currentAlertLevel = 3;
                 guard.alertTimer = 0.0f;
                 guard.alertDecayTimer = 0.0f;
                 break;
 
             case BehaviorMessage::CALM_DOWN:
-                // Decay alert level by one step (guards remain vigilant)
                 if (guard.currentAlertLevel > 0)
                 {
                     guard.currentAlertLevel--;
@@ -104,15 +91,12 @@ void processGuardMessages(BehaviorData& data, const VoidLight::GuardBehaviorConf
                 break;
 
             case BehaviorMessage::PANIC:
-                // Guards resist panic but escalate to HOSTILE alert
                 guard.currentAlertLevel = 3;
                 guard.alertTimer = 0.0f;
                 guard.alertDecayTimer = 0.0f;
                 break;
 
             case BehaviorMessage::DISTRESS:
-                // Victim/fleeing entity calling for help — escalate to SUSPICIOUS
-                // Triggers faster threat polling (0.25s vs 2s calm rate)
                 if (guard.currentAlertLevel < 1)
                 {
                     guard.currentAlertLevel = 1;
@@ -125,7 +109,7 @@ void processGuardMessages(BehaviorData& data, const VoidLight::GuardBehaviorConf
                 break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 }
 
 float normalizeAngle(float angle) {
@@ -149,29 +133,17 @@ Vector2D generateRoamTarget(const Vector2D& center, float radius) {
     return center + Vector2D(dist * std::cos(angle), dist * std::sin(angle));
 }
 
-/**
- * @brief Get the next patrol waypoint, handling ping-pong vs loop mode
- */
-Vector2D getNextPatrolWaypoint(BehaviorData& data) {
-    auto& guard = data.state.guard;
-
+Vector2D getNextPatrolWaypoint(VoidLight::GuardStateData& guard) {
     if (guard.patrolWaypointCount == 0) {
         return guard.assignedPosition;
     }
-
     return guard.patrolWaypoints[guard.currentPatrolWaypointIndex];
 }
 
-/**
- * @brief Advance to the next patrol waypoint
- */
-void advancePatrolWaypoint(BehaviorData& data) {
-    auto& guard = data.state.guard;
-
+void advancePatrolWaypoint(VoidLight::GuardStateData& guard) {
     if (guard.patrolWaypointCount == 0) return;
 
     if (guard.reversePatrol) {
-        // Ping-pong mode: go forward then backward
         if (guard.patrolForward) {
             if (guard.currentPatrolWaypointIndex + 1 >= guard.patrolWaypointCount) {
                 guard.patrolForward = false;
@@ -192,19 +164,16 @@ void advancePatrolWaypoint(BehaviorData& data) {
             }
         }
     } else {
-        // Loop mode: wrap around
         guard.currentPatrolWaypointIndex = (guard.currentPatrolWaypointIndex + 1) % guard.patrolWaypointCount;
     }
 }
 
-// Move entity using pathfinding or direct movement - EDM passed to avoid Instance() calls
 void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D& targetPos, float speed) {
     if (speed <= 0.0f || !ctx.pathData) return;
 
     auto& pathData = *ctx.pathData;
     Vector2D currentPos = ctx.transform.position;
 
-    // Check if we need a new path
     const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
                               pathData.progressTimer < 0.8f);
     bool needsPath = false;
@@ -213,7 +182,6 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
                     pathData.pathUpdateTimer > PATH_TTL;
     }
 
-    // Check if goal changed significantly
     if (!skipRefresh && !needsPath && pathData.hasPath && pathData.pathLength > 0) {
         constexpr float GOAL_CHANGE_THRESH_SQ = 100.0f * 100.0f;
         Vector2D lastGoal = edm.getPathGoal(ctx.edmIndex);
@@ -222,14 +190,12 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
         }
     }
 
-    // Request new path if needed
     if (needsPath && pathData.pathRequestCooldown <= 0.0f) {
         PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, currentPos, targetPos,
                                                         PathfinderManager::Priority::Normal);
         pathData.pathRequestCooldown = 0.3f + (ctx.entityId % 200) * 0.001f;
     }
 
-    // Follow path if available
     if (pathData.isFollowingPath()) {
         Vector2D waypoint = ctx.pathData->currentWaypoint;
         Vector2D toWaypoint = waypoint - currentPos;
@@ -250,7 +216,6 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
             pathData.progressTimer = 0.0f;
         }
     } else {
-        // Direct movement fallback
         Vector2D toTarget = targetPos - currentPos;
         float dist = toTarget.length();
         if (dist > NAV_RADIUS && dist > 0.001f) {
@@ -262,19 +227,14 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
     }
 }
 
-// Detect threats using memory data (O(1) instead of O(N))
-// Returns threat handle and sets isEnemyFaction to avoid redundant lookup in updateAlertLevel
-// Detect threats using memory data and also check for witness-based alert escalation
-// witnessAlertLevel is set to the highest alert level warranted by witnessed memories
-// witnessLocation is set to the location of the most relevant witness memory
 EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& isEnemyFaction,
-                          uint8_t& witnessAlertLevel, Vector2D& witnessLocation) {
+                          uint8_t& witnessAlertLevel, Vector2D& witnessLocation,
+                          const VoidLight::GuardStateData& guard) {
     isEnemyFaction = false;
     witnessAlertLevel = 0;
 
     uint8_t myFaction = ctx.characterData.faction;
 
-    // 1. Memory: lastAttacker — someone who attacked this guard
     if (ctx.memoryData.lastAttacker.isValid()) {
         size_t idx = edm.getIndex(ctx.memoryData.lastAttacker);
         if (idx != SIZE_MAX && edm.getHotDataByIndex(idx).isAlive()) {
@@ -283,7 +243,6 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
         }
     }
 
-    // 2. Memory: lastTarget — previous known threat
     if (ctx.memoryData.lastTarget.isValid()) {
         size_t idx = edm.getIndex(ctx.memoryData.lastTarget);
         if (idx != SIZE_MAX && edm.getHotDataByIndex(idx).isAlive()) {
@@ -292,8 +251,6 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
         }
     }
 
-    // 3. Recent witnessed combat/death memories — single pass for both threat detection
-    //    and witness-based alert escalation (avoids duplicate memory iteration)
     if (ctx.memoryData.isValid()) {
         EntityHandle recentThreat{};
         float recentTimestamp = -1.0f;
@@ -307,16 +264,14 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
             const float memAge = ctx.gameTime - mem.timestamp;
             if (memAge > 10.0f) continue;
 
-            // Track witness alert level (used when no direct threat found)
             if (mem.type == MemoryType::WitnessedDeath && witnessAlertLevel < 2) {
-                witnessAlertLevel = 2;  // INVESTIGATING
+                witnessAlertLevel = 2;
                 witnessLocation = mem.location;
             } else if (witnessAlertLevel < 1) {
-                witnessAlertLevel = 1;  // SUSPICIOUS
+                witnessAlertLevel = 1;
                 witnessLocation = mem.location;
             }
 
-            // Track direct threat from witnessed memories
             if (!mem.subject.isValid()) continue;
             size_t idx = edm.getIndex(mem.subject);
             if (idx == SIZE_MAX || !edm.getHotDataByIndex(idx).isAlive()) continue;
@@ -334,9 +289,8 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
         }
     }
 
-    // 4. Player proximity check for enemy-faction guards
     if (ctx.playerValid && ctx.characterData.faction == 1) {
-        float detectionRange = ctx.behaviorData.state.guard.cachedDetectionRange;
+        float detectionRange = guard.cachedDetectionRange;
         float distSq = Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
         if (distSq <= detectionRange * detectionRange) {
             isEnemyFaction = true;
@@ -347,27 +301,24 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
     return EntityHandle{};
 }
 
-// Update alert level based on threat presence
-// isEnemyFaction is pre-computed by detectThreat to avoid redundant EDM lookup
-void updateAlertLevel(BehaviorData& data, bool threatPresent, bool isEnemyFaction, float escalationMultiplier) {
-    auto& guard = data.state.guard;
-
+void updateAlertLevel(VoidLight::GuardStateData& guard, bool threatPresent,
+                      bool isEnemyFaction, float escalationMultiplier) {
     if (threatPresent) {
         guard.threatSightingTimer = 0.0f;
         guard.hasActiveThreat = true;
 
         if (isEnemyFaction) {
-            guard.currentAlertLevel = 3; // HOSTILE
+            guard.currentAlertLevel = 3;
             guard.alertTimer = 0.0f;
         } else {
             float threatDuration = guard.alertTimer;
             if (guard.currentAlertLevel == 0) {
-                guard.currentAlertLevel = 1; // SUSPICIOUS
+                guard.currentAlertLevel = 1;
                 guard.alertTimer = 0.0f;
             } else if (guard.currentAlertLevel == 1 && threatDuration > SUSPICIOUS_THRESHOLD * escalationMultiplier) {
-                guard.currentAlertLevel = 2; // INVESTIGATING
+                guard.currentAlertLevel = 2;
             } else if (guard.currentAlertLevel == 2 && threatDuration > INVESTIGATING_THRESHOLD * escalationMultiplier) {
-                guard.currentAlertLevel = 3; // HOSTILE
+                guard.currentAlertLevel = 3;
             }
         }
     } else {
@@ -379,65 +330,56 @@ void updateAlertLevel(BehaviorData& data, bool threatPresent, bool isEnemyFactio
 
 namespace Behaviors {
 
-// ============================================================================
-// PUBLIC API
-// ============================================================================
-
-void initGuard(size_t edmIndex, const VoidLight::GuardBehaviorConfig&) {
+void initGuard(size_t edmIndex, const VoidLight::GuardBehaviorConfig&,
+               VoidLight::GuardStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Guard);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& shared = edm.getBehaviorData(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    auto& guard = data.state.guard;
     auto& hotData = edm.getHotDataByIndex(edmIndex);
 
-    // Initialize guard state
-    guard.assignedPosition = hotData.transform.position;
-    guard.currentMode = 0; // STATIC_GUARD by default
-    guard.currentAlertLevel = 0; // CALM
-    guard.onDuty = true;
-    guard.hasActiveThreat = false;
-    guard.isInvestigating = false;
-    guard.returningToPost = false;
-    guard.alertRaised = false;
-    guard.helpCalled = false;
-    guard.threatSightingTimer = 0.0f;
-    guard.alertTimer = 0.0f;
-    guard.investigationTimer = 0.0f;
-    guard.positionCheckTimer = 0.0f;
-    guard.patrolMoveTimer = 0.0f;
-    guard.alertDecayTimer = 0.0f;
-    guard.currentHeading = 0.0f;
-    guard.roamTimer = DEFAULT_ROAM_INTERVAL;
-    guard.currentPatrolIndex = 0;
-    guard.escalationMultiplier = 1.0f;
-    guard.roamTarget = hotData.transform.position;
-    guard.currentPatrolTarget = hotData.transform.position;
-    guard.lastKnownThreatPosition = Vector2D(0, 0);
-    guard.investigationTarget = Vector2D(0, 0);
-    guard.hostileTimer = 0.0f;
+    state.assignedPosition = hotData.transform.position;
+    state.currentMode = 0;
+    state.currentAlertLevel = 0;
+    state.onDuty = true;
+    state.hasActiveThreat = false;
+    state.isInvestigating = false;
+    state.returningToPost = false;
+    state.alertRaised = false;
+    state.helpCalled = false;
+    state.threatSightingTimer = 0.0f;
+    state.alertTimer = 0.0f;
+    state.investigationTimer = 0.0f;
+    state.positionCheckTimer = 0.0f;
+    state.patrolMoveTimer = 0.0f;
+    state.alertDecayTimer = 0.0f;
+    state.currentHeading = 0.0f;
+    state.roamTimer = DEFAULT_ROAM_INTERVAL;
+    state.currentPatrolIndex = 0;
+    state.escalationMultiplier = 1.0f;
+    state.roamTarget = hotData.transform.position;
+    state.currentPatrolTarget = hotData.transform.position;
+    state.lastKnownThreatPosition = Vector2D(0, 0);
+    state.investigationTarget = Vector2D(0, 0);
+    state.hostileTimer = 0.0f;
 
-    data.setInitialized(true);
+    shared.setInitialized(true);
 }
 
-void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& config) {
-    if (!ctx.behaviorData.isValid()) return;
+void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& config,
+                  VoidLight::GuardStateData& guard) {
+    if (!ctx.sharedState.isValid()) return;
 
-    auto& data = ctx.behaviorData;
-    auto& guard = data.state.guard;
-
-    // Get EDM reference once - avoid multiple Instance() calls
+    auto& shared = ctx.sharedState;
     auto& edm = EntityDataManager::Instance();
 
-    // Cache engage range squared once for all distance comparisons this frame
     float engageRange = getAttackEngageRange(&ctx.characterData);
     float engageRangeSq = engageRange * engageRange;
 
-    // Process any pending messages before main logic
-    processGuardMessages(data, config);
+    processGuardMessages(shared, guard, config);
 
     if (!guard.onDuty) return;
 
@@ -459,7 +401,6 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         guard.escalationMultiplier = 1.0f;
     }
 
-    // Update path timers
     if (!ctx.pathData) return;
     auto& pathData = *ctx.pathData;
     pathData.pathUpdateTimer += ctx.deltaTime;
@@ -468,15 +409,12 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         pathData.pathRequestCooldown -= ctx.deltaTime;
     }
 
-    // Cache detection range - only recompute when mode changes
+    // Cache detection range — recompute only on mode change
     if (guard.currentMode != guard.lastCachedMode) {
         guard.cachedDetectionRange = DEFAULT_THREAT_DETECTION_RANGE * getModeAlertRadius(guard.currentMode, config);
         guard.lastCachedMode = guard.currentMode;
     }
 
-    // Detect threats - reduced-rate polling for calm guards, frequent polling when alerted
-    // Calm guards (level 0) poll every 2 seconds for ambient awareness
-    // Alerted guards (level > 0) poll every 0.25s to track active threats
     EntityHandle threat{};
     bool threatPresent = false;
     bool isEnemyFaction = false;
@@ -487,16 +425,14 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
     if (shouldPoll) {
         uint8_t witnessAlertLevel = 0;
         Vector2D witnessLocation{};
-        threat = detectThreat(ctx, edm, isEnemyFaction, witnessAlertLevel, witnessLocation);
+        threat = detectThreat(ctx, edm, isEnemyFaction, witnessAlertLevel, witnessLocation, guard);
         threatPresent = threat.isValid();
         guard.threatSightingTimer = 0.0f;
 
-        // Persist threat handle in memory for Attack behavior handoff
         if (threatPresent) {
             ctx.memoryData.lastTarget = threat;
         }
 
-        // Apply witness-based alert escalation (merged from separate memory scan)
         if (!threatPresent && guard.currentAlertLevel == 0 && witnessAlertLevel > 0) {
             guard.currentAlertLevel = witnessAlertLevel;
             guard.lastKnownThreatPosition = witnessLocation;
@@ -505,10 +441,8 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         }
     }
 
-    // Update alert level (isEnemyFaction pre-computed by detectThreat)
-    updateAlertLevel(data, threatPresent, isEnemyFaction, guard.escalationMultiplier);
+    updateAlertLevel(guard, threatPresent, isEnemyFaction, guard.escalationMultiplier);
 
-    // Overwhelmed guards with very low bravery can flee (+0.1 guard training bonus)
     if (guard.currentAlertLevel >= 3 && ctx.memoryData.isValid())
     {
         float fear = ctx.memoryData.emotions.fear;
@@ -520,7 +454,6 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         }
     }
 
-    // Call for help when first reaching HOSTILE (level 3 only) — ALARM handles its own wider call
     if (guard.currentAlertLevel == 3 && !guard.helpCalled && config.canCallForHelp) {
         guard.helpCalled = true;
         thread_local std::vector<size_t> s_helpBuffer;
@@ -534,29 +467,27 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
     }
 
     if (threatPresent) {
-        // Handle threat detection
         size_t threatIdx = edm.getIndex(threat);
         if (threatIdx != SIZE_MAX) {
             Vector2D threatPos = edm.getHotDataByIndex(threatIdx).transform.position;
             guard.lastKnownThreatPosition = threatPos;
 
             switch (guard.currentAlertLevel) {
-                case 1: // SUSPICIOUS
+                case 1:
                     guard.currentHeading = calculateAngle(ctx.transform.position, threatPos);
                     break;
 
-                case 2: // INVESTIGATING
+                case 2:
                     guard.isInvestigating = true;
                     guard.investigationTarget = threatPos;
                     guard.investigationTimer = 0.0f;
-                    moveToPosition(ctx, edm, threatPos, data.moveSpeed);
+                    moveToPosition(ctx, edm, threatPos, shared.moveSpeed);
                     break;
 
-                case 3: { // HOSTILE
-                    // Track time spent at HOSTILE for ALARM escalation
+                case 3: {
                     guard.hostileTimer += ctx.deltaTime;
                     if (guard.hostileTimer >= config.alarmEscalationTime) {
-                        guard.currentAlertLevel = 4; // Escalate to ALARM
+                        guard.currentAlertLevel = 4;
                         guard.hostileTimer = 0.0f;
                     }
 
@@ -565,20 +496,19 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
                         switchBehavior(ctx.edmIndex, BehaviorType::Attack);
                         return;
                     } else {
-                        moveToPosition(ctx, edm, threatPos, data.moveSpeed * GUARD_ALERT_SPEED_MULT);
+                        moveToPosition(ctx, edm, threatPos, shared.moveSpeed * GUARD_ALERT_SPEED_MULT);
                     }
                     break;
                 }
-                case 4: { // ALARM - like HOSTILE but wider help call and no return-to-post
+                case 4: {
                     float distSq4 = (ctx.transform.position - threatPos).lengthSquared();
                     if (distSq4 <= engageRangeSq) {
                         switchBehavior(ctx.edmIndex, BehaviorType::Attack);
                         return;
                     } else {
-                        moveToPosition(ctx, edm, threatPos, data.moveSpeed * GUARD_PURSUIT_SPEED_MULT);
+                        moveToPosition(ctx, edm, threatPos, shared.moveSpeed * GUARD_PURSUIT_SPEED_MULT);
                     }
 
-                    // Widen help call radius for ALARM state
                     if (!guard.helpCalled && config.canCallForHelp) {
                         guard.helpCalled = true;
                         thread_local std::vector<size_t> s_alarmBuffer;
@@ -597,41 +527,35 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
             }
         }
     } else if (guard.isInvestigating) {
-        // Continue investigation
-        // ALARM state: do not return to post until level decays below ALARM
         if (guard.investigationTimer > config.investigationTime && guard.currentAlertLevel < 3) {
             guard.isInvestigating = false;
             guard.returningToPost = true;
         } else {
-            // At HOSTILE level, check last known threat position for attack opportunity
-            // (Main threat detection above handles new threat discovery - no need for second scan)
-                if (guard.currentAlertLevel >= 3) {
-                    float distToThreatSq = (ctx.transform.position - guard.lastKnownThreatPosition).lengthSquared();
-                    if (distToThreatSq <= engageRangeSq) {
-                        switchBehavior(ctx.edmIndex, BehaviorType::Attack);
-                        return;
-                    }
+            if (guard.currentAlertLevel >= 3) {
+                float distToThreatSq = (ctx.transform.position - guard.lastKnownThreatPosition).lengthSquared();
+                if (distToThreatSq <= engageRangeSq) {
+                    switchBehavior(ctx.edmIndex, BehaviorType::Attack);
+                    return;
                 }
+            }
 
             if (!isAtPosition(ctx.transform.position, guard.investigationTarget)) {
-                float speed = (guard.currentAlertLevel >= 3) ? data.moveSpeed * GUARD_PURSUIT_SPEED_MULT : data.moveSpeed;
+                float speed = (guard.currentAlertLevel >= 3) ? shared.moveSpeed * GUARD_PURSUIT_SPEED_MULT : shared.moveSpeed;
                 moveToPosition(ctx, edm, guard.investigationTarget, speed);
             }
         }
     } else if (guard.returningToPost) {
-        // Return to assigned position
         if (!isAtPosition(ctx.transform.position, guard.assignedPosition)) {
-            moveToPosition(ctx, edm, guard.assignedPosition, data.moveSpeed);
+            moveToPosition(ctx, edm, guard.assignedPosition, shared.moveSpeed);
         } else {
             guard.returningToPost = false;
-            guard.currentAlertLevel = 0; // CALM
+            guard.currentAlertLevel = 0;
         }
     } else {
-        // Normal guard behavior based on mode - use mode-specific speeds
-        float modeSpeed = getModeSpeed(guard.currentMode, data.moveSpeed, config);
+        float modeSpeed = getModeSpeed(guard.currentMode, shared.moveSpeed, config);
 
         switch (guard.currentMode) {
-            case 0: // STATIC_GUARD
+            case 0:
                 if (!isAtPosition(ctx.transform.position, guard.assignedPosition, 10.0f)) {
                     moveToPosition(ctx, edm, guard.assignedPosition, modeSpeed);
                 }
@@ -642,17 +566,15 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
                 }
                 break;
 
-            case 1: // PATROL_GUARD
-                // If waypoints are set, follow them; otherwise fall back to roaming
+            case 1:
                 if (guard.patrolWaypointCount > 0) {
-                    Vector2D waypointTarget = getNextPatrolWaypoint(data);
+                    Vector2D waypointTarget = getNextPatrolWaypoint(guard);
                     if (isAtPosition(ctx.transform.position, waypointTarget)) {
-                        advancePatrolWaypoint(data);
-                        waypointTarget = getNextPatrolWaypoint(data);
+                        advancePatrolWaypoint(guard);
+                        waypointTarget = getNextPatrolWaypoint(guard);
                     }
                     moveToPosition(ctx, edm, waypointTarget, modeSpeed);
                 } else {
-                    // Fallback to roaming if no waypoints set
                     if (guard.roamTimer <= 0.0f || isAtPosition(ctx.transform.position, guard.roamTarget)) {
                         guard.roamTarget = generateRoamTarget(guard.assignedPosition, config.guardRadius);
                         guard.roamTimer = DEFAULT_ROAM_INTERVAL;
@@ -661,8 +583,8 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
                 }
                 break;
 
-            case 2: // AREA_GUARD
-            case 3: // ROAMING_GUARD
+            case 2:
+            case 3:
                 if (guard.roamTimer <= 0.0f || isAtPosition(ctx.transform.position, guard.roamTarget)) {
                     guard.roamTarget = generateRoamTarget(guard.assignedPosition, config.guardRadius);
                     guard.roamTimer = DEFAULT_ROAM_INTERVAL;
@@ -670,7 +592,7 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
                 moveToPosition(ctx, edm, guard.roamTarget, modeSpeed);
                 break;
 
-            case 4: // ALERT_GUARD
+            case 4:
                 if (guard.currentAlertLevel >= 2) {
                     if (guard.lastKnownThreatPosition.lengthSquared() > 0.0f) {
                         moveToPosition(ctx, edm, guard.lastKnownThreatPosition, modeSpeed);
@@ -693,13 +615,11 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         guard.currentAlertLevel--;
         guard.alertDecayTimer = 0.0f;
 
-        // ALARM (4) decays to HOSTILE (3) — reset hostileTimer so escalation restarts
         if (prevLevel == 4) {
             guard.hostileTimer = 0.0f;
-            guard.helpCalled = false; // Allow re-calling for help at new radius
+            guard.helpCalled = false;
         }
 
-        // When returning to CALM, signal nearby allies to calm down
         if (guard.currentAlertLevel == 0) {
             guard.helpCalled = false;
             thread_local std::vector<size_t> s_calmBuffer;

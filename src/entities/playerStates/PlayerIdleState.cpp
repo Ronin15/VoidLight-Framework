@@ -30,21 +30,18 @@ void PlayerIdleState::update(float) {
 }
 
 bool PlayerIdleState::hasInputDetected() const {
-    // Check for any movement input
     const InputManager& input = InputManager::Instance();
 
-    // Keyboard or controller input
-    if (input.isKeyDown(SDL_SCANCODE_D) ||
-        input.isKeyDown(SDL_SCANCODE_A) ||
-        input.isKeyDown(SDL_SCANCODE_W) ||
-        input.isKeyDown(SDL_SCANCODE_S) ||
-        input.getAxisX(0, 1) != 0 ||
-        input.getAxisY(0, 1) != 0) {
+    // Directional commands (keyboard W/A/S/D and gamepad left stick)
+    if (input.isCommandDown(InputManager::Command::MoveUp)    ||
+        input.isCommandDown(InputManager::Command::MoveDown)  ||
+        input.isCommandDown(InputManager::Command::MoveLeft)  ||
+        input.isCommandDown(InputManager::Command::MoveRight)) {
         return true;
     }
 
-    // Mouse input - only counts if not clicking on UI
-    if (input.getMouseButtonState(LEFT)) {
+    // Mouse world-click — only counts if not clicking on a UI element
+    if (input.isCommandDown(InputManager::Command::WorldInteract)) {
         const Vector2D& mousePos = input.getMousePosition();
         return !UIManager::Instance().isClickOnUI(mousePos);
     }

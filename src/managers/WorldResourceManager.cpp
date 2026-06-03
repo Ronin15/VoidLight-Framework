@@ -677,17 +677,20 @@ size_t WorldResourceManager::queryDroppedItemsInRadius(const Vector2D& center, f
 
     // Fast path: skip lock acquisition if no items in active world
     if (m_activeWorldItemCount.load(std::memory_order_relaxed) == 0) {
+        outIndices.clear();
         return 0;
     }
 
     std::shared_lock lock(m_registryMutex);
 
     if (m_activeWorld.empty()) {
+        outIndices.clear();
         return 0;
     }
 
     auto it = m_itemSpatialIndices.find(m_activeWorld);
     if (it == m_itemSpatialIndices.end()) {
+        outIndices.clear();
         return 0;
     }
 
@@ -723,17 +726,20 @@ size_t WorldResourceManager::queryHarvestablesInRadius(const Vector2D& center, f
 
     // Fast path: skip lock acquisition if no harvestables in active world
     if (m_activeWorldHarvestableCount.load(std::memory_order_relaxed) == 0) {
+        outIndices.clear();
         return 0;
     }
 
     std::shared_lock lock(m_registryMutex);
 
     if (m_activeWorld.empty()) {
+        outIndices.clear();
         return 0;
     }
 
     auto it = m_harvestableSpatialIndices.find(m_activeWorld);
     if (it == m_harvestableSpatialIndices.end()) {
+        outIndices.clear();
         return 0;
     }
 

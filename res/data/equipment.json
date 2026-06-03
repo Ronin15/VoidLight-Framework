@@ -1,0 +1,198 @@
+{
+  "resources": [
+    {
+      "id": "dragon_scale_armor",
+      "name": "Dragon Scale Armor",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "Armor crafted from the scales of an ancient dragon, providing exceptional protection.",
+      "value": 1200,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "dragon_armor_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "slot": "Chest",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 40,
+        "speedBonus": -5,
+        "durability": 200,
+        "maxDurability": 200
+      }
+    },
+    {
+      "id": "leather_armor",
+      "name": "Leather Armor",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "Light armor made from tanned leather, offering basic protection.",
+      "value": 80,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "leather_armor_icon",
+      "properties": {
+        "slot": "Chest",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 10,
+        "durability": 80,
+        "maxDurability": 80
+      }
+    },
+    {
+      "id": "iron_armor",
+      "name": "Iron Armor",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "Heavy iron armor providing solid protection in combat.",
+      "value": 200,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "iron_armor_icon",
+      "properties": {
+        "slot": "Chest",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 20,
+        "speedBonus": -5,
+        "durability": 150,
+        "maxDurability": 150
+      }
+    },
+    {
+      "id": "iron_helmet",
+      "name": "Iron Helmet",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "A sturdy iron helmet protecting the head.",
+      "value": 100,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "iron_helmet_icon",
+      "properties": {
+        "slot": "Helmet",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 8,
+        "durability": 100,
+        "maxDurability": 100
+      }
+    },
+    {
+      "id": "iron_shield",
+      "name": "Iron Shield",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "A reliable iron shield for blocking attacks.",
+      "value": 150,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "iron_shield_icon",
+      "properties": {
+        "slot": "Shield",
+        "handsRequired": 1,
+        "attackBonus": 0,
+        "defenseBonus": 15,
+        "durability": 120,
+        "maxDurability": 120
+      }
+    },
+    {
+      "id": "wooden_shield",
+      "name": "Wooden Shield",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "A rough wooden shield with enough strength for early practice.",
+      "value": 12,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "default",
+      "properties": {
+        "slot": "Shield",
+        "handsRequired": 1,
+        "attackBonus": 0,
+        "defenseBonus": 4,
+        "durability": 45,
+        "maxDurability": 45
+      }
+    },
+    {
+      "id": "old_shirt",
+      "name": "Old Shirt",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "A threadbare shirt offering minimal protection.",
+      "value": 5,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "default",
+      "properties": {
+        "slot": "Chest",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 1,
+        "durability": 25,
+        "maxDurability": 25
+      }
+    },
+    {
+      "id": "old_pants",
+      "name": "Old Pants",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "Worn pants suitable for travel.",
+      "value": 5,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "default",
+      "properties": {
+        "slot": "Legs",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 1,
+        "durability": 25,
+        "maxDurability": 25
+      }
+    },
+    {
+      "id": "worn_boots",
+      "name": "Worn Boots",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "Scuffed boots with a little life left in them.",
+      "value": 6,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "default",
+      "properties": {
+        "slot": "Boots",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 1,
+        "durability": 30,
+        "maxDurability": 30
+      }
+    },
+    {
+      "id": "cloth_gloves",
+      "name": "Cloth Gloves",
+      "category": "Item",
+      "type": "Equipment",
+      "description": "Thin cloth gloves that keep a firm grip.",
+      "value": 4,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "default",
+      "properties": {
+        "slot": "Gloves",
+        "handsRequired": 0,
+        "attackBonus": 0,
+        "defenseBonus": 1,
+        "durability": 20,
+        "maxDurability": 20
+      }
+    }
+  ]
+}

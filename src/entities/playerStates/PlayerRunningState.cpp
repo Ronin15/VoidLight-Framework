@@ -34,62 +34,42 @@ void PlayerRunningState::exit() {
 }
 
 void PlayerRunningState::handleMovementInput(float) {
-    // Movement uses direct velocity setting, not acceleration
-    
     const float speed = m_player.get().getMovementSpeed();
     const InputManager& input = InputManager::Instance();
-    
+
     Vector2D velocity(0.0f, 0.0f);
     bool hasInput = false;
 
-    // Keyboard input (highest priority - most responsive)
-    if (input.isKeyDown(SDL_SCANCODE_D)) {
-        velocity.setX(speed);
+    // Compose direction vector from four semantic move commands.
+    // Both keyboard (W/A/S/D) and gamepad left stick deflection are handled
+    // transparently by the command layer.
+    if (input.isCommandDown(InputManager::Command::MoveRight)) {
+        velocity.setX(velocity.getX() + speed);
         m_player.get().setFlip(SDL_FLIP_NONE);
         hasInput = true;
     }
-    if (input.isKeyDown(SDL_SCANCODE_A)) {
-        velocity.setX(-speed);
+    if (input.isCommandDown(InputManager::Command::MoveLeft)) {
+        velocity.setX(velocity.getX() - speed);
         m_player.get().setFlip(SDL_FLIP_HORIZONTAL);
         hasInput = true;
     }
-    if (input.isKeyDown(SDL_SCANCODE_W)) {
-        velocity.setY(-speed);
+    if (input.isCommandDown(InputManager::Command::MoveDown)) {
+        velocity.setY(velocity.getY() + speed);
         hasInput = true;
     }
-    if (input.isKeyDown(SDL_SCANCODE_S)) {
-        velocity.setY(speed);
+    if (input.isCommandDown(InputManager::Command::MoveUp)) {
+        velocity.setY(velocity.getY() - speed);
         hasInput = true;
     }
 
-    // Controller input (secondary priority - only when no keyboard input)
-    if (!hasInput) {
-        float joystickX = input.getAxisX(0, 1);
-        float joystickY = input.getAxisY(0, 1);
-
-        // InputManager provides normalized analog values after deadzone processing.
-        if (joystickX != 0 || joystickY != 0) {
-            velocity.setX(joystickX * speed);
-            velocity.setY(joystickY * speed);
-            hasInput = true;
-
-            if (joystickX > 0) {
-                m_player.get().setFlip(SDL_FLIP_NONE);
-            } else if (joystickX < 0) {
-                m_player.get().setFlip(SDL_FLIP_HORIZONTAL);
-            }
-        }
-    }
-
-    // Mouse input (lowest priority - only when no keyboard or controller input)
-    if (!hasInput && input.getMouseButtonState(LEFT)) {
+    // Mouse point-to-move (lowest priority — only when no directional command active)
+    if (!hasInput && input.isCommandDown(InputManager::Command::WorldInteract)) {
         const Vector2D& mouseScreenPos = input.getMousePosition();
 
         // Don't move player when clicking on UI elements (inventory, buttons, etc.)
         if (!UIManager::Instance().isClickOnUI(mouseScreenPos)) {
             const VoidLight::Camera* camera = m_player.get().getCamera();
             if (camera) {
-                // Convert mouse screen position to world coordinates
                 Vector2D mouseWorldPos = camera->screenToWorld(mouseScreenPos);
                 Vector2D playerPos = m_player.get().getPosition();
                 Vector2D direction = mouseWorldPos - playerPos;
@@ -109,7 +89,7 @@ void PlayerRunningState::handleMovementInput(float) {
         }
     }
 
-    // Normalize diagonal movement for consistent speed (only if we have input)
+    // Normalize diagonal movement so speed is consistent on all axes
     if (hasInput && velocity.lengthSquared() > speed * speed) {
         velocity.normalize();
         velocity = velocity * speed;
@@ -143,21 +123,17 @@ void PlayerRunningState::handleRunningAnimation(float deltaTime) {
 }
 
 bool PlayerRunningState::hasInputDetected() const {
-    // Returns true if any movement input is currently active
     const InputManager& input = InputManager::Instance();
 
-    // Keyboard or controller input
-    if (input.isKeyDown(SDL_SCANCODE_D) ||
-        input.isKeyDown(SDL_SCANCODE_A) ||
-        input.isKeyDown(SDL_SCANCODE_W) ||
-        input.isKeyDown(SDL_SCANCODE_S) ||
-        input.getAxisX(0, 1) != 0 ||
-        input.getAxisY(0, 1) != 0) {
+    if (input.isCommandDown(InputManager::Command::MoveUp)    ||
+        input.isCommandDown(InputManager::Command::MoveDown)  ||
+        input.isCommandDown(InputManager::Command::MoveLeft)  ||
+        input.isCommandDown(InputManager::Command::MoveRight)) {
         return true;
     }
 
-    // Mouse input - only counts if not clicking on UI
-    if (input.getMouseButtonState(LEFT)) {
+    // Mouse world-click — only counts if not clicking on UI
+    if (input.isCommandDown(InputManager::Command::WorldInteract)) {
         const Vector2D& mousePos = input.getMousePosition();
         return !UIManager::Instance().isClickOnUI(mousePos);
     }

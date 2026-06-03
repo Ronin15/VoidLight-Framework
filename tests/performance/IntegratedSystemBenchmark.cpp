@@ -62,11 +62,18 @@ BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 BOOST_AUTO_TEST_SUITE(IntegratedSystemBenchmarkSuite)
 
 namespace {
-    // Test configuration constants
-    constexpr float TARGET_FRAME_TIME_MS = 16.67f;  // 60 FPS
+    // Test configuration constants.
+    // Note: this bench measures *managers only* (no GPU, audio, input, game logic).
+    // Production frames are typically 2–4x more expensive than what we measure here, so
+    // MANAGER_BUDGET_MS is a tighter target than the 16.67 ms full-frame budget — managers
+    // must finish in well under a frame to leave room for everything else.
+    constexpr float TARGET_FRAME_TIME_MS = 16.67f;       // 60 FPS full-frame budget
+    constexpr float MANAGER_BUDGET_MS    = 10.0f;        // Realistic manager-only budget
     constexpr float P95_TARGET_MS = 20.0f;
     constexpr float P99_TARGET_MS = 25.0f;
     constexpr float MAX_FRAME_DROP_PERCENT = 5.0f;
+    // Scaling-test setup distributes entities across tiers (60/30/10).
+    constexpr float TIER_ACTIVE_FRACTION = 0.60f;
 
     // Benchmark helper class
     class IntegratedSystemBenchmark {
@@ -126,7 +133,9 @@ namespace {
             std::vector<FrameStats> scalingResults;
 
             for (size_t entityCount : entityCounts) {
-                std::cout << "Testing with " << entityCount << " entities..." << std::endl;
+                const size_t activeCount = static_cast<size_t>(entityCount * TIER_ACTIVE_FRACTION);
+                std::cout << "Testing with " << entityCount << " entities ("
+                          << activeCount << " Active)..." << std::endl;
 
                 cleanupScenario();
                 setupRealisticScenario(entityCount, entityCount / 2);
@@ -146,7 +155,8 @@ namespace {
             printScalingSummary(entityCounts, scalingResults);
         }
 
-        // Test 3: Manager coordination overhead
+        // Test 3: Manager coordination overhead — measured at multiple scales because
+        // overhead at 1K may not generalize to 10K (contention grows non-linearly).
         void testManagerCoordinationOverhead() {
             std::cout << "\n=== Manager Coordination Overhead Benchmark ===" << std::endl;
             std::cout << "Measuring overhead from cross-manager communication" << std::endl;
@@ -154,48 +164,59 @@ namespace {
 
             constexpr size_t frameCount = 60;
             constexpr float deltaTime = 1.0f / 60.0f;
-            constexpr size_t entityCount = 1000;
+            const std::vector<size_t> entityCounts = {1000, 10000};
+            bool allPass = true;
 
-            // Baseline: Managers idle
-            std::cout << "Baseline (managers idle)..." << std::endl;
-            cleanupScenario();
-            auto baselineStats = runFrameBenchmark(frameCount, deltaTime);
+            for (size_t entityCount : entityCounts) {
+                std::cout << "--- Coordination at " << entityCount << " entities ---" << std::endl;
 
-            // Individual manager active
-            std::cout << "AI Manager only..." << std::endl;
-            cleanupScenario();
-            setupAIOnly(entityCount);
-            auto aiStats = runFrameBenchmark(frameCount, deltaTime);
+                std::cout << "Baseline (managers idle)..." << std::endl;
+                cleanupScenario();
+                auto baselineStats = runFrameBenchmark(frameCount, deltaTime);
 
-            std::cout << "Particle Manager only..." << std::endl;
-            cleanupScenario();
-            setupParticlesOnly(entityCount / 2);
-            auto particleStats = runFrameBenchmark(frameCount, deltaTime);
+                std::cout << "AI Manager only..." << std::endl;
+                cleanupScenario();
+                setupAIOnly(entityCount);
+                auto aiStats = runFrameBenchmark(frameCount, deltaTime);
 
-            // All managers active
-            std::cout << "All managers active..." << std::endl;
-            cleanupScenario();
-            setupRealisticScenario(entityCount, entityCount / 2);
-            auto allStats = runFrameBenchmark(frameCount, deltaTime);
+                std::cout << "Particle Manager only..." << std::endl;
+                cleanupScenario();
+                setupParticlesOnly(entityCount / 2);
+                auto particleStats = runFrameBenchmark(frameCount, deltaTime);
 
-            // Calculate coordination overhead
-            double individualSum = aiStats.averageMs + particleStats.averageMs;
-            double overhead = allStats.averageMs - individualSum;
+                std::cout << "All managers active..." << std::endl;
+                cleanupScenario();
+                setupRealisticScenario(entityCount, entityCount / 2);
+                auto allStats = runFrameBenchmark(frameCount, deltaTime);
 
-            std::cout << std::fixed << std::setprecision(2);
-            std::cout << "\nCoordination Overhead Analysis:" << std::endl;
-            std::cout << "  Baseline (idle): " << baselineStats.averageMs << "ms" << std::endl;
-            std::cout << "  AI only: " << aiStats.averageMs << "ms" << std::endl;
-            std::cout << "  Particles only: " << particleStats.averageMs << "ms" << std::endl;
-            std::cout << "  Sum of individual: " << individualSum << "ms" << std::endl;
-            std::cout << "  All active: " << allStats.averageMs << "ms" << std::endl;
-            std::cout << "  Coordination overhead: " << overhead << "ms ("
-                     << (overhead / allStats.averageMs * 100.0) << "%)" << std::endl;
+                double individualSum = aiStats.averageMs + particleStats.averageMs;
+                double overhead = allStats.averageMs - individualSum;
+                double overheadPct = (allStats.averageMs > 0)
+                    ? (overhead / allStats.averageMs * 100.0) : 0.0;
 
-            if (overhead < 2.0) {
-                std::cout << "\n✓ PASS: Coordination overhead < 2ms" << std::endl;
+                std::cout << std::fixed << std::setprecision(2);
+                std::cout << "  Baseline (idle): " << baselineStats.averageMs << "ms\n";
+                std::cout << "  AI only: " << aiStats.averageMs << "ms\n";
+                std::cout << "  Particles only: " << particleStats.averageMs << "ms\n";
+                std::cout << "  Sum: " << individualSum << "ms\n";
+                std::cout << "  All active: " << allStats.averageMs << "ms\n";
+                std::cout << "  Coordination overhead: " << overhead << "ms ("
+                         << overheadPct << "%)\n";
+
+                // Threshold scales with entity count — more work means more synchronization.
+                const double thresholdMs = (entityCount <= 1000) ? 2.0 : 5.0;
+                if (overhead < thresholdMs) {
+                    std::cout << "  ✓ PASS: overhead < " << thresholdMs << "ms\n\n";
+                } else {
+                    std::cout << "  ✗ FAIL: overhead >= " << thresholdMs << "ms\n\n";
+                    allPass = false;
+                }
+            }
+
+            if (allPass) {
+                std::cout << "Overall: ✓ PASS — coordination overhead within budget at all scales\n";
             } else {
-                std::cout << "\n✗ FAIL: Coordination overhead >= 2ms (needs optimization)" << std::endl;
+                std::cout << "Overall: ✗ FAIL — coordination overhead exceeds budget\n";
             }
         }
 
@@ -438,15 +459,21 @@ namespace {
         }
 
         FrameStats runFrameBenchmark(size_t frameCount, float deltaTime) {
-            std::vector<double> frameTimes;
-            frameTimes.reserve(frameCount);
-
-            // Warmup frames (REQUIRED for SIMD staggering)
-            for (size_t i = 0; i < 16; ++i) {
+            // Extended warmup: WorkerBudget hill-climb needs ~100 frames to converge.
+            // 16 frames was too short and made scaling-test numbers reflect pre-converged state.
+            constexpr size_t WARMUP_FRAMES = 100;
+            for (size_t i = 0; i < WARMUP_FRAMES; ++i) {
                 updateAllManagers(deltaTime);
             }
 
-            // Benchmark frames
+            // Work-done sanity check via AIManager's exposed counter. Catches early-returns
+            // or any path that times-fast-but-does-nothing. Skipped if there's no AI work
+            // (baseline / particles-only tests) since the counter wouldn't advance anyway.
+            auto& aim = AIManager::Instance();
+            const size_t executionsBefore = aim.getBehaviorUpdateCount();
+
+            std::vector<double> frameTimes;
+            frameTimes.reserve(frameCount);
             for (size_t i = 0; i < frameCount; ++i) {
                 auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -455,6 +482,14 @@ namespace {
                 auto endTime = std::chrono::high_resolution_clock::now();
                 double frameTime = std::chrono::duration<double, std::milli>(endTime - startTime).count();
                 frameTimes.push_back(frameTime);
+            }
+
+            // Sanity check: if the test had AI entities, behaviors should have executed.
+            const size_t executionsAfter = aim.getBehaviorUpdateCount();
+            const size_t actualExecutions = executionsAfter - executionsBefore;
+            if (!m_testEntities.empty() && actualExecutions == 0) {
+                std::cout << "  WARNING: 0 behavior executions across " << frameCount
+                          << " frames — measurement may be invalid\n";
             }
 
             return calculateFrameStats(frameTimes);
@@ -542,41 +577,48 @@ namespace {
         void printScalingSummary(const std::vector<size_t>& entityCounts,
                                 const std::vector<FrameStats>& results) {
             std::cout << "\n=== Scaling Summary ===" << std::endl;
-            std::cout << std::left << std::setw(12) << "Entities"
+            std::cout << "Threshold: " << MANAGER_BUDGET_MS
+                      << " ms manager-only budget (leaves headroom for GPU + audio + game logic)\n";
+            std::cout << std::left << std::setw(10) << "Total"
+                     << std::setw(10) << "Active"
                      << std::setw(12) << "Avg (ms)"
                      << std::setw(12) << "P95 (ms)"
                      << std::setw(15) << "Drops (%)"
                      << "Status" << std::endl;
-            std::cout << std::string(60, '-') << std::endl;
+            std::cout << std::string(70, '-') << std::endl;
 
             for (size_t i = 0; i < entityCounts.size(); ++i) {
                 const auto& stats = results[i];
+                const size_t activeCount = static_cast<size_t>(entityCounts[i] * TIER_ACTIVE_FRACTION);
                 std::cout << std::fixed << std::setprecision(2);
-                std::cout << std::left << std::setw(12) << entityCounts[i]
+                std::cout << std::left << std::setw(10) << entityCounts[i]
+                         << std::setw(10) << activeCount
                          << std::setw(12) << stats.averageMs
                          << std::setw(12) << stats.p95Ms
                          << std::setw(15) << stats.frameDropPercent;
 
-                if (stats.averageMs < TARGET_FRAME_TIME_MS && stats.frameDropPercent < MAX_FRAME_DROP_PERCENT) {
-                    std::cout << "✓ 60+ FPS" << std::endl;
-                } else if (stats.averageMs < TARGET_FRAME_TIME_MS * 1.5) {
-                    std::cout << "~ 40-60 FPS" << std::endl;
+                if (stats.averageMs < MANAGER_BUDGET_MS && stats.frameDropPercent < MAX_FRAME_DROP_PERCENT) {
+                    std::cout << "✓ within manager budget" << std::endl;
+                } else if (stats.averageMs < TARGET_FRAME_TIME_MS) {
+                    std::cout << "~ over manager budget, under full-frame" << std::endl;
                 } else {
-                    std::cout << "✗ < 40 FPS" << std::endl;
+                    std::cout << "✗ over full-frame budget" << std::endl;
                 }
             }
 
-            // Find maximum sustainable entity count
-            size_t maxSustainable = 0;
+            // Find max sustainable Active entity count under manager-only budget.
+            // Reporting Active count rather than total — that's what's actually working per frame.
+            size_t maxSustainableActive = 0;
             for (size_t i = 0; i < results.size(); ++i) {
-                if (results[i].averageMs < TARGET_FRAME_TIME_MS &&
+                if (results[i].averageMs < MANAGER_BUDGET_MS &&
                     results[i].frameDropPercent < MAX_FRAME_DROP_PERCENT) {
-                    maxSustainable = entityCounts[i];
+                    maxSustainableActive = static_cast<size_t>(entityCounts[i] * TIER_ACTIVE_FRACTION);
                 }
             }
 
-            std::cout << "\nMaximum sustainable entity count @ 60 FPS: "
-                     << maxSustainable << std::endl;
+            std::cout << "\nMax Active NPCs sustainable within " << MANAGER_BUDGET_MS
+                      << " ms manager budget: " << maxSustainableActive << std::endl;
+            std::cout << "(Production frames will add GPU + audio + game logic on top.)\n";
         }
     };
 }

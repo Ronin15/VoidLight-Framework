@@ -6,11 +6,11 @@
 #include "gameStates/GamePlayState.hpp"
 #include "entities/Player.hpp"
 #include "controllers/combat/CombatController.hpp"
-#include "controllers/ui/GameplayHUDController.hpp"
+#include "controllers/ui/HudController.hpp"
+#include "controllers/ui/InventoryController.hpp"
 #include "controllers/social/SocialController.hpp"
 #include "controllers/world/DayNightController.hpp"
 #include "controllers/world/HarvestController.hpp"
-#include "controllers/world/ItemController.hpp"
 #include "controllers/world/WeatherController.hpp"
 #include "controllers/render/ResourceRenderController.hpp"
 #include "core/GameEngine.hpp"
@@ -20,6 +20,7 @@
 #include "gameStates/PauseState.hpp"
 #include "events/HarvestResourceEvent.hpp"
 #include "events/EntityEvents.hpp"
+#include "managers/EventManager.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -29,27 +30,26 @@
 #include "managers/InputManager.hpp"
 #include "managers/ParticleManager.hpp"
 #include "managers/PathfinderManager.hpp"
-#include "managers/ResourceTemplateManager.hpp"
 #include "managers/UIConstants.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
 #include "managers/WorldResourceManager.hpp"
 #include "managers/ProjectileManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Camera.hpp"
 #include "world/WorldData.hpp"
-#include <algorithm>
+#include <array>
 #include <cmath>
 #include <format>
 
 #include "gpu/GPURenderer.hpp"
-#include "gpu/SpriteBatch.hpp"
 #include "utils/GPUSceneRecorder.hpp"
 
 // Constructor/destructor defined here where GPUSceneRecorder is complete (for unique_ptr)
 GamePlayState::GamePlayState()
     : m_transitioningToLoading{false}, m_transitioningToGameOver{false},
-      mp_Player{nullptr}, m_inventoryVisible{false}, m_initialized{false},
+      mp_Player{nullptr}, m_initialized{false},
       m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{} {}
 
 GamePlayState::~GamePlayState() = default;
@@ -87,15 +87,13 @@ bool GamePlayState::enter() {
     mp_Player->initializeInventory();
 
     // Position player at screen center
-    Vector2D const screenCenter(gameEngine.getLogicalWidth() / 2.0,
-                                gameEngine.getLogicalHeight() / 2.0);
+    Vector2D const screenCenter(gameEngine.getWidthInPixels() / 2.0,
+                                gameEngine.getHeightInPixels() / 2.0);
     mp_Player->setPosition(screenCenter);
+    spawnStarterGearChest();
 
     // Set player handle in AIManager for collision culling reference point
     AIManager::Instance().setPlayerHandle(mp_Player->getHandle());
-
-    // Initialize the inventory UI
-    initializeInventoryUI();
 
     // Initialize camera (world already loaded)
     initializeCamera();
@@ -107,8 +105,8 @@ bool GamePlayState::enter() {
     m_controllers.add<WeatherController>();
     m_controllers.add<DayNightController>();
     m_controllers.add<CombatController>(mp_Player);
-    m_controllers.add<GameplayHUDController>(mp_Player->getHandle());
-    m_controllers.add<ItemController>(mp_Player);
+    m_controllers.add<HudController>(mp_Player);
+    auto& inventoryCtrl = m_controllers.add<InventoryController>(mp_Player);
     m_controllers.add<HarvestController>(mp_Player);
     m_controllers.add<ResourceRenderController>();
 
@@ -131,27 +129,31 @@ bool GamePlayState::enter() {
     auto &ui = UIManager::Instance();
 
     // Create event log for time/weather messages
-    ui.createEventLog("gameplay_event_log",
-                      {10, ui.getLogicalHeight() - 200, 730, 180}, 7);
+    ui.createEventLog("event_log",
+                      {10, ui.getHeightInPixels() - 200, 730, 180}, 7);
     UIPositioning eventLogPos;
     eventLogPos.mode = UIPositionMode::BOTTOM_ALIGNED;
     eventLogPos.offsetX = 10;
     eventLogPos.offsetY = 20;
     eventLogPos.fixedHeight = 180;
     eventLogPos.widthPercent = UIConstants::EVENT_LOG_WIDTH_PERCENT;
-    ui.setComponentPositioning("gameplay_event_log", eventLogPos);
+    ui.setComponentPositioning("event_log", eventLogPos);
 
     // Create time status label at top-right of screen (no panel, just label)
     int const barHeight = UIConstants::STATUS_BAR_HEIGHT;
     int labelPadding = UIConstants::STATUS_BAR_LABEL_PADDING;
 
-    ui.createLabel("gameplay_time_label",
-                   {labelPadding, 6, ui.getLogicalWidth() - 2 * labelPadding,
+    ui.createLabel("time_label",
+                   {labelPadding, 6, ui.getWidthInPixels() - 2 * labelPadding,
                     barHeight - 12},
                    "");
 
     // Right-align the text within the label
-    ui.setLabelAlignment("gameplay_time_label", UIAlignment::CENTER_RIGHT);
+    ui.setLabelAlignment("time_label", UIAlignment::CENTER_RIGHT);
+
+    // Full-width label driven by setComponentPositioning — disable auto-sizing
+    // so setText() updates don't shrink bounds back to content width.
+    ui.enableAutoSizing("time_label", false);
 
     // Full-width positioning for resize handling
     UIPositioning labelPos;
@@ -160,22 +162,42 @@ bool GamePlayState::enter() {
     labelPos.offsetY = 6;                    // Small vertical offset from top
     labelPos.fixedWidth = -2 * labelPadding; // Full width minus margins
     labelPos.fixedHeight = barHeight - 12;
-    ui.setComponentPositioning("gameplay_time_label", labelPos);
+    ui.setComponentPositioning("time_label", labelPos);
 
     // Pre-allocate status buffer for zero per-frame allocations
     m_statusBuffer.reserve(256);
 
     // Create FPS counter label (top-left, initially hidden, toggled with F2)
-    ui.createLabel("gameplay_fps", {labelPadding, 6, 120, barHeight - 12},
-                   "FPS: --");
-    ui.setComponentVisible("gameplay_fps", false);
+    ui.createLabel(
+        "fps",
+        {labelPadding, 6, UIConstants::FPS_COUNTER_WIDTH, barHeight - 12},
+        "FPS: --");
+    ui.setComponentVisible("fps", false);
+    // Fixed width covers Retina-scaled "FPS: nnn.n" in 1280x720 windowed mode
+    // without per-setText font metrics on every FPS update.
+    ui.enableAutoSizing("fps", false);
     UIPositioning fpsPos;
     fpsPos.mode = UIPositionMode::TOP_ALIGNED;
     fpsPos.offsetX = labelPadding;
     fpsPos.offsetY = 6;
-    fpsPos.fixedWidth = 120;
+    fpsPos.fixedWidth = UIConstants::FPS_COUNTER_WIDTH;
     fpsPos.fixedHeight = barHeight - 12;
-    ui.setComponentPositioning("gameplay_fps", fpsPos);
+    ui.setComponentPositioning("fps", fpsPos);
+
+    inventoryCtrl.initializeInventoryUI();
+    m_controllers.get<HudController>()->initializeHotbarUI();
+    if (mp_Player) {
+      Vector2D const merchantSpawnPos =
+          mp_Player->getPosition() + Vector2D(-96.0f, 32.0f);
+      EventManager::Instance().spawnMerchant("GeneralMerchant",
+                                             merchantSpawnPos.getX(),
+                                             merchantSpawnPos.getY(),
+                                             "Human",
+                                             1,
+                                             0.0f,
+                                             false,
+                                             EventManager::DispatchMode::Immediate);
+    }
 
     // Subscribe all controllers at once
     m_controllers.subscribeAll();
@@ -248,7 +270,7 @@ void GamePlayState::update(float deltaTime) {
     m_npcRenderCtrl.update(deltaTime);
 
     // Update combat HUD (health/stamina bars, target frame)
-    auto& gameplayHudCtrl = *m_controllers.get<GameplayHUDController>();
+    auto& gameplayHudCtrl = *m_controllers.get<HudController>();
     ui.updateCombatHUD(
         mp_Player->getHealth(),
         mp_Player->getStamina(),
@@ -293,7 +315,7 @@ void GamePlayState::update(float deltaTime) {
                    gameTimeMgr.getTimeOfDayName(), gameTimeMgr.getSeasonName(),
                    static_cast<int>(gameTimeMgr.getCurrentTemperature()),
                    m_controllers.get<WeatherController>()->getCurrentWeatherString());
-    ui.setText("gameplay_time_label", m_statusBuffer);
+    ui.setText("time_label", m_statusBuffer);
   }
 
   // Update UI
@@ -301,7 +323,7 @@ void GamePlayState::update(float deltaTime) {
     ui.update(deltaTime);
   }
 
-  // Inventory display is now updated automatically via data binding.
+  // Inventory display is refreshed by InventoryController on resource changes.
 }
 
 bool GamePlayState::exit() {
@@ -317,6 +339,11 @@ bool GamePlayState::exit() {
   GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
   auto &wrm = WorldResourceManager::Instance();
   auto &eventMgr = EventManager::Instance();
+
+  if (auto* socialCtrl = m_controllers.get<SocialController>();
+      socialCtrl && socialCtrl->isTrading()) {
+    socialCtrl->closeTrade();
+  }
 
   if (m_transitioningToLoading) {
     // Transitioning to LoadingState - do cleanup but preserve m_worldLoaded
@@ -338,6 +365,14 @@ bool GamePlayState::exit() {
     ProjectileManager::Instance().prepareForStateTransition();
     bgSimMgr.prepareForStateTransition();
     worldMgr.prepareForStateTransition();
+
+    // Unload world before WRM/EventManager transition cleanup so persistent
+    // world-unload handlers and WRM reverse lookups are still available.
+    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+      worldMgr.unloadWorld();
+      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
+      // infinite loop when LoadingState returns to this state
+    }
 
     if (wrm.isInitialized()) {
       wrm.prepareForStateTransition();
@@ -368,13 +403,6 @@ bool GamePlayState::exit() {
     // Clean up camera and GPU scene recorder
     m_camera.reset();
 
-    // Unload world (LoadingState will reload it)
-    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-      worldMgr.unloadWorld();
-      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
-      // infinite loop when LoadingState returns to this state
-    }
-
     // Clean up UI
     ui.prepareForStateTransition();
 
@@ -394,6 +422,11 @@ bool GamePlayState::exit() {
   // Full exit (going to main menu, other states, or shutting down)
   m_transitioningToGameOver = false;
 
+  if (auto* socialCtrl = m_controllers.get<SocialController>();
+      socialCtrl && socialCtrl->isTrading()) {
+    socialCtrl->closeTrade();
+  }
+
   // Clear NPCs before manager cleanup (NPCs hold EDM indices)
   aiMgr.destroyAllNPCsForStateTransition();
 
@@ -404,6 +437,16 @@ bool GamePlayState::exit() {
   ProjectileManager::Instance().prepareForStateTransition();
   bgSimMgr.prepareForStateTransition();
   worldMgr.prepareForStateTransition();
+
+  // Unload world before WRM/EventManager transition cleanup so persistent
+  // world-unload handlers and WRM reverse lookups are still available.
+  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+    worldMgr.unloadWorld();
+    // CRITICAL: Only reset m_worldLoaded when actually unloading a world
+    // This prevents infinite loop when transitioning to LoadingState (no world
+    // yet)
+    m_worldLoaded = false;
+  }
 
   if (wrm.isInitialized()) {
     wrm.prepareForStateTransition();
@@ -434,15 +477,6 @@ bool GamePlayState::exit() {
 
   // Clean up camera and GPU scene recorder first to stop world rendering
   m_camera.reset();
-
-  // Unload the world when fully exiting gameplay
-  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-    worldMgr.unloadWorld();
-    // CRITICAL: Only reset m_worldLoaded when actually unloading a world
-    // This prevents infinite loop when transitioning to LoadingState (no world
-    // yet)
-    m_worldLoaded = false;
-  }
 
   // Full UI cleanup using standard pattern
   ui.prepareForStateTransition();
@@ -521,9 +555,9 @@ void GamePlayState::unregisterEventHandlers() {
 void GamePlayState::pause() {
   // Hide gameplay UI when paused (PauseState overlays on top)
   auto &ui = UIManager::Instance();
-  ui.setComponentVisible("gameplay_event_log", false);
-  ui.setComponentVisible("gameplay_time_label", false);
-  ui.setComponentVisible("gameplay_fps", false);
+  ui.setComponentVisible("event_log", false);
+  ui.setComponentVisible("time_label", false);
+  ui.setComponentVisible("fps", false);
 
   // Hide combat HUD components
   ui.setComponentVisible("hud_health_label", false);
@@ -534,12 +568,20 @@ void GamePlayState::pause() {
   ui.setComponentVisible("hud_target_hp_label", false);
   ui.setComponentVisible("hud_target_health", false);
 
-  // Also hide inventory components if visible
-  if (m_inventoryVisible) {
-    ui.setComponentVisible("gameplay_inventory_panel", false);
-    ui.setComponentVisible("gameplay_inventory_title", false);
-    ui.setComponentVisible("gameplay_inventory_status", false);
-    ui.setComponentVisible("gameplay_inventory_list", false);
+  if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
+    inventoryCtrl->cancelDragOperation();
+    if (inventoryCtrl->isInventoryVisible()) {
+      ui.setComponentVisible(InventoryController::INVENTORY_PANEL_ID, false);
+    }
+  }
+
+  if (auto* hudCtrl = m_controllers.get<HudController>()) {
+    hudCtrl->setHotbarVisible(false);
+  }
+
+  if (auto* socialCtrl = m_controllers.get<SocialController>();
+      socialCtrl && socialCtrl->isTrading()) {
+    socialCtrl->closeTrade();
   }
 
   // Stop player movement to prevent drift during pause
@@ -556,12 +598,12 @@ void GamePlayState::pause() {
 void GamePlayState::resume() {
   // Show gameplay UI when resuming from pause
   auto &ui = UIManager::Instance();
-  ui.setComponentVisible("gameplay_event_log", true);
-  ui.setComponentVisible("gameplay_time_label", true);
+  ui.setComponentVisible("event_log", true);
+  ui.setComponentVisible("time_label", true);
 
   // Restore FPS counter visibility if it was enabled
   if (m_fpsVisible) {
-    ui.setComponentVisible("gameplay_fps", true);
+    ui.setComponentVisible("fps", true);
   }
 
   // Show combat HUD components (always visible during gameplay)
@@ -572,12 +614,13 @@ void GamePlayState::resume() {
   // Target frame visibility controlled by updateCombatHUD() based on
   // hasActiveTarget()
 
-  // Restore inventory visibility state
-  if (m_inventoryVisible) {
-    ui.setComponentVisible("gameplay_inventory_panel", true);
-    ui.setComponentVisible("gameplay_inventory_title", true);
-    ui.setComponentVisible("gameplay_inventory_status", true);
-    ui.setComponentVisible("gameplay_inventory_list", true);
+  if (auto* inventoryCtrl = m_controllers.get<InventoryController>();
+      inventoryCtrl && inventoryCtrl->isInventoryVisible()) {
+    inventoryCtrl->setInventoryVisible(true);
+  }
+
+  if (auto* hudCtrl = m_controllers.get<HudController>()) {
+    hudCtrl->setHotbarVisible(true);
   }
 
   // Resume all controllers (re-subscribe to events after pause)
@@ -591,45 +634,53 @@ void GamePlayState::handleInput() {
   const InputManager &inputMgr = InputManager::Instance();
   auto &ui = UIManager::Instance();
   GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
-  GameEngine &gameEngine = GameEngine::Instance();
 
-  // Use InputManager's new event-driven key press detection
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_P)) {
+  // Trade dialog is modal — it consumes all input so Pause cannot fire behind it.
+  auto* socialCtrl = m_controllers.get<SocialController>();
+  if (socialCtrl && socialCtrl->isTrading()) {
+    socialCtrl->handleTradeInput(inputMgr);
+    return;
+  }
+
+  if (inputMgr.isCommandPressed(InputManager::Command::Pause)) {
     // Create PauseState if it doesn't exist
     if (!mp_stateManager->hasState(GameStateId::PAUSE)) {
       mp_stateManager->addState(std::make_unique<PauseState>());
     }
     // pushState will call pause() which handles UI hiding and player velocity
     mp_stateManager->pushState(GameStateId::PAUSE);
+    return;
   }
 
+  // Developer debug shortcut — return to main menu. Intentionally not rebindable.
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_B)) {
     mp_stateManager->changeState(GameStateId::MAIN_MENU);
   }
 
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_ESCAPE)) {
-    // gameEngine already cached at top of function
-    gameEngine.setRunning(false);
+  // Inventory toggle
+  if (inputMgr.wasKeyPressed(SDL_SCANCODE_F2)) {
+    m_fpsVisible = !m_fpsVisible;
+    ui.setComponentVisible("fps", m_fpsVisible);
   }
 
-  // Inventory toggle
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_I)) {
+  if (inputMgr.isCommandPressed(InputManager::Command::OpenInventory)) {
     toggleInventoryDisplay();
   }
 
-  // FPS counter toggle
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_F2)) {
-    m_fpsVisible = !m_fpsVisible;
-    ui.setComponentVisible("gameplay_fps", m_fpsVisible);
+  if (auto* hudCtrl = m_controllers.get<HudController>()) {
+    if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
+      inventoryCtrl->handleHotbarAssignmentInput(*hudCtrl);
+    }
+    hudCtrl->handleHotbarInput();
   }
 
-  // Combat - F for melee attack
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_F) && mp_Player) {
+  // Combat — attack command (default: F, rebindable via Controls settings)
+  if (inputMgr.isCommandPressed(InputManager::Command::AttackLight) && mp_Player) {
     m_controllers.get<CombatController>()->tryAttack();
   }
 
 #ifndef NDEBUG
-  // Debug: R to spawn a hostile ranged NPC near player (test hook)
+  // Debug: R to spawn a hostile Warrior NPC near player (test hook)
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
@@ -638,7 +689,7 @@ void GamePlayState::handleInput() {
     EntityHandle npc = edm.createNPCWithRaceClass(spawnPos, "Human", "Warrior",
                                                    Sex::Unknown, 1);  // faction 1 = Enemy
     if (npc.isValid()) {
-      aiMgr.assignBehavior(npc, "RangedAttack");
+      aiMgr.assignBehavior(npc, "Attack");
     }
   }
 
@@ -660,57 +711,26 @@ void GamePlayState::handleInput() {
   }
 #endif
 
-  // Interaction - E to trade/pickup/harvest
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_E) && mp_Player) {
-    auto& socialCtrl = *m_controllers.get<SocialController>();
-
-    // If already trading, close the trade UI
-    if (socialCtrl.isTrading()) {
-      socialCtrl.closeTrade();
-    } else {
-      // Try to find a nearby merchant NPC to trade with
-      bool openedTrade = false;
-      auto& edm = EntityDataManager::Instance();
-      auto& aiMgr = AIManager::Instance();
-      Vector2D playerPos = mp_Player->getPosition();
-
-      // Query nearby NPCs
-      m_nearbyHandlesBuffer.clear();
-      aiMgr.scanActiveHandlesInRadius(playerPos, 100.0f, m_nearbyHandlesBuffer, true);
-
-      for (const auto& handle : m_nearbyHandlesBuffer) {
-        if (!handle.isValid() || handle.getKind() != EntityKind::NPC) {
-          continue;
-        }
-        // Check if this NPC is a merchant
-        if (edm.isNPCMerchant(handle)) {
-          if (socialCtrl.openTrade(handle)) {
-            openedTrade = true;
-            break;
-          }
-        }
-      }
-
-      // If no merchant found, try pickup/harvest
-      if (!openedTrade) {
-        auto& itemCtrl = *m_controllers.get<ItemController>();
-        if (!itemCtrl.attemptPickup()) {
-          // Try to start progress-based harvesting
-          auto& harvestCtrl = *m_controllers.get<HarvestController>();
-          harvestCtrl.startHarvest();
-        }
+  // Interaction — trade/pickup/harvest command (default: E, rebindable)
+  if (inputMgr.isCommandPressed(InputManager::Command::Interact) && mp_Player) {
+    if (!tryOpenNearbyMerchantTrade()) {
+      auto& inventoryCtrl = *m_controllers.get<InventoryController>();
+      if (!inventoryCtrl.tryOpenNearbyContainer() &&
+          !inventoryCtrl.attemptPickup()) {
+        auto& harvestCtrl = *m_controllers.get<HarvestController>();
+        harvestCtrl.startHarvest();
       }
     }
   }
   // Note: HarvestController handles movement cancellation automatically in update()
   // via position-based detection (MOVEMENT_CANCEL_THRESHOLD)
 
-  // Camera zoom controls
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_LEFTBRACKET) && m_camera) {
-    m_camera->zoomIn(); // [ key = zoom in (objects larger)
+  // Camera zoom controls (rebindable via Controls settings)
+  if (inputMgr.isCommandPressed(InputManager::Command::ZoomIn) && m_camera) {
+    m_camera->zoomIn();
   }
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_RIGHTBRACKET) && m_camera) {
-    m_camera->zoomOut(); // ] key = zoom out (objects smaller)
+  if (inputMgr.isCommandPressed(InputManager::Command::ZoomOut) && m_camera) {
+    m_camera->zoomOut();
   }
 
 #ifndef NDEBUG
@@ -718,12 +738,12 @@ void GamePlayState::handleInput() {
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_COMMA)) {
     gameTimeMgr.setTimeScale(60.0f);
     GAMEPLAY_INFO("Time scale set to NORMAL (60x)");
-    ui.addEventLogEntry("gameplay_event_log", "Time: NORMAL speed (60x)");
+    ui.addEventLogEntry("event_log", "Time: NORMAL speed (60x)");
   }
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_PERIOD)) {
     gameTimeMgr.setTimeScale(3600.0f);
     GAMEPLAY_INFO("Time scale set to MAX (3600x)");
-    ui.addEventLogEntry("gameplay_event_log", "Time: MAX speed (3600x)");
+    ui.addEventLogEntry("event_log", "Time: MAX speed (3600x)");
   }
 #endif
 
@@ -753,142 +773,77 @@ void GamePlayState::handleInput() {
   }
 }
 
-void GamePlayState::initializeInventoryUI() {
-  auto &ui = UIManager::Instance();
-  const auto &gameEngine = GameEngine::Instance();
-  int const windowWidth = gameEngine.getLogicalWidth();
+void GamePlayState::spawnStarterGearChest() {
+  if (!mp_Player) {
+    return;
+  }
 
-  // Create inventory panel (initially hidden) matching EventDemoState layout
-  // Using TOP_RIGHT positioning - UIManager handles all resize repositioning
-  constexpr int inventoryWidth = 280;
-  constexpr int panelMarginRight = 20; // 20px from right edge
-  constexpr int panelMarginTop = 170;  // 170px from top
-  constexpr int childInset = 10;       // Children are 10px inside panel
-  constexpr int childWidth = inventoryWidth - (childInset * 2); // 260px
-  constexpr int headerHeight = 110;    // Title + status label area
-  constexpr int itemHeight = 20;       // Height per inventory item row
-  constexpr int bottomPadding = 15;    // Padding below list
+  auto& edm = EntityDataManager::Instance();
+  auto& resourceManager = ResourceTemplateManager::Instance();
+  const Vector2D chestPosition = mp_Player->getPosition() + Vector2D(72.0f, 0.0f);
+  const EntityHandle chest =
+      edm.createContainer(chestPosition, ContainerType::Chest, 12, 0);
+  if (!chest.isValid()) {
+    GAMEPLAY_WARN("Failed to create starter gear chest");
+    return;
+  }
 
-  // Calculate inventory panel size based on slot count
-  uint32_t invIdx = mp_Player->getInventoryIndex();
-  const auto& invData = EntityDataManager::Instance().getInventoryData(invIdx);
-  int slotCount = static_cast<int>(invData.maxSlots);
+  auto& container = edm.getContainerData(chest);
+  constexpr std::array<std::string_view, 6> starterGearIds{
+      "wooden_sword",
+      "wooden_shield",
+      "old_shirt",
+      "old_pants",
+      "worn_boots",
+      "cloth_gloves"};
 
-  // Calculate list and panel heights dynamically
-  int listHeight = slotCount * itemHeight;
-  int inventoryHeight = headerHeight + listHeight + bottomPadding;
-
-  // Initial position (will be auto-repositioned by UIManager)
-  int inventoryX = windowWidth - inventoryWidth - panelMarginRight;
-  int inventoryY = panelMarginTop;
-
-  ui.createPanel("gameplay_inventory_panel",
-                 {inventoryX, inventoryY, inventoryWidth, inventoryHeight});
-  ui.setComponentVisible("gameplay_inventory_panel", false);
-  ui.setComponentPositioning("gameplay_inventory_panel",
-                             {UIPositionMode::TOP_RIGHT, panelMarginRight,
-                              panelMarginTop, inventoryWidth, inventoryHeight});
-
-  // Title: 25px below panel top, inset by 10px
-  ui.createTitle("gameplay_inventory_title",
-                 {inventoryX + childInset, inventoryY + 25, childWidth, 35},
-                 "Player Inventory");
-  ui.setComponentVisible("gameplay_inventory_title", false);
-  ui.setComponentPositioning("gameplay_inventory_title",
-                             {UIPositionMode::TOP_RIGHT,
-                              panelMarginRight + childInset,
-                              panelMarginTop + 25, childWidth, 35});
-
-  // Status label: 75px below panel top
-  ui.createLabel("gameplay_inventory_status",
-                 {inventoryX + childInset, inventoryY + 75, childWidth, 25},
-                 "Capacity: 0/20");
-  ui.setComponentVisible("gameplay_inventory_status", false);
-  ui.setComponentPositioning("gameplay_inventory_status",
-                             {UIPositionMode::TOP_RIGHT,
-                              panelMarginRight + childInset,
-                              panelMarginTop + 75, childWidth, 25});
-
-  // Inventory list: 110px below panel top, height based on slot count
-  ui.createList("gameplay_inventory_list",
-                {inventoryX + childInset, inventoryY + 110, childWidth, listHeight});
-  ui.setComponentVisible("gameplay_inventory_list", false);
-  ui.setComponentPositioning("gameplay_inventory_list",
-                             {UIPositionMode::TOP_RIGHT,
-                              panelMarginRight + childInset,
-                              panelMarginTop + 110, childWidth, listHeight});
-
-  // --- DATA BINDING SETUP ---
-  // Bind the inventory capacity label to a function that gets the data
-  ui.bindText("gameplay_inventory_status", [this]() -> std::string {
-    if (!mp_Player) {
-      return "Capacity: 0/0";
+  for (std::string_view gearId : starterGearIds) {
+    const auto handle = resourceManager.getHandleById(std::string(gearId));
+    if (!handle.isValid()) {
+      GAMEPLAY_WARN(std::format("Starter gear '{}' not found", gearId));
+      continue;
     }
-    uint32_t invIdx = mp_Player->getInventoryIndex();
-    if (invIdx == INVALID_INVENTORY_INDEX) {
-      return "Capacity: 0/0";
+
+    if (!edm.addToInventory(container.inventoryIndex, handle, 1)) {
+      GAMEPLAY_WARN(std::format("Failed to add starter gear '{}' to chest", gearId));
     }
-    const auto& inv = EntityDataManager::Instance().getInventoryData(invIdx);
-    return std::format("Capacity: {}/{}", inv.usedSlots, inv.maxSlots);
-  });
-
-  // Bind the inventory list - populates provided buffers (zero-allocation
-  // pattern)
-  ui.bindList(
-      "gameplay_inventory_list",
-      [this](std::vector<std::string> &items,
-             std::vector<std::pair<std::string, int>> &sortedResources) {
-        if (!mp_Player) {
-          items.push_back("(Empty)");
-          return;
-        }
-
-        uint32_t invIdx = mp_Player->getInventoryIndex();
-        if (invIdx == INVALID_INVENTORY_INDEX) {
-          items.push_back("(Empty)");
-          return;
-        }
-
-        auto allResources = EntityDataManager::Instance().getInventoryResources(invIdx);
-
-        if (allResources.empty()) {
-          items.push_back("(Empty)");
-          return;
-        }
-
-        // Build sorted list using reusable buffer provided by UIManager
-        sortedResources.reserve(allResources.size());
-        for (const auto &[resourceHandle, quantity] : allResources) {
-          if (quantity > 0) {
-            auto resourceTemplate =
-                ResourceTemplateManager::Instance().getResourceTemplate(
-                    resourceHandle);
-            std::string resourceName =
-                resourceTemplate ? resourceTemplate->getName() : "Unknown";
-            sortedResources.emplace_back(std::move(resourceName), quantity);
-          }
-        }
-        std::sort(sortedResources.begin(), sortedResources.end());
-
-        items.reserve(sortedResources.size());
-        for (const auto &[resourceId, quantity] : sortedResources) {
-          items.push_back(std::format("{} x{}", resourceId, quantity));
-        }
-
-        if (items.empty()) {
-          items.push_back("(Empty)");
-        }
-      });
+  }
 }
 
 void GamePlayState::toggleInventoryDisplay() {
-  auto &ui = UIManager::Instance();
-  m_inventoryVisible = !m_inventoryVisible;
+  if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
+    inventoryCtrl->toggleInventoryDisplay();
+  }
+}
 
-  ui.setComponentVisible("gameplay_inventory_panel", m_inventoryVisible);
-  ui.setComponentVisible("gameplay_inventory_title", m_inventoryVisible);
-  ui.setComponentVisible("gameplay_inventory_status", m_inventoryVisible);
-  ui.setComponentVisible("gameplay_inventory_list", m_inventoryVisible);
+bool GamePlayState::tryOpenNearbyMerchantTrade() {
+  if (!mp_Player) {
+    return false;
+  }
+
+  auto* socialCtrl = m_controllers.get<SocialController>();
+  if (!socialCtrl) {
+    return false;
+  }
+
+  auto& edm = EntityDataManager::Instance();
+  auto& aiMgr = AIManager::Instance();
+  Vector2D const playerPos = mp_Player->getPosition();
+
+  m_nearbyHandlesBuffer.clear();
+  aiMgr.scanActiveHandlesInRadius(playerPos, 100.0f, m_nearbyHandlesBuffer, true);
+
+  for (const auto& handle : m_nearbyHandlesBuffer) {
+    if (!handle.isValid() || handle.getKind() != EntityKind::NPC) {
+      continue;
+    }
+
+    if (edm.isNPCMerchant(handle) && socialCtrl->openTrade(handle)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void GamePlayState::initializeCamera() {
@@ -913,14 +868,7 @@ void GamePlayState::initializeCamera() {
     m_camera->setTarget(playerAsEntity);
     m_camera->setMode(VoidLight::Camera::Mode::Follow);
 
-    // Set up camera configuration for smooth following
-    // Using exponential smoothing for smooth, responsive follow
-    VoidLight::Camera::Config config;
-    config.followSpeed = 5.0f;      // Speed of camera interpolation
-    config.deadZoneRadius = 0.0f;   // No dead zone - always follow
-    config.smoothingFactor = 0.85f; // Smoothing factor (0-1, higher = smoother)
-    config.clampToWorldBounds = true; // Keep camera within world bounds
-    m_camera->setConfig(config);
+    // Camera follow tuning lives in Camera::Config defaults — uniform across states.
 
     // Provide camera to player for screen-to-world coordinate conversion
     mp_Player->setCamera(m_camera.get());
@@ -972,7 +920,7 @@ void GamePlayState::onTimePeriodChanged(const EventData &data) {
 
   // Add event log entry for the time period change
   UIManager::Instance().addEventLogEntry(
-      "gameplay_event_log",
+      "event_log",
       std::string(m_controllers.get<DayNightController>()->getCurrentPeriodDescription()));
 
   GAMEPLAY_DEBUG(std::format("Day/night transition started to period: {}",
@@ -995,8 +943,8 @@ void GamePlayState::updateAmbientParticles(TimePeriod period) {
   }
 
   const auto &gameEngine = GameEngine::Instance();
-  Vector2D screenCenter(gameEngine.getLogicalWidth() / 2.0f,
-                        gameEngine.getLogicalHeight() / 2.0f);
+  Vector2D screenCenter(gameEngine.getWidthInPixels() / 2.0f,
+                        gameEngine.getHeightInPixels() / 2.0f);
 
   // Stop existing ambient particles only when period changed
   if (m_ambientParticlesActive) {
@@ -1078,7 +1026,7 @@ void GamePlayState::onWeatherChanged(const EventData &data) {
 
   // Add event log entry for the weather change
   UIManager::Instance().addEventLogEntry(
-      "gameplay_event_log",
+      "event_log",
       std::string(m_controllers.get<WeatherController>()->getCurrentWeatherDescription()));
 
   GAMEPLAY_DEBUG(weatherEvent->getWeatherTypeString());
@@ -1140,7 +1088,7 @@ void GamePlayState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
       m_fpsBuffer.clear();
       std::format_to(std::back_inserter(m_fpsBuffer), "FPS: {:.1f}",
                      currentFPS);
-      ui.setText("gameplay_fps", m_fpsBuffer);
+      ui.setText("fps", m_fpsBuffer);
       m_lastDisplayedFPS = currentFPS;
     }
   }

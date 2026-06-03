@@ -585,7 +585,7 @@ struct AttackBehaviorConfig
  *
  * Usage:
  *   auto config = BehaviorConfigData::makeWander({.speed = 50.0f});
- *   edm.setBehaviorConfig(edmIndex, config);
+ *   edm.reassignBehaviorConfig(edmIndex, config);
  */
 struct BehaviorConfigData {
     BehaviorType type{static_cast<BehaviorType>(0xFF)};  // BehaviorType::None

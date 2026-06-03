@@ -35,6 +35,7 @@
 
 // Forward declarations
 class Player;
+class InputManager;
 
 /**
  * @brief Result of a trade operation
@@ -96,6 +97,7 @@ public:
 
     bool openTrade(EntityHandle npcHandle);
     void closeTrade();
+    void handleTradeInput(const InputManager& inputMgr);
     [[nodiscard]] bool isTrading() const { return m_isTrading; }
     [[nodiscard]] EntityHandle getMerchantHandle() const { return m_merchantHandle; }
 
@@ -150,8 +152,8 @@ public:
     /**
      * @brief Give an item to an NPC as a gift
      *
-     * Gifts improve relationship based on item value.
-     * NPCs remember gifts and become more friendly.
+     * Gifts transfer the item into the NPC inventory and improve relationship
+     * based on item value. NPCs remember gifts and become more friendly.
      */
     bool tryGift(EntityHandle npcHandle,
                  VoidLight::ResourceHandle itemHandle,
@@ -230,15 +232,29 @@ private:
     // --- Trade UI ---
     void createTradeUI();
     void destroyTradeUI();
+    void rebuildTradeListsUI();
+    void normalizeTradeSelections();
+    void ensurePaneSelection();
     void refreshMerchantItems();
     void refreshPlayerItems();
     void updatePriceDisplay();
     void updateSelectionHighlight();
+    void setActivePaneToMerchant();
+    void setActivePaneToPlayer();
+    void moveActiveSelection(int delta);
+    void adjustQuantityBy(int delta);
+    void executeActiveTrade();
+    [[nodiscard]] VoidLight::ResourceHandle getGoldHandle() const;
 
     // --- Memory recording ---
     void recordTrade(EntityHandle npcHandle, float tradeValue, bool wasGoodDeal);
     void recordGift(EntityHandle npcHandle, float giftValue);
     // --- Utility ---
+    void dispatchResourceChange(EntityHandle ownerHandle,
+                                VoidLight::ResourceHandle resourceHandle,
+                                int oldQuantity,
+                                int newQuantity,
+                                const std::string& reason) const;
     [[nodiscard]] float getItemBaseValue(VoidLight::ResourceHandle itemHandle) const;
 
     // Player reference
@@ -260,6 +276,7 @@ private:
     int m_selectedMerchantIndex{-1};
     int m_selectedPlayerIndex{-1};
     int m_quantity{1};
+    bool m_merchantPaneActive{true};
 
     // Trade UI element IDs
     static constexpr const char* UI_PANEL = "trade_panel";
@@ -273,6 +290,8 @@ private:
     static constexpr const char* UI_SELL_BTN = "trade_sell_btn";
     static constexpr const char* UI_CLOSE_BTN = "trade_close_btn";
     static constexpr const char* UI_GOLD_LABEL = "trade_gold_label";
+    static constexpr const char* UI_QUANTITY_DEC_BTN = "trade_qty_dec_btn";
+    static constexpr const char* UI_QUANTITY_INC_BTN = "trade_qty_inc_btn";
 };
 
 #endif // SOCIAL_CONTROLLER_HPP

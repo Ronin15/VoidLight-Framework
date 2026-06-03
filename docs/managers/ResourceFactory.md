@@ -23,10 +23,19 @@ The `ResourceFactory` is a static class that provides a centralized mechanism fo
 #include "MyCustomResource.hpp"
 
 // Register a creator function for your custom resource type
-VoidLight-Framework::ResourceFactory::registerCreator("MyCustomType", [](const JsonValue& json) -> ResourcePtr {
-    // Your custom creation logic here
-    auto resource = std::make_shared<MyCustomResource>();
-    // ... populate resource from json ...
+ResourceFactory::registerCreator("MyCustomType",
+    [](const JsonValue& json) -> ResourcePtr {
+    auto handle = ResourceTemplateManager::Instance().generateHandle();
+    auto resource = std::make_shared<MyCustomResource>(
+        handle,
+        json["id"].tryAsString().value_or(""),
+        json["name"].tryAsString().value_or(""));
+
+    if (json.hasKey("damage")) {
+        resource->setDamage(
+            static_cast<float>(json["damage"].tryAsNumber().value_or(0.0)));
+    }
+
     return resource;
 });
 ```
@@ -38,7 +47,7 @@ VoidLight-Framework::ResourceFactory::registerCreator("MyCustomType", [](const J
 JsonValue resourceJson = ...;
 
 // Create the resource using the factory
-ResourcePtr resource = VoidLight-Framework::ResourceFactory::createFromJson(resourceJson);
+ResourcePtr resource = ResourceFactory::createFromJson(resourceJson);
 
 if (resource) {
     // Use the created resource
@@ -75,14 +84,16 @@ Create a class that inherits from the `Resource` base class:
 #pragma once
 #include "resources/Resource.hpp"
 
-namespace VoidLight-Framework {
+namespace VoidLight {
 
 class MyCustomResource : public Resource {
 public:
-    MyCustomResource() = default;
-
-    // Required: Resource type identifier
-    std::string getType() const override { return "custom_type"; }
+    MyCustomResource(VoidLight::ResourceHandle handle,
+                     const std::string& id,
+                     const std::string& name)
+        : Resource(handle, id, name,
+                   ResourceCategory::Item,
+                   ResourceType::QuestItem) {}
 
     // Custom properties
     float getDamage() const { return m_damage; }
@@ -96,7 +107,7 @@ private:
     int m_durability{100};
 };
 
-} // namespace VoidLight-Framework
+} // namespace VoidLight
 ```
 
 ### Step 2: Implement JSON Parsing
@@ -110,19 +121,19 @@ Create a factory function that parses JSON and creates the resource:
 #include "utils/JsonReader.hpp"
 
 ResourcePtr createCustomResourceFromJson(const JsonValue& json) {
-    auto resource = std::make_shared<MyCustomResource>();
-
-    // Parse base Resource properties (name, description, etc.)
-    if (json.contains("name")) {
-        resource->setName(json["name"].get<std::string>());
-    }
+    auto handle = ResourceTemplateManager::Instance().generateHandle();
+    auto resource = std::make_shared<MyCustomResource>(
+        handle,
+        json["id"].tryAsString().value_or(""),
+        json["name"].tryAsString().value_or(""));
 
     // Parse custom properties
-    if (json.contains("damage")) {
-        resource->setDamage(json["damage"].get<float>());
+    if (json.hasKey("damage")) {
+        resource->setDamage(
+            static_cast<float>(json["damage"].tryAsNumber().value_or(0.0)));
     }
-    if (json.contains("durability")) {
-        resource->setDurability(json["durability"].get<int>());
+    if (json.hasKey("durability")) {
+        resource->setDurability(json["durability"].tryAsInt().value_or(0));
     }
 
     return resource;
@@ -136,7 +147,7 @@ Register your creator function during game initialization:
 ```cpp
 // In Game::init() or similar initialization function
 void registerCustomResources() {
-    VoidLight-Framework::ResourceFactory::registerCreator(
+    ResourceFactory::registerCreator(
         "custom_type",
         createCustomResourceFromJson
     );
@@ -145,21 +156,25 @@ void registerCustomResources() {
 
 ### Step 4: Define in JSON
 
-Create resource definitions in your data files:
+Create resource definitions in a role-appropriate catalog, or in a custom
+catalog loaded after the built-in split catalogs:
 
 ```json
-// res/data/custom_resources.json
 {
     "resources": [
         {
+            "id": "fire_sword",
             "type": "custom_type",
+            "category": "Item",
             "name": "Fire Sword",
             "description": "A sword wreathed in flames",
             "damage": 25.0,
             "durability": 150
         },
         {
+            "id": "ice_dagger",
             "type": "custom_type",
+            "category": "Item",
             "name": "Ice Dagger",
             "description": "A dagger of frozen steel",
             "damage": 15.0,
@@ -176,14 +191,14 @@ Load your resources using ResourceTemplateManager:
 ```cpp
 // Load all resources from file
 auto& rtm = ResourceTemplateManager::Instance();
-rtm.loadResourcesFromJson("res/data/custom_resources.json");
+rtm.loadResourcesFromJson("res/data/custom_weapons.json");
 
-// Access by name
-ResourceHandle fireHandle = rtm.getHandleByName("Fire Sword");
+// Access by stable JSON ID
+ResourceHandle fireHandle = rtm.getHandleById("fire_sword");
 ResourcePtr fireSword = rtm.getResourceTemplate(fireHandle);
 
 // Cast to specific type if needed
-const auto* customRes = dynamic_cast<const MyCustomResource*>(fireSword);
+auto customRes = std::dynamic_pointer_cast<MyCustomResource>(fireSword);
 if (customRes) {
     float damage = customRes->getDamage();
 }
@@ -202,7 +217,12 @@ void Game::init() {
     registerCustomResources();
 
     // 3. Load resource files (now includes custom types)
-    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/resources.json");
+    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/items.json");
+    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/weapons.json");
+    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/equipment.json");
+    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/materials.json");
+    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/currency.json");
+    ResourceTemplateManager::Instance().loadResourcesFromJson("res/data/custom_weapons.json");
 }
 ```
 

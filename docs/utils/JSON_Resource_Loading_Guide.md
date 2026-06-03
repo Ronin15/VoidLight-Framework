@@ -2,7 +2,10 @@
 
 ## Overview
 
-The project now uses the unified `res/data/resources.json` catalog for runtime resource definitions. This file contains more than a minimal demo set: equipment, consumables, crafting materials, ores, gems, currencies, merchant goods, and gameplay resources all live in the same catalog.
+The project uses focused runtime resource catalogs under `res/data/`:
+`items.json`, `weapons.json`, `equipment.json`, `materials.json`, and
+`currency.json`. This keeps balance data grouped by gameplay role while
+preserving one runtime loading path through `ResourceTemplateManager`.
 
 Use `ResourceTemplateManager` for loading and fast handle lookup, then use handles at runtime.
 
@@ -32,11 +35,30 @@ Common fields still include:
 - `consumable`
 - `properties`
 
-## Branch-Specific Implications
+`id` is the stable data identifier used by `ResourceTemplateManager::getHandleById(...)`.
+`textureId` is the common texture identity for both icon and world rendering;
+`iconTextureId` and `worldTextureId` override the common value for those specific
+uses. Atlas source rectangles come from `res/data/atlas.json` when the texture
+ID has an atlas entry.
+
+Supported exact `type` strings are:
+
+- `Equipment`
+- `Consumable`
+- `QuestItem`
+- `Ammunition`
+- `CraftingComponent`
+- `RawResource`
+- `Gold`
+- `Gem`
+- `FactionToken`
+- `CraftingCurrency`
+
+## Gameplay Implications
 
 ### `maxStackSize` matters during gameplay
 
-On this branch, stack sizes are gameplay-significant rather than cosmetic:
+Stack sizes are gameplay-significant rather than cosmetic:
 
 - harvested wood/stone/ore/gems can fill inventory quickly
 - trading and gift flows depend on current stack limits
@@ -45,13 +67,17 @@ On this branch, stack sizes are gameplay-significant rather than cosmetic:
 
 When adding new resources, choose `maxStackSize` deliberately and assume it affects both UI and interaction logic.
 
-### Merchant / economy content is now first-class
+### Merchant / economy content
 
-`resources.json` is no longer just a few sample items. It includes merchant-facing equipment, consumables, raw materials, and currencies used by the trading/social systems.
+The split catalogs include merchant-facing equipment, consumables, raw
+materials, and currencies used by the trading/social systems. Add weapons to
+`weapons.json`, armor and other gear to `equipment.json`, consumables and ammo
+to `items.json`, crafting inputs to `materials.json`, and spendable currencies
+to `currency.json`.
 
 ## Related Data
 
-Resource loading now interacts closely with NPC class data in `res/data/classes.json`:
+Resource loading interacts closely with NPC class data in `res/data/classes.json`:
 
 - `isMerchant`
 - `startingItems`

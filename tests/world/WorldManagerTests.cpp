@@ -118,6 +118,95 @@ BOOST_AUTO_TEST_CASE(TestUnloadWorldRemovesWRMState) {
     BOOST_CHECK(worldResourceManager->getActiveWorld().empty());
 }
 
+BOOST_AUTO_TEST_CASE(TestWorldUnloadedHandlerCanQueryWorldManager) {
+    BOOST_REQUIRE(EventManager::Instance().init());
+
+    WorldGenerationConfig config;
+    config.width = 20;
+    config.height = 20;
+    config.seed = 24680;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.3f;
+    config.mountainLevel = 0.7f;
+
+    BOOST_REQUIRE(worldManager->loadNewWorld(config));
+
+    bool sawUnload = false;
+    bool queriedWorldManager = false;
+    const auto token = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::World,
+        [&](const EventData& data) {
+            if (!std::dynamic_pointer_cast<WorldUnloadedEvent>(data.event)) {
+                return;
+            }
+
+            sawUnload = true;
+
+            int width = -1;
+            int height = -1;
+            queriedWorldManager = !WorldManager::Instance().getWorldDimensions(width, height);
+            BOOST_CHECK(!WorldManager::Instance().hasActiveWorld());
+        });
+
+    worldManager->unloadWorld();
+
+    BOOST_CHECK(sawUnload);
+    BOOST_CHECK(queriedWorldManager);
+
+    EventManager::Instance().removeHandler(token);
+    EventManager::Instance().clean();
+}
+
+BOOST_AUTO_TEST_CASE(TestWorldReplacementUnloadsBeforeActivatingNewWorld) {
+    BOOST_REQUIRE(EventManager::Instance().init());
+
+    WorldGenerationConfig config1;
+    config1.width = 20;
+    config1.height = 20;
+    config1.seed = 13579;
+    config1.elevationFrequency = 0.1f;
+    config1.humidityFrequency = 0.1f;
+    config1.waterLevel = 0.3f;
+    config1.mountainLevel = 0.7f;
+
+    WorldGenerationConfig config2 = config1;
+    config2.seed = 97531;
+
+    BOOST_REQUIRE(worldManager->loadNewWorld(config1));
+    const std::string firstWorldId = worldManager->getCurrentWorldId();
+    BOOST_REQUIRE(!firstWorldId.empty());
+
+    bool sawUnload = false;
+    bool hadNoReplacementWorldDuringUnload = false;
+    bool hadNoActiveResourceWorldDuringUnload = false;
+    const auto token = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::World,
+        [&](const EventData& data) {
+            const auto event =
+                std::dynamic_pointer_cast<WorldUnloadedEvent>(data.event);
+            if (!event || event->getWorldId() != firstWorldId) {
+                return;
+            }
+
+            sawUnload = true;
+            hadNoReplacementWorldDuringUnload =
+                !WorldManager::Instance().hasActiveWorld();
+            hadNoActiveResourceWorldDuringUnload =
+                WorldResourceManager::Instance().getActiveWorld().empty();
+        });
+
+    BOOST_REQUIRE(worldManager->loadNewWorld(config2));
+    BOOST_CHECK(sawUnload);
+    BOOST_CHECK(hadNoReplacementWorldDuringUnload);
+    BOOST_CHECK(hadNoActiveResourceWorldDuringUnload);
+    BOOST_CHECK(worldManager->hasActiveWorld());
+    BOOST_CHECK_NE(firstWorldId, worldManager->getCurrentWorldId());
+
+    EventManager::Instance().removeHandler(token);
+    EventManager::Instance().clean();
+}
+
 BOOST_AUTO_TEST_CASE(TestHarvestablesUseConfiguredHarvestTypes) {
     WorldGenerationConfig config;
     config.width = 40;
@@ -440,6 +529,8 @@ BOOST_AUTO_TEST_CASE(TestMultipleWorldLoads) {
     
     // World IDs should be different
     BOOST_CHECK_NE(firstWorldId, secondWorldId);
+    BOOST_CHECK(!worldResourceManager->hasWorld(firstWorldId));
+    BOOST_CHECK(worldResourceManager->hasWorld(secondWorldId));
 }
 
 BOOST_AUTO_TEST_CASE(TestWorldResourceInitialization) {
@@ -489,7 +580,7 @@ BOOST_AUTO_TEST_CASE(TestWorldResourceInitialization) {
         // Gold ore is rarer than iron, may be 0 in small worlds with few mountains
         BOOST_CHECK_GE(goldQuantity, 0); // Non-negative
     } else {
-        BOOST_WARN_MESSAGE(false, "Gold ore resource handle not found - check resources.json");
+        BOOST_WARN_MESSAGE(false, "Gold ore resource handle not found - check materials.json");
     }
     
     // Get all resources for this world to see what was actually initialized

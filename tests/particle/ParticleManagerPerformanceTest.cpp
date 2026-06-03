@@ -83,8 +83,9 @@ struct ParticleManagerPerformanceFixture {
 
     while (manager->getActiveParticleCount() < targetCount) {
       // Create effects at different positions to spread particles
-      Vector2D position(basePosition.getX() + (effectIds.size() % 10 - 5) * 100,
-                        basePosition.getY() + (effectIds.size() / 10) * 50);
+      const auto effectIndex = static_cast<int>(effectIds.size());
+      Vector2D position(basePosition.getX() + ((effectIndex % 10) - 5) * 100,
+                        basePosition.getY() + (effectIndex / 10) * 50);
 
       uint32_t effectId = manager->playEffect(effectType, position, 1.0f);
       if (effectId != 0) {

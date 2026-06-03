@@ -7,15 +7,11 @@
 #define LOGO_STATE_HPP
 
 #include "gameStates/GameState.hpp"
+#include "gpu/UIRenderBatches.hpp"
 #include <cstdint>
-#include <memory>
 #include <vector>
 
-#include <SDL3_ttf/SDL_ttf.h>
 struct SDL_GPUTexture;
-namespace VoidLight {
-class GPUTexture;
-}
 
 class LogoState : public GameState {
  public:
@@ -57,18 +53,16 @@ class LogoState : public GameState {
   int m_subtitleY{0};
   int m_versionY{0};
 
-  // GPU draw commands for multiple textures (scene rendering)
+  // Scene logo sprite batches.
   struct GPUDrawCommand {
-    std::shared_ptr<VoidLight::GPUTexture> textureOwner{};
     SDL_GPUTexture* texture{nullptr};
-    TTF_ImageType imageType{TTF_IMAGE_INVALID};
     uint32_t vertexOffset{0};
     uint32_t vertexCount{0};
   };
   std::vector<GPUDrawCommand> m_drawCommands;
 
-  // GPU draw commands for UI text (swapchain rendering)
-  std::vector<GPUDrawCommand> m_textDrawCommands;
+  // UI text batches are submitted by GPURenderer during the swapchain pass.
+  std::vector<VoidLight::UITextDrawBatch> m_textDrawBatches;
 };
 
 #endif  // LOGO_STATE_HPP

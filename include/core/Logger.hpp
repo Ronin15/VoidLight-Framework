@@ -400,12 +400,12 @@ public:
 #define COMBAT_INFO(msg) VOIDLIGHT_INFO("CombatController", msg)
 #define COMBAT_DEBUG(msg) VOIDLIGHT_DEBUG("CombatController", msg)
 
-// ItemController logging
-#define ITEM_CRITICAL(msg) VOIDLIGHT_CRITICAL("ItemController", msg)
-#define ITEM_ERROR(msg) VOIDLIGHT_ERROR("ItemController", msg)
-#define ITEM_WARN(msg) VOIDLIGHT_WARN("ItemController", msg)
-#define ITEM_INFO(msg) VOIDLIGHT_INFO("ItemController", msg)
-#define ITEM_DEBUG(msg) VOIDLIGHT_DEBUG("ItemController", msg)
+// InventoryController logging
+#define INVENTORY_CONTROLLER_CRITICAL(msg) VOIDLIGHT_CRITICAL("InventoryController", msg)
+#define INVENTORY_CONTROLLER_ERROR(msg) VOIDLIGHT_ERROR("InventoryController", msg)
+#define INVENTORY_CONTROLLER_WARN(msg) VOIDLIGHT_WARN("InventoryController", msg)
+#define INVENTORY_CONTROLLER_INFO(msg) VOIDLIGHT_INFO("InventoryController", msg)
+#define INVENTORY_CONTROLLER_DEBUG(msg) VOIDLIGHT_DEBUG("InventoryController", msg)
 
 // SocialController logging
 #define SOCIAL_CRITICAL(msg) VOIDLIGHT_CRITICAL("SocialController", msg)

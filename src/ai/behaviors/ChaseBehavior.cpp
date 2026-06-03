@@ -17,71 +17,68 @@ thread_local std::mt19937 s_rng{static_cast<unsigned>(
     std::chrono::steady_clock::now().time_since_epoch().count())};
 
 
-void updateCooldowns(BehaviorData& data, float deltaTime) {
-    auto& chase = data.state.chase;
+void updateCooldowns(VoidLight::ChaseStateData& chase, float deltaTime) {
     if (chase.pathRequestCooldown > 0.0f) chase.pathRequestCooldown -= deltaTime;
     if (chase.stallRecoveryCooldown > 0.0f) chase.stallRecoveryCooldown -= deltaTime;
     if (chase.behaviorChangeCooldown > 0.0f) chase.behaviorChangeCooldown -= deltaTime;
 }
 
-bool canRequestPath(const BehaviorData& data) {
-    const auto& chase = data.state.chase;
+bool canRequestPath(const VoidLight::ChaseStateData& chase) {
     return chase.pathRequestCooldown <= 0.0f && chase.stallRecoveryCooldown <= 0.0f;
 }
 
-void applyPathCooldown(BehaviorData& data, float cooldownSeconds) {
-    data.state.chase.pathRequestCooldown = cooldownSeconds;
+void applyPathCooldown(VoidLight::ChaseStateData& chase, float cooldownSeconds) {
+    chase.pathRequestCooldown = cooldownSeconds;
 }
 
 } // anonymous namespace
 
 namespace Behaviors {
 
-void initChase(size_t edmIndex, const VoidLight::ChaseBehaviorConfig&) {
+void initChase(size_t edmIndex, const VoidLight::ChaseBehaviorConfig&,
+               VoidLight::ChaseStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Chase);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& shared = edm.getBehaviorData(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    auto& chase = data.state.chase;
-
-    chase.isChasing = false;
-    chase.hasLineOfSight = false;
-    chase.timeWithoutSight = 0.0f;
-    chase.pathRequestCooldown = 0.0f;
-    chase.stallRecoveryCooldown = 0.0f;
-    chase.behaviorChangeCooldown = 0.0f;
-    chase.crowdCheckTimer = 0.0f;
-    chase.cachedChaserCount = 0;
-    chase.recalcCounter = 0;
-    chase.stallPositionVariance = 0.0f;
-    chase.unstickTimer = 0.0f;
+    state.isChasing = false;
+    state.hasLineOfSight = false;
+    state.timeWithoutSight = 0.0f;
+    state.pathRequestCooldown = 0.0f;
+    state.stallRecoveryCooldown = 0.0f;
+    state.behaviorChangeCooldown = 0.0f;
+    state.crowdCheckTimer = 0.0f;
+    state.cachedChaserCount = 0;
+    state.recalcCounter = 0;
+    state.stallPositionVariance = 0.0f;
+    state.unstickTimer = 0.0f;
 
     const auto& hotData = edm.getHotDataByIndex(edmIndex);
-    chase.lastKnownTargetPos = hotData.transform.position;
-    chase.currentDirection = Vector2D{0, 0};
-    chase.lastStallPosition = Vector2D{0, 0};
-    chase.hasExplicitTarget = false;
-    chase.explicitTarget = EntityHandle{};
+    state.lastKnownTargetPos = hotData.transform.position;
+    state.currentDirection = Vector2D{0, 0};
+    state.lastStallPosition = Vector2D{0, 0};
+    state.hasExplicitTarget = false;
+    state.explicitTarget = EntityHandle{};
 
-    data.setInitialized(true);
+    shared.setInitialized(true);
 }
 
-void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& config) {
-    if (!ctx.behaviorData.isValid()) return;
+void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& config,
+                  VoidLight::ChaseStateData& chase) {
+    if (!ctx.sharedState.isValid()) return;
 
-    auto& data = ctx.behaviorData;
-    auto& chase = data.state.chase;
+    auto& shared = ctx.sharedState;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i)
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
     {
-        switch (data.pendingMessages[i].messageId)
+        switch (shared.pendingMessages[i].messageId)
         {
             case BehaviorMessage::PANIC:
-                data.pendingMessageCount = 0;
+                shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::ATTACK_TARGET:
@@ -93,13 +90,13 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                 }
                 break;
             case BehaviorMessage::RETREAT:
-                data.pendingMessageCount = 0;
+                shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             default: break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 
     // Emotional modulation: fearful NPCs break off chase
     if (ctx.memoryData.isValid()) {
@@ -119,26 +116,22 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
     float chaseSpeed = config.speedMultiplier * emotionalSpeedMod;
 
     // Crowd analysis cache
-    data.lastCrowdAnalysis += ctx.deltaTime;
+    shared.lastCrowdAnalysis += ctx.deltaTime;
     float crowdCacheInterval = 3.0f + (static_cast<float>(ctx.entityId % 200) * 0.01f);
-    if (data.lastCrowdAnalysis >= crowdCacheInterval) {
+    if (shared.lastCrowdAnalysis >= crowdCacheInterval) {
         constexpr float kCrowdQueryRadius = 80.0f;
         auto& nearbyPositions = AIInternal::GetNearbyPositionBuffer();
         nearbyPositions.clear();
-        data.cachedNearbyCount = AIInternal::GetNearbyEntitiesWithPositions(
+        shared.cachedNearbyCount = AIInternal::GetNearbyEntitiesWithPositions(
             ctx.entityId, ctx.transform.position, kCrowdQueryRadius, nearbyPositions);
 
         if (!nearbyPositions.empty()) {
             Vector2D sum = std::accumulate(nearbyPositions.begin(), nearbyPositions.end(), Vector2D{0, 0});
-            data.cachedClusterCenter = sum * (1.0f / static_cast<float>(nearbyPositions.size()));
+            shared.cachedClusterCenter = sum * (1.0f / static_cast<float>(nearbyPositions.size()));
         }
-        data.lastCrowdAnalysis = 0.0f;
+        shared.lastCrowdAnalysis = 0.0f;
     }
 
-    // Target priority: explicit > lastAttacker (immediate threat) > lastTarget (stale tracking)
-    // lastAttacker must outrank lastTarget because combat-reactive transitions
-    // (Follow, Patrol, Idle, Wander → Chase) only set lastAttacker via recordCombatEvent.
-    // lastTarget may hold a stale reference (e.g., the Follow leader).
     Vector2D entityPos = ctx.transform.position;
     Vector2D targetPos;
     EntityHandle targetHandle{};
@@ -190,7 +183,6 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
             ctx.transform.velocity = Vector2D(0, 0);
             chase.isChasing = false;
             chase.hasLineOfSight = false;
-            // Was actively chasing, target lost — return to passive behavior
             switchBehavior(ctx.edmIndex, BehaviorType::Idle);
         }
         return;
@@ -201,7 +193,6 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
     // Caught target — transition to Attack
     float catchRadiusSq = config.catchRadius * config.catchRadius;
     if (distanceSquared <= catchRadiusSq) {
-        // Preserve target in memory for Attack to pick up
         if (targetHandle.isValid()) {
             ctx.memoryData.lastTarget = targetHandle;
         }
@@ -211,7 +202,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
     float maxRangeSquared = config.maxChaseRange * config.maxChaseRange;
     float minRangeSquared = config.minChaseRange * config.minChaseRange;
 
-    updateCooldowns(data, ctx.deltaTime);
+    updateCooldowns(chase, ctx.deltaTime);
 
     if (distanceSquared <= maxRangeSquared) {
         chase.hasLineOfSight = true;
@@ -241,7 +232,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
             bool stuckOnObstacle = (pathData.progressTimer > 3.0f);
             if (stuckOnObstacle) pathData.clear();
 
-            if ((needsNewPath || stuckOnObstacle) && canRequestPath(data)) {
+            if ((needsNewPath || stuckOnObstacle) && canRequestPath(chase)) {
                 float minRangeCheckSquared = (config.minChaseRange * 1.5f) * (config.minChaseRange * 1.5f);
                 if (distanceSquared < minRangeCheckSquared) {
                     ctx.transform.velocity = Vector2D(0, 0);
@@ -250,7 +241,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
 
                 PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, entityPos, targetPos,
                                                                PathfinderManager::Priority::High);
-                applyPathCooldown(data, config.pathRequestCooldown);
+                applyPathCooldown(chase, config.pathRequestCooldown);
             }
 
             if (pathData.isFollowingPath()) {
@@ -271,7 +262,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
 
                 if (following) {
                     Vector2D direction = toWaypoint / dist;
-                    ctx.transform.velocity = direction * data.moveSpeed * chaseSpeed;
+                    ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
                     pathData.progressTimer = 0.0f;
 
                     chase.crowdCheckTimer += ctx.deltaTime;
@@ -280,24 +271,23 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                     }
 
                     if (chase.cachedChaserCount > 3) {
-                        // Reuse direction (already normalized from toWaypoint/dist above)
                         Vector2D lateral(-direction.getY(), direction.getX());
                         float lateralBias = ((float)(ctx.entityId % 3) - 1.0f) * 15.0f;
                         Vector2D adjustedTarget = targetPos + lateral * lateralBias;
                         Vector2D diff = adjustedTarget - entityPos;
                         float diffLenSq = diff.lengthSquared();
                         if (diffLenSq > 0.001f) {
-                            ctx.transform.velocity = diff * ((data.moveSpeed * chaseSpeed) / std::sqrt(diffLenSq));
+                            ctx.transform.velocity = diff * ((shared.moveSpeed * chaseSpeed) / std::sqrt(diffLenSq));
                         }
                     }
                 } else {
                     Vector2D direction = (targetPos - entityPos).normalized();
-                    ctx.transform.velocity = direction * data.moveSpeed * chaseSpeed;
+                    ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
                     pathData.progressTimer = 0.0f;
                 }
             } else {
                 Vector2D direction = (targetPos - entityPos).normalized();
-                int nearbyCount = data.cachedNearbyCount;
+                int nearbyCount = shared.cachedNearbyCount;
 
                 if (nearbyCount > 1) {
                     Vector2D lateral(-direction.getY(), direction.getX());
@@ -306,7 +296,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                     direction.normalize();
                 }
 
-                ctx.transform.velocity = direction * data.moveSpeed * chaseSpeed;
+                ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
                 pathData.progressTimer = 0.0f;
             }
 
@@ -314,7 +304,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
 
             // Stall detection
             float currentSpeedSq = ctx.transform.velocity.lengthSquared();
-            float stallThreshold = std::max(1.0f, data.moveSpeed * chaseSpeed * config.stallSpeedMultiplier);
+            float stallThreshold = std::max(1.0f, shared.moveSpeed * chaseSpeed * config.stallSpeedMultiplier);
             float stallThresholdSq = stallThreshold * stallThreshold;
             float stallTimeLimit = config.stallTimeout;
 
@@ -329,7 +319,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                     Vector2D dir = (targetPos - entityPos).normalized();
                     float c = std::cos(jitter), s = std::sin(jitter);
                     Vector2D rotated(dir.getX() * c - dir.getY() * s, dir.getX() * s + dir.getY() * c);
-                    ctx.transform.velocity = rotated * data.moveSpeed * chaseSpeed;
+                    ctx.transform.velocity = rotated * shared.moveSpeed * chaseSpeed;
                 }
             } else {
                 pathData.stallTimer = 0.0f;

@@ -10,7 +10,8 @@
 #include <string>
 
 #include "core/Logger.hpp"
-#include "entities/resources/CurrencyAndGameResources.hpp"
+#include "entities/resources/CurrencyResources.hpp"
+#include "entities/resources/EquipmentResources.hpp"
 #include "entities/resources/ItemResources.hpp"
 #include "entities/resources/MaterialResources.hpp"
 #include "managers/ResourceFactory.hpp"
@@ -57,8 +58,8 @@ BOOST_AUTO_TEST_CASE(TestFactoryInitialization) {
   BOOST_CHECK(ResourceFactory::hasCreator("RawResource"));
   BOOST_CHECK(ResourceFactory::hasCreator("Gold"));
   BOOST_CHECK(ResourceFactory::hasCreator("Gem"));
-  BOOST_CHECK(ResourceFactory::hasCreator("Energy"));
-  BOOST_CHECK(ResourceFactory::hasCreator("Mana"));
+  BOOST_CHECK(ResourceFactory::hasCreator("Ammunition"));
+  BOOST_CHECK(ResourceFactory::hasCreator("CraftingCurrency"));
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateEquipmentFromJson) {
@@ -73,9 +74,14 @@ BOOST_AUTO_TEST_CASE(TestCreateEquipmentFromJson) {
         "consumable": false,
         "properties": {
             "slot": "Weapon",
+            "handsRequired": 2,
             "attackBonus": 15,
             "defenseBonus": 2,
             "speedBonus": 0,
+            "weaponMode": "ranged",
+            "attackRange": 375,
+            "projectileSpeed": 280,
+            "ammoTypeRequired": "Arrow",
             "durability": 100,
             "maxDurability": 100
         }
@@ -98,6 +104,43 @@ BOOST_AUTO_TEST_CASE(TestCreateEquipmentFromJson) {
                     static_cast<int>(Equipment::EquipmentSlot::Weapon));
   BOOST_CHECK_EQUAL(equipment->getAttackBonus(), 15);
   BOOST_CHECK_EQUAL(equipment->getDefenseBonus(), 2);
+  BOOST_CHECK_EQUAL(equipment->getHandsRequired(), 2);
+  BOOST_CHECK_EQUAL(static_cast<int>(equipment->getWeaponMode()),
+                    static_cast<int>(Equipment::WeaponMode::Ranged));
+  BOOST_CHECK_CLOSE(equipment->getAttackRangeOverride(), 375.0f, 0.001f);
+  BOOST_CHECK_CLOSE(equipment->getProjectileSpeedOverride(), 280.0f, 0.001f);
+  BOOST_CHECK_EQUAL(equipment->getAmmoTypeRequired(), "Arrow");
+}
+
+BOOST_AUTO_TEST_CASE(TestCreateShieldEquipmentFromJson) {
+  std::string jsonString = R"({
+        "id": "test_shield",
+        "name": "Test Shield",
+        "category": "Item",
+        "type": "Equipment",
+        "description": "A test shield for testing",
+        "value": 100,
+        "maxStackSize": 1,
+        "consumable": false,
+        "properties": {
+            "slot": "Shield",
+            "handsRequired": 1,
+            "attackBonus": 0,
+            "defenseBonus": 15,
+            "durability": 100,
+            "maxDurability": 100
+        }
+    })";
+
+  JsonValue json = parseJson(jsonString);
+  ResourcePtr resource = ResourceFactory::createFromJson(json);
+
+  auto equipment = std::dynamic_pointer_cast<Equipment>(resource);
+  BOOST_REQUIRE(equipment != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(equipment->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Shield));
+  BOOST_CHECK_EQUAL(equipment->getDefenseBonus(), 15);
+  BOOST_CHECK_EQUAL(equipment->getHandsRequired(), 1);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateConsumableFromJson) {
@@ -131,6 +174,33 @@ BOOST_AUTO_TEST_CASE(TestCreateConsumableFromJson) {
                     static_cast<int>(Consumable::ConsumableEffect::HealHP));
   BOOST_CHECK_EQUAL(consumable->getEffectPower(), 50);
   BOOST_CHECK_EQUAL(consumable->getEffectDuration(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestCreateStaminaConsumableFromJson) {
+  std::string jsonString = R"({
+        "id": "test_stamina_drink",
+        "name": "Test Stamina Drink",
+        "category": "Item",
+        "type": "Consumable",
+        "description": "A test stamina drink",
+        "value": 8,
+        "maxStackSize": 10,
+        "consumable": true,
+        "properties": {
+            "effect": "RestoreStamina",
+            "effectPower": 20,
+            "effectDuration": 0
+        }
+    })";
+
+  JsonValue json = parseJson(jsonString);
+  ResourcePtr resource = ResourceFactory::createFromJson(json);
+
+  auto consumable = std::dynamic_pointer_cast<Consumable>(resource);
+  BOOST_REQUIRE(consumable != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(consumable->getEffect()),
+                    static_cast<int>(Consumable::ConsumableEffect::RestoreStamina));
+  BOOST_CHECK_EQUAL(consumable->getEffectPower(), 20);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateQuestItemFromJson) {
@@ -286,19 +356,18 @@ BOOST_AUTO_TEST_CASE(TestCreateGemFromJson) {
   BOOST_CHECK_EQUAL(gem->getClarity(), 8);
 }
 
-BOOST_AUTO_TEST_CASE(TestCreateEnergyFromJson) {
+BOOST_AUTO_TEST_CASE(TestCreateAmmunitionFromJson) {
   std::string jsonString = R"({
-        "id": "test_energy",
-        "name": "Test Energy",
-        "category": "GameResource",
-        "type": "Energy",
-        "description": "Energy for testing",
-        "value": 0,
-        "maxStackSize": 999999,
-        "consumable": false,
+        "id": "test_arrows",
+        "name": "Test Arrows",
+        "category": "Item",
+        "type": "Ammunition",
+        "description": "Ammo for testing",
+        "value": 2,
+        "maxStackSize": 200,
+        "consumable": true,
         "properties": {
-            "regenerationRate": 1.5,
-            "maxEnergy": 200
+            "ammoType": "Arrow"
         }
     })";
 
@@ -306,29 +375,27 @@ BOOST_AUTO_TEST_CASE(TestCreateEnergyFromJson) {
   ResourcePtr resource = ResourceFactory::createFromJson(json);
 
   BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Energy");
+  BOOST_CHECK_EQUAL(resource->getName(), "Test Arrows");
+  BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
+                    static_cast<int>(ResourceCategory::Item));
 
-  // Test that it's actually an Energy object
-  auto energy = std::dynamic_pointer_cast<Energy>(resource);
-  BOOST_REQUIRE(energy != nullptr);
-  BOOST_CHECK_CLOSE(energy->getRegenerationRate(), 1.5f, 0.001f);
-  BOOST_CHECK_EQUAL(energy->getMaxEnergy(), 200);
+  auto ammunition = std::dynamic_pointer_cast<Ammunition>(resource);
+  BOOST_REQUIRE(ammunition != nullptr);
+  BOOST_CHECK_EQUAL(ammunition->getAmmoType(), "Arrow");
 }
 
-BOOST_AUTO_TEST_CASE(TestCreateManaFromJson) {
+BOOST_AUTO_TEST_CASE(TestCreateCraftingCurrencyFromJson) {
   std::string jsonString = R"({
-        "id": "test_mana",
-        "name": "Test Mana",
-        "category": "GameResource",
-        "type": "Mana",
-        "description": "Mana for testing",
+        "id": "test_essence",
+        "name": "Test Essence",
+        "category": "Currency",
+        "type": "CraftingCurrency",
+        "description": "Crafting currency for testing",
         "value": 0,
         "maxStackSize": 10000,
         "consumable": false,
         "properties": {
-            "manaType": "Divine",
-            "regenerationRate": 0.5,
-            "maxMana": 150
+            "exchangeRate": 0.0
         }
     })";
 
@@ -336,15 +403,13 @@ BOOST_AUTO_TEST_CASE(TestCreateManaFromJson) {
   ResourcePtr resource = ResourceFactory::createFromJson(json);
 
   BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Mana");
+  BOOST_CHECK_EQUAL(resource->getName(), "Test Essence");
+  BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
+                    static_cast<int>(ResourceCategory::Currency));
 
-  // Test that it's actually a Mana object
-  auto mana = std::dynamic_pointer_cast<Mana>(resource);
-  BOOST_REQUIRE(mana != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(mana->getManaType()),
-                    static_cast<int>(Mana::ManaType::Divine));
-  BOOST_CHECK_CLOSE(mana->getRegenerationRate(), 0.5f, 0.001f);
-  BOOST_CHECK_EQUAL(mana->getMaxMana(), 150);
+  auto craftingCurrency = std::dynamic_pointer_cast<CraftingCurrency>(resource);
+  BOOST_REQUIRE(craftingCurrency != nullptr);
+  BOOST_CHECK_CLOSE(craftingCurrency->getExchangeRate(), 0.0f, 0.001f);
 }
 
 BOOST_AUTO_TEST_CASE(TestInvalidJsonHandling) {

@@ -1,0 +1,182 @@
+{
+  "resources": [
+    {
+      "id": "super_health_potion",
+      "name": "Super Health Potion",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "A powerful healing potion that can restore significant health instantly.",
+      "value": 150,
+      "maxStackSize": 20,
+      "consumable": true,
+      "textureId": "health_potion_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "effect": "HealHP",
+        "effectPower": 100,
+        "effectDuration": 0
+      }
+    },
+    {
+      "id": "mana_elixir",
+      "name": "Mana Elixir",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "A mystical elixir that restores magical energy.",
+      "value": 120,
+      "maxStackSize": 15,
+      "consumable": true,
+      "textureId": "mana_elixir_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "effect": "RestoreMP",
+        "effectPower": 80,
+        "effectDuration": 0
+      }
+    },
+    {
+      "id": "ancient_key",
+      "name": "Ancient Key",
+      "category": "Item",
+      "type": "QuestItem",
+      "description": "An ornate key that seems to pulse with ancient magic. It might unlock something important.",
+      "value": 0,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "ancient_key_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "questId": "ancient_temple_quest"
+      }
+    },
+    {
+      "id": "mysterious_artifact",
+      "name": "Mysterious Artifact",
+      "category": "Item",
+      "type": "QuestItem",
+      "description": "A strange artifact of unknown origin. Its purpose remains a mystery.",
+      "value": 0,
+      "maxStackSize": 1,
+      "consumable": false,
+      "textureId": "mysterious_artifact_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "questId": ""
+      }
+    },
+    {
+      "id": "health_potion",
+      "name": "Health Potion",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "A basic healing potion that restores health.",
+      "value": 50,
+      "maxStackSize": 50,
+      "consumable": true,
+      "textureId": "health_potion_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "effect": "HealHP",
+        "effectPower": 50,
+        "effectDuration": 0
+      }
+    },
+    {
+      "id": "spectral_arrows",
+      "name": "Spectral Arrows",
+      "category": "Item",
+      "type": "Ammunition",
+      "description": "Arrows imbued with spectral energy that can pierce through magical defenses.",
+      "value": 15,
+      "maxStackSize": 500,
+      "consumable": false,
+      "textureId": "spectral_arrows",
+      "properties": {
+        "ammoType": "Arrow"
+      }
+    },
+    {
+      "id": "arrows",
+      "name": "Arrows",
+      "category": "Item",
+      "type": "Ammunition",
+      "description": "Standard arrows for use with a bow.",
+      "value": 2,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "arrows_icon",
+      "properties": {
+        "ammoType": "Arrow"
+      }
+    },
+    {
+      "id": "bread",
+      "name": "Bread",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "A loaf of fresh bread that restores a small amount of health.",
+      "value": 5,
+      "maxStackSize": 50,
+      "consumable": true,
+      "textureId": "bread_icon",
+      "properties": {
+        "effect": "HealHP",
+        "effectPower": 10,
+        "effectDuration": 0
+      }
+    },
+    {
+      "id": "meat",
+      "name": "Cooked Meat",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "Cooked meat that restores health when eaten.",
+      "value": 15,
+      "maxStackSize": 30,
+      "consumable": true,
+      "textureId": "meat_icon",
+      "properties": {
+        "effect": "HealHP",
+        "effectPower": 25,
+        "effectDuration": 0
+      }
+    },
+    {
+      "id": "ale",
+      "name": "Ale",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "A refreshing mug of ale that restores stamina.",
+      "value": 8,
+      "maxStackSize": 30,
+      "consumable": true,
+      "textureId": "ale_icon",
+      "properties": {
+        "effect": "RestoreStamina",
+        "effectPower": 20,
+        "effectDuration": 0
+      }
+    },
+    {
+      "id": "wine",
+      "name": "Wine",
+      "category": "Item",
+      "type": "Consumable",
+      "description": "A bottle of fine wine that restores stamina.",
+      "value": 25,
+      "maxStackSize": 20,
+      "consumable": true,
+      "textureId": "wine_icon",
+      "properties": {
+        "effect": "RestoreStamina",
+        "effectPower": 20,
+        "effectDuration": 0
+      }
+    }
+  ]
+}

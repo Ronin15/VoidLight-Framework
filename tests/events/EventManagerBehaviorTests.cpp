@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "EventManagerTestAccess.hpp"
-#include "collisions/CollisionInfo.hpp"
 #include "core/ThreadSystem.hpp"
 #include "events/CameraEvent.hpp"
 #include "events/Event.hpp"
@@ -241,16 +240,15 @@ BOOST_AUTO_TEST_CASE(DeferredDispatch_PreservesFIFOOrderAcrossTypes) {
       EventTypeId::Custom, [&callOrder](const EventData &) { callOrder.push_back(1); });
   auto weatherTok = EventManager::Instance().registerHandlerWithToken(
       EventTypeId::Weather, [&callOrder](const EventData &) { callOrder.push_back(2); });
-  auto collisionTok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Collision, [&callOrder](const EventData &) { callOrder.push_back(3); });
+  auto particleTok = EventManager::Instance().registerHandlerWithToken(
+      EventTypeId::ParticleEffect, [&callOrder](const EventData &) { callOrder.push_back(3); });
 
   EventManager::Instance().dispatchEvent(
       std::make_shared<TestEvent>("First"), EventManager::DispatchMode::Deferred);
   EventManager::Instance().changeWeather(
       "Rainy", 1.0f, EventManager::DispatchMode::Deferred);
-  VoidLight::CollisionInfo info{};
-  EventManager::Instance().triggerCollision(
-      info, EventManager::DispatchMode::Deferred);
+  EventManager::Instance().triggerParticleEffect(
+      "Fire", 0, 0, 1.0f, 1.0f, "", EventManager::DispatchMode::Deferred);
 
   EventManager::Instance().update();
 
@@ -261,7 +259,7 @@ BOOST_AUTO_TEST_CASE(DeferredDispatch_PreservesFIFOOrderAcrossTypes) {
 
   EventManager::Instance().removeHandler(customTok);
   EventManager::Instance().removeHandler(weatherTok);
-  EventManager::Instance().removeHandler(collisionTok);
+  EventManager::Instance().removeHandler(particleTok);
 }
 
 BOOST_AUTO_TEST_CASE(PrepareForStateTransition_ClearsCustomHandlersButKeepsBuiltIns) {

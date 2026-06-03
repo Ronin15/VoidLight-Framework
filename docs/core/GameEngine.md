@@ -6,7 +6,7 @@
 
 `GameEngine` coordinates the main loop, display/window state, manager initialization, GameState execution, and the render/present split.
 
-Two current details matter for timing/render docs:
+Rendering and timing details:
 
 - display refresh is propagated into `TimestepManager`
 - VSync is controlled through swapchain present mode
@@ -40,6 +40,8 @@ This does not change the fixed simulation rate. It allows `TimestepManager` to q
 
 ## Rendering
 
+- `getWidthInPixels()` / `getHeightInPixels()` are the authoritative dimensions
+  for swapchain, viewport, scene texture, and UI layout work
 - present pacing happens when the swapchain texture is acquired and the frame command buffer is submitted
 - `GPURenderer` owns swapchain present mode and pass sequencing
 - if the swapchain texture cannot be acquired for a frame, rendering can be skipped cleanly
@@ -61,8 +63,13 @@ On macOS this keeps the GPU path aligned with current display refresh handling, 
 Window/display changes feed back into:
 
 - display refresh propagation to `TimestepManager`
-- logical/viewport updates
+- cached logical window size plus pixel-space viewport/UI updates
 - swapchain-authoritative GPU viewport sizing
+- font DPI refresh on platforms where logical and pixel sizes differ
+
+`setVSyncEnabled(...)` only switches the runtime swapchain present mode. It does
+not save settings; callers that expose a user setting must persist the requested
+value through `SettingsManager`.
 
 ## Related Docs
 

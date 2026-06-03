@@ -14,23 +14,31 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Adaptive Multi-Threading System**
 
-   Hardware-adaptive thread pool with intelligent WorkerBudget batch optimization. Automatically detects logical cores (including SMT/hyperthreading) and reserves one to reduce OS contention. Sequential manager execution gives each system ALL workers during its update window. Priority-based scheduling (5 levels) and adaptive batch sizing help the engine scale cleanly across hardware.
+   Hardware-adaptive thread pool with intelligent WorkerBudget batch optimization. Automatically detects logical cores (including SMT/hyperthreading) and reserves one to reduce OS contention. Sequential manager execution gives each system ALL workers during its update window. Priority-based scheduling and adaptive batch sizing help the engine scale cleanly across hardware.
 
 - **High-Performance AI System**
 
-    Data-Oriented Design with EntityDataManager as single source of truth. Cache-friendly, lock-free, batch-processed AI supports 10K+ entities at 60+ FPS with simulation tiers (Active/Background/Hibernated), rich behaviors, and scalable pathfinding and combat integration.
+    Data-Oriented Design with EntityDataManager as single source of truth. Cache-friendly, lock-free, batch-processed AI supports 10K+ entities at 60+ FPS with simulation tiers (Active/Background/Hibernated), rich behaviors, dense per-behavior state pools, sparse transient sidecars, and scalable pathfinding and combat integration.
 
 - **Robust Event & State Management**  
     
-    Event-driven architecture centered on `EventManager` as the dispatch hub, with deferred event processing, entity/game state machines, and thread-safe manager updates.
+    Event-driven architecture centered on `EventManager` as the dispatch hub, with immediate/deferred dispatch modes, persistent and transient handler lifetimes, pooled hot-path events, merchant/NPC spawn helpers, entity/game state machines, and thread-safe manager updates.
 
 - **Flexible UI System**
 
-    Content-aware auto-sizing, professional theming (light/dark/custom), and rich component library (buttons, labels, input fields, lists, modals, etc.). Responsive layouts with DPI-aware rendering and animation support. Centralized UI constants with resolution-aware scaling (1920×1080 baseline) and event-driven resize handling. Optimized for PC handheld devices (Steam Deck, ROG Ally, OneXPlayer) with automatic baseline resolution scaling down to 1280×720.
+    Content-aware auto-sizing, professional theming (light/dark plus programmatic custom themes), and rich component library (buttons, labels, input fields, lists, modals, etc.). Responsive layouts with DPI-aware rendering and animation support. Centralized UI constants with resolution-aware scaling (1920×1080 baseline) and event-driven resize handling. Optimized for PC handheld devices (Steam Deck, ROG Ally, OneXPlayer) with automatic baseline resolution scaling down to 1280×720.
+
+- **Action-Mapped Input & Menu Navigation**
+
+    Rebindable command system for keyboard, mouse, and controller input with JSON persistence, category-specific binding capture, controller-aware menu focus, shared menu navigation helpers, and a Controls settings tab for player-facing remapping.
 
 - **Data-Driven Resource Management**  
   
-    JSON-based resource loading for items, materials, currency, and gameplay content. Handle-based runtime access keeps systems data-driven, performant, and extensible.
+    JSON-based resource loading for items, equipment, consumables, currency, merchant goods, and gameplay content. Handle-based runtime access and EDM-backed inventories keep systems data-driven, performant, and extensible.
+
+- **Inventory, Equipment & Trading**
+
+    State-scoped inventory and HUD controllers support pickup, gear equip/unequip, inventory slot reordering, hotbar assignment, event-driven inventory refresh, merchant buy/sell UI, relationship-aware pricing, gifts, theft reporting, and NPC memory integration.
 
 - **Fast, Safe Serialization**
   
@@ -38,7 +46,7 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Comprehensive Testing & Analysis**
 
-    74 test executables with Boost.Test framework covering unit, integration, and performance testing. Includes AI+Collision integration tests, GPU rendering tests, SIMD correctness validation, NPC memory coverage, and comprehensive thread safety verification with documented TSAN suppressions. Static analysis (cppcheck, clang-tidy), AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind integration support production-ready quality assurance.
+    80 core source-controlled Boost.Test executables plus 8 GPU-specific test targets covering unit, integration, and performance testing. Includes AI+Collision integration tests, GPU rendering tests, SIMD correctness validation, NPC memory coverage, and comprehensive thread safety verification with documented TSAN suppressions. Static analysis (cppcheck, clang-tidy), AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind integration support production-ready quality assurance.
 
 - **Debug Profiling Tools**
 
@@ -46,7 +54,7 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Release Logging**
 
-    In Release builds, CRITICAL and ERROR messages are written to a timestamped log file. All other levels are compiled out entirely. under the OS user data directory (`~/Library/Application Support/HammerForgedGames/VoidLight_Template/logs/` on macOS, `%APPDATA%\HammerForgedGames\VoidLight_Template\logs\` on Windows, `~/.local/share/HammerForgedGames/VoidLight_Template/logs/` on Linux). Files are named `voidlight_YYYYMMDD_HHMMSS.log` and the 5 most recent are kept automatically. See [Logger](docs/utils/Logger.md) for details.
+    In Release builds, CRITICAL and ERROR messages are written to a timestamped log file. All other levels are compiled out entirely. Log files are written under the OS user data directory (`~/Library/Application Support/HammerForgedGames/VoidLight_Template/logs/` on macOS, `%APPDATA%\HammerForgedGames\VoidLight_Template\logs\` on Windows, `~/.local/share/HammerForgedGames/VoidLight_Template/logs/` on Linux). Files are named `voidlight_YYYYMMDD_HHMMSS.log` and the 5 most recent are kept automatically. See [Logger](docs/utils/Logger.md) for details.
 
 - **Cross-Platform Optimizations**
 
@@ -62,7 +70,7 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Robust Combat System**
 
-    Dedicated combat, harvesting, and social/trading controllers support hit detection, resource gathering, theft/gift flows, and gameplay-specific state transitions without bloating core engine systems.
+    Dedicated combat, harvesting, projectile, inventory, and social/trading controllers support hit detection, knockback, resource gathering, theft/gift flows, and gameplay-specific state transitions without bloating core engine systems.
 
 - **Power Efficient (Race-to-Idle)**
 
@@ -82,10 +90,6 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 ---
 
-**Get started building your next 2D game with a foundation that’s fast, safe, and ready for anything.**
-
----
-
 ## Quick Start
 
 ### Prerequisites
@@ -94,7 +98,7 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 - Platforms: Linux, macOS (Apple Silicon), Windows (MinGW)
 - [SDL3 dependencies](https://wiki.libsdl.org/SDL3/README-linux) (ttf, mixer)
 - Boost (for tests), cppcheck & clang-tidy (static analysis), Valgrind (optional, Linux only)
-- Platform shader tools (required):
+- Platform shader tools (required only when regenerating checked-in shader binaries):
   - Linux: `glslangValidator` for Vulkan SPIR-V shaders
   - macOS: `glslangValidator` + `spirv-cross` for Metal shaders
   - Windows: `glslangValidator` + `spirv-cross` + `dxc` for Direct3D 12 DXIL shaders
@@ -119,7 +123,9 @@ cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja -C build
 ./bin/release/VoidLight_Template # Release build
 ```
 
-> Platform shader tools (see Prerequisites) must be installed for the build to compile shaders.
+When `ccache` is installed, CMake enables it by default for C and C++ compilation. Disable it with `-DUSE_CCACHE=OFF` if you need uncached compiler invocations.
+
+> Platform shader tools are needed to rebuild shader binaries from source. Without them, CMake uses the checked-in shader binaries under `res/shaders/` where available.
 
 **Sanitizer builds** (for debugging memory/thread issues):
 ```bash
@@ -148,31 +154,30 @@ export TSAN_OPTIONS="suppressions=$(pwd)/tests/tsan_suppressions.txt"
 - Static analysis:
   - `cppcheck`: `./tests/test_scripts/run_cppcheck_focused.sh`
     See [tests/cppcheck/README.md](tests/cppcheck/README.md) for more.
-  - `clang-tidy`: `./tests/test_scripts/run_clang_tidy.sh`
+  - `clang-tidy`: `./tests/clang-tidy/clang_tidy_focused.sh`
     See [tests/clang-tidy/README.md](tests/clang-tidy/README.md) for configuration, focused analysis, and full-project analysis details.
 - Memory & thread safety validation: AddressSanitizer (ASAN) and ThreadSanitizer (TSAN) support
   See [docs/core/ThreadSystem.md#threadsanitizer-tsan-support](docs/core/ThreadSystem.md#threadsanitizer-tsan-support) for details
 
-### Valgrind Analysis Suite
-- Comprehensive memory, cache, and thread analysis with Valgrind
-- Quick memory check: `./tests/valgrind/quick_memory_check.sh`
-- Cache performance: `./tests/valgrind/cache_performance_analysis.sh`
-- Function profiling: `./tests/valgrind/callgrind_profiling_analysis.sh`
-- Thread analysis: `./tests/valgrind/thread_safety_check.sh`
-- Full suite: `./tests/valgrind/run_complete_valgrind_suite.sh`
-- **Runtime analysis with Profile build** (Valgrind-compatible optimized):
+### Valgrind Diagnostics
+- Targeted Valgrind diagnostics for deeper heap/lifetime checks and performance profiling
+- Memcheck over high-risk ownership/lifecycle tests: `./tests/valgrind/quick_memory_check.sh`
+- Cachegrind test profiling: `./tests/valgrind/cache_performance_analysis.sh`
+- Callgrind function profiling: `./tests/valgrind/callgrind_profiling_analysis.sh ai`
+- **Runtime diagnostics with Profile build** (Valgrind-compatible optimized):
   ```bash
   cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Profile && ninja -C build
   ./tests/valgrind/runtime_cache_analysis.sh --profile 300   # MPKI analysis
   ./tests/valgrind/runtime_memory_analysis.sh --profile 300  # Memory analysis
   ```
-- See [tests/valgrind/README.md](tests/valgrind/README.md) for details, usage, and performance metrics
+- ASAN/TSAN remain the primary fast memory and race gates; Valgrind is for targeted deeper diagnostics
+- See [tests/valgrind/README.md](tests/valgrind/README.md) for target policy and usage
 
 ---
 
 ## Sprite Atlas Workflow
 
-The repository includes an atlas management tool for extracting sprites, assigning texture IDs, and repacking the atlas and runtime metadata.
+The repository includes an atlas management tool for extracting sprites, assigning texture IDs, and repacking the atlas.
 
 ### Process
 
@@ -183,13 +188,13 @@ python3 tools/atlas_tool.py extract
 # 2. Map extracted sprites to texture IDs
 python3 tools/atlas_tool.py map
 
-# 3. Repack the atlas and export updated JSON data
+# 3. Repack the atlas and update atlas coordinates
 python3 tools/atlas_tool.py pack
 ```
 
 - `extract` pulls sprite regions from `res/img/atlas.png` into `res/sprites/`
-- `map` starts a local browser-based mapper and saves rename mappings to `res/sprites/mappings.json`
-- `pack` applies mappings, rebuilds `atlas.png`, updates `res/data/atlas.json`, exports related JSON metadata, and cleans up temporary sprite files
+- `map` starts a local browser-based mapper and applies sprite renames immediately
+- `pack` rebuilds `res/img/atlas.png`, updates `res/data/atlas.json`, and cleans up temporary sprite files
 
 Use `extract-from` to import sprites from an external image instead of the current atlas:
 
@@ -197,7 +202,7 @@ Use `extract-from` to import sprites from an external image instead of the curre
 python3 tools/atlas_tool.py extract-from path/to/source.png
 ```
 
-For the full workflow, command reference, file locations, and legacy texture mapper details, see [tools/README.md](tools/README.md).
+For the full workflow, command reference, file locations, and seasonal texture generation details, see [tools/README.md](tools/README.md).
 
 ---
 
@@ -210,16 +215,16 @@ For the full workflow, command reference, file locations, and legacy texture map
 - **Collision & Physics:** [CollisionManager](docs/managers/CollisionManager.md)
 - **Entity System:** [Overview](docs/entities/README.md), [EntityHandle](docs/entities/EntityHandle.md), [EntityDataManager](docs/managers/EntityDataManager.md), [BackgroundSimulationManager](docs/managers/BackgroundSimulationManager.md)
 - **Event System:** [Overview](docs/events/EventManager.md), [Quick Reference](docs/events/EventManager_QuickReference.md), [Advanced](docs/events/EventManager_Advanced.md), [TimeEvents](docs/events/TimeEvents.md), [EventFactory](docs/events/EventFactory.md)
-- **Controllers:** [Overview](docs/controllers/README.md), [ControllerRegistry](docs/controllers/ControllerRegistry.md), [WeatherController](docs/controllers/WeatherController.md), [DayNightController](docs/controllers/DayNightController.md), [CombatController](docs/controllers/CombatController.md), [GameplayHUDController](docs/controllers/GameplayHUDController.md), [HarvestController](docs/controllers/HarvestController.md), [SocialController](docs/controllers/SocialController.md)
-- **Managers:** [BackgroundSimulationManager](docs/managers/BackgroundSimulationManager.md), [CollisionManager](docs/managers/CollisionManager.md), [EntityDataManager](docs/managers/EntityDataManager.md), [FontManager](docs/managers/FontManager.md), [ParticleManager](docs/managers/ParticleManager.md), [PathfinderManager](docs/managers/PathfinderManager.md), [ProjectileManager](docs/managers/ProjectileManager.md), [ResourceFactory](docs/managers/ResourceFactory.md), [ResourceTemplateManager](docs/managers/ResourceTemplateManager.md), [SoundManager](docs/managers/SoundManager.md), [TextureManager](docs/managers/TextureManager.md), [WorldManager](docs/managers/WorldManager.md), [WorldResourceManager](docs/managers/WorldResourceManager.md)
+- **Controllers:** [Overview](docs/controllers/README.md), [ControllerRegistry](docs/controllers/ControllerRegistry.md), [WeatherController](docs/controllers/WeatherController.md), [DayNightController](docs/controllers/DayNightController.md), [CombatController](docs/controllers/CombatController.md), [HudController](docs/controllers/HudController.md), [InventoryController](docs/controllers/InventoryController.md), [HarvestController](docs/controllers/HarvestController.md), [SocialController](docs/controllers/SocialController.md)
+- **Managers:** [BackgroundSimulationManager](docs/managers/BackgroundSimulationManager.md), [CollisionManager](docs/managers/CollisionManager.md), [EntityDataManager](docs/managers/EntityDataManager.md), [FontManager](docs/managers/FontManager.md), [InputManager](docs/managers/InputManager.md), [ParticleManager](docs/managers/ParticleManager.md), [PathfinderManager](docs/managers/PathfinderManager.md), [ProjectileManager](docs/managers/ProjectileManager.md), [ResourceFactory](docs/managers/ResourceFactory.md), [ResourceTemplateManager](docs/managers/ResourceTemplateManager.md), [SoundManager](docs/managers/SoundManager.md), [TextureManager](docs/managers/TextureManager.md), [WorldManager](docs/managers/WorldManager.md), [WorldResourceManager](docs/managers/WorldResourceManager.md)
 - **UI:** [UIManager Guide](docs/ui/UIManager_Guide.md), [UIConstants Reference](docs/ui/UIConstants.md), [Auto-Sizing](docs/ui/Auto_Sizing_System.md), [DPI-Aware Fonts](docs/ui/DPI_Aware_Font_System.md), [Minimap Implementation](docs/ui/Minimap_Implementation.md)
 - **GPU Rendering:** [GPU System Overview](docs/gpu/GPURendering.md)
 - **GameStates:** [Overview](docs/gameStates/README.md), [LoadingState](docs/gameStates/LoadingState.md), [SettingsMenuState](docs/gameStates/SettingsMenuState.md), [GameOverState](docs/gameStates/GameOverState.md)
-- **Utilities:** [FrameProfiler](docs/utils/FrameProfiler.md), [Camera](docs/utils/Camera.md), [JsonReader](docs/utils/JsonReader.md), [JSON Resource Loading](docs/utils/JSON_Resource_Loading_Guide.md), [Serialization](docs/utils/SERIALIZATION.md), [ResourceHandle System](docs/utils/ResourceHandle_System.md)
+- **Utilities:** [FrameProfiler](docs/utils/FrameProfiler.md), [Camera](docs/utils/Camera.md), [JsonReader](docs/utils/JsonReader.md), [JSON Resource Loading](docs/utils/JSON_Resource_Loading_Guide.md), [MenuNavigation](docs/utils/MenuNavigation.md), [Serialization](docs/utils/SERIALIZATION.md), [ResourceHandle System](docs/utils/ResourceHandle_System.md)
 - **Architecture:** [Interpolation System](docs/architecture/InterpolationSystem.md)
 - **Performance:** [Power Efficiency](docs/performance/PowerEfficiency.md), [EntityDataManager Power Analysis](docs/performance_reports/power_profile_edm_comparison_2026-01-29.md)
 - **Development:** Repo-wide agent guidance lives in [AGENTS.md](AGENTS.md).
-- **Engine Plans & Issues:** [Camera Refactor Plan](docs/Camera_Refactor_Plan.md), [SDL3 macOS Cleanup Issue](docs/issues/SDL3_MACOS_CLEANUP_ISSUE.md)
+- **Engine Issues:** [SDL3 macOS Cleanup Issue](docs/issues/SDL3_MACOS_CLEANUP_ISSUE.md)
 
 For the full, up-to-date documentation map, see [docs/README.md](docs/README.md).
 

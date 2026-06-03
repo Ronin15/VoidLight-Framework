@@ -24,6 +24,7 @@ class GameStateManager {
   void pushState(GameStateId stateId);
   void popState();
   void changeState(GameStateId stateId);
+  void changeStateClearingStack(GameStateId stateId);
 
   void update(float deltaTime);
   void handleInput();

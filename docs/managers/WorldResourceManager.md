@@ -4,7 +4,7 @@
 
 ## Overview
 
-`WorldResourceManager` is now a registry-over-EDM, not a quantity store.
+`WorldResourceManager` is a registry over EDM data, not a quantity store.
 
 It tracks:
 
@@ -15,11 +15,10 @@ It tracks:
 
 Actual inventory quantities, dropped items, and harvestable state live in `EntityDataManager`.
 
-## What Changed
+## Responsibility Boundary
 
-Old docs describing `addResource()`, `removeResource()`, `setResource()`, and transfer-style quantity mutation are obsolete on this branch.
-
-Current WRM behavior is query and registration focused.
+WRM behavior is query and registration focused. Quantity mutation belongs in EDM
+inventory/resource APIs, not in WRM transfer-style APIs.
 
 ## Core API
 

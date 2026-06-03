@@ -24,6 +24,7 @@
  */
 
 #include "ai/BehaviorConfig.hpp"
+#include "ai/BehaviorStateData.hpp"
 #include "managers/EntityDataManager.hpp"  // For BehaviorType, BehaviorData, PathData, etc.
 #include "managers/EventManager.hpp"       // For EventManager::DeferredEvent
 #include <vector>
@@ -48,7 +49,7 @@ struct BehaviorContext {
     bool playerValid{false};       // Whether player is valid this frame
 
     // Pre-fetched EDM data - avoids repeated Instance() calls in behaviors
-    BehaviorData& behaviorData;      // Guaranteed valid for behavior execution
+    BehaviorData& sharedState;       // Slimmed shared header (flags, moveSpeed, crowd cache, message queue)
     PathData* pathData{nullptr};     // Optional: some behaviors support direct movement fallback
     NPCMemoryData& memoryData;       // Guaranteed valid for NPC behavior execution
     const CharacterData& characterData;  // Guaranteed valid for behavior execution
@@ -65,17 +66,25 @@ struct BehaviorContext {
     // for systems that need absolute time (e.g., MemoryEntry timestamps).
     float gameTime{0.0f};
 
+    // Pre-fetched knockback sidecar — worker threads call knockback.get(edmIndex) for O(1)
+    // presence check without touching EntityDataManager::Instance().
+    // Reference (not pointer) because a BehaviorContext is always constructed with the
+    // process-wide sidecar — null has no meaning here and CLAUDE.md forbids nullable accessors.
+    // Declared last so the initializer list order matches declaration order.
+    SparseSidecar<KnockbackData>& knockback;
+
     BehaviorContext(TransformData& t, EntityHotData& h, EntityHandle::IDType id, size_t idx, float dt,
                     EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
                     BehaviorData& bData, PathData* pData, NPCMemoryData& mData,
                     const CharacterData& cData,
                     float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
-                    float gTime)
+                    float gTime,
+                    SparseSidecar<KnockbackData>& kbSidecar)
         : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt),
           playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid),
-          behaviorData(bData), pathData(pData), memoryData(mData), characterData(cData),
+          sharedState(bData), pathData(pData), memoryData(mData), characterData(cData),
           worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY),
-          worldBoundsValid(wBoundsValid), gameTime(gTime) {}
+          worldBoundsValid(wBoundsValid), gameTime(gTime), knockback(kbSidecar) {}
 };
 
 // ============================================================================
@@ -92,6 +101,7 @@ namespace BehaviorMessage {
     // Attack messages
     constexpr uint8_t ATTACK_TARGET = 1;     // Force attack on explicit target
     constexpr uint8_t RETREAT = 2;           // Allies retreat when nearby attacker retreats
+    constexpr uint8_t RANGED_ATTACK_FAILED = 3;  // Re-evaluate positioning/equipment after ranged failure
 
     // Flee messages
     constexpr uint8_t PANIC = 10;            // Witness lethal combat — force flee
@@ -104,7 +114,29 @@ namespace BehaviorMessage {
     constexpr uint8_t RAISE_ALERT = 22;      // Guard/civilian under attack — force HOSTILE
 }
 
+// ============================================================================
+// KNOCKBACK TUNING CONSTANTS
+// ============================================================================
+
+namespace Knockback {
+    // Number of fixed-timestep frames a knockback impulse is applied.
+    // This is a frame count, not seconds — see EntityHotData::knockbackFrames.
+    inline constexpr int FRAMES = 8;
+    // Per-frame decay factor applied to the knockback impulse components.
+    inline constexpr float DECAY = 0.7f;
+}
+
 namespace Behaviors {
+
+// ============================================================================
+// BEHAVIOR TUNING CONSTANTS
+// ============================================================================
+
+// Seconds since the most recent combat event before an NPC is no longer
+// considered "in combat" for behavior-layer decisions (pathfinding priority,
+// alertness, etc.). Lives here, not on NPCMemoryData: EDM holds state
+// (`lastCombatTime`), policy decisions live in the behavior layer.
+constexpr float COMBAT_TIMEOUT_SECONDS = 5.0f;
 
 // ============================================================================
 // EXECUTION FUNCTIONS (one per behavior type)
@@ -114,57 +146,65 @@ namespace Behaviors {
  * @brief Execute Idle behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Idle behavior configuration
+ * @param state Mutable idle variant state from the dense state pool
  */
-void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config);
+void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config, VoidLight::IdleStateData& state);
 
 /**
  * @brief Execute Wander behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Wander behavior configuration
+ * @param state Mutable wander variant state from the dense state pool
  */
-void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& config);
+void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& config, VoidLight::WanderStateData& state);
 
 /**
  * @brief Execute Chase behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Chase behavior configuration
+ * @param state Mutable chase variant state from the dense state pool
  */
-void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& config);
+void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& config, VoidLight::ChaseStateData& state);
 
 /**
  * @brief Execute Patrol behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Patrol behavior configuration
+ * @param state Mutable patrol variant state from the dense state pool
  */
-void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& config);
+void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& config, VoidLight::PatrolStateData& state);
 
 /**
  * @brief Execute Guard behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Guard behavior configuration
+ * @param state Mutable guard variant state from the dense state pool
  */
-void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& config);
+void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& config, VoidLight::GuardStateData& state);
 
 /**
  * @brief Execute Attack behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Attack behavior configuration
+ * @param state Mutable attack variant state from the dense state pool
  */
-void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& config);
+void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& config, VoidLight::AttackStateData& state);
 
 /**
  * @brief Execute Flee behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Flee behavior configuration
+ * @param state Mutable flee variant state from the dense state pool
  */
-void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& config);
+void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& config, VoidLight::FleeStateData& state);
 
 /**
  * @brief Execute Follow behavior logic
  * @param ctx Pre-populated BehaviorContext with EDM references
  * @param config Follow behavior configuration
+ * @param state Mutable follow variant state from the dense state pool
  */
-void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config);
+void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config, VoidLight::FollowStateData& state);
 
 // ============================================================================
 // INITIALIZATION FUNCTIONS (called when behavior assigned)
@@ -174,71 +214,69 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
  * @brief Initialize Idle behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Idle behavior configuration
+ * @param state Mutable idle state slot from the dense pool (already pushed by reassignBehaviorConfig)
  */
-void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config);
+void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config, VoidLight::IdleStateData& state);
 
 /**
  * @brief Initialize Wander behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Wander behavior configuration
+ * @param state Mutable wander state slot from the dense pool
  */
-void initWander(size_t edmIndex, const VoidLight::WanderBehaviorConfig& config);
+void initWander(size_t edmIndex, const VoidLight::WanderBehaviorConfig& config, VoidLight::WanderStateData& state);
 
 /**
  * @brief Initialize Chase behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Chase behavior configuration
+ * @param state Mutable chase state slot from the dense pool
  */
-void initChase(size_t edmIndex, const VoidLight::ChaseBehaviorConfig& config);
+void initChase(size_t edmIndex, const VoidLight::ChaseBehaviorConfig& config, VoidLight::ChaseStateData& state);
 
 /**
  * @brief Initialize Patrol behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Patrol behavior configuration
+ * @param state Mutable patrol state slot from the dense pool
  */
-void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config);
+void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config, VoidLight::PatrolStateData& state);
 
 /**
  * @brief Initialize Guard behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Guard behavior configuration
+ * @param state Mutable guard state slot from the dense pool
  */
-void initGuard(size_t edmIndex, const VoidLight::GuardBehaviorConfig& config);
+void initGuard(size_t edmIndex, const VoidLight::GuardBehaviorConfig& config, VoidLight::GuardStateData& state);
 
 /**
  * @brief Initialize Attack behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Attack behavior configuration
+ * @param state Mutable attack state slot from the dense pool
  */
-void initAttack(size_t edmIndex, const VoidLight::AttackBehaviorConfig& config);
+void initAttack(size_t edmIndex, const VoidLight::AttackBehaviorConfig& config, VoidLight::AttackStateData& state);
 
 /**
  * @brief Initialize Flee behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Flee behavior configuration
+ * @param state Mutable flee state slot from the dense pool
  */
-void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config);
+void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config, VoidLight::FleeStateData& state);
 
 /**
  * @brief Initialize Follow behavior state in EDM
  * @param edmIndex Entity's index in EDM
  * @param config Follow behavior configuration
+ * @param state Mutable follow state slot from the dense pool
  */
-void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig& config);
+void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig& config, VoidLight::FollowStateData& state);
 
 // ============================================================================
 // MAIN DISPATCHER
 // ============================================================================
-
-/**
- * @brief Execute behavior based on config type (switch dispatch)
- * @param ctx Pre-populated BehaviorContext with EDM references
- * @param configData Behavior configuration with type tag
- *
- * This is the main entry point for behavior execution. It dispatches to
- * the appropriate execute function based on the behavior type.
- */
-void execute(BehaviorContext& ctx, const VoidLight::BehaviorConfigData& configData);
 
 /**
  * @brief Initialize behavior state based on config type (switch dispatch)

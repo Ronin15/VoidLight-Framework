@@ -21,8 +21,8 @@
 static Vector2D getPlayerPosition() {
   // Try to get player position from current game state
   // For now, return center of screen as placeholder
-  return Vector2D(GameEngine::Instance().getLogicalWidth() / 2.0f,
-                  GameEngine::Instance().getLogicalHeight() / 2.0f);
+  return Vector2D(GameEngine::Instance().getWidthInPixels() / 2.0f,
+                  GameEngine::Instance().getHeightInPixels() / 2.0f);
 }
 
 // Random number generation - use thread_local for thread safety

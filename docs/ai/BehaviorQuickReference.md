@@ -1,10 +1,11 @@
 # Behavior Quick Reference
 
-## Current Model
+## Model
 
-- configs live in `BehaviorConfigData`
-- state lives in EDM `BehaviorData`
-- execution uses `Behaviors::execute(...)`
+- configs live in per-variant dense pools on EDM, addressed via `BehaviorConfigRef { type, index }`
+- state lives in per-variant dense pools on EDM, sharing the same index as the config (`get<Variant>State(ref.index)`)
+- `BehaviorData` on EDM holds only shared/cross-behavior fields (no tagged union)
+- the batched hot path iterates `m_activeIndicesBuffer` in a single fused pass (emotional decay + behavior dispatch + SIMD movement), switching on per-entity `ref.type` to call typed executors (`Behaviors::executeWander`, etc.) directly
 - transitions/messages are mediated by `AICommandBus`
 
 ## AIManager Calls
@@ -32,14 +33,15 @@ scanFactionInRadius(...)
 ```cpp
 BehaviorMessage::ATTACK_TARGET
 BehaviorMessage::RETREAT
+BehaviorMessage::RANGED_ATTACK_FAILED
 BehaviorMessage::PANIC
 BehaviorMessage::CALM_DOWN
 BehaviorMessage::DISTRESS
 BehaviorMessage::RAISE_ALERT
 ```
 
-## Do Not Use
+## Unsupported Patterns
 
-- removed clone-based behavior ownership
-- old registration flows built around `registerBehavior(...)`
-- string broadcast helpers from the previous messaging model
+- clone-based behavior ownership
+- registration flows built around `registerBehavior(...)`
+- string broadcast helpers outside `AICommandBus`

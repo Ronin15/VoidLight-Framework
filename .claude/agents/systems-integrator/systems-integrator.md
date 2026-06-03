@@ -1,7 +1,7 @@
 ---
 name: systems-integrator
 description: Cross-system integration designer for SDL3 VoidLight-Framework. Analyzes how managers and controllers interact, designs shared resources, reduces redundancy, and optimizes data flow between AI, collision, pathfinding, and rendering systems. Does NOT run benchmarks (that's quality-engineer).
-model: sonnet
+model: opus
 tools: Read, Glob, Grep, Bash
 ---
 

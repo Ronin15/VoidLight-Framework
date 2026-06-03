@@ -1,0 +1,386 @@
+{
+  "resources": [
+    {
+      "id": "iron_ore",
+      "name": "Iron Ore",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Raw iron ore that can be smelted into iron bars.",
+      "value": 10,
+      "maxStackSize": 20,
+      "consumable": false,
+      "textureId": "iron_ore",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "gold_ore",
+      "name": "Gold Ore",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Precious gold ore that can be smelted into gold bars.",
+      "value": 50,
+      "maxStackSize": 20,
+      "consumable": false,
+      "textureId": "gold_ore",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "copper_ore",
+      "name": "Copper Ore",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Common copper ore that can be smelted into copper bars.",
+      "value": 5,
+      "maxStackSize": 20,
+      "consumable": false,
+      "textureId": "copper_ore",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "mithril_ore",
+      "name": "Mithril Ore",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "A rare and precious metal ore that shimmers with silver light.",
+      "value": 75,
+      "maxStackSize": 15,
+      "consumable": false,
+      "textureId": "mithril_ore",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "limestone",
+      "name": "Limestone",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Rough limestone that can be cut into building stone.",
+      "value": 8,
+      "maxStackSize": 25,
+      "consumable": false,
+      "textureId": "limestone",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "stone",
+      "name": "Stone",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Raw stone useful for construction and basic crafting.",
+      "value": 2,
+      "maxStackSize": 25,
+      "consumable": false,
+      "textureId": "stone",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "coal",
+      "name": "Coal",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Combustible coal used as fuel for smelting.",
+      "value": 5,
+      "maxStackSize": 25,
+      "consumable": false,
+      "textureId": "coal",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "rough_emerald",
+      "name": "Rough Emerald",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "An uncut emerald that can be refined into a precious gem.",
+      "value": 100,
+      "maxStackSize": 10,
+      "consumable": false,
+      "textureId": "rough_emerald",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "rough_ruby",
+      "name": "Rough Ruby",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "An uncut ruby that can be refined into a precious gem.",
+      "value": 120,
+      "maxStackSize": 10,
+      "consumable": false,
+      "textureId": "rough_ruby",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "rough_sapphire",
+      "name": "Rough Sapphire",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "An uncut sapphire that can be refined into a precious gem.",
+      "value": 110,
+      "maxStackSize": 10,
+      "consumable": false,
+      "textureId": "rough_sapphire",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "rough_diamond",
+      "name": "Rough Diamond",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "An uncut diamond that can be refined into a precious gem.",
+      "value": 200,
+      "maxStackSize": 5,
+      "consumable": false,
+      "textureId": "rough_diamond",
+      "properties": {
+        "origin": "Mining"
+      }
+    },
+    {
+      "id": "iron_bar",
+      "name": "Iron Bar",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Smelted iron bar for crafting weapons and armor.",
+      "value": 25,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "iron_bar",
+      "properties": {
+        "componentType": "Metal"
+      }
+    },
+    {
+      "id": "gold_bar",
+      "name": "Gold Bar",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Smelted gold bar for crafting jewelry and decorations.",
+      "value": 150,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "gold_bar",
+      "properties": {
+        "componentType": "Metal"
+      }
+    },
+    {
+      "id": "copper_bar",
+      "name": "Copper Bar",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Smelted copper bar for crafting basic items.",
+      "value": 15,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "copper_bar",
+      "properties": {
+        "componentType": "Metal"
+      }
+    },
+    {
+      "id": "mithril_bar",
+      "name": "Mithril Bar",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Smelted mithril bar for crafting legendary equipment.",
+      "value": 200,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "mithril_bar",
+      "properties": {
+        "componentType": "Metal"
+      }
+    },
+    {
+      "id": "cut_stone",
+      "name": "Cut Stone",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Precisely cut stone blocks for construction.",
+      "value": 20,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "cut_stone",
+      "properties": {
+        "componentType": "Stone"
+      }
+    },
+    {
+      "id": "emerald",
+      "name": "Emerald",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "A brilliant green gemstone, cut and polished.",
+      "value": 300,
+      "maxStackSize": 50,
+      "consumable": false,
+      "textureId": "emerald",
+      "properties": {
+        "componentType": "Gem"
+      }
+    },
+    {
+      "id": "ruby",
+      "name": "Ruby",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "A fiery red gemstone, cut and polished.",
+      "value": 350,
+      "maxStackSize": 50,
+      "consumable": false,
+      "textureId": "ruby",
+      "properties": {
+        "componentType": "Gem"
+      }
+    },
+    {
+      "id": "sapphire",
+      "name": "Sapphire",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "A deep blue gemstone, cut and polished.",
+      "value": 320,
+      "maxStackSize": 50,
+      "consumable": false,
+      "textureId": "sapphire",
+      "properties": {
+        "componentType": "Gem"
+      }
+    },
+    {
+      "id": "diamond",
+      "name": "Diamond",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "A brilliant diamond, the most precious of gems.",
+      "value": 500,
+      "maxStackSize": 50,
+      "consumable": false,
+      "textureId": "diamond",
+      "properties": {
+        "componentType": "Gem"
+      }
+    },
+    {
+      "id": "enchanted_wood",
+      "name": "Enchanted Wood",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Wood from a tree blessed by nature spirits, perfect for magical crafting.",
+      "value": 50,
+      "maxStackSize": 200,
+      "consumable": false,
+      "textureId": "enchanted_wood",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "origin": "Logging"
+      }
+    },
+    {
+      "id": "crystal_essence",
+      "name": "Crystal Essence",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Pure magical essence extracted from elemental crystals.",
+      "value": 200,
+      "maxStackSize": 50,
+      "consumable": false,
+      "textureId": "crystal_essence_world",
+      "numFrames": 2,
+      "animSpeed": 100,
+      "properties": {
+        "componentType": "Essence"
+      }
+    },
+    {
+      "id": "void_silk",
+      "name": "Void Silk",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Silk spun by void spiders, incredibly strong and magically conductive.",
+      "value": 300,
+      "maxStackSize": 25,
+      "consumable": false,
+      "textureId": "void_silk_icon",
+      "properties": {
+        "componentType": "Fabric"
+      }
+    },
+    {
+      "id": "wood",
+      "name": "Wood",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Basic wood logs useful for crafting and construction.",
+      "value": 5,
+      "maxStackSize": 25,
+      "consumable": false,
+      "textureId": "wood_icon",
+      "properties": {
+        "origin": "Logging"
+      }
+    },
+    {
+      "id": "enchanted_stone",
+      "name": "Enchanted Stone",
+      "category": "Material",
+      "type": "CraftingComponent",
+      "description": "Magically reinforced stone used in the construction of mystical buildings.",
+      "value": 25,
+      "maxStackSize": 1000,
+      "consumable": false,
+      "textureId": "enchanted_stone",
+      "properties": {
+        "componentType": "Stone"
+      }
+    },
+    {
+      "id": "wheat",
+      "name": "Wheat",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Harvested wheat that can be milled into flour.",
+      "value": 3,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "wheat_icon",
+      "properties": {
+        "origin": "Harvesting"
+      }
+    },
+    {
+      "id": "vegetables",
+      "name": "Vegetables",
+      "category": "Material",
+      "type": "RawResource",
+      "description": "Fresh vegetables from the farm.",
+      "value": 4,
+      "maxStackSize": 100,
+      "consumable": false,
+      "textureId": "vegetables_icon",
+      "properties": {
+        "origin": "Harvesting"
+      }
+    }
+  ]
+}

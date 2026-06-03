@@ -5,8 +5,9 @@
 #include "gpu/GPUTypes.hpp"
 #include "gpu/GPUTransferBuffer.hpp"
 #include "core/Logger.hpp"
-#include <format>
+#include <cmath>
 #include <cstring>
+#include <format>
 
 namespace VoidLight {
 
@@ -245,6 +246,69 @@ void SpriteBatch::addQuad(float x0, float y0, float x1, float y1,
     v[2] = {x1, y1, u1, v1, r, g, b, a};
     // Vertex 3: bottom-left
     v[3] = {x0, y1, u0, v1, r, g, b, a};
+
+    m_vertexCount += VERTICES_PER_SPRITE;
+    ++m_spriteCount;
+}
+
+void SpriteBatch::drawUVRotated(float u0, float v0, float u1, float v1,
+                                float dstX, float dstY, float dstW, float dstH,
+                                float angleRad,
+                                uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    if (!m_recording) { return; }
+
+    if (m_vertexCount + VERTICES_PER_SPRITE > m_maxVertices) {
+        GAMEENGINE_WARN("SpriteBatch: vertex capacity exceeded");
+        return;
+    }
+    if (m_spriteCount >= MAX_SPRITES) {
+        GAMEENGINE_WARN("SpriteBatch: sprite capacity exceeded");
+        return;
+    }
+
+    // Center in engine Y-down space, then convert to GPU Y-up space
+    float halfW = dstW * 0.5f;
+    float halfH = dstH * 0.5f;
+    float gpuCX = dstX + halfW;
+    float gpuCY = m_targetHeight - (dstY + halfH);
+
+    // Negate angle: engine Y-down clockwise → GPU Y-up
+    float cosA = std::cos(-angleRad);
+    float sinA = std::sin(-angleRad);
+
+    addQuadRotated(gpuCX, gpuCY, halfW, halfH, cosA, sinA,
+                   u0, v0, u1, v1, r, g, b, a);
+}
+
+void SpriteBatch::addQuadRotated(float cx, float cy, float halfW, float halfH,
+                                 float cosA, float sinA,
+                                 float u0, float v0, float u1, float v1,
+                                 uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    if (!m_writePtr) { return; }
+
+    SpriteVertex* v = m_writePtr + m_vertexCount;
+
+    // Corner offsets in GPU Y-up space, matching addQuad() winding:
+    //   0: top-left     (-halfW, +halfH)
+    //   1: top-right    (+halfW, +halfH)
+    //   2: bottom-right (+halfW, -halfH)
+    //   3: bottom-left  (-halfW, -halfH)
+    struct { float dx, dy; } corners[4] = {
+        {-halfW, +halfH},
+        {+halfW, +halfH},
+        {+halfW, -halfH},
+        {-halfW, -halfH},
+    };
+
+    float uvs[4][2] = {
+        {u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}
+    };
+
+    for (int i = 0; i < 4; ++i) {
+        float rx = corners[i].dx * cosA - corners[i].dy * sinA;
+        float ry = corners[i].dx * sinA + corners[i].dy * cosA;
+        v[i] = {cx + rx, cy + ry, uvs[i][0], uvs[i][1], r, g, b, a};
+    }
 
     m_vertexCount += VERTICES_PER_SPRITE;
     ++m_spriteCount;

@@ -8,6 +8,7 @@
 
 #include "entities/Resource.hpp"
 #include "utils/ResourceHandle.hpp"
+#include "utils/TextureSource.hpp"
 #include <atomic>
 #include <mutex>
 #include <shared_mutex>
@@ -71,6 +72,7 @@ public:
   getResourceByName(const std::string &name) const; // O(1) display name lookup
   ResourcePtr
   getResourceById(const std::string &id) const; // O(1) JSON ID lookup
+  TextureSource getIconTextureSource(VoidLight::ResourceHandle handle) const;
   VoidLight::ResourceHandle
   getHandleByName(const std::string &name) const; // O(1) name to handle lookup
   VoidLight::ResourceHandle
@@ -187,7 +189,7 @@ private:
   bool registerResourceTemplateInternal(const ResourcePtr &resource);
 
   // Default resource creation
-  void createDefaultResources();
+  [[nodiscard]] bool createDefaultResources();
 };
 
 #endif // RESOURCE_TEMPLATE_MANAGER_HPP

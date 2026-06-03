@@ -89,8 +89,11 @@ BOOST_AUTO_TEST_CASE(TestEmotionalStateSize) {
 }
 
 BOOST_AUTO_TEST_CASE(TestNPCMemoryDataSize) {
-    // NPCMemoryData should be under 512 bytes
-    BOOST_CHECK(sizeof(NPCMemoryData) <= 512);
+    // NPCMemoryData must be exactly 448 bytes (7 cache lines) — layout locked by DOD discipline.
+    // First 64 B: fields read every frame by every behavior.
+    // Next 64 B: lastTarget — combat behaviors fault one extra line, not multiple.
+    // Remainder: event-driven and Guard-only fields.
+    BOOST_CHECK_EQUAL(sizeof(NPCMemoryData), 448u);
 }
 
 BOOST_AUTO_TEST_CASE(TestMemoryEntryClearing) {
@@ -262,10 +265,32 @@ BOOST_AUTO_TEST_CASE(TestMemoryOverflow) {
     BOOST_CHECK_EQUAL(memData.memoryCount, 10);
     BOOST_CHECK(memData.hasOverflow());
 
-    // Verify overflow exists
-    auto* overflow = edm->getMemoryOverflow(memData.overflowId);
+    // Verify overflow sidecar entry exists, keyed by edmIdx
+    auto* overflow = edm->getMemoryOverflow(index);
     BOOST_CHECK(overflow != nullptr);
     BOOST_CHECK_EQUAL(overflow->extraMemories.size(), 10 - NPCMemoryData::INLINE_MEMORY_COUNT);
+}
+
+BOOST_AUTO_TEST_CASE(TestMemoryOverflowSidecarHasEntry) {
+    auto [handle, index] = createTestNPC();
+    edm->initMemoryData(index);
+
+    // No overflow before inline slots fill
+    auto& memData = edm->getMemoryData(index);
+    BOOST_CHECK(!memData.hasOverflow());
+
+    // Fill inline slots and push one into overflow
+    for (size_t i = 0; i <= NPCMemoryData::INLINE_MEMORY_COUNT; ++i) {
+        MemoryEntry entry;
+        entry.type = MemoryType::WitnessedCombat;
+        entry.timestamp = static_cast<float>(i);
+        entry.flags = MemoryEntry::FLAG_VALID;
+        edm->addMemory(index, entry, true);
+    }
+
+    // FLAG_HAS_OVERFLOW must be set and sidecar must have an entry for this edmIdx
+    BOOST_CHECK(memData.hasOverflow());
+    BOOST_CHECK(edm->getMemoryOverflow(index) != nullptr);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -423,7 +448,7 @@ BOOST_AUTO_TEST_CASE(TestRecordCombatEventReceived) {
     BOOST_CHECK(memData.lastAttacker == attacker);
     BOOST_CHECK(approxEqual(memData.totalDamageReceived, 25.0f));
     BOOST_CHECK_EQUAL(memData.combatEncounters, 1);
-    BOOST_CHECK(memData.isInCombat());
+    BOOST_CHECK(memData.lastCombatTime < Behaviors::COMBAT_TIMEOUT_SECONDS);
 }
 
 BOOST_AUTO_TEST_CASE(TestRecordCombatEventDealt) {
@@ -505,15 +530,14 @@ BOOST_AUTO_TEST_CASE(TestMemoryClearedOnEntityDestruction) {
     }
 
     auto& memData = edm->getMemoryData(index);
-    uint32_t overflowId = memData.overflowId;
     BOOST_CHECK(memData.hasOverflow());
 
     // Destroy the entity
     edm->destroyEntity(handle);
     edm->processDestructionQueue();
 
-    // Overflow should be cleaned up
-    auto* overflow = edm->getMemoryOverflow(overflowId);
+    // Overflow sidecar entry should be cleaned up (keyed by edmIdx)
+    auto* overflow = edm->getMemoryOverflow(index);
     BOOST_CHECK(overflow == nullptr);
 }
 

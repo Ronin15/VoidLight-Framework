@@ -9,47 +9,47 @@
 
 namespace Behaviors {
 
-void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig&) {
+void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig&,
+                VoidLight::FollowStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Follow);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& shared = edm.getBehaviorData(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    auto& follow = data.state.follow;
     auto& hotData = edm.getHotDataByIndex(edmIndex);
 
-    follow.lastTargetPosition = hotData.transform.position;
-    follow.currentVelocity = Vector2D(0, 0);
-    follow.desiredPosition = hotData.transform.position;
-    follow.formationOffset = Vector2D(0, 0);
-    follow.lastSepForce = Vector2D(0, 0);
-    follow.currentSpeed = 0.0f;
-    follow.currentHeading = 0.0f;
-    follow.backoffTimer = 0.0f;
-    follow.formationSlot = -1;
-    follow.isFollowing = false;
-    follow.targetMoving = false;
-    follow.inFormation = false;
-    follow.isStopped = true;
+    state.lastTargetPosition = hotData.transform.position;
+    state.currentVelocity = Vector2D(0, 0);
+    state.desiredPosition = hotData.transform.position;
+    state.formationOffset = Vector2D(0, 0);
+    state.lastSepForce = Vector2D(0, 0);
+    state.currentSpeed = 0.0f;
+    state.currentHeading = 0.0f;
+    state.backoffTimer = 0.0f;
+    state.formationSlot = -1;
+    state.isFollowing = false;
+    state.targetMoving = false;
+    state.inFormation = false;
+    state.isStopped = true;
 
-    data.setInitialized(true);
+    shared.setInitialized(true);
 }
 
-void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config) {
-    if (!ctx.behaviorData.isValid()) return;
+void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config,
+                   VoidLight::FollowStateData& follow) {
+    if (!ctx.sharedState.isValid()) return;
 
-    auto& data = ctx.behaviorData;
-    auto& follow = data.state.follow;
+    auto& shared = ctx.sharedState;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i)
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
     {
-        switch (data.pendingMessages[i].messageId)
+        switch (shared.pendingMessages[i].messageId)
         {
             case BehaviorMessage::PANIC:
-                data.pendingMessageCount = 0;
+                shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::CALM_DOWN:
@@ -61,7 +61,7 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
             case BehaviorMessage::RAISE_ALERT:
                 if (ctx.memoryData.personality.bravery < 0.4f)
                 {
-                    data.pendingMessageCount = 0;
+                    shared.pendingMessageCount = 0;
                     switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                     return;
                 }
@@ -69,7 +69,7 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
             default: break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 
     // Combat reaction: brave+aggressive NPCs fight back, others flee
     if (isUnderRecentAttack(ctx, 2.0f)) {
@@ -189,13 +189,13 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
 
             if (dist > 0.001f) {
                 Vector2D direction = toWaypoint / dist;
-                float speed = data.moveSpeed;
+                float speed = shared.moveSpeed;
 
                 // Speed adjustment based on distance
                 if (distanceToTarget > config.catchupRange) {
-                    speed *= config.catchupSpeedMultiplier;  // Speed up to catch up
+                    speed *= config.catchupSpeedMultiplier;
                 } else if (distanceToTarget < config.followDistance * 0.5f) {
-                    speed *= config.slowdownSpeedMultiplier;  // Slow down when too close
+                    speed *= config.slowdownSpeedMultiplier;
                 }
 
                 ctx.transform.velocity = direction * speed;
@@ -204,28 +204,27 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
         } else {
             // Direct movement fallback
             Vector2D direction = (desiredPos - currentPos).normalized();
-            ctx.transform.velocity = direction * data.moveSpeed;
-            follow.currentSpeed = data.moveSpeed;
+            ctx.transform.velocity = direction * shared.moveSpeed;
+            follow.currentSpeed = shared.moveSpeed;
         }
     } else {
         // No pathData - direct movement
         Vector2D direction = (desiredPos - currentPos).normalized();
-        ctx.transform.velocity = direction * data.moveSpeed;
-        follow.currentSpeed = data.moveSpeed;
+        ctx.transform.velocity = direction * shared.moveSpeed;
+        follow.currentSpeed = shared.moveSpeed;
     }
 
-    // Stall detection
+    // Stall detection — uses shared separationTimer
     float speedSq = ctx.transform.velocity.lengthSquared();
-    float stallThreshold = data.moveSpeed * config.stallSpeedMultiplier;
+    float stallThreshold = shared.moveSpeed * config.stallSpeedMultiplier;
     if (speedSq < stallThreshold * stallThreshold) {
-        data.separationTimer += config.updateInterval;
-        if (data.separationTimer > config.stallTimeout) {
-            // Try to unstick
+        shared.separationTimer += config.updateInterval;
+        if (shared.separationTimer > config.stallTimeout) {
             if (ctx.pathData) ctx.pathData->clear();
-            data.separationTimer = 0.0f;
+            shared.separationTimer = 0.0f;
         }
     } else {
-        data.separationTimer = 0.0f;
+        shared.separationTimer = 0.0f;
     }
 
     follow.currentVelocity = ctx.transform.velocity;

@@ -8,6 +8,10 @@
 
 #include "gameStates/GameState.hpp"
 
+#include <array>
+#include <cstddef>
+#include <string_view>
+
 class MainMenuState : public GameState {
  public:
   bool enter() override;
@@ -24,7 +28,30 @@ class MainMenuState : public GameState {
   bool supportsGPURendering() const override { return true; }
 
  private:
-  // Pure UIManager approach - no UIScreen needed
+  // Keyboard/gamepad navigation — ordered list of focusable buttons, matches
+  // the vertical order on screen. Index wraps on MenuUp/MenuDown.
+  static constexpr std::array<std::string_view, 8> kNavOrder{
+      "mainmenu_start_game_btn",
+      "mainmenu_ai_demo_btn",
+      "mainmenu_advanced_ai_demo_btn",
+      "mainmenu_event_demo_btn",
+      "mainmenu_ui_example_btn",
+      "mainmenu_overlay_demo_btn",
+      "mainmenu_settings_btn",
+      "mainmenu_exit_btn",
+  };
+
+  // Quit-confirm dialog navigation — Cancel first so it is the default focus.
+  static constexpr std::array<std::string_view, 2> kQuitDialogNavOrder{
+      "mainmenu_quit_dialog_cancel_btn",
+      "mainmenu_quit_dialog_yes_btn",
+  };
+
+  size_t m_selectedIndex{0};
+  bool m_quitDialogOpen{false};
+
+  void openQuitDialog();
+  void closeQuitDialog();
 };
 
 #endif  // MAIN_MENU_STATE_HPP

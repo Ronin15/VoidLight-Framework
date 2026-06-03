@@ -4,6 +4,7 @@
  */
 
 #include "entities/Player.hpp"
+#include "ai/BehaviorExecutors.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
 #include "entities/playerStates/PlayerAttackingState.hpp"
@@ -11,6 +12,7 @@
 #include "entities/playerStates/PlayerHurtState.hpp"
 #include "entities/playerStates/PlayerIdleState.hpp"
 #include "entities/playerStates/PlayerRunningState.hpp"
+#include "entities/resources/ItemResources.hpp"
 
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
@@ -22,8 +24,80 @@
 #include "gpu/GPUTypes.hpp"
 
 #include <algorithm>
-#include <cmath>
 #include <format>
+#include <unordered_map>
+#include <vector>
+
+namespace {
+
+using ResourceQuantitySnapshot =
+    std::unordered_map<VoidLight::ResourceHandle, int>;
+
+void addTrackedResource(ResourceQuantitySnapshot& snapshot,
+                        EntityDataManager& edm,
+                        uint32_t inventoryIndex,
+                        VoidLight::ResourceHandle handle) {
+  if (!handle.isValid() || snapshot.contains(handle)) {
+    return;
+  }
+
+  snapshot.emplace(handle, edm.getInventoryQuantity(inventoryIndex, handle));
+}
+
+ResourceQuantitySnapshot collectInventoryResourceSnapshot(
+    EntityDataManager& edm,
+    EntityHandle ownerHandle,
+    uint32_t inventoryIndex,
+    VoidLight::ResourceHandle explicitHandle) {
+  ResourceQuantitySnapshot snapshot;
+  if (!edm.isValidInventoryIndex(inventoryIndex)) {
+    return snapshot;
+  }
+
+  addTrackedResource(snapshot, edm, inventoryIndex, explicitHandle);
+
+  const size_t maxSlots = edm.getInventoryData(inventoryIndex).maxSlots;
+  std::vector<InventorySlotData> slots(maxSlots);
+  const size_t slotCount = edm.getInventorySlots(inventoryIndex, slots);
+  for (size_t i = 0; i < slotCount; ++i) {
+    addTrackedResource(snapshot, edm, inventoryIndex, slots[i].resourceHandle);
+  }
+
+  if (ownerHandle.isValid() && ownerHandle.hasHealth()) {
+    const auto& charData = edm.getCharacterData(ownerHandle);
+    for (const auto& equippedHandle : charData.equippedItems) {
+      addTrackedResource(snapshot, edm, inventoryIndex, equippedHandle);
+    }
+  }
+
+  return snapshot;
+}
+
+bool applyConsumableEffect(Player& player, const Consumable& consumable) {
+  const float power = static_cast<float>(consumable.getEffectPower());
+  switch (consumable.getEffect()) {
+    case Consumable::ConsumableEffect::HealHP:
+      player.heal(power);
+      return true;
+    case Consumable::ConsumableEffect::RestoreStamina:
+      player.restoreStamina(power);
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool isSupportedConsumableEffect(const Consumable& consumable) {
+  switch (consumable.getEffect()) {
+    case Consumable::ConsumableEffect::HealHP:
+    case Consumable::ConsumableEffect::RestoreStamina:
+      return true;
+    default:
+      return false;
+  }
+}
+
+} // namespace
 
 Player::Player() : Entity() {
   // Register with EntityDataManager FIRST - data must exist before any state
@@ -34,6 +108,8 @@ Player::Player() : Entity() {
     EntityHandle handle =
         edm.registerPlayer(getID(), m_initialPosition, 16.0f, 16.0f);
     setHandle(handle);
+    edm.setCharacterBaseStats(handle, 100.0f, 100.0f, 25.0f, 50.0f,
+                              m_movementSpeed);
   }
 
   m_textureID =
@@ -164,6 +240,26 @@ void Player::update(float deltaTime) {
   // getPosition()/getVelocity() to read from EntityDataManager (single source
   // of truth)
   Vector2D currentVel = getVelocity();
+
+  // Apply knockback impulse (decays over multiple frames).
+  // Main-thread: can call EDM directly without going through BehaviorContext.
+  auto& edm = EntityDataManager::Instance();
+  const size_t playerIdx = edm.getIndex(m_handle);
+  if (playerIdx != SIZE_MAX)
+  {
+    if (auto* kb = edm.getKnockback(playerIdx))
+    {
+      currentVel.setX(currentVel.getX() + kb->impulseX);
+      currentVel.setY(currentVel.getY() + kb->impulseY);
+      kb->impulseX *= Knockback::DECAY;
+      kb->impulseY *= Knockback::DECAY;
+      if (--kb->framesRemaining == 0)
+      {
+        edm.clearKnockback(playerIdx);
+      }
+    }
+  }
+
   Vector2D newPos = getPosition() + (currentVel * deltaTime);
 
   // WORLD BOUNDS CONSTRAINT: Clamp player position to stay within world
@@ -325,9 +421,6 @@ void Player::clean() {
     m_inventoryIndex = INVALID_INVENTORY_INDEX;
   }
 
-  // Clear equipped items
-  m_equippedItems.clear();
-
   // Unregister from EntityDataManager
   if (edm.isInitialized()) {
     edm.unregisterEntity(getID());
@@ -369,35 +462,27 @@ void Player::setPosition(const Vector2D &position) {
 void Player::initializeInventory() {
   // Create EDM inventory with 20 slots (forces meaningful inventory decisions)
   auto &edm = EntityDataManager::Instance();
-  m_inventoryIndex = edm.createInventory(20, true);  // 20 slots, world-tracked
+  m_inventoryIndex = edm.createInventory(20, false);  // Player inventory is not world resource storage.
 
   if (m_inventoryIndex == INVALID_INVENTORY_INDEX) {
     PLAYER_ERROR("Failed to create player inventory");
     return;
   }
-
-  // Initialize equipment slots with invalid handles
-  m_equippedItems["weapon"] = VoidLight::ResourceHandle{};
-  m_equippedItems["helmet"] = VoidLight::ResourceHandle{};
-  m_equippedItems["chest"] = VoidLight::ResourceHandle{};
-  m_equippedItems["legs"] = VoidLight::ResourceHandle{};
-  m_equippedItems["boots"] = VoidLight::ResourceHandle{};
-  m_equippedItems["gloves"] = VoidLight::ResourceHandle{};
-  m_equippedItems["ring"] = VoidLight::ResourceHandle{};
-  m_equippedItems["necklace"] = VoidLight::ResourceHandle{};
+  edm.setCharacterInventoryIndex(m_handle, m_inventoryIndex);
 
   // Give player some starting resources using ResourceTemplateManager
   const auto &templateManager = ResourceTemplateManager::Instance();
 
-  auto goldResource = templateManager.getResourceByName("gold");
-  if (goldResource) {
-    m_goldHandle = goldResource->getHandle();  // Cache for gold methods
+  m_goldHandle = templateManager.getHandleById("gold_coins");
+  if (m_goldHandle.isValid()) {
     edm.addToInventory(m_inventoryIndex, m_goldHandle, 100);
+  } else {
+    PLAYER_WARN("Player::initializeInventory - gold_coins resource not found");
   }
 
-  auto healthPotionResource = templateManager.getResourceByName("health_potion");
-  if (healthPotionResource) {
-    edm.addToInventory(m_inventoryIndex, healthPotionResource->getHandle(), 3);
+  const auto healthPotionHandle = templateManager.getHandleById("health_potion");
+  if (healthPotionHandle.isValid()) {
+    edm.addToInventory(m_inventoryIndex, healthPotionHandle, 3);
   }
 
   PLAYER_DEBUG(std::format("Player EDM inventory initialized with index {}", m_inventoryIndex));
@@ -492,96 +577,74 @@ bool Player::hasGold(int amount) const {
   return getGold() >= amount;
 }
 
+float Player::getMovementSpeed() const {
+  if (!hasValidHandle()) {
+    return m_movementSpeed;
+  }
+
+  return EntityDataManager::Instance().getCharacterData(m_handle).moveSpeed;
+}
+
 // Equipment management
 bool Player::equipItem(VoidLight::ResourceHandle itemHandle) {
-  if (m_inventoryIndex == INVALID_INVENTORY_INDEX) {
-    PLAYER_WARN("Player::equipItem - Inventory not initialized");
+  auto& edm = EntityDataManager::Instance();
+  const auto before = collectInventoryResourceSnapshot(
+      edm, m_handle, m_inventoryIndex, itemHandle);
+  const bool result = edm.equipCharacterItem(m_handle, itemHandle);
+  if (!result) {
     return false;
   }
 
-  if (!itemHandle.isValid()) {
-    PLAYER_ERROR("Player::equipItem - Invalid resource handle");
-    return false;
+  const auto after = collectInventoryResourceSnapshot(
+      edm, m_handle, m_inventoryIndex, itemHandle);
+  for (const auto& [handle, oldQuantity] : before) {
+    const auto afterIt = after.find(handle);
+    const int newQuantity =
+        afterIt != after.end() ? afterIt->second : 0;
+    if (oldQuantity != newQuantity) {
+      onResourceChanged(handle, oldQuantity, newQuantity);
+    }
   }
-
-  auto &edm = EntityDataManager::Instance();
-  if (!edm.hasInInventory(m_inventoryIndex, itemHandle, 1)) {
-    PLAYER_WARN(std::format("Player::equipItem - Item not available (handle: {})", itemHandle.toString()));
-    return false;
+  for (const auto& [handle, newQuantity] : after) {
+    if (!before.contains(handle) && newQuantity != 0) {
+      onResourceChanged(handle, 0, newQuantity);
+    }
   }
-
-  const auto &templateManager = ResourceTemplateManager::Instance();
-  auto itemTemplate = templateManager.getResourceTemplate(itemHandle);
-  if (!itemTemplate) {
-    PLAYER_ERROR(std::format("Player::equipItem - Cannot get template for item handle: {}", itemHandle.toString()));
-    return false;
-  }
-
-  // Check if it's equipment
-  if (itemTemplate->getType() != ResourceType::Equipment) {
-    PLAYER_WARN(std::format("Player::equipItem - Item is not equipment (handle: {})", itemHandle.toString()));
-    return false;
-  }
-
-  // Determine equipment slot (simplified - in a real game you'd check
-  // Equipment::EquipmentSlot)
-  std::string slotName =
-      "weapon"; // Default, should be determined from item properties
-
-  // Unequip existing item in that slot
-  if (m_equippedItems[slotName].isValid()) {
-    unequipItem(slotName);
-  }
-
-  // Remove item from inventory and equip it
-  if (edm.removeFromInventory(m_inventoryIndex, itemHandle, 1)) {
-    m_equippedItems[slotName] = itemHandle;
-    PLAYER_DEBUG(std::format("Equipped item (handle: {}) in slot: {}",
-                             itemHandle.toString(), slotName));
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 bool Player::unequipItem(const std::string &slotName) {
-  if (slotName.empty()) {
-    PLAYER_ERROR("Player::unequipItem - Slot name cannot be empty");
+  auto& edm = EntityDataManager::Instance();
+  const VoidLight::ResourceHandle equippedHandle =
+      edm.getEquippedCharacterItem(m_handle, slotName);
+  const auto before = collectInventoryResourceSnapshot(
+      edm, m_handle, m_inventoryIndex, equippedHandle);
+  const bool result = edm.unequipCharacterItem(m_handle, slotName);
+  if (!result) {
     return false;
   }
 
-  auto it = m_equippedItems.find(slotName);
-  if (it == m_equippedItems.end() || !it->second.isValid()) {
-    PLAYER_WARN(std::format(
-        "Player::unequipItem - No item equipped in slot: {}", slotName));
-    return false; // Nothing equipped in this slot
+  const auto after = collectInventoryResourceSnapshot(
+      edm, m_handle, m_inventoryIndex, equippedHandle);
+  for (const auto& [handle, oldQuantity] : before) {
+    const auto afterIt = after.find(handle);
+    const int newQuantity =
+        afterIt != after.end() ? afterIt->second : 0;
+    if (oldQuantity != newQuantity) {
+      onResourceChanged(handle, oldQuantity, newQuantity);
+    }
   }
-
-  VoidLight::ResourceHandle itemHandle = it->second;
-
-  // Try to add back to inventory
-  auto &edm = EntityDataManager::Instance();
-  if (edm.addToInventory(m_inventoryIndex, itemHandle, 1)) {
-    it->second = VoidLight::ResourceHandle{}; // Set to invalid handle
-    PLAYER_DEBUG(std::format("Unequipped item (handle: {}) from slot: {}",
-                             itemHandle.toString(), slotName));
-    return true;
+  for (const auto& [handle, newQuantity] : after) {
+    if (!before.contains(handle) && newQuantity != 0) {
+      onResourceChanged(handle, 0, newQuantity);
+    }
   }
-
-  PLAYER_WARN(std::format("Player::unequipItem - Could not add item back to inventory (handle: {})", itemHandle.toString()));
-  return false;
+  return true;
 }
 
 VoidLight::ResourceHandle
 Player::getEquippedItem(const std::string &slotName) const {
-  if (slotName.empty()) {
-    PLAYER_ERROR("Player::getEquippedItem - Slot name cannot be empty");
-    return VoidLight::ResourceHandle{};
-  }
-
-  auto it = m_equippedItems.find(slotName);
-  return (it != m_equippedItems.end()) ? it->second
-                                       : VoidLight::ResourceHandle{};
+  return EntityDataManager::Instance().getEquippedCharacterItem(m_handle, slotName);
 }
 
 // Crafting and consumption
@@ -615,16 +678,28 @@ bool Player::consumeItem(VoidLight::ResourceHandle itemHandle) {
 
   const auto &templateManager = ResourceTemplateManager::Instance();
   auto itemTemplate = templateManager.getResourceTemplate(itemHandle);
+  if (itemTemplate && itemTemplate->getType() == ResourceType::Ammunition) {
+    PLAYER_WARN(std::format("Player::consumeItem - Ammunition is consumed by weapons only (handle: {})", itemHandle.toString()));
+    return false;
+  }
+
   if (!itemTemplate || !itemTemplate->isConsumable()) {
     PLAYER_WARN(std::format("Player::consumeItem - Item is not consumable (handle: {})", itemHandle.toString()));
     return false;
   }
 
-  // Remove the item and apply its effects
+  const auto consumable = std::dynamic_pointer_cast<Consumable>(itemTemplate);
+  if (!consumable || !isSupportedConsumableEffect(*consumable)) {
+    PLAYER_WARN(std::format("Player::consumeItem - Unsupported consumable effect (handle: {})", itemHandle.toString()));
+    return false;
+  }
+
+  const int oldQuantity = edm.getInventoryQuantity(m_inventoryIndex, itemHandle);
   if (edm.removeFromInventory(m_inventoryIndex, itemHandle, 1)) {
+    applyConsumableEffect(*this, *consumable);
+    onResourceChanged(itemHandle, oldQuantity, oldQuantity - 1);
     PLAYER_DEBUG(
         std::format("Consumed item (handle: {})", itemHandle.toString()));
-    // Here you would apply the item's effects (healing, buffs, etc.)
     return true;
   }
 
@@ -772,13 +847,14 @@ void Player::die() {
 
 void Player::setMaxHealth(float maxHealth) {
   auto &charData = EntityDataManager::Instance().getCharacterData(m_handle);
-  charData.maxHealth = maxHealth;
+  charData.baseMaxHealth = std::max(1.0f, maxHealth);
+  charData.maxHealth = charData.baseMaxHealth;
   charData.health = std::min(charData.health, charData.maxHealth);
 }
 
 void Player::setMaxStamina(float maxStamina) {
   auto &charData = EntityDataManager::Instance().getCharacterData(m_handle);
-  charData.maxStamina = maxStamina;
+  charData.maxStamina = std::max(1.0f, maxStamina);
   charData.stamina = std::min(charData.stamina, charData.maxStamina);
 }
 

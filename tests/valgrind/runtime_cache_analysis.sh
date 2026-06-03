@@ -447,18 +447,11 @@ fi
 case "${OVERALL_ASSESSMENT}" in
     "WORLD_CLASS")
         cat >> "${REPORT_FILE}" << EOF
-🏆 **WORLD-CLASS CACHE PERFORMANCE**
+**EXCELLENT CACHE PERFORMANCE**
 
-The application demonstrates exceptional cache efficiency:
-- Cache miss rates in the top 1% globally
-- Optimal memory access patterns
-- Excellent branch prediction accuracy
-- Production-ready for high-performance scenarios
-
-This level of optimization typically requires:
-- Expert-level performance engineering
-- Careful data structure design
-- Cache-aware algorithm implementation
+This run shows very low cache miss rates and strong branch prediction. Treat it
+as current-run evidence only; compare against project baselines before making
+regression or release claims.
 EOF
         ;;
     "EXCELLENT")
@@ -699,10 +692,30 @@ fi
 
 # Overall assessment with color
 echo -e "${BOLD}Overall Assessment:${NC}"
+RESULT_STATUS="REVIEW"
+RESULT_ACTION="inspect_runtime_cache_report"
+if [[ "${OVERALL_ASSESSMENT}" == "WORLD_CLASS" || "${OVERALL_ASSESSMENT}" == "EXCELLENT" || "${OVERALL_ASSESSMENT}" == "GOOD" ]]; then
+    RESULT_STATUS="PASS"
+    RESULT_ACTION="none"
+elif [[ "${OVERALL_ASSESSMENT}" == "NEEDS_OPTIMIZATION" ]]; then
+    RESULT_STATUS="FAIL"
+    RESULT_ACTION="review_runtime_cache_hotspots"
+elif [[ "${OVERALL_ASSESSMENT}" == "ACCEPTABLE" ]]; then
+    RESULT_ACTION="compare_against_cache_baseline"
+fi
+
+{
+    echo ""
+    echo "## Automated Result"
+    echo ""
+    echo "Result: **${RESULT_STATUS,,}**"
+    echo "Action: **${RESULT_ACTION}**"
+} >> "${REPORT_FILE}"
+
 case "${OVERALL_ASSESSMENT}" in
     "WORLD_CLASS")
-        echo -e "${BOLD}${GREEN}🏆 WORLD-CLASS CACHE PERFORMANCE${NC}"
-        echo -e "${GREEN}Top 1% cache efficiency globally. Production ready!${NC}"
+        echo -e "${BOLD}${GREEN}EXCELLENT CACHE PERFORMANCE${NC}"
+        echo -e "${GREEN}Very low cache miss rates in this run.${NC}"
         ;;
     "EXCELLENT")
         echo -e "${BOLD}${GREEN}🎯 EXCELLENT CACHE PERFORMANCE${NC}"
@@ -721,6 +734,20 @@ case "${OVERALL_ASSESSMENT}" in
         echo -e "${RED}Review cache performance hotspots.${NC}"
         ;;
 esac
+
+case "${RESULT_STATUS}" in
+    "PASS")
+        echo -e "Result: ${GREEN}PASS${NC}"
+        ;;
+    "FAIL")
+        echo -e "Result: ${RED}FAIL${NC}"
+        ;;
+    *)
+        echo -e "Result: ${YELLOW}REVIEW${NC}"
+        ;;
+esac
+echo "Action: ${RESULT_ACTION}"
+echo ""
 
 echo ""
 echo -e "${BOLD}Output Files:${NC}"

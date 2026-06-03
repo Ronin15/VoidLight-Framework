@@ -12,7 +12,8 @@
 #include <vector>
 
 #include "core/Logger.hpp"
-#include "entities/resources/CurrencyAndGameResources.hpp"
+#include "entities/resources/CurrencyResources.hpp"
+#include "entities/resources/EquipmentResources.hpp"
 #include "entities/resources/ItemResources.hpp"
 #include "entities/resources/MaterialResources.hpp"
 #include "managers/ResourceTemplateManager.hpp"
@@ -64,6 +65,148 @@ protected:
 
 BOOST_FIXTURE_TEST_SUITE(ResourceTemplateManagerJsonTestSuite,
                          ResourceTemplateManagerJsonTestFixture)
+
+BOOST_AUTO_TEST_CASE(TestLoadDefaultResources) {
+  auto ironSword = resourceManager->getResourceById("iron_sword");
+  BOOST_REQUIRE(ironSword != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(ironSword->getType()),
+                    static_cast<int>(ResourceType::Equipment));
+
+  auto healthPotion = resourceManager->getResourceById("health_potion");
+  BOOST_REQUIRE(healthPotion != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(healthPotion->getType()),
+                    static_cast<int>(ResourceType::Consumable));
+
+  auto ironArmor = resourceManager->getResourceById("iron_armor");
+  BOOST_REQUIRE(ironArmor != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(ironArmor->getType()),
+                    static_cast<int>(ResourceType::Equipment));
+
+  auto ironOre = resourceManager->getResourceById("iron_ore");
+  BOOST_REQUIRE(ironOre != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(ironOre->getCategory()),
+                    static_cast<int>(ResourceCategory::Material));
+
+  auto goldCoins = resourceManager->getResourceById("gold_coins");
+  BOOST_REQUIRE(goldCoins != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(goldCoins->getCategory()),
+                    static_cast<int>(ResourceCategory::Currency));
+
+  auto ale = std::dynamic_pointer_cast<Consumable>(
+      resourceManager->getResourceById("ale"));
+  BOOST_REQUIRE(ale != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(ale->getEffect()),
+                    static_cast<int>(Consumable::ConsumableEffect::RestoreStamina));
+
+  auto bread = std::dynamic_pointer_cast<Consumable>(
+      resourceManager->getResourceById("bread"));
+  BOOST_REQUIRE(bread != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(bread->getEffect()),
+                    static_cast<int>(Consumable::ConsumableEffect::HealHP));
+
+  auto meat = std::dynamic_pointer_cast<Consumable>(
+      resourceManager->getResourceById("meat"));
+  BOOST_REQUIRE(meat != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(meat->getEffect()),
+                    static_cast<int>(Consumable::ConsumableEffect::HealHP));
+
+  auto wine = std::dynamic_pointer_cast<Consumable>(
+      resourceManager->getResourceById("wine"));
+  BOOST_REQUIRE(wine != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(wine->getEffect()),
+                    static_cast<int>(Consumable::ConsumableEffect::RestoreStamina));
+
+  auto woodenSword = std::dynamic_pointer_cast<Equipment>(
+      resourceManager->getResourceById("wooden_sword"));
+  BOOST_REQUIRE(woodenSword != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(woodenSword->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Weapon));
+  BOOST_CHECK_EQUAL(woodenSword->getIconTextureId(), "default");
+  BOOST_CHECK_EQUAL(woodenSword->getAttackBonus(), 3);
+
+  auto woodenShield = std::dynamic_pointer_cast<Equipment>(
+      resourceManager->getResourceById("wooden_shield"));
+  BOOST_REQUIRE(woodenShield != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(woodenShield->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Shield));
+  BOOST_CHECK_EQUAL(woodenShield->getIconTextureId(), "default");
+  BOOST_CHECK_EQUAL(woodenShield->getDefenseBonus(), 4);
+
+  auto oldShirt = std::dynamic_pointer_cast<Equipment>(
+      resourceManager->getResourceById("old_shirt"));
+  BOOST_REQUIRE(oldShirt != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(oldShirt->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Chest));
+  BOOST_CHECK_EQUAL(oldShirt->getIconTextureId(), "default");
+
+  auto oldPants = std::dynamic_pointer_cast<Equipment>(
+      resourceManager->getResourceById("old_pants"));
+  BOOST_REQUIRE(oldPants != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(oldPants->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Legs));
+  BOOST_CHECK_EQUAL(oldPants->getIconTextureId(), "default");
+
+  auto wornBoots = std::dynamic_pointer_cast<Equipment>(
+      resourceManager->getResourceById("worn_boots"));
+  BOOST_REQUIRE(wornBoots != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(wornBoots->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Boots));
+  BOOST_CHECK_EQUAL(wornBoots->getIconTextureId(), "default");
+
+  auto clothGloves = std::dynamic_pointer_cast<Equipment>(
+      resourceManager->getResourceById("cloth_gloves"));
+  BOOST_REQUIRE(clothGloves != nullptr);
+  BOOST_CHECK_EQUAL(static_cast<int>(clothGloves->getEquipmentSlot()),
+                    static_cast<int>(Equipment::EquipmentSlot::Gloves));
+  BOOST_CHECK_EQUAL(clothGloves->getIconTextureId(), "default");
+
+  BOOST_CHECK_EQUAL(resourceManager->getResourceTemplateCount(), 64U);
+}
+
+BOOST_AUTO_TEST_CASE(TestUnmappedResourceTexturesDoNotSampleDefaultAtlasTile) {
+  auto healthPotion = resourceManager->getResourceById("health_potion");
+  BOOST_REQUIRE(healthPotion != nullptr);
+  BOOST_CHECK_GT(healthPotion->getAtlasW(), 0);
+  BOOST_CHECK_GT(healthPotion->getAtlasH(), 0);
+
+  auto bow = resourceManager->getResourceById("bow");
+  BOOST_REQUIRE(bow != nullptr);
+  BOOST_CHECK_EQUAL(bow->getIconTextureId(), "bow_icon");
+  BOOST_CHECK_EQUAL(bow->getAtlasW(), 0);
+  BOOST_CHECK_EQUAL(bow->getAtlasH(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestIconTextureSourceResolvesCanonicalResourceIcon) {
+  auto healthPotion = resourceManager->getResourceById("health_potion");
+  BOOST_REQUIRE(healthPotion != nullptr);
+  const TextureSource healthPotionSource =
+      resourceManager->getIconTextureSource(healthPotion->getHandle());
+  BOOST_CHECK_EQUAL(healthPotionSource.textureId, "atlas");
+  BOOST_CHECK(healthPotionSource.useSourceRect);
+  BOOST_CHECK_EQUAL(healthPotionSource.sourceX, healthPotion->getAtlasX());
+  BOOST_CHECK_EQUAL(healthPotionSource.sourceY, healthPotion->getAtlasY());
+  BOOST_CHECK_EQUAL(healthPotionSource.sourceW, healthPotion->getAtlasW());
+  BOOST_CHECK_EQUAL(healthPotionSource.sourceH, healthPotion->getAtlasH());
+
+  auto bow = resourceManager->getResourceById("bow");
+  BOOST_REQUIRE(bow != nullptr);
+  const TextureSource bowSource =
+      resourceManager->getIconTextureSource(bow->getHandle());
+  BOOST_CHECK_EQUAL(bowSource.textureId, "bow_icon");
+  BOOST_CHECK(!bowSource.useSourceRect);
+
+  auto oldShirt = resourceManager->getResourceById("old_shirt");
+  BOOST_REQUIRE(oldShirt != nullptr);
+  const TextureSource oldShirtSource =
+      resourceManager->getIconTextureSource(oldShirt->getHandle());
+  BOOST_CHECK_EQUAL(oldShirtSource.textureId, "default");
+  BOOST_CHECK(!oldShirtSource.useSourceRect);
+
+  const TextureSource missingSource =
+      resourceManager->getIconTextureSource(VoidLight::ResourceHandle{});
+  BOOST_CHECK(missingSource.isEmpty());
+  BOOST_CHECK(!missingSource.useSourceRect);
+}
 
 BOOST_AUTO_TEST_CASE(TestLoadValidJsonString) {
   std::string jsonString = R"({
@@ -189,11 +332,11 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonFile) {
   // the same file again (duplicate name detection should handle this
   // gracefully).
 
-  // Test loading from the project's existing resources.json file
+  // Test loading from the project's existing items.json file
   std::vector<std::filesystem::path> candidatePaths;
 
   // Try multiple potential working directories and path combinations
-  std::filesystem::path itemsFile = "resources.json";
+  std::filesystem::path itemsFile = "items.json";
   std::vector<std::filesystem::path> basePaths = {
       std::filesystem::current_path() / ".." / ".." / "res" /
           "data",                                       // From bin/debug/
@@ -315,6 +458,33 @@ BOOST_AUTO_TEST_CASE(TestLoadInvalidResourceData) {
   BOOST_CHECK_EQUAL(newCount, initialCount);
 }
 
+BOOST_AUTO_TEST_CASE(TestLoadGeneratesDeterministicIdsFromNames) {
+  std::string jsonString = R"({
+        "resources": [
+            {
+                "name": "Runtime Generated ID",
+                "category": "Item",
+                "type": "Consumable",
+                "description": "No authored id",
+                "value": 5,
+                "maxStackSize": 3,
+                "consumable": true
+            }
+        ]
+    })";
+
+  const size_t initialCount = resourceManager->getResourceTemplateCount();
+  BOOST_REQUIRE(resourceManager->loadResourcesFromJsonString(jsonString));
+  BOOST_CHECK_EQUAL(resourceManager->getResourceTemplateCount(), initialCount + 1);
+
+  const auto generatedHandle =
+      resourceManager->getHandleById("runtime_generated_id");
+  BOOST_REQUIRE(generatedHandle.isValid());
+  auto generated = resourceManager->getResourceTemplate(generatedHandle);
+  BOOST_REQUIRE(generated != nullptr);
+  BOOST_CHECK_EQUAL(generated->getName(), "Runtime Generated ID");
+}
+
 BOOST_AUTO_TEST_CASE(TestLoadNonExistentFile) {
   // Test loading from a file that doesn't exist
   std::string nonExistentFile = "../../non_existent_file.json";
@@ -353,7 +523,7 @@ BOOST_AUTO_TEST_CASE(TestLoadDuplicateResources) {
   BOOST_REQUIRE(resource1 != nullptr);
   BOOST_CHECK_EQUAL(resource1->getName(), "First Version");
 
-  // Second load with same ID (should fail to register)
+  // Second load with same ID should fail before mutating indexes.
   std::string jsonString2 = R"({
         "resources": [
             {
@@ -370,21 +540,18 @@ BOOST_AUTO_TEST_CASE(TestLoadDuplicateResources) {
     })";
 
   bool result2 = resourceManager->loadResourcesFromJsonString(jsonString2);
-  BOOST_CHECK(result2); // Should succeed - different resources can have same ID
-                        // but different handles
+  BOOST_CHECK(!result2);
 
-  // Both resources should now exist with different names and handles
+  // The first resource remains, and the duplicate did not partially register.
   auto firstHandle = findResourceByName(resourceManager, "First Version");
   BOOST_REQUIRE(firstHandle.isValid());
   auto firstResource = resourceManager->getResourceTemplate(firstHandle);
   BOOST_REQUIRE(firstResource != nullptr);
   BOOST_CHECK_EQUAL(firstResource->getName(), "First Version");
+  BOOST_CHECK(resourceManager->getHandleById("duplicate_test") == firstHandle);
 
   auto secondHandle = findResourceByName(resourceManager, "Second Version");
-  BOOST_REQUIRE(secondHandle.isValid());
-  auto secondResource = resourceManager->getResourceTemplate(secondHandle);
-  BOOST_REQUIRE(secondResource != nullptr);
-  BOOST_CHECK_EQUAL(secondResource->getName(), "Second Version");
+  BOOST_CHECK(!secondHandle.isValid());
 }
 
 BOOST_AUTO_TEST_CASE(TestLoadResourcesStatistics) {

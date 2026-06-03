@@ -16,8 +16,7 @@ thread_local std::mt19937 s_rng{std::random_device{}()};
 thread_local std::uniform_real_distribution<float> s_angleDistribution{0.0f, 2.0f * static_cast<float>(M_PI)};
 thread_local std::uniform_int_distribution<uint64_t> s_delayDistribution{0, 5000};
 
-void updateTimers(BehaviorData& data, float deltaTime, PathData* pathData) {
-    auto& wander = data.state.wander;
+void updateTimers(VoidLight::WanderStateData& wander, float deltaTime, PathData* pathData) {
     wander.directionChangeTimer += deltaTime;
     wander.lastDirectionFlip += deltaTime;
     wander.stallTimer += deltaTime;
@@ -32,37 +31,33 @@ void updateTimers(BehaviorData& data, float deltaTime, PathData* pathData) {
     }
 }
 
-bool handleStartDelay(BehaviorContext& ctx) {
-    auto& data = ctx.behaviorData;
-    auto& wander = data.state.wander;
+bool handleStartDelay(BehaviorContext& ctx, VoidLight::WanderStateData& wander) {
     if (wander.movementStarted) return true;
 
     if (wander.directionChangeTimer < wander.startDelay) return false;
 
     wander.movementStarted = true;
-    ctx.transform.velocity = wander.currentDirection * data.moveSpeed;
+    ctx.transform.velocity = wander.currentDirection * ctx.sharedState.moveSpeed;
     return true;
 }
 
-float calculateMoveDistance(BehaviorData& data, const Vector2D& position,
-                           float baseDistance, const VoidLight::WanderBehaviorConfig& config) {
-    int nearbyCount = data.cachedNearbyCount;
-    auto& wander = data.state.wander;
+float calculateMoveDistance(BehaviorData& shared, VoidLight::WanderStateData& wander,
+                            const Vector2D& position, float baseDistance,
+                            const VoidLight::WanderBehaviorConfig& config) {
+    int nearbyCount = shared.cachedNearbyCount;
     float moveDistance = baseDistance;
 
     if (nearbyCount > config.crowdEscapeThreshold) {
         moveDistance = baseDistance * config.crowdEscapeDistanceMultiplier;
         if (nearbyCount > 0) {
-            Vector2D escapeDirection = (position - data.cachedClusterCenter).normalized();
+            Vector2D escapeDirection = (position - shared.cachedClusterCenter).normalized();
             float randomOffset = (nearbyCount % 60 - 30) * 0.01f;
             escapeDirection.setX(escapeDirection.getX() + randomOffset);
             escapeDirection.setY(escapeDirection.getY() + randomOffset);
-            // Skip re-normalize: small offset barely changes unit-length vector
             wander.currentDirection = escapeDirection;
         }
     } else if (nearbyCount > 5) {
         moveDistance = baseDistance * 2.0f;
-        // Direction is already normalized from init or prior normalization
     } else if (nearbyCount > 2) {
         moveDistance = baseDistance * 1.3f;
     }
@@ -70,14 +65,13 @@ float calculateMoveDistance(BehaviorData& data, const Vector2D& position,
     return moveDistance;
 }
 
-void applyBoundaryAvoidance(BehaviorData& data, const Vector2D& position,
+void applyBoundaryAvoidance(VoidLight::WanderStateData& wander, const Vector2D& position,
                             const VoidLight::WanderBehaviorConfig& config,
                             const BehaviorContext& ctx) {
     if (!ctx.worldBoundsValid) {
         return;
     }
 
-    auto& wander = data.state.wander;
     const float EDGE_THRESHOLD = config.edgeThreshold;
     Vector2D boundaryForce(0, 0);
 
@@ -98,7 +92,6 @@ void applyBoundaryAvoidance(BehaviorData& data, const Vector2D& position,
     }
 
     if (boundaryForce.lengthSquared() > 0.01f) {
-        // Blend direction toward boundary force without double-normalize
         Vector2D blended = wander.currentDirection * 0.4f + boundaryForce * 0.6f;
         float lenSq = blended.lengthSquared();
         if (lenSq > 0.0001f) {
@@ -143,24 +136,23 @@ void handlePathfinding(const BehaviorContext& ctx, const Vector2D& dest,
     }
 }
 
-void chooseNewDirection(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&) {
-    auto& data = ctx.behaviorData;
-    auto& wander = data.state.wander;
+void chooseNewDirection(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
+                        const VoidLight::WanderBehaviorConfig&) {
     float angle = s_angleDistribution(s_rng);
     wander.currentDirection = Vector2D(std::cos(angle), std::sin(angle));
     if (wander.movementStarted) {
-        ctx.transform.velocity = wander.currentDirection * data.moveSpeed;
+        ctx.transform.velocity = wander.currentDirection * ctx.sharedState.moveSpeed;
     }
 }
 
-void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& wander = data.state.wander;
+void handleMovement(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
+                    const VoidLight::WanderBehaviorConfig& config) {
+    auto& shared = ctx.sharedState;
     float baseDistance = config.baseGoalDistance;
     Vector2D position = ctx.transform.position;
 
-    float moveDistance = calculateMoveDistance(data, position, baseDistance, config);
-    applyBoundaryAvoidance(data, position, config, ctx);
+    float moveDistance = calculateMoveDistance(shared, wander, position, baseDistance, config);
+    applyBoundaryAvoidance(wander, position, config, ctx);
 
     Vector2D dest = position + wander.currentDirection * moveDistance;
 
@@ -171,8 +163,6 @@ void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&
         float minY = ctx.worldMinY + MARGIN;
         float maxY = ctx.worldMaxY - MARGIN;
 
-        // Small worlds can be narrower than 2*MARGIN; collapse to center instead
-        // of passing inverted bounds to std::clamp (debug STL asserts on Windows).
         if (maxX < minX) {
             minX = (ctx.worldMinX + ctx.worldMaxX) * 0.5f;
             maxX = minX;
@@ -189,7 +179,7 @@ void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&
     handlePathfinding(ctx, dest, config);
 
     if (!ctx.pathData) {
-        ctx.transform.velocity = wander.currentDirection * data.moveSpeed;
+        ctx.transform.velocity = wander.currentDirection * shared.moveSpeed;
         return;
     }
     auto& pathData = *ctx.pathData;
@@ -211,21 +201,21 @@ void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&
 
         if (dist > 0.001f) {
             Vector2D direction = toWaypoint / dist;
-            ctx.transform.velocity = direction * data.moveSpeed;
+            ctx.transform.velocity = direction * shared.moveSpeed;
         }
     } else {
-        ctx.transform.velocity = wander.currentDirection * data.moveSpeed;
+        ctx.transform.velocity = wander.currentDirection * shared.moveSpeed;
     }
 
     float speedSq = ctx.transform.velocity.lengthSquared();
-    const float stallSpeed = std::max(config.stallSpeed, data.moveSpeed * 0.5f);
+    const float stallSpeed = std::max(config.stallSpeed, shared.moveSpeed * 0.5f);
     const float stallSpeedSq = stallSpeed * stallSpeed;
     const float stallSeconds = config.stallTimeout;
 
     if (speedSq < stallSpeedSq) {
         if (wander.stallTimer >= stallSeconds) {
             pathData.clear();
-            chooseNewDirection(ctx, config);
+            chooseNewDirection(ctx, wander, config);
             pathData.pathRequestCooldown = 0.6f;
             wander.stallTimer = 0.0f;
             return;
@@ -236,11 +226,12 @@ void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&
 
     float changeIntervalSeconds = config.changeDirectionIntervalMin / 1000.0f;
     if (wander.directionChangeTimer >= changeIntervalSeconds) {
-        chooseNewDirection(ctx, config);
+        chooseNewDirection(ctx, wander, config);
         wander.directionChangeTimer = 0.0f;
     }
 
-    const float jitterThresholdSq = (data.moveSpeed * config.jitterThresholdMultiplier) * (data.moveSpeed * config.jitterThresholdMultiplier);
+    const float jitterThresholdSq = (shared.moveSpeed * config.jitterThresholdMultiplier) *
+                                    (shared.moveSpeed * config.jitterThresholdMultiplier);
     if (speedSq < jitterThresholdSq && speedSq >= stallSpeedSq) {
         float jitter = (s_angleDistribution(s_rng) - static_cast<float>(M_PI)) * 0.1f;
         Vector2D dir = wander.currentDirection;
@@ -249,11 +240,11 @@ void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&
         if (rotated.lengthSquared() > 0.000001f) {
             rotated.normalize();
             wander.currentDirection = rotated;
-            ctx.transform.velocity = wander.currentDirection * data.moveSpeed;
+            ctx.transform.velocity = wander.currentDirection * shared.moveSpeed;
         }
     }
 
-    int nearbyCount = data.cachedNearbyCount;
+    int nearbyCount = shared.cachedNearbyCount;
     if (nearbyCount > 5) {
         float slowdownMultiplier = (nearbyCount > 10) ? config.crowdSlowdownHeavy : config.crowdSlowdownLight;
         ctx.transform.velocity = ctx.transform.velocity * slowdownMultiplier;
@@ -266,56 +257,52 @@ void handleMovement(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig&
 
 namespace Behaviors {
 
-void initWander(size_t edmIndex, const VoidLight::WanderBehaviorConfig&) {
-    // Config used in executeWander(), not needed for state initialization
-
+void initWander(size_t edmIndex, const VoidLight::WanderBehaviorConfig&,
+                VoidLight::WanderStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Wander);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& shared = edm.getBehaviorData(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    auto& wander = data.state.wander;
-
-    wander.directionChangeTimer = 0.0f;
-    wander.lastDirectionFlip = 0.0f;
-    wander.startDelay = s_delayDistribution(s_rng) / 1000.0f;
-    wander.movementStarted = false;
-    wander.stallTimer = 0.0f;
-    wander.lastStallPosition = Vector2D{0, 0};
-    wander.stallPositionVariance = 0.0f;
-    wander.unstickTimer = 0.0f;
-    wander.movementUpdateTimer = 0.0f;  // First update runs immediately
+    state.directionChangeTimer = 0.0f;
+    state.lastDirectionFlip = 0.0f;
+    state.startDelay = s_delayDistribution(s_rng) / 1000.0f;
+    state.movementStarted = false;
+    state.stallTimer = 0.0f;
+    state.lastStallPosition = Vector2D{0, 0};
+    state.stallPositionVariance = 0.0f;
+    state.unstickTimer = 0.0f;
+    state.movementUpdateTimer = 0.0f;
 
     float angle = s_angleDistribution(s_rng);
-    wander.currentDirection = Vector2D(std::cos(angle), std::sin(angle));
-    wander.previousVelocity = Vector2D{0, 0};
+    state.currentDirection = Vector2D(std::cos(angle), std::sin(angle));
+    state.previousVelocity = Vector2D{0, 0};
 
-    data.setInitialized(true);
+    shared.setInitialized(true);
 }
 
-void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    if (!data.isValid()) return;
+void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& config,
+                   VoidLight::WanderStateData& state) {
+    auto& shared = ctx.sharedState;
+    if (!shared.isValid()) return;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i) {
-        switch (data.pendingMessages[i].messageId) {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        switch (shared.pendingMessages[i].messageId) {
             case BehaviorMessage::PANIC:
-                // Panic overrides everything — flee regardless of bravery
-                data.pendingMessageCount = 0;
+                shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::CALM_DOWN:
-                // Clear fear so NPC doesn't re-trigger flee from residual emotion
                 if (ctx.memoryData.isValid()) {
                     ctx.memoryData.emotions.fear = std::max(0.0f, ctx.memoryData.emotions.fear - 0.5f);
                 }
                 break;
             case BehaviorMessage::RAISE_ALERT:
                 if (ctx.memoryData.personality.bravery < 0.4f) {
-                    data.pendingMessageCount = 0;
+                    shared.pendingMessageCount = 0;
                     switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                     return;
                 }
@@ -323,7 +310,7 @@ void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& 
             default: break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 
     // Combat reaction: recent combat memory drives self-preservation/retaliation.
     if (isUnderRecentAttack(ctx, 2.0f)) {
@@ -339,17 +326,17 @@ void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& 
         return;
     }
 
-    updateTimers(data, ctx.deltaTime, ctx.pathData);
+    updateTimers(state, ctx.deltaTime, ctx.pathData);
 
-    if (!handleStartDelay(ctx)) return;
+    if (!handleStartDelay(ctx, state)) return;
 
-    if (data.state.wander.movementStarted) {
+    if (state.movementStarted) {
         // Throttle heavy movement logic — wanderers are peaceful, just coast
         // on current velocity between updates
-        data.state.wander.movementUpdateTimer += ctx.deltaTime;
-        if (data.state.wander.movementUpdateTimer >= config.updateInterval) {
-            data.state.wander.movementUpdateTimer = 0.0f;
-            handleMovement(ctx, config);
+        state.movementUpdateTimer += ctx.deltaTime;
+        if (state.movementUpdateTimer >= config.updateInterval) {
+            state.movementUpdateTimer = 0.0f;
+            handleMovement(ctx, state, config);
         }
 
         // Cautious movement when suspicious

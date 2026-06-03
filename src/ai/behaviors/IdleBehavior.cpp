@@ -35,8 +35,8 @@ float getRandomTurnInterval(float turnFrequency) {
     return baseInterval * s_frequencyVariation(s_rng);
 }
 
-void initializeIdleState(const Vector2D& position, BehaviorData& data, const VoidLight::IdleBehaviorConfig& config) {
-    auto& idle = data.state.idle;
+void initializeIdleState(const Vector2D& position, VoidLight::IdleStateData& idle,
+                         const VoidLight::IdleBehaviorConfig& config) {
     idle.originalPosition = position;
     idle.currentOffset = Vector2D(0, 0);
     idle.movementTimer = 0.0f;
@@ -51,9 +51,8 @@ void updateStationary(BehaviorContext& ctx) {
     ctx.transform.velocity = Vector2D(0, 0);
 }
 
-void updateSubtleSway(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& idle = data.state.idle;
+void updateSubtleSway(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
+                      VoidLight::IdleStateData& idle) {
     idle.movementTimer += ctx.deltaTime;
 
     if (config.movementFrequency > 0.0f && idle.movementTimer >= idle.movementInterval) {
@@ -65,9 +64,8 @@ void updateSubtleSway(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig&
     }
 }
 
-void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& idle = data.state.idle;
+void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
+                          VoidLight::IdleStateData& idle) {
     idle.turnTimer += ctx.deltaTime;
 
     if (config.turnFrequency > 0.0f && idle.turnTimer >= idle.turnInterval) {
@@ -79,9 +77,8 @@ void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorCon
     ctx.transform.velocity = Vector2D(0, 0);
 }
 
-void updateLightFidget(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    auto& idle = data.state.idle;
+void updateLightFidget(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
+                       VoidLight::IdleStateData& idle) {
     idle.movementTimer += ctx.deltaTime;
     idle.turnTimer += ctx.deltaTime;
 
@@ -104,34 +101,35 @@ void updateLightFidget(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig
 
 namespace Behaviors {
 
-void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config) {
+void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config, VoidLight::IdleStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Idle);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& sharedState = edm.getBehaviorData(edmIndex);
     auto& hotData = edm.getHotDataByIndex(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    sharedState.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    initializeIdleState(hotData.transform.position, data, config);
-    data.setInitialized(true);
+    initializeIdleState(hotData.transform.position, state, config);
+    sharedState.setInitialized(true);
 }
 
-void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config) {
-    auto& data = ctx.behaviorData;
-    if (!data.isValid()) return;
+void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
+                 VoidLight::IdleStateData& state) {
+    auto& shared = ctx.sharedState;
+    if (!shared.isValid()) return;
 
-    if (!data.isInitialized()) {
-        initializeIdleState(ctx.transform.position, data, config);
-        data.setInitialized(true);
+    if (!shared.isInitialized()) {
+        initializeIdleState(ctx.transform.position, state, config);
+        shared.setInitialized(true);
     }
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i) {
-        switch (data.pendingMessages[i].messageId) {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        switch (shared.pendingMessages[i].messageId) {
             case BehaviorMessage::PANIC:
                 // Panic overrides everything — flee regardless of bravery
-                data.pendingMessageCount = 0;
+                shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::CALM_DOWN:
@@ -142,7 +140,7 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
                 break;
             case BehaviorMessage::RAISE_ALERT:
                 if (ctx.memoryData.personality.bravery < 0.4f) {
-                    data.pendingMessageCount = 0;
+                    shared.pendingMessageCount = 0;
                     switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                     return;
                 }
@@ -150,7 +148,7 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
             default: break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 
     // Combat reaction: recent combat memory drives self-preservation/retaliation.
     if (isUnderRecentAttack(ctx, 2.0f)) {
@@ -172,13 +170,13 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
         updateStationary(ctx);
         break;
     case VoidLight::IdleBehaviorConfig::IdleMode::SUBTLE_SWAY:
-        updateSubtleSway(ctx, config);
+        updateSubtleSway(ctx, config, state);
         break;
     case VoidLight::IdleBehaviorConfig::IdleMode::OCCASIONAL_TURN:
-        updateOccasionalTurn(ctx, config);
+        updateOccasionalTurn(ctx, config, state);
         break;
     case VoidLight::IdleBehaviorConfig::IdleMode::LIGHT_FIDGET:
-        updateLightFidget(ctx, config);
+        updateLightFidget(ctx, config, state);
         break;
     }
 }

@@ -985,10 +985,10 @@ class AttackBehavior : public AIBehavior {
 4. Consolidating state in EDM provides single source of truth
 
 **How to Fix Violations:**
-1. Add new fields to appropriate `BehaviorData::StateUnion` struct in `EntityDataManager.hpp`
-2. Update `raw[]` size if needed to accommodate new fields
+1. Add new fields to the appropriate per-variant state struct in `include/ai/BehaviorStateData.hpp` (e.g., `WanderStateData`, `AttackStateData`)
+2. For fields shared across all behaviors (flocking, messages, movement cache), add to `BehaviorData` in `EntityDataManager.hpp`
 3. Change behavior methods to take `edmIndex` parameter when accessing state
-4. Access state via `edm.getBehaviorData(edmIndex).state.X` or `ctx.behaviorData->state.X`
+4. Access variant state via `edm.get<Variant>State(ref.index).X` where `ref = edm.getBehaviorConfigRef(edmIndex)`; access shared header via `edm.getBehaviorData(edmIndex).X` or `ctx.sharedState.X`
 
 **Quality Gate:** ✓ No per-entity mutable state in AIBehavior member variables (BLOCKING)
 

@@ -31,10 +31,10 @@ This directory indexes manager-focused documentation. Some major systems live in
 - [WorkerBudget](../core/WorkerBudget.md)
 - [TimestepManager](../core/TimestepManager.md)
 
-## Current Notes
+## Notes
 
-- `WorldResourceManager` is now a registry-over-EDM, not a quantity store.
+- `WorldResourceManager` is a registry over EDM data, not a quantity store.
 - `WorldManager` explicitly coordinates active-world setup and harvestable spawning.
-- `TimestepManager` documentation now lives in `docs/core/` for consistency with other timing docs.
+- `TimestepManager` documentation lives in `docs/core/` for consistency with other timing docs.
 
 For the broader system map, see [docs/README.md](../README.md).

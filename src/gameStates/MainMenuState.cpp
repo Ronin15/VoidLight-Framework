@@ -10,6 +10,7 @@
 #include "managers/GameStateManager.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
+#include "utils/MenuNavigation.hpp"
 
 #include "gpu/GPURenderer.hpp"
 
@@ -18,6 +19,8 @@
 
 bool MainMenuState::enter() {
   GAMESTATE_INFO("Entering MAIN MENU State");
+
+  VoidLight::MenuNavigation::reset();
 
   // Pause all game managers to reduce power draw while at menu
   GameEngine::Instance().setGlobalPause(true);
@@ -59,7 +62,7 @@ bool MainMenuState::enter() {
   ui.createCenteredButton("mainmenu_settings_btn", firstButtonOffset + 6 * buttonStep, buttonWidth, buttonHeight, "Settings");
 
   // Exit button uses danger style (manual creation + positioning)
-  ui.createButtonDanger("mainmenu_exit_btn", {ui.getLogicalWidth()/2 - buttonWidth/2, ui.getLogicalHeight()/2 + firstButtonOffset + 7 * buttonStep, buttonWidth, buttonHeight}, "Exit");
+  ui.createButtonDanger("mainmenu_exit_btn", {ui.getWidthInPixels()/2 - buttonWidth/2, ui.getHeightInPixels()/2 + firstButtonOffset + 7 * buttonStep, buttonWidth, buttonHeight}, "Exit");
   ui.setComponentPositioning("mainmenu_exit_btn", {UIPositionMode::CENTERED_BOTH, 0, firstButtonOffset + 7 * buttonStep, buttonWidth, buttonHeight});
 
   // Set up button callbacks - capture mp_stateManager for proper architecture
@@ -91,9 +94,58 @@ bool MainMenuState::enter() {
     mp_stateManager->changeState(GameStateId::SETTINGS_MENU);
   });
 
-  ui.setOnClick("mainmenu_exit_btn", []() {
+  ui.setOnClick("mainmenu_exit_btn", [this]() {
+    openQuitDialog();
+  });
+
+  // --- Quit-confirm dialog (hidden by default) ---
+  const int dialogWidth  = UIConstants::DEFAULT_DIALOG_WIDTH;
+  const int dialogHeight = UIConstants::DEFAULT_DIALOG_HEIGHT;
+  const int dialogX = (UIConstants::BASELINE_WIDTH  - dialogWidth)  / 2;
+  const int dialogY = (UIConstants::BASELINE_HEIGHT - dialogHeight) / 2;
+
+  ui.createCenteredDialog("mainmenu_quit_dialog_panel", dialogWidth, dialogHeight, "dark");
+
+  ui.createLabel("mainmenu_quit_dialog_title",
+                 {dialogX + 20, dialogY + 20, 360, 30},
+                 "Quit Game?",
+                 "mainmenu_quit_dialog_panel");
+  ui.setComponentPositioning("mainmenu_quit_dialog_title",
+                             {UIPositionMode::CENTERED_BOTH, 0, -65, 360, 30});
+
+  ui.createLabel("mainmenu_quit_dialog_text",
+                 {dialogX + 20, dialogY + 60, 360, 40},
+                 "Exit to desktop?",
+                 "mainmenu_quit_dialog_panel");
+  ui.setComponentPositioning("mainmenu_quit_dialog_text",
+                             {UIPositionMode::CENTERED_BOTH, 0, -20, 360, 40});
+
+  ui.createButtonSuccess("mainmenu_quit_dialog_yes_btn",
+                         {dialogX + 50, dialogY + 120, 100, 40},
+                         "Quit",
+                         "mainmenu_quit_dialog_panel");
+  ui.setComponentPositioning("mainmenu_quit_dialog_yes_btn",
+                             {UIPositionMode::CENTERED_BOTH, 100, 40, 100, 40});
+  ui.setOnClick("mainmenu_quit_dialog_yes_btn", []() {
     GameEngine::Instance().setRunning(false);
   });
+
+  ui.createButtonWarning("mainmenu_quit_dialog_cancel_btn",
+                         {dialogX + 250, dialogY + 120, 100, 40},
+                         "Cancel",
+                         "mainmenu_quit_dialog_panel");
+  ui.setComponentPositioning("mainmenu_quit_dialog_cancel_btn",
+                             {UIPositionMode::CENTERED_BOTH, -100, 40, 100, 40});
+  ui.setOnClick("mainmenu_quit_dialog_cancel_btn", [this]() {
+    closeQuitDialog();
+  });
+
+  // Hide the modal layer (overlay + dialog panel + its children cascade via linkToParent) until triggered.
+  ui.setComponentVisible("__overlay",                  false);
+  ui.setComponentVisible("mainmenu_quit_dialog_panel", false);
+
+  m_selectedIndex = 0;
+  VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
 
   return true;
 }
@@ -103,6 +155,11 @@ void MainMenuState::update(float) {
   auto& ui = UIManager::Instance();
   if (!ui.isShutdown()) {
     ui.update(0.0f);
+  }
+  if (m_quitDialogOpen) {
+    VoidLight::MenuNavigation::applySelection(kQuitDialogNavOrder, m_selectedIndex);
+  } else {
+    VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
   }
 }
 
@@ -122,36 +179,66 @@ bool MainMenuState::exit() {
 void MainMenuState::handleInput() {
   const auto& inputManager = InputManager::Instance();
 
-  // Keyboard shortcuts for quick navigation
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_RETURN)) {
-      mp_stateManager->changeState(GameStateId::GAME_PLAY);
+  if (m_quitDialogOpen) {
+    VoidLight::MenuNavigation::readInputs(kQuitDialogNavOrder, m_selectedIndex);
+    if (VoidLight::MenuNavigation::cancelPressed()) {
+      closeQuitDialog();
+    }
+    return;
   }
 
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_A)) {
-      mp_stateManager->changeState(GameStateId::AI_DEMO);
+  VoidLight::MenuNavigation::readInputs(kNavOrder, m_selectedIndex);
+  if (VoidLight::MenuNavigation::cancelPressed()) {
+    openQuitDialog();
   }
 
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_E)) {
-      mp_stateManager->changeState(GameStateId::EVENT_DEMO);
-  }
-
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_U)) {
-      mp_stateManager->changeState(GameStateId::UI_DEMO);
-  }
-
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_O)) {
-      mp_stateManager->changeState(GameStateId::OVERLAY_DEMO);
-  }
-
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_S)) {
-      mp_stateManager->changeState(GameStateId::SETTINGS_MENU);
-  }
-
-  if (inputManager.wasKeyPressed(SDL_SCANCODE_ESCAPE)) {
-      GameEngine::Instance().setRunning(false);
-  }
+  // Developer debug shortcuts for demo states — Debug builds only.
+  VOIDLIGHT_DEBUG_ONLY(
+    if (inputManager.wasKeyPressed(SDL_SCANCODE_A)) {
+        mp_stateManager->changeState(GameStateId::AI_DEMO);
+    }
+    if (inputManager.wasKeyPressed(SDL_SCANCODE_E)) {
+        mp_stateManager->changeState(GameStateId::EVENT_DEMO);
+    }
+    if (inputManager.wasKeyPressed(SDL_SCANCODE_U)) {
+        mp_stateManager->changeState(GameStateId::UI_DEMO);
+    }
+    if (inputManager.wasKeyPressed(SDL_SCANCODE_O)) {
+        mp_stateManager->changeState(GameStateId::OVERLAY_DEMO);
+    }
+    if (inputManager.wasKeyPressed(SDL_SCANCODE_S)) {
+        mp_stateManager->changeState(GameStateId::SETTINGS_MENU);
+    }
+  )
 }
 
+void MainMenuState::openQuitDialog()
+{
+  m_quitDialogOpen = true;
+  auto& ui = UIManager::Instance();
+
+  // The modal overlay (z=500) dims menu buttons and title beneath it; the dialog
+  // panel (z=600) and its linked children render above everything. No hide hacks needed.
+  ui.setComponentVisible("__overlay",                  true);
+  ui.setComponentVisible("mainmenu_quit_dialog_panel", true);
+
+  // Default focus: Cancel (index 0 in kQuitDialogNavOrder)
+  m_selectedIndex = 0;
+  VoidLight::MenuNavigation::reset();
+}
+
+void MainMenuState::closeQuitDialog()
+{
+  m_quitDialogOpen = false;
+  auto& ui = UIManager::Instance();
+
+  ui.setComponentVisible("__overlay",                  false);
+  ui.setComponentVisible("mainmenu_quit_dialog_panel", false);
+
+  // Return focus to the Exit button (last item in main menu nav order)
+  m_selectedIndex = kNavOrder.size() - 1;
+  VoidLight::MenuNavigation::reset();
+}
 
 void MainMenuState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
                                        float) {

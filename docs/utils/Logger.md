@@ -104,7 +104,7 @@ namespace VoidLight-Framework {
     // Full Logger class with printf-based output
     // All log levels functional
     // Immediate flushing for real-time feedback
-    #define VOIDLIGHT_INFO(system, msg) VoidLight-Framework::Logger::Log(VoidLight-Framework::LogLevel::INFO, system, std::string(msg))
+    #define VOIDLIGHT_INFO(system, msg) VoidLight::Logger::Log(VoidLight::LogLevel::INFO, system, std::string(msg))
 #endif
 ```
 
@@ -359,15 +359,15 @@ The logging system includes a benchmark mode that disables all logging output fo
 // Enable benchmark mode (disables all logging)
 VOIDLIGHT_ENABLE_BENCHMARK_MODE();
 // or
-VoidLight-Framework::Logger::SetBenchmarkMode(true);
+VoidLight::Logger::SetBenchmarkMode(true);
 
 // Disable benchmark mode (re-enables logging)
 VOIDLIGHT_DISABLE_BENCHMARK_MODE();
 // or
-VoidLight-Framework::Logger::SetBenchmarkMode(false);
+VoidLight::Logger::SetBenchmarkMode(false);
 
 // Check current benchmark mode status
-if (VoidLight-Framework::Logger::IsBenchmarkMode()) {
+if (VoidLight::Logger::IsBenchmarkMode()) {
     // Logging is currently disabled
 }
 ```

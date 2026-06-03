@@ -22,7 +22,7 @@ void update(float deltaTime);
 
 bool isHarvesting() const;
 float getProgress() const;
-VoidLight-Framework::HarvestType getCurrentType() const;
+VoidLight::HarvestType getCurrentType() const;
 std::string_view getActionVerb() const;
 Vector2D getTargetPosition() const;
 ```

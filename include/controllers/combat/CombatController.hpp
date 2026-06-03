@@ -88,8 +88,9 @@ private:
     /**
      * @brief Execute the attack and detect hits
      * @param player Raw pointer to player (from locked weak_ptr)
+     * @return true if an attack was actually performed
      */
-    void performAttack(Player* player);
+    [[nodiscard]] bool performAttack(Player* player);
 
     /**
      * @brief Regenerate player stamina over time

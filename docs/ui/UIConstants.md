@@ -102,16 +102,16 @@ ui.createLabel("my_label", bounds, "Text");  // Uses FONT_DEFAULT automatically
 
 ---
 
-## Z-Order Layering Constants
+## Z-Order Priority Constants
 
-Controls the render order of UI components. Lower values render first (behind), higher values render last (on top).
+Controls UI component priority. Lower values are lower priority, higher values are higher priority. `UIManager` renders with fixed GPU families for performance: primitives first, images second, text last. These constants order components inside a render family and drive input/modal priority; they do not create arbitrary cross-family visual layering.
 
 | Constant | Value | Component Type | Purpose |
 |----------|-------|----------------|---------|
-| `ZORDER_OVERLAY` | -10 | Overlay backgrounds | Behind everything |
+| `ZORDER_OVERLAY` | -10 | Overlay backgrounds | Lowest priority overlay backgrounds |
 | `ZORDER_PANEL` | 0 | Background panels | Container backgrounds |
 | `ZORDER_IMAGE` | 1 | Background images | Visual decoration |
-| `ZORDER_DIALOG` | 2 | Dialogs | Above overlays and panels |
+| `ZORDER_DIALOG` | 2 | Dialogs | Non-modal dialog priority |
 | `ZORDER_PROGRESS_BAR` | 5 | Progress indicators | Status display |
 | `ZORDER_EVENT_LOG` | 6 | Event logs | Information display |
 | `ZORDER_LIST` | 8 | Lists | Item containers |
@@ -121,24 +121,28 @@ Controls the render order of UI components. Lower values render first (behind), 
 | `ZORDER_INPUT_FIELD` | 15 | Text input fields | Text input |
 | `ZORDER_LABEL` | 20 | Text labels | Information text |
 | `ZORDER_TITLE` | 25 | Title text | Page headings |
-| `ZORDER_TOOLTIP` | 1000 | Tooltips | Always on top |
+| `ZORDER_MODAL_OVERLAY` | 500 | Modal overlay | Render/input cutoff for lower normal UI |
+| `ZORDER_MODAL_DIALOG` | 600 | Modal dialog | Modal dialog content priority |
+| `ZORDER_TOOLTIP` | 1000 | Tooltips | Highest tooltip priority |
 
-### Z-Order Diagram
+### Priority Diagram
 
 ```
-Layer -10: Dialog backgrounds     ========================
-Layer  0:  Background panels      ========================
-Layer  1:  Background images      ========================
-Layer  5:  Progress bars          ========================
-Layer  6:  Event logs             ========================
-Layer  8:  Lists                  ========================
-Layer 10:  Buttons                ========================
-Layer 12:  Sliders                ========================
-Layer 13:  Checkboxes             ========================
-Layer 15:  Input fields           ========================
-Layer 20:  Labels                 ========================
-Layer 25:  Titles                 ========================
-Layer 1000:Tooltips (floating)    ↑ (top, always visible)
+Priority -10: Dialog backgrounds
+Priority  0:  Background panels
+Priority  1:  Background images
+Priority  5:  Progress bars
+Priority  6:  Event logs
+Priority  8:  Lists
+Priority 10:  Buttons
+Priority 12:  Sliders
+Priority 13:  Checkboxes
+Priority 15:  Input fields
+Priority 20:  Labels
+Priority 25:  Titles
+Priority 500: Modal overlay cutoff
+Priority 600: Modal dialog
+Priority 1000:Tooltips
 ```
 
 ### Usage Examples
@@ -146,13 +150,14 @@ Layer 1000:Tooltips (floating)    ↑ (top, always visible)
 ```cpp
 auto& ui = UIManager::Instance();
 
-// Components automatically get correct z-order by type
+// Components automatically get priority by type
 ui.createButton("btn", bounds, "Click");           // Auto: ZORDER_BUTTON (10)
 ui.createLabel("label", bounds, "Text");           // Auto: ZORDER_LABEL (20)
 ui.createDialog("bg", bounds);                     // Auto: ZORDER_DIALOG (2)
 
-// Manual override only if needed (rarely required)
-ui.setComponentZOrder("special_button", UIConstants::ZORDER_TITLE);  // Move to top layer
+// Manual override only if needed (rarely required). This changes input and
+// same-family ordering, not cross-family GPU render order.
+ui.setComponentZOrder("special_button", UIConstants::ZORDER_TITLE);
 ```
 
 ---
@@ -423,8 +428,8 @@ constexpr int DEFAULT_BUTTON_HEIGHT = 40;      // Standard button height
 
 ```cpp
 auto& ui = UIManager::Instance();
-int windowWidth = gameEngine.getLogicalWidth();
-int windowHeight = gameEngine.getLogicalHeight();
+int windowWidth = gameEngine.getWidthInPixels();
+int windowHeight = gameEngine.getHeightInPixels();
 
 // Positioned title (top with offset)
 ui.createTitle("header",
@@ -457,9 +462,9 @@ constexpr int INFO_LABEL_HEIGHT_COMPACT = 24;  // Compact (tighter layouts)
 
 ```cpp
 // Vertical positioning for info lines
-constexpr int INFO_FIRST_LINE_Y = 55;          // First info line Y position
+constexpr int INFO_FIRST_LINE_Y = 62;          // First info line Y position
 constexpr int INFO_LINE_SPACING = 8;           // Gap between lines
-constexpr int INFO_STATUS_SPACING = 12;        // Extra gap before status section
+constexpr int INFO_STATUS_SPACING = 4;         // Extra gap before status section
 
 // Horizontal positioning
 constexpr int INFO_LABEL_MARGIN_X = 10;        // Left margin for all info labels
@@ -470,11 +475,11 @@ constexpr int INFO_LABEL_MARGIN_X = 10;        // Left margin for all info label
 ```
 Y=10:   [Title]
         (gap of 5px)
-Y=55:   [Info Line 1]
-Y=63:   [Info Line 2]  (8px spacing)
-        (gap of 12px for status)
-Y=83:   [Status Line]
-Y=91:   [Status Line 2] (8px spacing)
+Y=62:   [Info Line 1]
+Y=70:   [Info Line 2]  (8px spacing)
+        (gap of 4px for status)
+Y=82:   [Status Line]
+Y=90:   [Status Line 2] (8px spacing)
 ```
 
 ---
@@ -602,9 +607,9 @@ ui.setComponentPositioning("my_button", {
 See [UIManager Guide](UIManager_Guide.md) for usage patterns and integration examples.
 
 Key sections that reference UIConstants:
-- [Quick Start](UIManager_Guide.md#quick-start) - Basic usage
-- [Content-Aware Auto-Sizing](UIManager_Guide.md#1-content-aware-auto-sizing) - Sizing with constants
-- [Z-Order Management](UIManager_Guide.md#3-automatic-z-order-management) - Automatic layering
+- [Basic Pattern](UIManager_Guide.md#basic-pattern) - State integration
+- [Positioning](UIManager_Guide.md#positioning) - Resize-aware helper usage
+- [Rendering Notes](UIManager_Guide.md#rendering-notes) - Fixed UI render-family behavior
 - [Auto-Repositioning System](UIManager_Guide.md#auto-repositioning-system) - Responsive positioning
 - [Best Practices](UIManager_Guide.md#best-practices) - When to use constants
 

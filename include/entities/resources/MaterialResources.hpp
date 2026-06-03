@@ -43,7 +43,8 @@ public:
     Gem = 4,
     Essence = 5,
     Crystal = 6,
-    COUNT = 7
+    Stone = 7,
+    COUNT = 8
   };
 
   CraftingComponent(VoidLight::ResourceHandle handle, const std::string &id,

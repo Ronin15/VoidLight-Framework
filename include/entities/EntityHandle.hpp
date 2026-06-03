@@ -150,17 +150,17 @@ constexpr const char* tierToString(SimulationTier tier) noexcept {
 struct EntityHandle {
     // Type aliases matching existing codebase patterns
     using IDType = VoidLight::UniqueID::IDType;  // uint64_t
-    using Generation = uint8_t;
+    using Generation = uint32_t;
 
     // Special values
     static constexpr IDType INVALID_ID = 0;
     static constexpr Generation INVALID_GENERATION = 0;
 
-    // Handle components (12 bytes total)
+    // Handle components (16 bytes total, naturally aligned)
     IDType id{INVALID_ID};                      // 8 bytes: Unique entity identifier
     EntityKind kind{EntityKind::NPC};           // 1 byte: Entity type
-    Generation generation{INVALID_GENERATION};  // 1 byte: Stale reference detection
-    uint16_t padding{0};                        // 2 bytes: Alignment padding
+    uint8_t padding[3]{};                       // 3 bytes: Alignment padding
+    Generation generation{INVALID_GENERATION};  // 4 bytes: Stale reference detection
 
     // Default constructor creates invalid handle
     constexpr EntityHandle() noexcept = default;
@@ -168,7 +168,7 @@ struct EntityHandle {
     // Construct with all components
     constexpr EntityHandle(IDType entityId, EntityKind entityKind,
                           Generation gen) noexcept
-        : id(entityId), kind(entityKind), generation(gen), padding(0) {}
+        : id(entityId), kind(entityKind), padding{}, generation(gen) {}
 
     // Validity check
     [[nodiscard]] constexpr bool isValid() const noexcept {
@@ -233,7 +233,7 @@ struct EntityHandle {
         // Combine id, kind, and generation into hash
         std::size_t h = static_cast<std::size_t>(id);
         h ^= static_cast<std::size_t>(kind) << 48;
-        h ^= static_cast<std::size_t>(generation) << 56;
+        h ^= static_cast<std::size_t>(generation) << 32;
         return h;
     }
 
@@ -248,8 +248,8 @@ struct EntityHandle {
 };
 
 // Static assertion to verify handle size
-// Note: Due to 8-byte alignment of uint64_t id, actual size is 16 bytes:
-// - id (8 bytes) + kind (1) + generation (1) + padding (2) + 4 bytes end padding = 16
+// Layout: id (8) + kind (1) + padding (3) + generation (4) = 16 bytes
+// generation widened to uint32_t for safer slot-reuse headroom (see commit c4a29432).
 static_assert(sizeof(EntityHandle) == 16, "EntityHandle should be 16 bytes (8-byte aligned)");
 
 /**

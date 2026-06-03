@@ -112,8 +112,8 @@ bool EventDemoState::enter() {
                                  m_worldWidth, m_worldHeight));
     } else {
       // Fallback to screen dimensions if world bounds unavailable
-      m_worldWidth = gameEngine.getLogicalWidth();
-      m_worldHeight = gameEngine.getLogicalHeight();
+      m_worldWidth = gameEngine.getWidthInPixels();
+      m_worldHeight = gameEngine.getHeightInPixels();
     }
 
     // Initialize state-owned event subscriptions.
@@ -175,7 +175,7 @@ bool EventDemoState::enter() {
     ui.createLabel(
         "event_controls",
         {UIConstants::INFO_LABEL_MARGIN_X, controlsY,
-         ui.getLogicalWidth() - 2 * UIConstants::INFO_LABEL_MARGIN_X,
+         ui.getWidthInPixels() - 2 * UIConstants::INFO_LABEL_MARGIN_X,
          UIConstants::INFO_LABEL_HEIGHT},
         "[B] Exit | [1-6] Events | [R] Reset | [F] Fire | [G] Smoke | [K] Sparks | [I] Inventory | [ ] Zoom");
     ui.setComponentPositioning("event_controls",
@@ -185,7 +185,7 @@ bool EventDemoState::enter() {
                                 UIConstants::INFO_LABEL_HEIGHT});
 
     // Create event log component using auto-detected dimensions
-    ui.createEventLog("event_log", {10, ui.getLogicalHeight() - 200, 730, 180},
+    ui.createEventLog("event_log", {10, ui.getHeightInPixels() - 200, 730, 180},
                       7);
     // Set auto-repositioning: anchored to bottom with percentage-based width
     // for responsiveness
@@ -208,7 +208,7 @@ bool EventDemoState::enter() {
     constexpr int childInset = 10;       // Children are 10px inside panel
     constexpr int childWidth = inventoryWidth - (childInset * 2); // 260px
 
-    int const windowWidth = ui.getLogicalWidth();
+    int const windowWidth = ui.getWidthInPixels();
     int inventoryX = windowWidth - inventoryWidth - panelMarginRight;
     int inventoryY = panelMarginTop;
 
@@ -376,6 +376,15 @@ bool EventDemoState::exit() {
       bgSimMgr.prepareForStateTransition();
       worldMgr.prepareForStateTransition();
 
+      // Unload before WRM/EventManager transition cleanup so persistent
+      // world-unload handlers observe the same cleared-world contract as
+      // GamePlayState.
+      if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+        worldMgr.unloadWorld();
+        // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
+        // infinite loop when LoadingState returns to this state
+      }
+
       if (wrm.isInitialized()) {
         wrm.prepareForStateTransition();
       }
@@ -407,13 +416,6 @@ bool EventDemoState::exit() {
 
       // Clean up UI
       ui.prepareForStateTransition();
-
-      // Unload world (LoadingState will reload it)
-      if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-        worldMgr.unloadWorld();
-        // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
-        // infinite loop when LoadingState returns to this state
-      }
 
       // Reset initialized flag so state re-initializes after loading
       m_initialized = false;
@@ -448,6 +450,14 @@ bool EventDemoState::exit() {
     bgSimMgr.prepareForStateTransition();
     worldMgr.prepareForStateTransition();
 
+    // Unload before WRM/EventManager transition cleanup so persistent
+    // world-unload handlers and WRM reverse lookups are still available.
+    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+      worldMgr.unloadWorld();
+      // Reset m_worldLoaded when doing full exit (going to main menu, etc.)
+      m_worldLoaded = false;
+    }
+
     if (wrm.isInitialized()) {
       wrm.prepareForStateTransition();
     }
@@ -479,15 +489,6 @@ bool EventDemoState::exit() {
 
     // Clean up UI components before world cleanup
     ui.prepareForStateTransition();
-
-    // Unload the world when fully exiting, but only if there's actually a world
-    // loaded This matches GamePlayState's safety pattern and prevents Metal
-    // renderer crashes
-    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-      worldMgr.unloadWorld();
-      // Reset m_worldLoaded when doing full exit (going to main menu, etc.)
-      m_worldLoaded = false;
-    }
 
     // Reset initialization flag for next fresh start
     m_initialized = false;
@@ -827,11 +828,11 @@ void EventDemoState::triggerResourceDemo() {
     break;
   }
   case 3: {
-    // Discovery pattern: Find building materials
-    auto gameResources =
-        templateManager.getResourcesByType(ResourceType::BuildingMaterial);
-    if (!gameResources.empty()) {
-      selectedResource = gameResources[0];
+    // Discovery pattern: Find processed crafting materials
+    auto craftingComponents =
+        templateManager.getResourcesByType(ResourceType::CraftingComponent);
+    if (!craftingComponents.empty()) {
+      selectedResource = craftingComponents[0];
       quantity = 8;
     }
     break;
@@ -1210,8 +1211,8 @@ void EventDemoState::initializeCamera() {
   // Create camera starting at player position
   m_camera = std::make_unique<VoidLight::Camera>(
       playerPosition.getX(), playerPosition.getY(), // Start at player position
-      static_cast<float>(gameEngine.getLogicalWidth()),
-      static_cast<float>(gameEngine.getLogicalHeight()));
+      static_cast<float>(gameEngine.getWidthInPixels()),
+      static_cast<float>(gameEngine.getHeightInPixels()));
 
   // Configure camera to follow player
   if (m_player) {
@@ -1222,14 +1223,7 @@ void EventDemoState::initializeCamera() {
     m_camera->setTarget(std::static_pointer_cast<Entity>(m_player));
     m_camera->setMode(VoidLight::Camera::Mode::Follow);
 
-    // Set up camera configuration for fast, smooth following (match
-    // GamePlayState) Using exponential smoothing for smooth, responsive follow
-    VoidLight::Camera::Config config;
-    config.followSpeed = 5.0f;      // Speed of camera interpolation
-    config.deadZoneRadius = 0.0f;   // No dead zone - always follow
-    config.smoothingFactor = 0.85f; // Smoothing factor (0-1, higher = smoother)
-    config.clampToWorldBounds = true; // Keep camera within world
-    m_camera->setConfig(config);
+    // Camera follow tuning lives in Camera::Config defaults — uniform across states.
 
     // Provide camera to player for screen-to-world coordinate conversion
     m_player->setCamera(m_camera.get());

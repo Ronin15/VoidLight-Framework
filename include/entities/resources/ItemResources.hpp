@@ -8,6 +8,8 @@
 
 #include "entities/Resource.hpp"
 
+#include <string>
+
 /**
  * @brief Base class for all item resources (equipment, consumables, quest
  * items)
@@ -33,49 +35,6 @@ protected:
 };
 
 /**
- * @brief Equipment items (weapons, armor, accessories)
- */
-class Equipment : public Item {
-public:
-  enum class EquipmentSlot : uint8_t {
-    Weapon = 0,
-    Helmet = 1,
-    Chest = 2,
-    Legs = 3,
-    Boots = 4,
-    Gloves = 5,
-    Ring = 6,
-    Necklace = 7,
-    COUNT = 8
-  };
-
-  Equipment(VoidLight::ResourceHandle handle, const std::string &id,
-            const std::string &name, EquipmentSlot slot);
-  ~Equipment() override = default;
-
-  EquipmentSlot getEquipmentSlot() const { return m_equipmentSlot; }
-  int getAttackBonus() const { return m_attackBonus; }
-  int getDefenseBonus() const { return m_defenseBonus; }
-  int getSpeedBonus() const { return m_speedBonus; }
-
-  void setAttackBonus(int bonus) { m_attackBonus = bonus; }
-  void setDefenseBonus(int bonus) { m_defenseBonus = bonus; }
-  void setSpeedBonus(int bonus) { m_speedBonus = bonus; }
-
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
-
-  static std::string equipmentSlotToString(EquipmentSlot slot);
-
-private:
-  EquipmentSlot m_equipmentSlot;
-  int m_attackBonus{0};
-  int m_defenseBonus{0};
-  int m_speedBonus{0};
-};
-
-/**
  * @brief Consumable items (potions, food, scrolls)
  */
 class Consumable : public Item {
@@ -86,8 +45,9 @@ public:
     BoostAttack = 2,
     BoostDefense = 3,
     BoostSpeed = 4,
-    Teleport = 5,
-    COUNT = 6
+    RestoreStamina = 5,
+    Teleport = 6,
+    COUNT = 7
   };
 
   Consumable(VoidLight::ResourceHandle handle, const std::string &id,
@@ -134,6 +94,22 @@ public:
 
 private:
   std::string m_questId{""}; // Associated quest ID (empty = general quest item)
+};
+
+/**
+ * @brief Ammunition items consumed by compatible ranged weapons
+ */
+class Ammunition : public Item {
+public:
+  Ammunition(VoidLight::ResourceHandle handle, const std::string &id,
+             const std::string &name, const std::string &ammoType);
+  ~Ammunition() override = default;
+
+  const std::string &getAmmoType() const { return m_ammoType; }
+  void setAmmoType(const std::string &ammoType) { m_ammoType = ammoType; }
+
+private:
+  std::string m_ammoType;
 };
 
 #endif // ITEM_RESOURCES_HPP

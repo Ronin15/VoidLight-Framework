@@ -4,7 +4,7 @@
 
 The entity layer uses `EntityDataManager` as the single source of truth for runtime data, with lightweight entity classes and `EntityHandle` references sitting on top.
 
-Key branch-relevant themes:
+Core themes:
 
 - SoA entity storage in EDM
 - generation-safe `EntityHandle`
@@ -15,15 +15,16 @@ Key branch-relevant themes:
 
 - [EntityHandle](EntityHandle.md)
 - [EntityStates](EntityStates.md)
+- [Resource](Resource.md)
 - [EntityDataManager](../managers/EntityDataManager.md)
 
 ## Player Notes
 
 `Player` remains a lightweight wrapper over EDM-backed state plus local animation/input behavior.
 
-Branch-accurate details:
+Player resource details:
 
-- default player inventory size is now `20` slots
+- default player inventory size is `20` slots
 - gold convenience helpers exist on `Player`
   - `getGold()`
   - `addGold(int amount)`

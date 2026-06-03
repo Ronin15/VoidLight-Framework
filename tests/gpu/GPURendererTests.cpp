@@ -316,22 +316,6 @@ BOOST_FIXTURE_TEST_CASE(CompositePipelineValid, RendererTestFixture) {
     BOOST_CHECK(pipeline != nullptr);
 }
 
-BOOST_FIXTURE_TEST_CASE(UISpritePipelineValid, RendererTestFixture) {
-    SKIP_IF_NO_GPU();
-    BOOST_REQUIRE(rendererInitialized);
-
-    SDL_GPUGraphicsPipeline* pipeline = renderer->getUISpritePipeline();
-    BOOST_CHECK(pipeline != nullptr);
-}
-
-BOOST_FIXTURE_TEST_CASE(UIPrimitivePipelineValid, RendererTestFixture) {
-    SKIP_IF_NO_GPU();
-    BOOST_REQUIRE(rendererInitialized);
-
-    SDL_GPUGraphicsPipeline* pipeline = renderer->getUIPrimitivePipeline();
-    BOOST_CHECK(pipeline != nullptr);
-}
-
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================

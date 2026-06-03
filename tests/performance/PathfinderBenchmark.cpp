@@ -202,11 +202,12 @@ BOOST_AUTO_TEST_CASE(BenchmarkImmediatePathfinding) {
             double queuingLatencyUs = duration_cast<nanoseconds>(requestQueued - requestStart).count() / 1000.0;
             queuingLatencies.push_back(queuingLatencyUs);
 
-            // Wait for async pathfinding to complete
-            // Process buffered requests without contaminating timing
+            // Wait for ThreadSystem to deliver the callback.
+            // PathfinderManager fires callback-based requests directly from the worker
+            // (PathfinderManager.cpp:342, "Fire callback directly (ThreadSystem completion
+            // mechanism)") — no main-thread commit needed. Just yield until the atomic flips.
             while (!pathReady.load(std::memory_order_acquire)) {
-                PathfinderManager::Instance().update(); // Process all buffered requests
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                std::this_thread::yield();
             }
 
             // Measure total completion time (from request to callback)

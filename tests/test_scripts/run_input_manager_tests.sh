@@ -28,32 +28,48 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-if [ "$BUILD_TYPE" = "Debug" ]; then
-  TEST_EXECUTABLE="$PROJECT_ROOT/bin/debug/input_manager_tests"
-else
-  TEST_EXECUTABLE="$PROJECT_ROOT/bin/release/input_manager_tests"
-fi
-
-if [ ! -f "$TEST_EXECUTABLE" ]; then
-  echo -e "${RED}Error: Test executable not found at '$TEST_EXECUTABLE'${NC}"
-  exit 1
-fi
-
 mkdir -p "$PROJECT_ROOT/test_results"
-OUTPUT_FILE="$PROJECT_ROOT/test_results/input_manager_tests_output.txt"
 
 TEST_OPTS="--log_level=all --catch_system_errors=no"
 if [ "$VERBOSE" = true ]; then
   TEST_OPTS="$TEST_OPTS --report_level=detailed"
 fi
 
-"$TEST_EXECUTABLE" $TEST_OPTS 2>&1 | tee "$OUTPUT_FILE"
-TEST_RESULT=${PIPESTATUS[0]}
-
-if [ $TEST_RESULT -ne 0 ] || grep -q "failure\|test cases failed\|fatal error" "$OUTPUT_FILE"; then
-  echo -e "${RED}❌ Some tests failed! See $OUTPUT_FILE for details.${NC}"
-  exit 1
+if [ "$BUILD_TYPE" = "Debug" ]; then
+  BIN_DIR="$PROJECT_ROOT/bin/debug"
 else
-  echo -e "${GREEN}✅ All Input Manager tests passed!${NC}"
-  exit 0
+  BIN_DIR="$PROJECT_ROOT/bin/release"
 fi
+
+TEST_EXECUTABLES=(
+  "input_manager_tests"
+  "input_manager_command_tests"
+)
+
+FINAL_RESULT=0
+for EXEC in "${TEST_EXECUTABLES[@]}"; do
+  TEST_EXECUTABLE="$BIN_DIR/$EXEC"
+  OUTPUT_FILE="$PROJECT_ROOT/test_results/${EXEC}_output.txt"
+
+  if [ ! -f "$TEST_EXECUTABLE" ]; then
+    echo -e "${RED}Error: Test executable not found at '$TEST_EXECUTABLE'${NC}"
+    exit 1
+  fi
+
+  "$TEST_EXECUTABLE" $TEST_OPTS 2>&1 | tee "$OUTPUT_FILE"
+  TEST_RESULT=${PIPESTATUS[0]}
+
+  if [ $TEST_RESULT -ne 0 ] || grep -q "failure\|test cases failed\|fatal error" "$OUTPUT_FILE"; then
+    echo -e "${RED}❌ Some tests failed in $EXEC! See $OUTPUT_FILE for details.${NC}"
+    FINAL_RESULT=1
+  else
+    echo -e "${GREEN}✅ $EXEC passed!${NC}"
+  fi
+done
+
+if [ $FINAL_RESULT -ne 0 ]; then
+  exit $FINAL_RESULT
+fi
+
+echo -e "${GREEN}✅ All Input Manager tests passed!${NC}"
+exit 0

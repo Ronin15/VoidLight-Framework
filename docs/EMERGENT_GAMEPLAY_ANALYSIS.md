@@ -75,7 +75,7 @@ struct BehaviorContext {
 
 - Type-indexed dispatch (O(1) routing via `EventTypeId` enum)
 - Priority levels: CRITICAL (1000) → HIGH (800) → NORMAL (500) → LOW (200) → DEFERRED (0)
-- Event pools for hot-path events (CollisionEvent, ParticleEffect)
+- Event pools for hot-path event objects such as particle effects
 - Token-based handler registration for loose coupling
 
 **Existing Event Chains**:
@@ -101,7 +101,7 @@ Combat:
 | **GameTimeManager** | `include/managers/GameTimeManager.hpp` | Season-specific weather probability tables |
 | **WorldGenerator** | `include/world/WorldGenerator.hpp` | Biome-based procedural content |
 | **BackgroundSimulationManager** | `include/managers/BackgroundSimulationManager.hpp` | 3-tier simulation (Active/Background/Hibernated) |
-| **WorldResourceManager** | `include/managers/WorldResourceManager.hpp` | Per-world resource tracking with transactions |
+| **WorldResourceManager** | `include/managers/WorldResourceManager.hpp` | Spatial registry over EDM-backed world resources |
 | **CollisionManager** | `include/managers/CollisionManager.hpp` | Trigger system for zone-based events |
 
 ---

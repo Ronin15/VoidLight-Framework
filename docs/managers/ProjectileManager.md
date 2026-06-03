@@ -6,26 +6,26 @@
 
 - Integrates projectile movement (SIMD 4-wide where possible)
 - Manages projectile lifetime (timeouts + embedded projectiles)
-- Bridges `Collision` → `Damage` via the existing deferred `EventManager` pipeline
+- Bridges projectile hit sink input to `Damage` via the existing deferred `EventManager` pipeline
 
 Projectiles are regular EDM entities created via `EntityDataManager::createProjectile()` and live in the Active simulation tier.
 
 ## Runtime Contract
 
 - Small projectiles are **overlap-driven hit bodies**, not blocking physics bodies.
-- `CollisionManager` still detects projectile overlaps and dispatches `CollisionEvent`s for them.
+- `CollisionManager` detects projectile overlaps and delivers `CollisionInfo` directly through the projectile hit sink.
 - `CollisionManager::resolve()` skips positional pushback and velocity cancellation when a projectile is involved, so projectile contacts do not block movement.
 - `ProjectileManager` applies owner immunity at event-handling time using the stored projectile owner handle.
 - Any other health-bearing target can receive projectile damage, regardless of faction.
 - Non-health targets (for example world geometry) cause the projectile to embed and stop participating in further hit detection.
 
-## Event Flow (Collision → Damage)
+## Event Flow (Projectile Hit Sink → Damage)
 
 1. `CollisionManager` detects projectile hits during broadphase/narrowphase.
 2. After resolving each collision, `CollisionManager::update()` stamps `CollisionInfo::projectileInvolved` and invokes `m_projectileHitSink` directly (set by `ProjectileManager::init()`).
 3. `ProjectileManager::handleProjectileCollision()` receives the `CollisionInfo` directly on the main thread, applies owner immunity, embeds on non-health targets, and converts valid health-target hits into a deferred `DamageEvent` (same combat queue NPC melee/ranged combat uses).
 
-Non-projectile collisions are forwarded to `EventManager` via the existing `addCollisionCallback` path, unchanged.
+Non-projectile collision traffic remains manager-owned infrastructure for world triggers and obstacle-change event traffic. General non-projectile collision pairs are not forwarded through `EventManager`, and projectile contacts do not use a collision-event object API.
 
 This keeps `CollisionManager` agnostic of higher-layer managers while preserving the non-blocking "small projectile" gameplay rule.
 

@@ -1,4 +1,0 @@
-interface:
-  display_name: "C++20 GameDev"
-  short_description: "Focused C++20 engine, gameplay, and rendering work"
-  default_prompt: "Use $cpp20-gamedev to help with C++20 game engine, gameplay, rendering, AI, threading, or performance work in this repository."

@@ -54,6 +54,10 @@ CraftingComponent::CraftingComponent(VoidLight::ResourceHandle handle,
     setTier(5);
     setValue(25.0f);
     break;
+  case ComponentType::Stone:
+    setTier(2);
+    setValue(4.0f);
+    break;
   case ComponentType::COUNT:
     break;
   }
@@ -64,7 +68,7 @@ std::string CraftingComponent::componentTypeToString(ComponentType type) {
       {ComponentType::Metal, "Metal"},     {ComponentType::Wood, "Wood"},
       {ComponentType::Leather, "Leather"}, {ComponentType::Fabric, "Fabric"},
       {ComponentType::Gem, "Gem"},         {ComponentType::Essence, "Essence"},
-      {ComponentType::Crystal, "Crystal"}};
+      {ComponentType::Crystal, "Crystal"}, {ComponentType::Stone, "Stone"}};
 
   auto it = typeMap.find(type);
   return (it != typeMap.end()) ? it->second : "Unknown";

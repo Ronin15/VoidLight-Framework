@@ -1,4 +1,4 @@
-# Cppcheck Suppressions File for SDL3_ForgeEngine_Template
+# Cppcheck Suppressions File for VoidLight-Framework
 # This file suppresses false positives and irrelevant warnings
 
 # Suppress missing include warnings for project headers
@@ -298,7 +298,7 @@ constVariableReference:*/PauseState.cpp:78
 # Suppress common external library style issues
 # JsonReader library - non-explicit constructors are intentional for API usability
 noExplicitConstructor:*/utils/JsonReader.hpp:60
-noExplicitConstructor:*/utils/JsonReader.hpp:61  
+noExplicitConstructor:*/utils/JsonReader.hpp:61
 noExplicitConstructor:*/utils/JsonReader.hpp:62
 
 # Variables used in debug logging macros (conditionally compiled)
@@ -308,7 +308,7 @@ unreadVariable:*/ai/internal/SpatialPriority.cpp:284
 unreadVariable:*/ai/internal/SpatialPriority.cpp:361
 unreadVariable:*/ai/pathfinding/PathfindingGrid.cpp:192
 
-# Defensive checks in simplified implementations 
+# Defensive checks in simplified implementations
 knownConditionTrueFalse:*/ai/behaviors/GuardBehavior.cpp:422
 knownConditionTrueFalse:*/ai/pathfinding/PathfindingGrid.cpp:444
 

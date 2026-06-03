@@ -2,6 +2,11 @@
 
 Guidance for Claude Code working in this repository.
 
+## Project Stance
+
+- Performance-oriented, data-oriented, minimal abstraction overhead.
+- Prioritize memory safety, cache efficiency, low latency, minimal allocations, and deterministic behavior.
+
 ## Build
 
 ```bash
@@ -32,14 +37,20 @@ export TSAN_OPTIONS="suppressions=$(pwd)/tests/tsan_suppressions.txt"
 
 ## Testing
 
-Boost.Test, 69 executables. See `tests/TESTING.md`. Prefer direct executables over wrapper scripts.
+Boost.Test executables. See `tests/TESTING.md`. Prefer direct executables over wrapper scripts.
 
 ```bash
 ./bin/debug/<test_executable>                         # all tests
 ./bin/debug/<test_executable> --list_content          # list cases
 ./bin/debug/<test_executable> --run_test="TestCase*"  # specific case
 
+# Concrete examples
+./bin/debug/entity_data_manager_tests
+./bin/debug/ai_manager_edm_integration_tests
+./bin/debug/behavior_functionality_tests --run_test="FleeFromAttacker*"
+
 ./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # slow (7–20 min)
+./tests/test_scripts/run_controller_tests.sh --verbose
 ```
 
 Test names use the `BOOST_AUTO_TEST_CASE` name directly (`ThreadingModeComparison`, not `TestThreadingModeComparison`). Suite prefix optional; verify with `--list_content`.
@@ -59,32 +70,30 @@ C++20 SDL3 engine, CMake/Ninja, data-oriented, 10K+ entities at 60+ FPS.
 - **AI**: AIBehavior base → 9 behaviors (Idle, Wander, Patrol, Chase, Flee, Follow, Guard, Attack, Custom). Lock-free EDM access via `BehaviorContext`.
 - **Controllers**: State-scoped via ControllerRegistry. `controllers/{combat,social,world,render}/`
 - **Utils**: Camera | Vector2D | SIMDMath (SSE2/NEON/AVX2) | JsonReader | BinarySerializer | UniqueID | FrameProfiler
-- **GPU**: GPUDevice | GPURenderer | GPUShaderManager (SPIR-V/Metal) | SpriteBatch (50K) | GPUVertexPool (triple-buffered). Shaders in `res/shaders/`.
+- **GPU**: GPUDevice | GPURenderer | GPUSceneRecorder | GPUShaderManager (SPIR-V/Metal) | SpriteBatch (50K) | GPUVertexPool (triple-buffered). Shaders in `res/shaders/`.
 
 ### Rendering
 
-Flow: scene pass → composite to swapchain → UI pass. Platform-native shaders (Metal/macOS, DXIL/Windows, SPIR-V/Linux). Game states implement `renderGPUScene()` and `renderGPUUI()`; the engine ends the frame.
+Flow: `beginFrame()` → state `recordGPUVertices()` → scene pass → composite to swapchain → UI pass → `endFrame()` from `GameEngine::present()`. Platform-native shaders (Metal/macOS, DXIL/Windows, SPIR-V/Linux). Game states implement `recordGPUVertices()`, `renderGPUScene()`, and `renderGPUUI()`; the engine owns frame lifetime.
 
 - Scene texture = viewport dimensions (1x). Zoom lives in the composite shader, not tile scaling. Composite uses LINEAR sampler: `uv = fragTexCoord / zoom + subPixelOffset`.
+- **GPU atlas interpretation is authoritative** for atlas-backed EDM render data.
 - **One present per frame**: `GameEngine::render()` handles scene+UI; `GameEngine::present()` ends the GPU frame. NEVER end the frame, submit command buffers, or present from a GameState.
-- **Render ownership**: EDM stores manager-owned `std::shared_ptr<SDL_Texture>` (TextureManager owns/caches). Call `.get()` only at the draw site. NEVER copy `shared_ptr` in visible-entity loops (atomic overhead).
+- **Render ownership**: EDM render data stores atlas coordinates and frame metadata, not texture ownership. Resolve manager-owned GPU textures at render submission and call `.get()` only at the final GPU API boundary.
 - **GPU UI text**: `TTF_GetGPUTextDrawData()` only — no UV flips, half-texel offsets, or shader hacks. Snap text to whole pixels for integer UI layouts.
 - **DayNightController**: Needs `update(dt)` each frame (30s lighting transitions). `GPURenderer::setDayNightParams()` does this automatically.
 - **Loading**: Use `LoadingState` with async ThreadSystem ops, not blocking manual rendering.
 - **Deferred transitions**: Set flag in `enter()`, transition in `update()`.
 
-### AI Behavior Switching
-
-`switchBehavior()` calls `clearBehaviorData()` → `setBehaviorConfig()` → `init()`. State set before the switch is wiped — always set state after. Full controller/AI boundary rules in **EDM Patterns**.
-
 ### State Transitions
 
 AI-heavy cleanup order:
-`AIManager → ProjectileManager → BackgroundSimulationManager → WorldResourceManager → EventManager → CollisionManager → PathfinderManager → EntityDataManager → WorkerBudgetManager → ParticleManager`
+`AIManager → ProjectileManager → BackgroundSimulationManager → WorldManager → WorldResourceManager → EventManager → CollisionManager → PathfinderManager → EntityDataManager → WorkerBudgetManager → ParticleManager`
 
 - Call `prepareForStateTransition()` before cleanup (pauses work, drains queues, waits for batches).
+- Demo states may skip managers they never initialized.
 - `ControllerRegistry::clear()` (not just `unsubscribeAll()`) must be called in `GamePlayState::exit()`.
-- **World lifecycle**: Manager-local caches, spatial indices, and reverse lookups tied to world geometry must be cleared on world unload. Every `WorldLoaded` subscriber needs a paired `WorldUnloaded` handler.
+- **World lifecycle**: Manager-local caches, spatial indices, and reverse lookups tied to world geometry must be cleared by transition cleanup or unload handling. Do not rely only on deferred `WorldUnloaded` after transition cleanup has begun.
 
 ### Event Handler Persistence
 
@@ -92,7 +101,6 @@ EventManager has **persistent** and **transient** handlers. `prepareForStateTran
 
 - **`init()` → `registerPersistentHandler[WithToken]()`**: manager infrastructure (CollisionManager world events, ProjectileManager collision handler, PathfinderManager world/obstacle events, WorldManager season events). Registered once.
 - **`enter()` → `registerHandler[WithToken]()`**: state-level handlers (GamePlayState time/weather/harvest, ControllerRegistry subscriptions). Auto-cleared on transition.
-- CollisionManager's `m_callbacks` (collision→EventManager bridge) are persistent and not cleared in `prepareForStateTransition()`. No state registers collision callbacks.
 
 Never manually unsubscribe/resubscribe manager handlers across transitions.
 
@@ -110,7 +118,7 @@ Never manually unsubscribe/resubscribe manager handlers across transitions.
 
 **Logging**: `std::format()`, never `+` concatenation. Use `AI_INFO_IF(cond, msg)` when the condition only gates logging. Use `VOIDLIGHT_DEBUG_ONLY(...)` for debug-only blocks — never raw `#ifdef DEBUG`. Defined in `Logger.hpp`.
 
-**Unused parameters**: Drop the name, keep the type: `void foo(float)`. Never `(void)param;`, `[[maybe_unused]]`, or commented names to suppress warnings — fix the root cause. `[[maybe_unused]]` is permitted only on virtual base class empty defaults (e.g., `GameState.hpp`).
+**Unused parameters**: Drop the name, keep the type: `void foo(float)`. Never `(void)param;` or commented names to suppress warnings. Avoid `[[maybe_unused]]` in production except on empty virtual base defaults; in tests prefer real assertions over unused probes.
 
 **`[[nodiscard]]`**: Required on critical bool-returning functions (`init()`, `load()`, `create()`). Check with `BOOST_REQUIRE()` in tests, `if (!init())` in production.
 
@@ -148,20 +156,6 @@ class Manager {
 };
 ```
 
-## EDM (EntityDataManager) Patterns
-
-**Pure data storage** — stores/retrieves/aggregates entity state. AI decision logic belongs in `Behaviors::` (`BehaviorExecutors.hpp/.cpp`).
-
-- **State, not policy**: EDM fields describe what the entity *is* (position, health, timers, emotion state). Thresholds, weights, tuning, and decision policy belong in the behavior layer or config — never EDM.
-- **BehaviorContext access**: `ctx.behaviorData` (state), `ctx.pathData` (navigation), `ctx.memoryData` (combat/emotions) — all pre-fetched in `processBatch()`.
-- **Combat/emotion split**: `EDM::recordCombatEvent()` records stats/memory only. `Behaviors::processCombatEvent()` applies personality-scaled emotion changes. `Behaviors::processWitnessedCombat()` handles distance falloff, composure scaling, and `EDM::addMemory()`. Emotional contagion is a main-thread pre-pass in `AIManager::update()`.
-- **Controller → AI boundary**: Controllers MUST NEVER directly mutate AI behavior state in EDM. Main thread: `Behaviors::queueBehaviorMessage(idx, BehaviorMessage::X)`. Worker threads: `Behaviors::deferBehaviorMessage()`.
-- **Cross-frame state** (paths, timers): MUST live in EDM, never local variables — temporaries die each frame, causing infinite recomputation.
-
-## SIMD
-
-`include/utils/SIMDMath.hpp` (SSE2/NEON/AVX2). Process 4 elements/iteration + scalar tail. Always provide a scalar fallback.
-
 ## UI Positioning
 
 **Always** call `setComponentPositioning()` after creating components for resize/fullscreen support.
@@ -174,6 +168,7 @@ class Manager {
 
 - **Transitions**: `mp_stateManager->changeState()`, never `GameEngine::Instance()` for transitions. `GameEngine::Instance()` remains valid for non-transition access (pause, window sizing, shutdown).
 - **Manager/Controller access**: Local references, not cached `mp_*` members. Cache at function top when used multiple times; single use → call directly. No cached `mp_*Ctrl` pointers. Add controllers with `m_controllers.add<T>()` in `enter()`.
+- **UI from controllers**: Prefer `UIManager` public sizing/positioning/relayout APIs. Do not reach back into `GameEngine` from controllers just to query window size or force UI relayout.
 
 ```cpp
 void SomeState::update(float dt) {
@@ -189,22 +184,25 @@ m_controllers.get<WeatherController>()->getCurrentWeather();    // single use �
 
 ## Debug Tools
 
-**FrameProfiler** (F3): Three-tier timing (Frame → Manager → Render). RAII timers: `ScopedPhaseTimer`, `ScopedManagerTimer`, `ScopedRenderTimer`. Hitch detection >20 ms. No-op in Release.
+**FrameProfiler** (F3): Three-tier timing (Frame → Manager → Render). RAII timers: `ScopedPhaseTimer`, `ScopedManagerTimer`, `ScopedRenderTimer`, `ScopedRenderTimerGPU`. Hitch detection >20 ms. No-op in Release.
 
 ## Repo Traps
 
 - `GamePlayState` is the pristine official gameplay state — keep it clean and production-ready. Demo-suffixed states (`EventDemoState`, `UIDemoState`, `AIDemoState`, `AdvancedAIDemoState`, `OverlayDemoState`) are for testing/showcasing.
 - Reference menu patterns: `SettingsMenuState`, `MainMenuState`.
 - `WorldResourceManager` is a spatial index over EDM, not a quantity store.
-- Do NOT wire `subscribeWorldEvents()` in `init()` — `WorldManager` fires deferred events that arrive after the new world is populated.
+- `CollisionManager::subscribeWorldEvents()` is persistent manager infrastructure registered from `init()`; do not rewire it during state transitions.
 
 ## Working Principles
 
 - Read the exact code path and search for matching patterns in the same subsystem before editing.
+- Do not assume system ownership, hot paths, or participating managers. Trace them in code first.
 - Use established systems and patterns (UIManager helpers, state architecture, existing constants). NEVER create ad-hoc alternatives when a pattern exists.
 - Prefer minimal, direct fixes over new abstractions. No unnecessary safety checks, statistical analysis, or helper layers beyond what was asked.
+- Do not add compatibility overloads, ad-hoc safety layers, or new abstractions unless the task requires them.
 - When the user names a file, work on exactly that file — don't substitute similar-sounding ones.
 - Keep production code and tests aligned in the same change. Run the most targeted test executable when feasible.
+- Before finishing, run the most targeted build or test feasible and state exactly what was verified.
 - Fix root causes in production code. NEVER bypass failing tests by changing expectations unless explicitly told to.
 - For `EventManager` regressions, distinguish missing state-owned handler wiring in tests from a production bug before editing prod code.
 - For rendering issues (jitter/shimmer/flicker), trace the full pipeline first (camera → interpolation → floor/round → sub-pixel offset → draw). No speculative fixes.

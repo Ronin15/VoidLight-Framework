@@ -6,15 +6,71 @@
 #include "controllers/combat/CombatController.hpp"
 #include "core/Logger.hpp"
 #include "entities/Player.hpp"
+#include "entities/resources/EquipmentResources.hpp"
 #include "events/EntityEvents.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include "managers/UIManager.hpp"
 #include <format>
 
 namespace {
-constexpr const char* GAMEPLAY_EVENT_LOG = "gameplay_event_log";
+constexpr const char* EVENT_LOG = "event_log";
+constexpr float PLAYER_PROJECTILE_SPAWN_OFFSET = 20.0f;
+
+bool equipFirstAvailableMeleeWeapon(Player& player, EntityDataManager& edm) {
+  const EntityHandle handle = player.getHandle();
+  if (!handle.isValid() || !handle.hasHealth()) {
+    return false;
+  }
+
+  const size_t idx = edm.getIndex(handle);
+  if (idx == SIZE_MAX) {
+    return false;
+  }
+
+  const auto& charData = edm.getCharacterDataByIndex(idx);
+  if (!charData.hasInventory()) {
+    return false;
+  }
+
+  const size_t maxSlots = edm.getInventoryData(charData.inventoryIndex).maxSlots;
+  auto& resourceManager = ResourceTemplateManager::Instance();
+  for (size_t slot = 0; slot < maxSlots; ++slot) {
+    const InventorySlotData inventorySlot =
+        edm.getInventorySlot(charData.inventoryIndex, slot);
+    if (inventorySlot.isEmpty()) {
+      continue;
+    }
+
+    auto resourceTemplate =
+        resourceManager.getResourceTemplate(inventorySlot.resourceHandle);
+    const auto equipment =
+        std::dynamic_pointer_cast<Equipment>(resourceTemplate);
+    if (!equipment ||
+        equipment->getEquipmentSlot() != Equipment::EquipmentSlot::Weapon ||
+        equipment->getWeaponMode() != Equipment::WeaponMode::Melee) {
+      continue;
+    }
+
+    return player.equipItem(inventorySlot.resourceHandle);
+  }
+
+  return false;
+}
+
+void dispatchResourceChange(EntityHandle ownerHandle,
+                            const InventoryResourceChange& change,
+                            const std::string& reason) {
+  if (!change.isValid()) {
+    return;
+  }
+
+  EventManager::Instance().triggerResourceChange(
+      ownerHandle, change.resourceHandle, change.oldQuantity,
+      change.newQuantity, reason);
+}
 }
 
 void CombatController::subscribe() {
@@ -72,6 +128,10 @@ bool CombatController::tryAttack() {
     return false;
   }
 
+  if (!performAttack(player.get())) {
+    return false;
+  }
+
   // Consume stamina and start cooldown
   float oldStamina = player->getStamina();
   player->consumeStamina(ATTACK_STAMINA_COST);
@@ -83,35 +143,58 @@ bool CombatController::tryAttack() {
   // Transition player to attacking state
   player->changeState("attacking");
 
-  // Perform hit detection using AIManager
-  performAttack(player.get());
-
   return true;
 }
 
-void CombatController::performAttack(Player *player) {
+bool CombatController::performAttack(Player *player) {
   if (!player) {
-    return;
+    return false;
   }
 
   // Cache manager references at function scope
   auto& edm = EntityDataManager::Instance();
   auto& aiMgr = AIManager::Instance();
   const Vector2D playerPos = player->getPosition();
-  const float attackRange = player->getAttackRange();
-  const float attackDamage = player->getAttackDamage();
+  EntityHandle playerHandle = player->getHandle();
+  CharacterData activeCharData = edm.getCharacterData(playerHandle);
 
   // Determine attack direction based on player facing
   float attackDirX = (player->getFlip() == SDL_FLIP_HORIZONTAL) ? -1.0f : 1.0f;
 
+  if (activeCharData.combatStyle == CharacterData::CombatStyle::Ranged) {
+    if (activeCharData.projectileSpeed <= 0.0f) {
+      COMBAT_WARN("Player ranged weapon has no projectile speed configured");
+      return false;
+    }
+
+    InventoryResourceChange ammoChange{};
+    if (!edm.consumeRequiredAmmoForRangedAttack(playerHandle, &ammoChange)) {
+      if (!equipFirstAvailableMeleeWeapon(*player, edm)) {
+        COMBAT_INFO("Player has no compatible ammunition or melee fallback weapon");
+        UIManager::Instance().addEventLogEntry(EVENT_LOG, "No ammunition!");
+        return false;
+      }
+      activeCharData = edm.getCharacterData(playerHandle);
+    } else {
+      dispatchResourceChange(playerHandle, ammoChange, "ammo_consumed");
+      const Vector2D direction(attackDirX, 0.0f);
+      const Vector2D spawnPos =
+          playerPos + direction * PLAYER_PROJECTILE_SPAWN_OFFSET;
+      const Vector2D velocity = direction * activeCharData.projectileSpeed;
+      const float lifetime =
+          (activeCharData.attackRange / activeCharData.projectileSpeed) + 0.5f;
+      edm.createProjectile(spawnPos, velocity, playerHandle,
+                           activeCharData.attackDamage, lifetime);
+      UIManager::Instance().addEventLogEntry(EVENT_LOG, "Fired ranged attack!");
+      return true;
+    }
+  }
+
   // Query nearby entity handles from AIManager (EntityHandle-based API)
   // Reuse buffer to avoid per-frame allocation
   m_nearbyHandlesBuffer.clear();  // Keeps capacity
-  aiMgr.scanActiveHandlesInRadius(playerPos, attackRange,
+  aiMgr.scanActiveHandlesInRadius(playerPos, activeCharData.attackRange,
                              m_nearbyHandlesBuffer, true);
-
-  // Get player's EntityHandle for event-driven damage
-  EntityHandle playerHandle = player->getHandle();
 
   for (const auto &handle : m_nearbyHandlesBuffer) {
     if (!handle.isValid())
@@ -153,7 +236,8 @@ void CombatController::performAttack(Player *player) {
     // on the main thread immediately for player attacks.
     auto& eventMgr = EventManager::Instance();
     auto damageEvent = eventMgr.acquireDamageEvent();
-    damageEvent->configure(playerHandle, handle, attackDamage, knockback);
+    damageEvent->configure(playerHandle, handle, activeCharData.attackDamage,
+                           knockback);
     eventMgr.dispatchEvent(
         damageEvent, EventManager::DispatchMode::Immediate);
 
@@ -162,21 +246,25 @@ void CombatController::performAttack(Player *player) {
 
     COMBAT_INFO(
         std::format("Hit entity {} for {:.1f} damage! HP: {:.1f} -> {:.1f}",
-                    handle.getId(), attackDamage, oldHealth, newHealth));
+                    handle.getId(), activeCharData.attackDamage, oldHealth,
+                    newHealth));
 
     UIManager::Instance().addEventLogEntry(
-        GAMEPLAY_EVENT_LOG,
-        std::format("Hit Enemy #{} for {:.0f} damage!", handle.getId(), attackDamage));
+        EVENT_LOG,
+        std::format("Hit Enemy #{} for {:.0f} damage!", handle.getId(),
+                    activeCharData.attackDamage));
 
     // Kill notification for UI
     if (wasLethal) {
       COMBAT_INFO(std::format("Entity {} killed!", handle.getId()));
 
       UIManager::Instance().addEventLogEntry(
-          GAMEPLAY_EVENT_LOG,
+          EVENT_LOG,
           std::format("Defeated Enemy #{}!", handle.getId()));
     }
   }
+
+  return true;
 }
 
 void CombatController::regenerateStamina(Player *player, float deltaTime) {

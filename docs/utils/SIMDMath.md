@@ -53,7 +53,7 @@ SIMDMath is a cross-platform SIMD (Single Instruction, Multiple Data) abstractio
 void processData(float* data, size_t count) {
 #if defined(VOIDLIGHT_SIMD_SSE2) || defined(VOIDLIGHT_SIMD_NEON)
     // Unified SIMD path (works on both x86 and ARM)
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     for (size_t i = 0; i + 3 < count; i += 4) {
         Float4 v = load4(&data[i]);
@@ -263,7 +263,7 @@ float sum = horizontal_add(v); // 1 + 2 + 3 + 4 = 10.0
 ```cpp
 // Compute distances from AI entity to 4 targets simultaneously
 void computeDistances(const Vector2D& aiPos, const Vector2D targets[4], float distances[4]) {
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     // Load AI position into all lanes
     Float4 aiX = broadcast(aiPos.x);
@@ -298,7 +298,7 @@ struct AABB {
 };
 
 void computeBounds(const Vector2D centers[4], const Vector2D halfsizes[4], AABB bounds[4]) {
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     // Load centers
     float centerX[4] = {centers[0].x, centers[1].x, centers[2].x, centers[3].x};
@@ -338,7 +338,7 @@ void computeBounds(const Vector2D centers[4], const Vector2D halfsizes[4], AABB 
 ```cpp
 // Check collision layer masks for 4 bodies simultaneously
 bool canCollide(uint32_t layerMasks[4], uint32_t collideMasks[4], bool results[4]) {
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     // Load masks
     Int4 layers = _mm_loadu_si128(reinterpret_cast<const __m128i*>(layerMasks));
@@ -368,7 +368,7 @@ bool canCollide(uint32_t layerMasks[4], uint32_t collideMasks[4], bool results[4
 void updateParticles(float posX[4], float posY[4],
                      const float velX[4], const float velY[4],
                      float deltaTime) {
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     // Load positions and velocities
     Float4 px = load4(posX);
@@ -425,7 +425,7 @@ Float4 v = load4(data); // Aligned load (faster on some platforms)
 #### 3. Process 4 Elements at a Time
 ```cpp
 void processData(float* data, size_t count) {
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     size_t i = 0;
 
@@ -523,7 +523,7 @@ Based on VoidLight-Framework benchmarks:
 
 #### After (Cross-Platform)
 ```cpp
-using namespace VoidLight-Framework::SIMD;
+using namespace VoidLight::SIMD;
 
 Float4 v = load4(data);
 v = mul(v, broadcast(2.0f));
@@ -560,7 +560,7 @@ struct ParticleSystem {
 #include "utils/SIMDMath.hpp"
 
 void updateParticles(ParticleSystem& ps, float dt) {
-    using namespace VoidLight-Framework::SIMD;
+    using namespace VoidLight::SIMD;
 
     size_t count = ps.posX.size();
     size_t i = 0;
@@ -621,4 +621,4 @@ printFloat4("v", v); // Prints: v: [5.00, 5.00, 5.00, 5.00]
 - [AIManager Documentation](../ai/AIManager.md) - SIMD distance calculations
 - [CollisionManager Documentation](../managers/CollisionManager.md) - SIMD AABB operations
 - [ParticleManager Documentation](../managers/ParticleManager.md) - SIMD particle updates
-- [CLAUDE.md](../../CLAUDE.md) - Build configuration for SIMD optimization
+- [AGENTS.md](../../AGENTS.md) - Repo build and architecture guidance for SIMD-related work

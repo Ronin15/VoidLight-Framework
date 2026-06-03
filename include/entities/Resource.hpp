@@ -22,8 +22,7 @@ enum class ResourceCategory : uint8_t {
   Item = 0,         // Equipment, consumables, quest items
   Material = 1,     // Crafting components, raw resources
   Currency = 2,     // Gold, gems, faction tokens
-  GameResource = 3, // Energy, mana, building materials, ammunition
-  COUNT = 4
+  COUNT = 3
 };
 
 /**
@@ -34,6 +33,7 @@ enum class ResourceType : uint8_t {
   Equipment = 0,
   Consumable = 1,
   QuestItem = 2,
+  Ammunition = 3,
 
   // Materials
   CraftingComponent = 10,
@@ -43,21 +43,16 @@ enum class ResourceType : uint8_t {
   Gold = 20,
   Gem = 21,
   FactionToken = 22,
+  CraftingCurrency = 23,
 
-  // Game Resources
-  Energy = 30,
-  Mana = 31,
-  BuildingMaterial = 32,
-  Ammunition = 33,
-
-  COUNT = 34
+  COUNT = 24
 };
 
 /**
  * @brief Pure data class for resource templates.
  * 
  * Resources are immutable data definitions that specify properties
- * of items, materials, currency, and game resources. They do NOT
+ * of items, materials, and currency. They do NOT
  * inherit from Entity and have no world state or behavior.
  */
 class Resource {
@@ -155,8 +150,8 @@ protected:
   // Atlas coordinates (for sprite atlas rendering)
   int m_atlasX{0};                       // X offset in atlas
   int m_atlasY{0};                       // Y offset in atlas
-  int m_atlasW{16};                      // Width in atlas
-  int m_atlasH{16};                      // Height in atlas
+  int m_atlasW{0};                       // Width in atlas (0 = unmapped)
+  int m_atlasH{0};                       // Height in atlas (0 = unmapped)
 };
 
 #endif // RESOURCE_HPP

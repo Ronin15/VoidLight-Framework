@@ -16,11 +16,6 @@ thread_local std::mt19937 s_rng{std::random_device{}()};
 thread_local std::uniform_real_distribution<float> s_angleDist{0.0f, 2.0f * static_cast<float>(M_PI)};
 thread_local std::uniform_real_distribution<float> s_cooldownVariation{0.0f, 1.0f};
 
-// Patrol uses guard state since they share similar patrol mechanics
-// guard.currentPatrolIndex = current waypoint index
-// guard.currentPatrolTarget = current target position
-// guard.patrolMoveTimer = movement timer
-
 Vector2D generateRandomWaypoint(const Vector2D& currentPos, float boundaryPadding) {
     float minX, minY, maxX, maxY;
     if (!Behaviors::getCachedWorldBounds(minX, minY, maxX, maxY)) {
@@ -56,21 +51,22 @@ bool isAtWaypoint(const Vector2D& position, const Vector2D& waypoint, float radi
 
 namespace Behaviors {
 
-void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config) {
+void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config,
+                VoidLight::PatrolStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Patrol);
-    auto& data = edm.getBehaviorData(edmIndex);
+    auto& shared = edm.getBehaviorData(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
-    data.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
+    shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    auto& guard = data.state.guard;  // Patrol uses guard state
     auto& hotData = edm.getHotDataByIndex(edmIndex);
 
-    guard.currentPatrolIndex = 0;
-    guard.currentPatrolTarget = hotData.transform.position;
-    guard.patrolMoveTimer = 0.0f;
-    guard.assignedPosition = hotData.transform.position;
+    state.currentPatrolIndex = 0;
+    state.currentPatrolTarget = hotData.transform.position;
+    state.patrolMoveTimer = 0.0f;
+    state.assignedPosition = hotData.transform.position;
+    state.patrolThrottleTimer = 0.0f;
 
     // Generate initial waypoints in the waypoint slot
     auto waypointSlot = edm.getWaypointSlot(edmIndex);
@@ -78,22 +74,22 @@ void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config) 
         waypointSlot[i] = generateRandomWaypoint(hotData.transform.position, config.boundaryPadding);
     }
 
-    data.setInitialized(true);
+    shared.setInitialized(true);
 }
 
-void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& config) {
-    if (!ctx.behaviorData.isValid()) return;
+void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& config,
+                   VoidLight::PatrolStateData& patrol) {
+    if (!ctx.sharedState.isValid()) return;
 
-    auto& data = ctx.behaviorData;
-    auto& guard = data.state.guard;
+    auto& shared = ctx.sharedState;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < data.pendingMessageCount; ++i)
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
     {
-        switch (data.pendingMessages[i].messageId)
+        switch (shared.pendingMessages[i].messageId)
         {
             case BehaviorMessage::PANIC:
-                data.pendingMessageCount = 0;
+                shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::CALM_DOWN:
@@ -105,7 +101,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
             case BehaviorMessage::RAISE_ALERT:
                 if (ctx.memoryData.personality.bravery < 0.4f)
                 {
-                    data.pendingMessageCount = 0;
+                    shared.pendingMessageCount = 0;
                     switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                     return;
                 }
@@ -113,7 +109,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
             default: break;
         }
     }
-    data.pendingMessageCount = 0;
+    shared.pendingMessageCount = 0;
 
     // Combat reaction: brave+aggressive NPCs fight back, others flee
     if (isUnderRecentAttack(ctx, 2.0f)) {
@@ -130,10 +126,10 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
     }
 
     // Throttle patrol movement logic — peaceful walking between waypoints
-    guard.patrolThrottleTimer += ctx.deltaTime;
-    if (guard.patrolThrottleTimer < config.updateInterval) return;
-    float elapsed = guard.patrolThrottleTimer;
-    guard.patrolThrottleTimer = 0.0f;
+    patrol.patrolThrottleTimer += ctx.deltaTime;
+    if (patrol.patrolThrottleTimer < config.updateInterval) return;
+    float elapsed = patrol.patrolThrottleTimer;
+    patrol.patrolThrottleTimer = 0.0f;
 
     Vector2D currentPos = ctx.transform.position;
     auto& edm = EntityDataManager::Instance();
@@ -142,13 +138,13 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
     auto waypointSlot = edm.getWaypointSlot(ctx.edmIndex);
 
     // Check if at current waypoint
-    Vector2D currentWaypoint = waypointSlot[guard.currentPatrolIndex % 4];
+    Vector2D currentWaypoint = waypointSlot[patrol.currentPatrolIndex % 4];
     if (isAtWaypoint(currentPos, currentWaypoint, config.waypointReachedRadius)) {
-        guard.patrolMoveTimer += elapsed;
-        if (guard.patrolMoveTimer >= config.waypointCooldown) {
-            guard.currentPatrolIndex = (guard.currentPatrolIndex + 1) % 4;
-            guard.patrolMoveTimer = 0.0f;
-            guard.currentPatrolTarget = waypointSlot[guard.currentPatrolIndex];
+        patrol.patrolMoveTimer += elapsed;
+        if (patrol.patrolMoveTimer >= config.waypointCooldown) {
+            patrol.currentPatrolIndex = (patrol.currentPatrolIndex + 1) % 4;
+            patrol.patrolMoveTimer = 0.0f;
+            patrol.currentPatrolTarget = waypointSlot[patrol.currentPatrolIndex];
         }
         ctx.transform.velocity = Vector2D(0, 0);
         return;
@@ -188,17 +184,17 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
 
             if (dist > 0.001f) {
                 Vector2D direction = toWaypoint / dist;
-                ctx.transform.velocity = direction * data.moveSpeed;
+                ctx.transform.velocity = direction * shared.moveSpeed;
             }
         } else {
             // Direct movement fallback
             Vector2D direction = (currentWaypoint - currentPos).normalized();
-            ctx.transform.velocity = direction * data.moveSpeed;
+            ctx.transform.velocity = direction * shared.moveSpeed;
         }
     } else {
         // No pathData - direct movement
         Vector2D direction = (currentWaypoint - currentPos).normalized();
-        ctx.transform.velocity = direction * data.moveSpeed;
+        ctx.transform.velocity = direction * shared.moveSpeed;
     }
 
     // Cautious movement when suspicious
@@ -206,20 +202,20 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
         ctx.transform.velocity = ctx.transform.velocity * 0.7f;
     }
 
-    // Stall detection
+    // Stall detection — uses shared separationTimer (persists across frames)
     float speedSq = ctx.transform.velocity.lengthSquared();
-    float stallThreshold = data.moveSpeed * config.stallSpeedMultiplier;
+    float stallThreshold = shared.moveSpeed * config.stallSpeedMultiplier;
     if (speedSq < stallThreshold * stallThreshold) {
-        data.separationTimer += config.updateInterval;
-        if (data.separationTimer > config.advanceWaypointDelay) {
+        shared.separationTimer += config.updateInterval;
+        if (shared.separationTimer > config.advanceWaypointDelay) {
             // Skip to next waypoint
-            guard.currentPatrolIndex = (guard.currentPatrolIndex + 1) % 4;
-            guard.currentPatrolTarget = waypointSlot[guard.currentPatrolIndex];
-            data.separationTimer = 0.0f;
+            patrol.currentPatrolIndex = (patrol.currentPatrolIndex + 1) % 4;
+            patrol.currentPatrolTarget = waypointSlot[patrol.currentPatrolIndex];
+            shared.separationTimer = 0.0f;
             if (ctx.pathData) ctx.pathData->clear();
         }
     } else {
-        data.separationTimer = 0.0f;
+        shared.separationTimer = 0.0f;
     }
 }
 

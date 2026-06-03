@@ -54,6 +54,46 @@
 
 #define VOIDLIGHT_GRAY 31, 32, 34, 255
 
+float GameEngine::calculateFontDPIScale(
+#ifdef __APPLE__
+    int logicalWidth, int logicalHeight, int pixelWidth, int pixelHeight
+#else
+    int, int, int, int
+#endif
+) const {
+#ifdef __APPLE__
+  SDL_Window *window = mp_window.get();
+  if (window) {
+    const float pixelDensity = SDL_GetWindowPixelDensity(window);
+    if (pixelDensity > 0.0f) {
+      return pixelDensity;
+    }
+  }
+
+  if (logicalWidth > 0 && logicalHeight > 0 && pixelWidth > 0 &&
+      pixelHeight > 0) {
+    const float scaleX = static_cast<float>(pixelWidth) /
+                         static_cast<float>(logicalWidth);
+    const float scaleY = static_cast<float>(pixelHeight) /
+                         static_cast<float>(logicalHeight);
+    if (scaleX > 0.0f && scaleY > 0.0f) {
+      return (scaleX > scaleY) ? scaleX : scaleY;
+    }
+  }
+
+  if (window) {
+    const float displayScale = SDL_GetWindowDisplayScale(window);
+    if (displayScale > 0.0f) {
+      return displayScale;
+    }
+  }
+
+  return 1.0f;
+#else
+    return 1.0f;
+#endif
+}
+
 bool GameEngine::init(std::string_view title) {
   GAMEENGINE_INFO("Initializing SDL Video and Gamepad");
 
@@ -222,6 +262,8 @@ bool GameEngine::init(std::string_view title) {
     return false;
   }
 
+  SDL_SetWindowMinimumSize(mp_window.get(), 1280, 720);
+
   GAMEENGINE_DEBUG("Window creation system online");
 
   // macOS Game Mode is triggered by Info.plist (LSApplicationCategoryType=games + LSSupportsGameMode)
@@ -369,8 +411,8 @@ bool GameEngine::init(std::string_view title) {
   // Store actual dimensions for UI positioning
   int const actualWidth = pixelWidth;
   int const actualHeight = pixelHeight;
-  m_logicalWidth = actualWidth;
-  m_logicalHeight = actualHeight;
+  m_widthInPixels = actualWidth;
+  m_heightInPixels = actualHeight;
 
   GAMEENGINE_INFO(
       std::format("GPU rendering at native resolution: {}x{}",
@@ -393,28 +435,18 @@ bool GameEngine::init(std::string_view title) {
   // INITIALIZING GAME RESOURCE LOADING AND
   // MANAGEMENT_________________________BEGIN
 
-  // Calculate DPI-aware font sizes before threading
-  float dpiScale = 1.0f;
-
-  const int dpiLogicalWidth = logicalWidth;
-  const int dpiLogicalHeight = logicalHeight;
-
-  if (dpiLogicalWidth > 0 && dpiLogicalHeight > 0) {
+  // Calculate DPI-aware font sizes before threading.
+  const float dpiScale =
+      calculateFontDPIScale(logicalWidth, logicalHeight, pixelWidth,
+                            pixelHeight);
 #ifdef __APPLE__
-    // On macOS, use the native display content scale for proper text rendering
-    float displayScale = SDL_GetWindowDisplayScale(mp_window.get());
-    dpiScale = (displayScale > 0.0f) ? displayScale : 1.0f;
-    GAMEENGINE_INFO(
-        std::format("macOS display content scale: {} {}", dpiScale,
-                    displayScale > 0.0f ? "(detected)" : "(fallback)"));
+  GAMEENGINE_INFO(std::format(
+      "macOS font DPI scale: {:.2f} (logical: {}x{}, pixels: {}x{})",
+      dpiScale, logicalWidth, logicalHeight, pixelWidth, pixelHeight));
 #else
-    // On other platforms, don't apply additional DPI scaling - SDL3 logical
-    // presentation handles it
-    dpiScale = 1.0f;
-    GAMEENGINE_INFO("Non-macOS: Using DPI scale 1.0 (SDL3 logical presentation "
-                    "handles scaling)");
+  GAMEENGINE_INFO("Non-macOS: Using DPI scale 1.0 (SDL3 logical presentation "
+                  "handles scaling)");
 #endif
-  }
 
   // Store DPI scale for use by other managers
   m_dpiScale = dpiScale;
@@ -472,6 +504,11 @@ bool GameEngine::init(std::string_view title) {
               return false;
             }
             inputMgr.initializeGamePad();
+            // Load user-customized bindings; fall back to defaults on failure
+            if (!inputMgr.loadBindingsFromFile(
+                    VoidLight::ResourcePath::resolve("res/input_bindings.json"))) {
+              GAMEENGINE_WARN("Input bindings file not found or invalid — using defaults");
+            }
             return true;
           }));
 
@@ -762,7 +799,7 @@ bool GameEngine::init(std::string_view title) {
   // Configure tier radii based on logical screen size (dynamic for different
   // devices)
   BackgroundSimulationManager::Instance().configureForScreenSize(
-      m_logicalWidth, m_logicalHeight);
+      m_widthInPixels, m_heightInPixels);
   GAMEENGINE_INFO(std::format(
       "Background Simulation Manager initialized (activeRadius: {:.0f}, "
       "backgroundRadius: {:.0f})",
@@ -966,6 +1003,10 @@ void GameEngine::handleEvents() {
     }
   }
 
+  // Resolve semantic command state from raw SDL state now that all events
+  // for this frame are in. Must run before game states read commands.
+  inputMgr.refreshCommandState();
+
   // Global fullscreen toggle (F1 key) - processed before state input
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_F1)) {
     toggleFullscreen();
@@ -992,6 +1033,10 @@ float GameEngine::getCurrentFPS() const {
 }
 
 void GameEngine::update(float deltaTime) {
+  if (!m_running) {
+    return;
+  }
+
   // OPTIMAL MANAGER UPDATE ARCHITECTURE - CLEAN DESIGN
   // ===================================================
   // Update order optimized for correct NPC movement AND animation sync.
@@ -1028,6 +1073,9 @@ void GameEngine::update(float deltaTime) {
   // 1. Event system - FIRST: process global events, state changes, weather triggers
   { PROFILE_MANAGER(VoidLight::ManagerPhase::Event);
     mp_eventManager->update(); }
+  if (!m_running) {
+    return;
+  }
 
   // 2. Game states - player movement and state logic
   //    MUST update BEFORE AIManager so NPCs react to current player position.
@@ -1035,6 +1083,9 @@ void GameEngine::update(float deltaTime) {
   { PROFILE_MANAGER(VoidLight::ManagerPhase::GameState);
     mp_gameStateManager->setCurrentFPS(m_timestepManager->getCurrentFPS());
     mp_gameStateManager->update(deltaTime); }
+  if (!m_running) {
+    return;
+  }
 
   // 3. AI system - processes NPC behaviors with internal parallelization
   //    Sets NPC velocities and applies position updates.
@@ -1044,7 +1095,7 @@ void GameEngine::update(float deltaTime) {
 
   // 3.5 Projectile system - position integration + lifetime management
   //     Uses WorkerBudget threading with SIMD 4-wide movement.
-  //     Collision damage handled via EventTypeId::Collision subscription.
+  //     Collision damage handled via CollisionManager::setProjectileHitSink().
   { PROFILE_MANAGER(VoidLight::ManagerPhase::Projectile);
     mp_projectileManager->update(deltaTime); }
 
@@ -1142,7 +1193,10 @@ void GameEngine::clean() {
 
   // Clean up engine managers (non-singletons)
   GAMEENGINE_INFO("Cleaning up GameState manager...");
-  mp_gameStateManager.reset();
+  if (mp_gameStateManager) {
+    mp_gameStateManager->clearAllStates();
+    mp_gameStateManager.reset();
+  }
 
   // Active state exit paths may need workers alive to drain pathfinding,
   // background simulation, or other queued jobs. Once states are gone, shut the
@@ -1310,9 +1364,10 @@ bool GameEngine::setVSyncEnabled(bool enable) {
                                 committedVSync ? "VSYNC" : "MAILBOX"));
   }
 
-  auto &settings = VoidLight::SettingsManager::Instance();
-  settings.set("graphics", "vsync", committedVSync);
-  settings.saveToFile(VoidLight::ResourcePath::resolve("res/settings.json"));
+  // Pure mode switch: update in-memory VSync and frame-pacing state only.
+  // Persistence is the caller's responsibility (SettingsMenuState::applySettings
+  // issues a single explicit saveToFile for the whole settings file).
+  VoidLight::SettingsManager::Instance().set("graphics", "vsync", committedVSync);
 
   return success;
 }
@@ -1537,22 +1592,20 @@ void GameEngine::refreshWindowMetrics(std::string_view reason) {
                                  SDL_GetError()));
   }
 
-  float displayScale = 1.0f;
+  float fontDPIScale = 1.0f;
 #ifdef __APPLE__
-  displayScale = SDL_GetWindowDisplayScale(mp_window.get());
-  if (displayScale <= 0.0f) {
-    displayScale = 1.0f;
-  }
+  fontDPIScale =
+      calculateFontDPIScale(logicalWidth, logicalHeight, pixelWidth,
+                            pixelHeight);
 #endif
 
   GAMEENGINE_INFO(std::format(
-      "{} -> logical: {}x{}, pixels: {}x{}, display scale: {:.2f}",
-      reason, logicalWidth, logicalHeight, pixelWidth, pixelHeight,
-      displayScale));
+      "{} -> logical: {}x{}, pixels: {}x{}, font DPI scale: {:.2f}", reason,
+      logicalWidth, logicalHeight, pixelWidth, pixelHeight, fontDPIScale));
 
   setWindowSize(logicalWidth, logicalHeight);
-  setLogicalSize(pixelWidth, pixelHeight);
-  setDPIScale(displayScale);
+  setSizeInPixels(pixelWidth, pixelHeight);
+  setDPIScale(fontDPIScale);
   updateDisplayRefreshRate();
 
   if (mp_backgroundSimManager) {
@@ -1576,7 +1629,7 @@ void GameEngine::refreshWindowMetrics(std::string_view reason) {
       GAMEENGINE_INFO("Font system reinitialized successfully after window/display update");
     }
 
-    uiManager.onWindowResize(getLogicalWidth(), getLogicalHeight());
+    uiManager.onWindowResize(getWidthInPixels(), getHeightInPixels());
     GAMEENGINE_INFO("UIManager notified for UI component repositioning");
   } catch (const std::exception &e) {
     GAMEENGINE_ERROR(std::format(

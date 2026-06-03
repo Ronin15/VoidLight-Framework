@@ -42,6 +42,7 @@ set(ALL_TESTS
     pathfinder_manager_tests
     camera_tests
     input_manager_tests
+    input_manager_command_tests
     simd_correctness_tests
     simd_performance_benchmark
     buffer_reuse_tests
@@ -86,19 +87,23 @@ set(ALL_TESTS
     controller_registry_tests
     npc_render_controller_tests
     harvest_controller_tests
-    item_controller_tests
+    inventory_controller_tests
     combat_controller_tests
-    gameplay_hud_controller_tests
+    hud_controller_tests
     social_controller_tests
     resource_render_controller_tests
     ai_manager_edm_integration_tests
     pathfinder_manager_edm_integration_tests
     resource_integration_tests
     resource_architecture_tests
+    sparse_sidecar_tests
+    knockback_sidecar_tests
 )
 
 # Create all test executables
 foreach(test_name ${ALL_TESTS})
+    set(test_source "")
+
     # Determine source file based on test name
     if(${test_name} STREQUAL "save_manager_tests")
         set(test_source "SaveManagerTests.cpp")
@@ -159,6 +164,8 @@ foreach(test_name ${ALL_TESTS})
         set(test_source "CameraTests.cpp")
     elseif(${test_name} STREQUAL "input_manager_tests")
         set(test_source "InputManagerTests.cpp")
+    elseif(${test_name} STREQUAL "input_manager_command_tests")
+        set(test_source "InputManagerCommandTests.cpp")
     elseif(${test_name} STREQUAL "simd_correctness_tests")
         set(test_source "SIMDCorrectnessTests.cpp")
     elseif(${test_name} STREQUAL "simd_performance_benchmark")
@@ -251,23 +258,35 @@ foreach(test_name ${ALL_TESTS})
         set(test_source "controllers/NPCRenderControllerTests.cpp")
     elseif(${test_name} STREQUAL "harvest_controller_tests")
         set(test_source "controllers/HarvestControllerTests.cpp")
-    elseif(${test_name} STREQUAL "item_controller_tests")
-        set(test_source "controllers/ItemControllerTests.cpp")
+    elseif(${test_name} STREQUAL "inventory_controller_tests")
+        set(test_source "controllers/InventoryControllerTests.cpp")
     elseif(${test_name} STREQUAL "combat_controller_tests")
         set(test_source "controllers/CombatControllerTests.cpp")
-    elseif(${test_name} STREQUAL "gameplay_hud_controller_tests")
-        set(test_source "controllers/GameplayHUDControllerTests.cpp")
+    elseif(${test_name} STREQUAL "hud_controller_tests")
+        set(test_source "controllers/HudControllerTests.cpp")
     elseif(${test_name} STREQUAL "social_controller_tests")
         set(test_source "controllers/SocialControllerTests.cpp")
     elseif(${test_name} STREQUAL "ai_manager_edm_integration_tests")
         set(test_source "managers/AIManagerEDMIntegrationTests.cpp")
     elseif(${test_name} STREQUAL "pathfinder_manager_edm_integration_tests")
         set(test_source "managers/PathfinderManagerEDMIntegrationTests.cpp")
+    elseif(${test_name} STREQUAL "sparse_sidecar_tests")
+        set(test_source "managers/SparseSidecarTest.cpp")
+    elseif(${test_name} STREQUAL "knockback_sidecar_tests")
+        set(test_source "integration/KnockbackSidecarTest.cpp")
+    endif()
+
+    if("${test_source}" STREQUAL "")
+        message(FATAL_ERROR "No test source mapped for ${test_name}")
     endif()
 
     add_executable(${test_name} ${test_source})
     target_link_libraries(${test_name} PRIVATE VoidLightLib Boost::unit_test_framework)
     target_compile_definitions(${test_name} PRIVATE BOOST_TEST_NO_SIGNAL_HANDLING)
+    if(${test_name} STREQUAL "rendering_pipeline_tests")
+        target_compile_definitions(${test_name} PRIVATE
+            VOIDLIGHT_PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    endif()
 endforeach()
 
 # --- Tests needing EventManagerTestAccess ---
@@ -276,8 +295,8 @@ set(EVENT_ACCESS_TESTS
     event_manager_behavior_tests
     weather_event_tests
     harvest_controller_tests
-    item_controller_tests
-    gameplay_hud_controller_tests
+    inventory_controller_tests
+    hud_controller_tests
     social_controller_tests
     resource_render_controller_tests
     weather_controller_tests
@@ -366,10 +385,15 @@ set(GPU_UNIT_TESTS
 
     # Source file mapping for GPU unit tests (no GPU required)
     foreach(test_name ${GPU_UNIT_TESTS})
+        set(test_source "")
         if(${test_name} STREQUAL "gpu_types_tests")
             set(test_source "gpu/GPUTypesTests.cpp")
         elseif(${test_name} STREQUAL "gpu_pipeline_config_tests")
             set(test_source "gpu/GPUPipelineConfigTests.cpp")
+        endif()
+
+        if(test_source STREQUAL "")
+            message(FATAL_ERROR "No source mapping found for GPU unit test '${test_name}'")
         endif()
 
         add_executable(${test_name} ${test_source})
@@ -384,6 +408,7 @@ set(GPU_UNIT_TESTS
 
     # Source file mapping for GPU integration tests (require GPU)
     foreach(test_name ${GPU_INTEGRATION_TESTS})
+        set(test_source "")
         if(${test_name} STREQUAL "gpu_device_tests")
             set(test_source "gpu/GPUDeviceTests.cpp")
         elseif(${test_name} STREQUAL "gpu_shader_manager_tests")
@@ -394,6 +419,10 @@ set(GPU_UNIT_TESTS
             set(test_source "gpu/GPUVertexPoolTests.cpp")
         elseif(${test_name} STREQUAL "sprite_batch_tests")
             set(test_source "gpu/SpriteBatchTests.cpp")
+        endif()
+
+        if(test_source STREQUAL "")
+            message(FATAL_ERROR "No source mapping found for GPU integration test '${test_name}'")
         endif()
 
         add_executable(${test_name} ${test_source})
@@ -408,8 +437,13 @@ set(GPU_UNIT_TESTS
 
     # Source file mapping for GPU system tests (full frame flow)
     foreach(test_name ${GPU_SYSTEM_TESTS})
+        set(test_source "")
         if(${test_name} STREQUAL "gpu_renderer_tests")
             set(test_source "gpu/GPURendererTests.cpp")
+        endif()
+
+        if(test_source STREQUAL "")
+            message(FATAL_ERROR "No source mapping found for GPU system test '${test_name}'")
         endif()
 
         add_executable(${test_name} ${test_source})

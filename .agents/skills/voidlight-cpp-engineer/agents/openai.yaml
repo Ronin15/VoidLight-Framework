@@ -1,0 +1,4 @@
+interface:
+  display_name: "VoidLight C++ Engineer"
+  short_description: "Implement engine, gameplay, and rendering fixes"
+  default_prompt: "Use $voidlight-cpp-engineer to help with C++20 game engine, gameplay, rendering, AI, threading, or performance work in this repository."

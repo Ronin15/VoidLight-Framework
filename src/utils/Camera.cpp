@@ -67,7 +67,8 @@ Camera::Camera(float x, float y, float viewportWidth, float viewportHeight)
 }
 
 void Camera::update(float deltaTime) {
-    // Store previous position BEFORE updating for render interpolation
+    // Store previous position BEFORE updating so render-time interpolation
+    // can blend across this fixed-timestep step.
     m_previousPosition = m_position;
 
     // Update camera shake first (no-ops if inactive)
@@ -81,10 +82,7 @@ void Camera::update(float deltaTime) {
         }
     }
 
-    // Follow mode - track target position for entity rendering
     if (m_mode == Mode::Follow && hasTarget()) {
-        // Sync world bounds only when version changes (avoids per-frame overhead)
-        // This is needed for computeOffsetFromCenter() to clamp correctly
         if (m_autoSyncWorldBounds) {
             uint64_t const currentVersion = WorldManager::Instance().getWorldVersion();
             if (currentVersion != m_lastWorldVersion) {
@@ -92,35 +90,34 @@ void Camera::update(float deltaTime) {
             }
         }
 
-        // Blend toward target's position with subtle damping for smoother tracking.
-        // Both position and previousPosition are blended to preserve interpolation sync
-        // and prevent diagonal movement jitter while reducing high-zoom tracking jitter.
-        // The 0.9/0.1 blend adds ~1 frame of subtle lag but significantly smooths movement.
-        if (auto targetPtr = m_target.lock()) {
-            constexpr float blendFactor = 0.9f;  // 0.9 = subtle damping, 1.0 = snap (original)
-            Vector2D targetPos = targetPtr->getPosition();
-            Vector2D targetPrevPos = targetPtr->getPreviousPosition();
-            m_position = m_position * (1.0f - blendFactor) + targetPos * blendFactor;
-            m_previousPosition = m_previousPosition * (1.0f - blendFactor) + targetPrevPos * blendFactor;
-        } else if (m_positionGetter) {
-            // Function-based target: use smoothing since we can't access previous position
-            Vector2D const targetPos = m_positionGetter();
-            float const t = std::clamp(
-                1.0f - std::pow(m_config.smoothingFactor,
-                               deltaTime * 60.0f * m_config.followSpeed),
-                0.0f, 1.0f);
-            m_position = m_position + (targetPos - m_position) * t;
+        Vector2D const targetPos = getTargetPosition();
+        Vector2D const delta = targetPos - m_position;
+        float const distance = delta.length();
+
+        if (m_config.maxCatchupDistance > 0.0f && distance > m_config.maxCatchupDistance) {
+            // Target ran away (teleport, dash, scene seam) — snap forward so
+            // we don't trail by a screen and a half. Pull only as close as
+            // the catchup radius so the lag tail still exists.
+            float const overshoot = distance - m_config.maxCatchupDistance;
+            m_position = m_position + delta * (overshoot / distance);
         }
 
-        // Clamp camera to world bounds after following target
-        if (m_config.clampToWorldBounds) {
-            clampToWorldBounds();
+        if (m_config.deadZoneRadius > 0.0f && distance <= m_config.deadZoneRadius) {
+            // Inside dead zone: hold position. Suppresses sub-pixel shimmer
+            // when the player is idle / pacing in place.
+        } else if (m_config.followLag <= 0.0f) {
+            // Lag disabled: snap to target.
+            m_position = targetPos;
+        } else {
+            // Frame-rate-independent exponential smoothing.
+            // t = 1 - e^(-dt / lag). At dt == lag, t ~= 0.632.
+            float const t = 1.0f - std::exp(-deltaTime / m_config.followLag);
+            m_position = m_position + delta * t;
         }
-    } else {
-        // Non-Follow modes: clamp camera position
-        if (m_config.clampToWorldBounds) {
-            clampToWorldBounds();
-        }
+    }
+
+    if (m_config.clampToWorldBounds) {
+        clampToWorldBounds();
     }
 }
 
@@ -249,7 +246,8 @@ bool Camera::hasTarget() const {
 bool Camera::setConfig(const Config& config) {
     if (config.isValid()) {
         m_config = config;
-        CAMERA_INFO(std::format("Camera configuration updated (followSpeed={})", m_config.followSpeed));
+        CAMERA_INFO(std::format("Camera configuration updated (followLag={}s, deadZone={}px, catchup={}px)",
+                                 m_config.followLag, m_config.deadZoneRadius, m_config.maxCatchupDistance));
         return true;
     } else {
         CAMERA_WARN("Invalid camera configuration provided");
@@ -308,34 +306,19 @@ void Camera::computeOffsetFromCenter(float centerX, float centerY,
 }
 
 Vector2D Camera::getRenderOffset(float& offsetX, float& offsetY, float interpolationAlpha) const {
-    Vector2D center;
+    // The camera's own m_previousPosition -> m_position blend IS the trail.
+    // In Follow mode, m_position chases the target via exponential smoothing
+    // in update(); rendering it directly gives the intentional lag without
+    // re-introducing target/camera desync jitter (we read one position only).
+    Vector2D const center{
+        m_previousPosition.getX() + (m_position.getX() - m_previousPosition.getX()) * interpolationAlpha,
+        m_previousPosition.getY() + (m_position.getY() - m_previousPosition.getY()) * interpolationAlpha};
 
-    // In Follow mode with entity target, query position at RENDER TIME
-    // This ensures we use post-collision position (collision runs after camera update)
-    if (m_mode == Mode::Follow) {
-        if (auto targetPtr = m_target.lock()) {
-            // Get target's current interpolated position - includes collision corrections
-            center = targetPtr->getInterpolatedPosition(interpolationAlpha);
-        } else {
-            // No valid target - use camera's own interpolation
-            center = Vector2D(
-                m_previousPosition.getX() + (m_position.getX() - m_previousPosition.getX()) * interpolationAlpha,
-                m_previousPosition.getY() + (m_position.getY() - m_previousPosition.getY()) * interpolationAlpha);
-        }
-    } else {
-        // Non-Follow modes: use camera's own interpolation
-        center = Vector2D(
-            m_previousPosition.getX() + (m_position.getX() - m_previousPosition.getX()) * interpolationAlpha,
-            m_previousPosition.getY() + (m_position.getY() - m_previousPosition.getY()) * interpolationAlpha);
-    }
-
-    // Compute screen offset from the center position
     computeOffsetFromCenter(center.getX(), center.getY(), offsetX, offsetY);
 
     // Cache rendered center for coordinate conversion consistency
     m_lastRenderedCenter = center;
 
-    // Return the center position we used
     return center;
 }
 
