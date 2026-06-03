@@ -1,6 +1,6 @@
 # Behavior Modes
 
-This page catalogs the current behavior families and the configuration style used on this branch. The important architectural change is that modes are data in EDM-backed config structs, not separate heap-owned behavior instances.
+This page catalogs the behavior families and the configuration style. Modes are data in EDM-backed config structs, not separate heap-owned behavior instances.
 
 ## Behavior Families
 
@@ -24,9 +24,9 @@ This page catalogs the current behavior families and the configuration style use
 ## Assignment Pattern
 
 ```cpp
-VoidLight-Framework::BehaviorConfigData config{};
+VoidLight::BehaviorConfigData config{};
 config.type = BehaviorType::Idle;
-config.idle = VoidLight-Framework::IdleBehaviorConfig::createSubtleSway();
+config.idle = VoidLight::IdleBehaviorConfig::createSubtleSway();
 
 AIManager::Instance().assignBehavior(handle, config);
 ```
@@ -41,12 +41,13 @@ AIManager::Instance().assignBehavior(handle, "Guard");
 
 ## Messages and Transitions
 
-Behaviors now react through queued messages and command-bus transitions instead of direct cross-controller mutation.
+Behaviors react through queued messages and command-bus transitions instead of direct cross-controller mutation.
 
 Important message IDs:
 
 - `ATTACK_TARGET`
 - `RETREAT`
+- `RANGED_ATTACK_FAILED`
 - `PANIC`
 - `CALM_DOWN`
 - `DISTRESS`

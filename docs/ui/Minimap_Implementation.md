@@ -126,7 +126,7 @@ void SomeState::renderGPUUI(VoidLight::GPURenderer& gpu,
 ## 11. References
 
 - See `docs/ui/UIManager_Guide.md` and `docs/utils/Camera.md` for related UI overlay and camera integration details.
-- See `include/core/GameEngine.hpp`, `include/ui/UIManager.hpp`, and `include/world/WorldData.hpp` for integration points.
+- See `include/core/GameEngine.hpp`, `include/managers/UIManager.hpp`, and `include/world/WorldData.hpp` for integration points.
 
 ---
 

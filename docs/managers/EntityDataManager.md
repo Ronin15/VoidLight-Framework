@@ -61,7 +61,7 @@ struct EntityHotData {
 static_assert(sizeof(EntityHotData) == 64, "One cache line");
 ```
 
-Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback no longer lives inline in `EntityHotData`; it is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state.
+Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state.
 
 ### TransformData (32 bytes)
 
@@ -196,7 +196,7 @@ void processDestructionQueue();  // Call at end of frame
 
 ### Entity Registration (Legacy Support)
 
-For entities created via old patterns (Entity subclass constructors):
+For entities created via legacy `Entity` subclass constructors:
 
 ```cpp
 EntityHandle registerNPC(EntityID entityId, const Vector2D& position, float halfWidth, float halfHeight, float health, float maxHealth);
@@ -281,7 +281,7 @@ void initBehaviorData(size_t index, BehaviorType type);
 void clearBehaviorData(size_t index);
 ```
 
-Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index, and `reassignBehaviorConfig(...)` / `clearBehaviorConfig(...)` for structural changes. `BehaviorData` is now shared cross-behavior state only.
+Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index, and `reassignBehaviorConfig(...)` / `clearBehaviorConfig(...)` for structural changes. `BehaviorData` is shared cross-behavior state only.
 
 ### Knockback Sidecar
 
@@ -385,29 +385,38 @@ if (m_framesSinceTierUpdate++ >= TIER_UPDATE_INTERVAL) {
 #### Batch Processing Pattern
 
 ```cpp
-void AIManager::update(float dt) {
+void AIManager::update(float dt)
+{
     auto& edm = EntityDataManager::Instance();
 
-    // Get pre-filtered indices (O(1) - just returns span)
-    const auto activeIndices = edm.getActiveIndices();
+    m_activeIndicesBuffer.assign(
+        edm.getActiveIndices().begin(), edm.getActiveIndices().end());
 
-    // Process in batches using WorkerBudget
-    auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-        SystemType::AI, activeIndices.size(), workers);
+    auto decision = WorkerBudgetManager::Instance().shouldUseThreading(
+        SystemType::AI, m_activeIndicesBuffer.size());
 
-    for (size_t batch = 0; batch < batchCount; ++batch) {
+    auto [batchCount, batchSize] = WorkerBudgetManager::Instance()
+        .getBatchStrategy(SystemType::AI, m_activeIndicesBuffer.size(), workers);
+
+    for (size_t batch = 0; batch < batchCount; ++batch)
+    {
         size_t start = batch * batchSize;
-        size_t end = std::min(start + batchSize, activeIndices.size());
+        size_t end = std::min(start + batchSize, m_activeIndicesBuffer.size());
 
-        threadSystem.enqueueTask([this, &activeIndices, start, end, dt] {
-            for (size_t i = start; i < end; ++i) {
-                size_t edmIndex = activeIndices[i];
-                processBehavior(edmIndex, dt);
-            }
+        threadSystem.enqueueTask([this, start, end, dt] {
+            processBatch(dt, start, end);
         });
     }
 }
 ```
+
+`AIManager::processBatch(...)` reads EDM indices from `m_activeIndicesBuffer`.
+The fused per-entity loop then builds a `BehaviorContext`, switches on the
+entity's `BehaviorConfigRef::type`, calls the typed behavior executor with the
+matching dense config/state pool entries, accumulates movement, and consumes
+knockback sidecar state. Structural outputs such as behavior transitions,
+ranged attacks, and equipment fallback requests go through `AICommandBus` and
+are committed after worker batches join.
 
 ### Queries
 
@@ -442,21 +451,30 @@ character.faction = 1;  // Enemy
 ### Batch Processing (AI/Collision)
 
 ```cpp
-void AIManager::processBatch(float dt, size_t start, size_t end) {
+void AIManager::processBatch(float dt, size_t start, size_t end)
+{
     auto& edm = EntityDataManager::Instance();
-    auto activeIndices = edm.getActiveIndices();
 
-    for (size_t i = start; i < end; ++i) {
-        size_t edmIndex = activeIndices[i];
+    for (size_t i = start; i < end; ++i)
+    {
+        size_t edmIndex = m_activeIndicesBuffer[i];
 
         // Direct index access - no map lookups
         EntityHotData& hot = edm.getHotDataByIndex(edmIndex);
         if (!hot.isAlive() || hot.kind != EntityKind::NPC) continue;
 
         BehaviorData& behavior = edm.getBehaviorData(edmIndex);
-        PathData& path = edm.getPathData(edmIndex);
+        BehaviorConfigRef ref = edm.getBehaviorConfigRef(edmIndex);
 
-        // Process behavior...
+        switch (ref.type) {
+        case BehaviorType::Wander:
+            Behaviors::executeWander(ctx,
+                edm.getWanderConfig(ref.index),
+                edm.getWanderState(ref.index));
+            break;
+        default:
+            break;
+        }
     }
 }
 ```

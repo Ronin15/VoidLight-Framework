@@ -4,9 +4,11 @@
 
 ## Overview
 
-`WorldManager` owns the active world, chunk-oriented rendering setup, and world generation/loading. On this branch it also coordinates the world-facing side of harvesting by spawning EDM harvestables that match tile obstacles.
+`WorldManager` owns the active world, chunk-oriented rendering setup, world
+generation/loading, and the world-facing side of harvesting by spawning EDM
+harvestables that match tile obstacles.
 
-## Current Responsibilities
+## Responsibilities
 
 - load and unload worlds
 - expose world bounds and dimensions

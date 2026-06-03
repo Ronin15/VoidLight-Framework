@@ -44,4 +44,4 @@ ATTACK_COOLDOWN = 0.5f
 ## Notes
 
 - The controller owns a reusable `m_nearbyHandlesBuffer` to avoid per-frame allocations.
-- The controller updates the gameplay event log as part of player combat feedback; do not expect the old event-only flow from previous docs.
+- The controller updates the gameplay event log as part of player combat feedback.

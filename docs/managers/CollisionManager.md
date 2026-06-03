@@ -223,18 +223,18 @@ CollisionManager queries WorkerBudgetManager for optimal batch configuration:
 
 ```cpp
 // Dispatcher in broadphaseSOA()
-auto& budgetMgr = VoidLight-Framework::WorkerBudgetManager::Instance();
+auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 size_t optimalWorkers = budgetMgr.getOptimalWorkers(
-    VoidLight-Framework::SystemType::Collision, movableIndices.size());
+    VoidLight::SystemType::Collision, movableIndices.size());
 
 auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-    VoidLight-Framework::SystemType::Collision,
+    VoidLight::SystemType::Collision,
     movableIndices.size(),
     optimalWorkers);
 
 // Adaptive threshold learns optimal cutoff based on measured throughput
 bool useThreading = batchCount > 1 &&
-    budgetMgr.shouldUseThreading(VoidLight-Framework::SystemType::Collision, movableIndices.size());
+    budgetMgr.shouldUseThreading(VoidLight::SystemType::Collision, movableIndices.size());
 
 if (!useThreading) {
     broadphaseSingleThreaded(indexPairs);
@@ -515,7 +515,7 @@ Zero-contention batch updates where each AI batch has its own buffer.
 // Create water trigger area
 EntityID waterTriggerId = CollisionManager::Instance().createTriggerArea(
     AABB(100.0f, 100.0f, 50.0f, 50.0f),
-    VoidLight-Framework::TriggerTag::Water,
+    VoidLight::TriggerTag::Water,
     CollisionLayer::Layer_Environment,
     CollisionLayer::Layer_Player | CollisionLayer::Layer_NPC
 );
@@ -523,7 +523,7 @@ EntityID waterTriggerId = CollisionManager::Instance().createTriggerArea(
 // Create trigger at specific coordinates
 EntityID triggerId = CollisionManager::Instance().createTriggerAreaAt(
     x, y, halfWidth, halfHeight,
-    VoidLight-Framework::TriggerTag::Portal,
+    VoidLight::TriggerTag::Portal,
     CollisionLayer::Layer_Trigger,
     CollisionLayer::Layer_Player
 );

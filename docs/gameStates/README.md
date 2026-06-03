@@ -2,11 +2,15 @@
 
 ## Overview
 
-GameStates own screen-level behavior, state-scoped controllers, event tokens, and their teardown order. The current branch standardizes several patterns that older docs missed.
+GameStates own screen-level behavior, state-scoped controllers, event tokens, and their teardown order.
 
 ## Documented States
 
 - [LoadingState](LoadingState.md)
+- [LogoState](LogoState.md)
+- [MainMenuState](MainMenuState.md)
+- [GamePlayState](GamePlayState.md)
+- [PauseState](PauseState.md)
 - [SettingsMenuState](SettingsMenuState.md)
 - [GameOverState](GameOverState.md)
 

@@ -35,11 +35,30 @@ Common fields still include:
 - `consumable`
 - `properties`
 
-## Branch-Specific Implications
+`id` is the stable data identifier used by `ResourceTemplateManager::getHandleById(...)`.
+`textureId` is the common texture identity for both icon and world rendering;
+`iconTextureId` and `worldTextureId` override the common value for those specific
+uses. Atlas source rectangles come from `res/data/atlas.json` when the texture
+ID has an atlas entry.
+
+Supported exact `type` strings are:
+
+- `Equipment`
+- `Consumable`
+- `QuestItem`
+- `Ammunition`
+- `CraftingComponent`
+- `RawResource`
+- `Gold`
+- `Gem`
+- `FactionToken`
+- `CraftingCurrency`
+
+## Gameplay Implications
 
 ### `maxStackSize` matters during gameplay
 
-On this branch, stack sizes are gameplay-significant rather than cosmetic:
+Stack sizes are gameplay-significant rather than cosmetic:
 
 - harvested wood/stone/ore/gems can fill inventory quickly
 - trading and gift flows depend on current stack limits
@@ -48,7 +67,7 @@ On this branch, stack sizes are gameplay-significant rather than cosmetic:
 
 When adding new resources, choose `maxStackSize` deliberately and assume it affects both UI and interaction logic.
 
-### Merchant / economy content is now first-class
+### Merchant / economy content
 
 The split catalogs include merchant-facing equipment, consumables, raw
 materials, and currencies used by the trading/social systems. Add weapons to
@@ -58,7 +77,7 @@ to `currency.json`.
 
 ## Related Data
 
-Resource loading now interacts closely with NPC class data in `res/data/classes.json`:
+Resource loading interacts closely with NPC class data in `res/data/classes.json`:
 
 - `isMerchant`
 - `startingItems`

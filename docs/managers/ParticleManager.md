@@ -140,7 +140,7 @@ ParticleManager leverages the SIMDMath.hpp abstraction layer for cross-platform 
 ```cpp
 // Process 4 particles simultaneously using SIMDMath abstraction
 // Cross-platform: SSE2/NEON/scalar fallback handled automatically
-using namespace VoidLight-Framework::SIMD;
+using namespace VoidLight::SIMD;
 
 // Prepare SIMD constants
 const Float4 deltaTimeVec = broadcast(deltaTime);
@@ -171,7 +171,7 @@ store4(&particles.posY[i], posYv);
 
 **Active Flag Filtering with SIMD:**
 ```cpp
-using namespace VoidLight-Framework::SIMD;  // Use SIMDMath abstraction layer
+using namespace VoidLight::SIMD;  // Use SIMDMath abstraction layer
 
 // Check 4 particles' active flags using SIMD byte operations
 const Byte16 flagsv = load_byte16(&particles.flags[i]);
@@ -383,7 +383,7 @@ void toggleSparksEffect();
 ### Rendering Pipeline
 
 ```cpp
-void renderGPU(VoidLight-Framework::GPURenderer& gpuRenderer, SDL_GPURenderPass* scenePass);
+void renderGPU(VoidLight::GPURenderer& gpuRenderer, SDL_GPURenderPass* scenePass);
 ```
 
 ### Global Controls

@@ -17,7 +17,7 @@ The InputManager provides centralized input handling for the VoidLight Engine, i
 - **Gamepad Support**: Multi-controller support with SDL3 gamepad API, normalized axis values in [-1.0, 1.0]
 - **Hot-Plug Support**: Gamepads can be connected and disconnected at runtime via `SDL_EVENT_GAMEPAD_ADDED` / `SDL_EVENT_GAMEPAD_REMOVED`
 - **Focus Loss Handling**: Keyboard and gamepad state is cleared on window focus loss to prevent stuck inputs
-- **Window Event Handling**: Automatic window resize detection and system coordination
+- **Window Event Interaction**: Focus, gamepad, keyboard, mouse, and pixel-density input handling. `GameEngine` owns window/display resize coordination.
 
 ## Quick Start
 
@@ -47,13 +47,16 @@ bool leftClick = input.getMouseButtonState(LEFT);
 
 ## Coordinate System Integration
 
-The InputManager automatically converts mouse coordinates to match the engine's coordinate system. All mouse events use logical coordinates after conversion, ensuring UI and gameplay accuracy across platforms.
+The InputManager converts SDL mouse window coordinates into the engine's
+pixel-space coordinate system using `SDL_GetWindowPixelDensity(...)`. UI hit
+testing and gameplay screen-to-world conversion should use
+`getMousePosition()`.
 
 ## Input Detection Methods
 
 ### Command Input
 
-The branch adds an action-mapped command layer:
+The action-mapped command layer lets gameplay and menu code query commands:
 
 ```cpp
 if (input.isCommandPressed(InputManager::Command::OpenInventory)) {
@@ -97,6 +100,36 @@ void resetBindingsToDefaults();
 ```
 
 `GameEngine` loads `res/input_bindings.json` during startup. `SettingsMenuState` saves it after applying settings or resetting controls.
+
+### Default Command Map
+
+Default keyboard/mouse bindings:
+
+- movement: `W`, `A`, `S`, `D`
+- attack: `F`
+- interact: `E`
+- inventory: `I`
+- pause/menu cancel: `Escape`
+- world interact: left mouse button
+- zoom: `[` and `]`
+- hotbar slots: `1` through `9`
+- menu navigation: arrow keys and `Return`
+
+Default controller bindings:
+
+- movement: left stick
+- attack: west face button
+- interact/menu confirm: south face button
+- inventory: north face button
+- pause: start
+- zoom: D-pad up/down
+- menu navigation: D-pad
+
+Intentional gaps:
+
+- `WorldInteract` has no controller default because it requires a screen
+  position.
+- hotbar slots are keyboard-only by default.
 
 ### Keyboard Input
 
@@ -151,9 +184,11 @@ bool aButton = input.getButtonState(0, 0); // 0 = first gamepad, 0 = A button
 
 Gamepads are tracked by `SDL_JoystickID`. Connecting or disconnecting a controller during play is handled automatically — no manual re-initialization is required.
 
-## Window Event Handling
+## Window and Display Events
 
-The InputManager automatically handles window resize events and coordinates system updates, updating GameEngine, UIManager, and FontManager as needed.
+`GameEngine` routes resize/display events and refreshes `FontManager`,
+`UIManager`, display refresh rate, and cached pixel dimensions. `InputManager`
+handles input events and focus-loss state cleanup.
 
 ## API Reference
 

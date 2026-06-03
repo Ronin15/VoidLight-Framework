@@ -5,6 +5,8 @@
 `InventoryController` is a state-scoped gameplay controller for player inventory interaction and inventory UI. It owns:
 
 - pickup interaction within `PICKUP_RADIUS`
+- nearby container open/close policy
+- container loot/store/transfer UI
 - inventory panel creation and visibility
 - inventory grid refresh after `ResourceChangeEvent`
 - gear slot display and equip/unequip clicks
@@ -16,15 +18,27 @@ It does not own inventory storage. Player inventory and equipment state remain i
 
 ## Runtime Flow
 
-`GamePlayState` adds the controller with `m_controllers.add<InventoryController>(mp_Player)`, calls `initializeInventoryUI()` after UI setup, and then lets `m_controllers.updateAll(dt)` plus state input routing drive it.
+`GamePlayState` adds the controller with
+`m_controllers.add<InventoryController>(mp_Player)`, creates shared gameplay UI
+such as the event log and status labels, then calls
+`inventoryCtrl.initializeInventoryUI()` and
+`HudController::initializeHotbarUI()`. After that, `m_controllers.updateAll(dt)`
+plus state input routing drive it.
 
 Typical input order in gameplay:
 
 1. `OpenInventory` toggles the inventory panel.
-2. `Interact` prioritizes merchant trade, then pickup, then harvest interaction.
-3. When the inventory is open, slot clicks may equip gear, consume usable items, or start a hotbar assignment.
-4. Inventory slot drags use EDM slot-swap storage primitives. Dropping onto an occupied inventory slot swaps stacks, dropping onto an empty inventory slot moves the stack there, and dropping outside the inventory cancels the reorder.
-5. During hotbar assignment, the controller tracks the dragged resource handle. Inventory-origin drops over the hotbar assign through `HudController::assignHotbarItem(...)`; hotbar-origin drags reorder through `HudController::moveHotbarItem(...)`.
+2. `Interact` prioritizes merchant trade, then nearby container open, then
+   pickup, then harvest interaction.
+3. Locked containers report feedback instead of opening.
+4. When the inventory is open, slot clicks may equip gear, consume usable items,
+   transfer between inventory/container, loot all, or start a hotbar assignment.
+5. Inventory slot drags use EDM slot-swap storage primitives. Dropping onto an occupied inventory slot swaps stacks, dropping onto an empty inventory slot moves the stack there, and dropping outside the inventory cancels the reorder.
+6. During hotbar assignment, the controller tracks the dragged resource handle. Inventory-origin and container-origin drops over the hotbar assign through `HudController::assignHotbarItem(...)`; hotbar-origin drags reorder through `HudController::moveHotbarItem(...)`.
+
+Open containers are validated during update. The controller auto-closes the
+container view when the player walks out of interaction range or the container
+handle/inventory becomes invalid.
 
 ## UI Contract
 
@@ -32,6 +46,7 @@ Typical input order in gameplay:
 - `refreshInventoryUI()` reflects ordered physical EDM inventory slots. Use `EntityDataManager::getInventorySlots(...)` for bulk slot reads instead of rebuilding the player grid from aggregate resource totals.
 - `refreshInventoryUI()` rebuilds the grid entries, so click/drag handlers must copy any `ResourceHandle` they need before triggering refresh.
 - Gear slots are displayed inside the existing inventory overlay; inventory items remain visible while gear is assigned.
+- Container slots are controller-owned UI over EDM container inventory data.
 - Pause/resume hides or restores inventory and hotbar UI through controller APIs instead of direct component ownership in the state.
 
 ## Rules

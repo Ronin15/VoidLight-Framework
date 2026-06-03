@@ -38,7 +38,7 @@ bool isShutdown() const;
 
 ```cpp
 struct GPUTextureData {
-    std::shared_ptr<VoidLight-Framework::GPUTexture> texture;
+    std::shared_ptr<VoidLight::GPUTexture> texture;
     float width{0.0f};
     float height{0.0f};
 };

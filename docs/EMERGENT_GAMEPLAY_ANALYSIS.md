@@ -101,7 +101,7 @@ Combat:
 | **GameTimeManager** | `include/managers/GameTimeManager.hpp` | Season-specific weather probability tables |
 | **WorldGenerator** | `include/world/WorldGenerator.hpp` | Biome-based procedural content |
 | **BackgroundSimulationManager** | `include/managers/BackgroundSimulationManager.hpp` | 3-tier simulation (Active/Background/Hibernated) |
-| **WorldResourceManager** | `include/managers/WorldResourceManager.hpp` | Per-world resource tracking with transactions |
+| **WorldResourceManager** | `include/managers/WorldResourceManager.hpp` | Spatial registry over EDM-backed world resources |
 | **CollisionManager** | `include/managers/CollisionManager.hpp` | Trigger system for zone-based events |
 
 ---

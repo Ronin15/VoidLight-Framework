@@ -66,8 +66,8 @@ template<typename T>
 ### Batch Operations
 
 ```cpp
-void subscribeAll();    // Called in GameState::enter()
-void unsubscribeAll();  // Called in GameState::exit()
+void subscribeAll();    // Called after controllers are added in GameState::enter()
+void unsubscribeAll();  // Removes subscriptions, but keeps controller objects alive
 void suspendAll();      // Called in GameState::pause()
 void resumeAll();       // Called in GameState::resume()
 
@@ -85,8 +85,12 @@ void updateAll(float deltaTime);
 ```cpp
 [[nodiscard]] size_t size() const;
 [[nodiscard]] bool empty() const;
-void clear();  // Unsubscribes first, then clears
+void clear();  // Unsubscribes first, then destroys controller objects
 ```
+
+Use `clear()` as the normal `GameState::exit()` endpoint when the state is
+leaving or re-entering with fresh references. `unsubscribeAll()` is useful when
+controller objects must stay alive, but it is not a full teardown.
 
 ## IUpdatable Interface
 
@@ -146,7 +150,7 @@ public:
     }
 
     bool exit() override {
-        m_controllers.unsubscribeAll();
+        m_controllers.clear();
         return true;
     }
 };
@@ -164,9 +168,10 @@ void GamePlayState::render() {
     }
 
     // Check if controller exists
-    if (m_controllers.has<CombatController>()) {
-        auto* combat = m_controllers.get<CombatController>();
-        renderCombatUI(combat->getCombatState());
+    if (auto* hud = m_controllers.get<HudController>()) {
+        updateTargetFrame(hud->hasActiveTarget(),
+                          hud->getTargetLabel(),
+                          hud->getTargetHealth());
     }
 }
 ```
@@ -211,9 +216,9 @@ private:
 m_controllers.add<CombatController>(mp_player);
 ```
 
-## Migration from Manual Controller Management
+## Ownership Examples
 
-### Before (Manual Management)
+### Manual Ownership
 
 ```cpp
 class GamePlayState : public GameState {
@@ -246,7 +251,7 @@ private:
 };
 ```
 
-### After (ControllerRegistry)
+### Registry Ownership
 
 ```cpp
 class GamePlayState : public GameState {
@@ -266,7 +271,7 @@ private:
     }
 
     bool exit() override {
-        m_controllers.unsubscribeAll();
+        m_controllers.clear();
         return true;
     }
 };

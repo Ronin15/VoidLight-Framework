@@ -36,7 +36,7 @@ The system operates in two distinct phases:
 ## ResourceHandle Structure
 
 ```cpp
-namespace VoidLight-Framework {
+namespace VoidLight {
     class ResourceHandle {
     private:
         uint32_t m_id;          // 32-bit unique identifier
@@ -79,8 +79,8 @@ namespace VoidLight-Framework {
 class GamePlayState : public GameState {
 private:
     // Store handles as member variables
-    VoidLight-Framework::ResourceHandle m_goldHandle;
-    VoidLight-Framework::ResourceHandle m_healthPotionHandle;
+    VoidLight::ResourceHandle m_goldHandle;
+    VoidLight::ResourceHandle m_healthPotionHandle;
     
 public:
     void init() override {
@@ -114,10 +114,10 @@ public:
 class Player : public Entity {
 private:
     // Store handles instead of item names
-    std::unordered_map<std::string, VoidLight-Framework::ResourceHandle> m_equippedItems;
+    std::unordered_map<std::string, VoidLight::ResourceHandle> m_equippedItems;
     
 public:
-    bool equipItem(VoidLight-Framework::ResourceHandle itemHandle) {
+    bool equipItem(VoidLight::ResourceHandle itemHandle) {
         // Handle-based validation and equipment
         if (!itemHandle.isValid()) {
             return false;
@@ -135,9 +135,9 @@ public:
         return true;
     }
     
-    VoidLight-Framework::ResourceHandle getEquippedItem(const std::string& slotName) const {
+    VoidLight::ResourceHandle getEquippedItem(const std::string& slotName) const {
         auto it = m_equippedItems.find(slotName);
-        return (it != m_equippedItems.end()) ? it->second : VoidLight-Framework::ResourceHandle{};
+        return (it != m_equippedItems.end()) ? it->second : VoidLight::ResourceHandle{};
     }
 };
 ```
@@ -147,7 +147,7 @@ public:
 class NPC : public Entity {
 private:
     // Handle-based loot drops
-    std::unordered_map<VoidLight-Framework::ResourceHandle, float> m_dropRates;
+    std::unordered_map<VoidLight::ResourceHandle, float> m_dropRates;
     
 public:
     void initializeLootDrops() {
@@ -182,7 +182,7 @@ public:
 ```cpp
 // ✅ GOOD: Fast, cache-friendly operations
 void fastResourceAccess() {
-    VoidLight-Framework::ResourceHandle handle = getResourceHandle();
+    VoidLight::ResourceHandle handle = getResourceHandle();
     
     // Direct handle operations
     if (handle.isValid()) {
@@ -192,7 +192,7 @@ void fastResourceAccess() {
     }
     
     // Bulk operations for even better performance
-    std::vector<VoidLight-Framework::ResourceHandle> handles = getAllHandles();
+    std::vector<VoidLight::ResourceHandle> handles = getAllHandles();
     auto values = rtm.getValues(handles);  // Single optimized call
 }
 ```
@@ -218,8 +218,8 @@ void slowResourceAccess() {
 ```cpp
 class InventoryUI {
 private:
-    VoidLight-Framework::ResourceHandle m_goldHandle;
-    VoidLight-Framework::ResourceHandle m_healthPotionHandle;
+    VoidLight::ResourceHandle m_goldHandle;
+    VoidLight::ResourceHandle m_healthPotionHandle;
     
 public:
     void initialize() {
@@ -235,8 +235,8 @@ public:
 ```cpp
 class ResourceConstants {
 public:
-    static VoidLight-Framework::ResourceHandle getGoldHandle() {
-        static VoidLight-Framework::ResourceHandle s_goldHandle = 
+    static VoidLight::ResourceHandle getGoldHandle() {
+        static VoidLight::ResourceHandle s_goldHandle =
             ResourceTemplateManager::Instance().getHandleById("gold_coins");
         return s_goldHandle;
     }
@@ -262,7 +262,7 @@ bool Player::equipItem(const std::string& itemId) {
 
 #### After (Handle-Based)
 ```cpp
-bool Player::equipItem(VoidLight-Framework::ResourceHandle itemHandle) {
+bool Player::equipItem(VoidLight::ResourceHandle itemHandle) {
     // Handle validation (fast)
     if (!itemHandle.isValid()) return false;
     
@@ -278,16 +278,16 @@ bool Player::equipItem(VoidLight-Framework::ResourceHandle itemHandle) {
 
 | Component | Old Signature | New Signature |
 |-----------|---------------|---------------|
-| Equipment | `equipItem(const std::string& itemId)` | `equipItem(VoidLight-Framework::ResourceHandle handle)` |
-| Inventory | `addResource(const std::string& name, int qty)` | `addResource(VoidLight-Framework::ResourceHandle handle, int qty)` |
-| Trading | `canTrade(const std::string& itemId)` | `canTrade(VoidLight-Framework::ResourceHandle handle)` |
-| Loot | `dropSpecificItem(const std::string& itemId)` | `dropSpecificItem(VoidLight-Framework::ResourceHandle handle)` |
+| Equipment | `equipItem(const std::string& itemId)` | `equipItem(VoidLight::ResourceHandle handle)` |
+| Inventory | `addResource(const std::string& name, int qty)` | `addResource(VoidLight::ResourceHandle handle, int qty)` |
+| Trading | `canTrade(const std::string& itemId)` | `canTrade(VoidLight::ResourceHandle handle)` |
+| Loot | `dropSpecificItem(const std::string& itemId)` | `dropSpecificItem(VoidLight::ResourceHandle handle)` |
 
 ## Error Handling
 
 ### Handle Validation
 ```cpp
-void safeResourceOperation(VoidLight-Framework::ResourceHandle handle) {
+void safeResourceOperation(VoidLight::ResourceHandle handle) {
     // Always validate handles before use
     if (!handle.isValid()) {
         GAME_ERROR("Invalid resource handle provided");
@@ -307,7 +307,7 @@ void safeResourceOperation(VoidLight-Framework::ResourceHandle handle) {
 
 ### Graceful Degradation
 ```cpp
-int getResourceStackSize(VoidLight-Framework::ResourceHandle handle) {
+int getResourceStackSize(VoidLight::ResourceHandle handle) {
     const auto& rtm = ResourceTemplateManager::Instance();
     
     // ResourceTemplateManager returns sensible defaults for invalid handles

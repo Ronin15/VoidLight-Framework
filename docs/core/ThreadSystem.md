@@ -2,7 +2,7 @@
 
 **Code:** `include/core/ThreadSystem.hpp`, `include/core/WorkerBudget.hpp`, `src/core/WorkerBudget.cpp`
 
-**Singleton Access:** Use `VoidLight-Framework::ThreadSystem::Instance()` to access the thread system.
+**Singleton Access:** Use `VoidLight::ThreadSystem::Instance()` to access the thread system.
 
 ## Overview
 
@@ -142,12 +142,12 @@ void AIManager::update(float deltaTime) {
     if (entityCount == 0) return;
 
     // Get optimal batch configuration from WorkerBudget
-    auto& budgetMgr = VoidLight-Framework::WorkerBudgetManager::Instance();
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
     size_t optimalWorkers = budgetMgr.getOptimalWorkers(
-        VoidLight-Framework::SystemType::AI, entityCount);
+        VoidLight::SystemType::AI, entityCount);
 
     auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-        VoidLight-Framework::SystemType::AI,
+        VoidLight::SystemType::AI,
         entityCount,
         optimalWorkers);
 
@@ -168,7 +168,7 @@ void AIManager::update(float deltaTime) {
 
     auto elapsed = std::chrono::steady_clock::now() - startTime;
     budgetMgr.reportExecution(
-        VoidLight-Framework::SystemType::AI,
+        VoidLight::SystemType::AI,
         entityCount,
         true,
         batchCount,
@@ -244,12 +244,12 @@ int result = future.get();
 
 ```cpp
 void processEntitiesWithBudget(std::vector<Entity*>& entities, float deltaTime) {
-    auto& budgetMgr = VoidLight-Framework::WorkerBudgetManager::Instance();
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 
     auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-        VoidLight-Framework::SystemType::AI,
+        VoidLight::SystemType::AI,
         entities.size(),
-        budgetMgr.getOptimalWorkers(VoidLight-Framework::SystemType::AI, entities.size()));
+        budgetMgr.getOptimalWorkers(VoidLight::SystemType::AI, entities.size()));
 
     for (size_t i = 0; i < batchCount; ++i) {
         size_t start = i * batchSize;
@@ -339,12 +339,12 @@ void Manager::update(float deltaTime) {
     if (workloadSize == 0) return;
 
     // 1. Get optimal configuration from WorkerBudget
-    auto& budgetMgr = VoidLight-Framework::WorkerBudgetManager::Instance();
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
     size_t optimalWorkers = budgetMgr.getOptimalWorkers(
-        VoidLight-Framework::SystemType::MyType, workloadSize);
+        VoidLight::SystemType::MyType, workloadSize);
 
     auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-        VoidLight-Framework::SystemType::MyType,
+        VoidLight::SystemType::MyType,
         workloadSize,
         optimalWorkers);
 
@@ -362,7 +362,7 @@ void Manager::update(float deltaTime) {
     // 4. Report metrics for adaptive tuning
     auto elapsed = std::chrono::steady_clock::now() - startTime;
     budgetMgr.reportExecution(
-        VoidLight-Framework::SystemType::MyType,
+        VoidLight::SystemType::MyType,
         workloadSize,
         true,
         batchCount,

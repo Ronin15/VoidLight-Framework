@@ -4,14 +4,14 @@
 
 ## Overview
 
-`WorkerBudgetManager` is the engine's central threading decision system. On this branch it combines:
+`WorkerBudgetManager` is the engine's central threading decision system. It combines:
 
 - learned single-thread switch-over thresholds
 - hysteresis for mode stability
 - batch tuning for multi-threaded work
 - per-system reset during state transitions
 
-This replaces the older docs that implied a simple throughput-only single-vs-multi decision model.
+The threading decision model is more than a simple throughput-only single-vs-multi cutoff.
 
 ## Core API
 
@@ -51,7 +51,7 @@ Multi-threaded runs feed the batch multiplier hill-climb through `reportExecutio
 ## Usage Pattern
 
 ```cpp
-auto& budgetMgr = VoidLight-Framework::WorkerBudgetManager::Instance();
+auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 auto decision = budgetMgr.shouldUseThreading(SystemType::AI, count);
 
 size_t batchCount = 1;

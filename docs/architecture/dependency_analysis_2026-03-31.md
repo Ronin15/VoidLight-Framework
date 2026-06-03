@@ -5,6 +5,10 @@
 **Branch:** audit
 **Analysis Mode:** Full Architecture Audit
 
+> Historical snapshot: this report preserves the dependency graph observed on
+> 2026-03-31. Current API and ownership guidance lives in the subsystem docs and
+> headers. Names listed below may include types that have since been retired.
+
 ---
 
 ## Executive Summary

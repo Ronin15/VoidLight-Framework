@@ -104,7 +104,7 @@ Current `EventTypeId` values:
 
 ```cpp
 Weather, SceneChange, NPCSpawn, ParticleEffect,
-ResourceChange, World, Camera, Harvest,
+ResourceChange, World, Camera, Harvest, Collision,
 WorldTrigger, CollisionObstacleChanged, Custom,
 Time, Combat, Entity, BehaviorMessage, MerchantSpawn
 ```
@@ -114,6 +114,10 @@ Key event types:
 - `BehaviorMessage` covers inter-entity AI signaling such as `RAISE_ALERT`
 - `MerchantSpawn` covers merchant-focused NPC spawning through `MerchantSpawnEvent`
 - `DamageEvent` under `EventTypeId::Combat` is the hot path for gameplay damage
+- `Collision` is a reserved legacy ID. There is no `CollisionEvent` payload in
+  the current event path.
+- `CollisionObstacleChanged` is the supported world-obstacle collision update
+  event. Projectile hits use the persistent projectile hit sink.
 - theft/social flows emit normal event traffic instead of bespoke controller-only state
 - `ResourceChangeEvent` is reused heavily by inventory, harvesting, and UI sync paths
 

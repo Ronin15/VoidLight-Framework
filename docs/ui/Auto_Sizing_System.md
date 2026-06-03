@@ -34,10 +34,10 @@ See [UIConstants Reference - Baseline Resolution System](UIConstants.md#baseline
 - **Alignment Preservation**: Component alignment maintained after auto-sizing
 - **Position Stability**: Auto-sizing affects dimensions only, never base positioning
 
-### SDL3 Integration
-- **Coordinate Compatibility**: Works seamlessly with SDL3's logical presentation system
+### SDL3_GPU Integration
+- **Coordinate Compatibility**: Uses the engine's pixel-space GPU/UI coordinate system
 - **DPI Awareness**: Integrates with GameEngine's DPI detection for optimal sizing
-- **Input Accuracy**: Proper mouse coordinate handling with logical presentation
+- **Input Accuracy**: Proper mouse coordinate handling through InputManager pixel-density scaling
 
 ## How It Works
 

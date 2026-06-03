@@ -4,7 +4,7 @@
 
 ## Overview
 
-`SocialController` owns player-facing social interactions with NPCs. On this branch it has two major roles:
+`SocialController` owns player-facing social interactions with NPCs. It has two major roles:
 
 - merchant trading
 - relationship, memory, and crime reporting flows
@@ -70,6 +70,8 @@ void alertNearbyGuards(const Vector2D& location, EntityHandle criminal);
 While a trade session is open, trade input is modal:
 
 - `handleTradeInput(inputMgr)` consumes menu-style commands for pane switching, item selection, quantity adjustment, confirm, and cancel.
+- quantity step shortcuts still use raw `-` / `+` key handling; they are not
+  separate rebindable commands yet.
 - normal gameplay input such as attack, pickup, and pause-sensitive UI interaction should not run through the usual path until the trade session closes.
 - pause/exit paths call `closeTrade()` so state-owned UI does not survive transition cleanup.
 
@@ -80,9 +82,9 @@ While a trade session is open, trade input is modal:
 - relationship and emotional changes are backed by NPC memory data
 - nearby guard queries reuse an internal buffer and route through AI/EDM helpers
 
-## Important Branch-Specific Fields
+## NPC Class Fields
 
-The data-driven NPC class schema now matters for this controller:
+The data-driven NPC class schema matters for this controller:
 
 - `isMerchant`
 - `emotionalResilience`

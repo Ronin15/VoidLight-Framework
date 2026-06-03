@@ -16,9 +16,9 @@ Current controller families:
 
 | Controller | Role | Notes |
 |-----------|------|-------|
-| [CombatController](CombatController.md) | Player melee combat and stamina timing | Emits damage through EventManager; logs player combat feedback |
+| [CombatController](CombatController.md) | Player melee/ranged combat, stamina timing, ammo use, and melee fallback | Emits damage/projectiles through current gameplay paths; logs player combat feedback |
 | [HudController](HudController.md) | State-scoped HUD: hotbar UI + transient combat target state | Owns hotbar components; subscribes to Combat and ResourceChange events |
-| [InventoryController](InventoryController.md) | Player inventory overlay, gear UI, pickup, slot reordering, and hotbar assignment | Syncs from ResourceChange events; uses EDM ordered slots; hands hotbar writes to HudController |
+| [InventoryController](InventoryController.md) | Player inventory overlay, container UI, gear UI, pickup, slot reordering, loot/store transfers, and hotbar assignment | Syncs from ResourceChange events; uses EDM ordered slots; hands hotbar writes to HudController |
 | [WeatherController](WeatherController.md) | Weather state tracking | Event-driven |
 | [DayNightController](DayNightController.md) | Time-of-day visuals and GPU lighting | Requires `update(dt)` each frame |
 | [HarvestController](HarvestController.md) | Progress-based harvesting of WRM/EDM harvestables | Cancels on movement, emits resource/harvest events |

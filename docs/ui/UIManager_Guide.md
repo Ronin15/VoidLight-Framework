@@ -6,7 +6,7 @@
 
 `UIManager` is the engine's main-thread UI system. It owns component creation, layout, theming, animation, input routing, and frame-local UI render batches. SDL_GPU device objects, pipelines, samplers, command buffers, render passes, and vertex pools stay owned by the GPU architecture.
 
-The branch-specific changes worth knowing:
+Core contracts:
 
 - GPU text is atlas-backed through SDL3_ttf draw sequences
 - raster text placement is snapped to whole pixels before vertex emission
@@ -47,7 +47,7 @@ Guidelines:
 
 ## Combat HUD Helpers
 
-This branch adds built-in combat HUD helpers used by gameplay/demo states:
+Built-in combat HUD helpers are used by gameplay/demo states:
 
 ```cpp
 createCombatHUD();
@@ -62,6 +62,19 @@ Use them from states that own combat flow instead of rebuilding the same health/
 `UIManager` tracks keyboard/controller selection separately from mouse hover. Shared menu states use `MenuNavigation::applySelection()` to set the current keyboard selection only after controller navigation is active, keeping mouse-only hover behavior clean.
 
 `simulateClick()` queues the component callback. Tests and state code that depend on the callback having run should call `UIManager::update(...)` after simulating the click.
+
+## Parent and Child Components
+
+Many UI creation APIs accept an optional `parentId`. Parent/child links provide:
+
+- cascading visibility
+- cascading removal
+- backdrop inheritance for labels/titles inside panels or dialogs
+- child z-order elevation above the parent backdrop
+
+Children inside a parent backdrop suppress redundant default text backgrounds,
+so dialog and panel text does not draw a second opaque rectangle over the parent.
+Remove the parent component to remove its linked children.
 
 ## Images and Atlas Icons
 
@@ -92,4 +105,4 @@ After creating components, call `setComponentPositioning()` when the element mus
 ## Related Docs
 
 - [GPU Rendering](../gpu/GPURendering.md)
-- [SDL3 Logical Presentation Modes](SDL3_Logical_Presentation_Modes.md)
+- [SDL3 GPU Display Coordinates](SDL3_Logical_Presentation_Modes.md)

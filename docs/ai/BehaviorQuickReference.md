@@ -1,6 +1,6 @@
 # Behavior Quick Reference
 
-## Current Model
+## Model
 
 - configs live in per-variant dense pools on EDM, addressed via `BehaviorConfigRef { type, index }`
 - state lives in per-variant dense pools on EDM, sharing the same index as the config (`get<Variant>State(ref.index)`)
@@ -33,14 +33,15 @@ scanFactionInRadius(...)
 ```cpp
 BehaviorMessage::ATTACK_TARGET
 BehaviorMessage::RETREAT
+BehaviorMessage::RANGED_ATTACK_FAILED
 BehaviorMessage::PANIC
 BehaviorMessage::CALM_DOWN
 BehaviorMessage::DISTRESS
 BehaviorMessage::RAISE_ALERT
 ```
 
-## Do Not Use
+## Unsupported Patterns
 
-- removed clone-based behavior ownership
-- old registration flows built around `registerBehavior(...)`
-- string broadcast helpers from the previous messaging model
+- clone-based behavior ownership
+- registration flows built around `registerBehavior(...)`
+- string broadcast helpers outside `AICommandBus`

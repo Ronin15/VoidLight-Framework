@@ -4,11 +4,11 @@
 
 ## Overview
 
-The SDL3 GPU path is built around `GPURenderer` and a two-pass scene-plus-swapchain flow. The current branch makes swapchain acquisition explicit instead of hiding it inside a monolithic frame begin.
+The SDL3 GPU path is built around `GPURenderer` and a two-pass scene-plus-swapchain flow. Swapchain acquisition is explicit instead of hidden inside a monolithic frame begin.
 
 ## Platform Shader Targets
 
-The GPU build now emits platform-native shader binaries and requests the matching SDL GPU backend at device creation time:
+The GPU build emits platform-native shader binaries and requests the matching SDL GPU backend at device creation time:
 
 - Windows: Direct3D 12 with `.dxil` shaders
 - macOS: Metal with `.metal` shaders
@@ -55,6 +55,10 @@ If `acquireSwapchainTexture()` fails, the engine can skip the presentable frame 
 - `GPURenderer::renderUIBatches()` owns SDL_GPU UI pipeline, sampler, vertex-buffer, and draw-call submission
 - vertex pools are triple-buffered
 - UI/menu text should be snapped to whole pixels before vertex emission
+- `SpriteBatch::drawUVRotated(...)` draws atlas sub-rects rotated around their
+  center. Angles are radians in engine screen space, where positive rotation is
+  clockwise because engine/UI coordinates are Y-down; `SpriteBatch` converts
+  vertices into the GPU Y-up scene coordinate system before submission.
 
 ## GameState Integration
 

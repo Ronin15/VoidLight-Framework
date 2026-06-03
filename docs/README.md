@@ -2,7 +2,10 @@
 
 ## Overview
 
-This hub covers the engine architecture and the major subsystem docs. The current branch centers on `EventManager` for event flow, EDM-backed AI state, controller-owned harvesting and social flows, world-resource orchestration, and the SDL3_GPU rendering path.
+This hub covers the engine architecture and the major subsystem docs. Core
+runtime architecture centers on `EventManager` event flow, EDM-backed AI state,
+controller-owned harvesting and social flows, world-resource orchestration, and
+the SDL3_GPU rendering path.
 
 ## Core Systems
 
@@ -52,7 +55,11 @@ This hub covers the engine architecture and the major subsystem docs. The curren
 
 - [Entity System](entities/README.md)
 - [GameState Documentation](gameStates/README.md)
+- [LogoState](gameStates/LogoState.md)
+- [MainMenuState](gameStates/MainMenuState.md)
+- [GamePlayState](gameStates/GamePlayState.md)
 - [LoadingState](gameStates/LoadingState.md)
+- [PauseState](gameStates/PauseState.md)
 - [SettingsMenuState](gameStates/SettingsMenuState.md)
 - [GameOverState](gameStates/GameOverState.md)
 
@@ -80,11 +87,19 @@ This hub covers the engine architecture and the major subsystem docs. The curren
 ## Testing and Validation
 
 - [`tests/TESTING.md`](../tests/TESTING.md)
-  - includes coverage for behavior transitions, NPC memory, controller tests, and GPU frame timing benchmarks
+- [`tests/valgrind/README.md`](../tests/valgrind/README.md)
+- [`tests/cppcheck/README.md`](../tests/cppcheck/README.md)
+- [`tests/clang-tidy/README.md`](../tests/clang-tidy/README.md)
+- [`tools/README.md`](../tools/README.md)
+
+Validation coverage includes behavior transitions, NPC memory, controller tests,
+input command tests, sidecar tests, GPU frame timing benchmarks, atlas tool
+tests, static-analysis helper scripts, and the retained runtime/test Valgrind
+split.
 
 ## Notes
 
 - WorkerBudget docs describe threshold learning and hysteresis. A 10-sample EMA warmup prevents cold-start spikes from triggering premature threading decisions.
 - InputManager `getAxisX`/`getAxisY` return normalized `float` in [-1.0, 1.0]. Gamepad hotplugging is handled automatically.
 - `TimestepManager` documentation lives under `docs/core/` and covers display-refresh-aware cadence snapping.
-- Performance reports under `docs/performance_reports/` should be treated as dated measurements unless their metadata explicitly matches the current branch and commit.
+- Performance reports under `docs/performance_reports/` should be treated as dated measurements unless their metadata explicitly matches the checked-out commit and local environment.

@@ -23,7 +23,7 @@ EDM should remain a storage and aggregation layer.
 AI-layer behavior code owns interpretation:
 
 - personality-scaled emotion changes
-- witnessed-combat falloff
+- witnessed-combat falloff and alert/flee decision policy
 - alert/fear/aggression responses
 - emotional contagion pre-pass in `AIManager::update()`
 
@@ -31,19 +31,19 @@ AI-layer behavior code owns interpretation:
 
 ### Direct combat
 
-`Behaviors::processCombatEvent(...)`:
+`EventManager` performs the built-in `DamageEvent` result and records factual
+combat data through EDM. `EntityDataManager::recordCombatEvent()` updates combat
+totals, last attacker/target bookkeeping, and memory entries only; it does not
+own behavior policy.
 
-1. records factual combat data through EDM
-2. updates emotions in AI logic
-3. leaves persistent results in `NPCMemoryData`
+Behavior executors read memory and character state during `AIManager::update()`
+and decide how emotions or behavior messages should affect the NPC.
 
 ### Witnessed combat
 
-`Behaviors::processWitnessedCombat(...)`:
-
-1. evaluates distance and composure
-2. records a memory entry
-3. applies fear/aggression/suspicion changes
+Witnessed combat is represented as memory data in EDM and interpreted by the
+behavior layer. Distance falloff, composure, panic, guard alerts, and other
+responses are behavior policy, not EDM storage policy.
 
 ### Social interactions
 
@@ -51,7 +51,7 @@ AI-layer behavior code owns interpretation:
 
 ## Testing Coverage
 
-The branch adds dedicated memory coverage in `tests/managers/NPCMemoryTests.cpp`, including:
+Dedicated memory coverage lives in `tests/managers/NPCMemoryTests.cpp`, including:
 
 - structure/layout assumptions
 - add/find memory behavior

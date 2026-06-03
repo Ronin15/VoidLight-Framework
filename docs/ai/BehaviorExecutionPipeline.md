@@ -2,7 +2,7 @@
 
 ## Overview
 
-The branch replaces per-entity virtual behavior objects with a data-oriented pipeline:
+The behavior system uses a data-oriented pipeline:
 
 1. `AIManager` gathers active EDM indices into `m_activeIndicesBuffer`
 2. a single `getBatchStrategy` call against the full workload chooses batch count/size
@@ -38,8 +38,20 @@ Behavior switching must preserve EDM state correctly; see the transition tests i
 - behavior messages
 - behavior transitions
 - faction changes
+- melee fallback equipment swaps
+- ranged attack projectile requests
 
-This keeps worker-thread logic from mutating shared orchestration state directly. Commands are drained and committed on the main thread in deterministic sequence order.
+This keeps worker-thread logic from mutating shared orchestration state directly.
+Commands are drained and committed on the main thread in deterministic sequence
+order. Commit code validates the target handle/index before applying structural
+changes, so outdated worker output is discarded instead of mutating the wrong
+entity.
+
+Ranged attack requests are also command-bus work. Behaviors enqueue the attack
+intent from the batch path; `AIManager` commits the projectile spawn on the main
+thread. If the request cannot be committed, the attacker receives
+`BehaviorMessage::RANGED_ATTACK_FAILED` and can re-evaluate equipment or
+positioning on the next behavior pass.
 
 ## Event Emission
 
