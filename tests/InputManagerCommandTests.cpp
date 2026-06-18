@@ -22,7 +22,11 @@ struct CommandTestFixture
 {
     CommandTestFixture()
     {
+#if defined(_WIN32)
+        _putenv_s("SDL_VIDEODRIVER", "offscreen");
+#else
         setenv("SDL_VIDEODRIVER", "offscreen", 1);
+#endif
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK | SDL_INIT_GAMEPAD)) {
             throw std::runtime_error(
                 std::string("SDL_Init failed: ") + SDL_GetError());

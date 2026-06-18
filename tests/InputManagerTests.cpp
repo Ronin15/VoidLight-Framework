@@ -15,7 +15,11 @@
 struct InputManagerTestFixture {
     InputManagerTestFixture() {
         // Tests only inject SDL events; they do not need a real display.
+#if defined(_WIN32)
+        _putenv_s("SDL_VIDEODRIVER", "offscreen");
+#else
         setenv("SDL_VIDEODRIVER", "offscreen", 1);
+#endif
         // Initialize SDL Video subsystem (needed for event processing)
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             throw std::runtime_error("Failed to initialize SDL: " + std::string(SDL_GetError()));
