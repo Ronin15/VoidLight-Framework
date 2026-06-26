@@ -52,7 +52,8 @@ Key states include:
 - `SettingsMenuState`
 - `LoadingState`
 - `GamePlayState`
-- demo states
+- `PauseState`
+- demo states (`AIDemoState`, `AdvancedAIDemoState`, `EventDemoState`, `OverlayDemoState`, `UIDemoState`)
 - `GameOverState`
 
 Important transitions:
