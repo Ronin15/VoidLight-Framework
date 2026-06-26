@@ -192,6 +192,7 @@ m_controllers.get<WeatherController>()->getCurrentWeather();    // single use â†
 - Reference menu patterns: `SettingsMenuState`, `MainMenuState`.
 - `WorldResourceManager` is a spatial index over EDM, not a quantity store.
 - `CollisionManager::subscribeWorldEvents()` is persistent manager infrastructure registered from `init()`; do not rewire it during state transitions.
+- **Before raising review findings, read `docs/review-non-issues.md`** â€” it lists findings already investigated and deliberately not changed (with rationale), plus intentional includes that must not be stripped on a clangd "unused" warning. Don't re-flag those unless you re-verify the code path changed; if so, update that file in the same change.
 
 ## Working Principles
 
