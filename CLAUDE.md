@@ -68,7 +68,7 @@ C++20 SDL3 engine, CMake/Ninja, data-oriented, 10K+ entities at 60+ FPS.
 - **Managers**: EntityDataManager (SoA) | AIManager (SIMD, 10K+) | EventManager (16 types) | CollisionManager (HierarchicalSpatialHash) | ParticleManager (SoA, pooled) | PathfinderManager | WorldManager (chunk-based procedural) | WorldResourceManager (spatial registry) | BackgroundSimulationManager (tiered) | UIManager | GameTimeManager | InputManager | TextureManager | FontManager | SoundManager
 - **Entities**: EntityKind (10 types) | SimulationTier (Active/Background/Hibernated) | EntityHandle (generation-safe)
 - **AI**: AIBehavior base → 9 behaviors (Idle, Wander, Patrol, Chase, Flee, Follow, Guard, Attack, Custom). Lock-free EDM access via `BehaviorContext`.
-- **Controllers**: State-scoped via ControllerRegistry. `controllers/{combat,social,world,render}/`
+- **Controllers**: State-scoped via ControllerRegistry. `controllers/{combat,render,social,ui,world}/`
 - **Utils**: Camera | Vector2D | SIMDMath (SSE2/NEON/AVX2) | JsonReader | BinarySerializer | UniqueID | FrameProfiler
 - **GPU**: GPUDevice | GPURenderer | GPUSceneRecorder | GPUShaderManager (SPIR-V/Metal) | SpriteBatch (50K) | GPUVertexPool (triple-buffered). Shaders in `res/shaders/`.
 
@@ -126,7 +126,7 @@ Never manually unsubscribe/resubscribe manager handlers across transitions.
 
 ### Threading
 
-Sequential execution with parallel batching. Main thread owns SDL (events, render); workers process batches.
+Sequential execution with parallel batching. Managers update one after another on the main thread — no two run concurrently; parallelism is internal to a manager, which joins its worker batches before returning. Main thread owns SDL (events, render). Events enqueued during a frame are drained next frame by `EventManager` on the main thread.
 
 - **ThreadSystem**: Pool of `hardware_concurrency - 1` workers, 5 priorities (Critical→Idle). `enqueueTaskWithResult()` for futures, `batchEnqueueTasks()` for bulk.
 - **WorkerBudget**: Adaptive batch sizing. `shouldUseThreading()` / `getBatchStrategy()` / `reportExecution()` for unified throughput tracking.
@@ -202,8 +202,15 @@ m_controllers.get<WeatherController>()->getCurrentWeather();    // single use �
 - Do not add compatibility overloads, ad-hoc safety layers, or new abstractions unless the task requires them.
 - When the user names a file, work on exactly that file — don't substitute similar-sounding ones.
 - Keep production code and tests aligned in the same change. Run the most targeted test executable when feasible.
-- Before finishing, run the most targeted build or test feasible and state exactly what was verified.
+- Every code change is followed by a quality check: targeted build + most-targeted tests + C++20 standards/threading/architecture self-check. State exactly what was verified. Static analysis (cppcheck/clang-tidy) is a pre-commit/PR step, not a per-change gate.
 - Fix root causes in production code. NEVER bypass failing tests by changing expectations unless explicitly told to.
 - For `EventManager` regressions, distinguish missing state-owned handler wiring in tests from a production bug before editing prod code.
 - For rendering issues (jitter/shimmer/flicker), trace the full pipeline first (camera → interpolation → floor/round → sub-pixel offset → draw). No speculative fixes.
 - Delete dead code and unused parameters entirely — never comment out.
+
+## Change Discipline — Trace Before You Touch
+
+- Trace the real callers, thread context, lifetimes, and types in source before editing. State what you verified.
+- A latent/theoretical/"Low" finding is a NOTE, not a change — only fix it if you confirm it actually triggers here.
+- Hardening is fine, but only after tracing proves it correct and warranted. Blind hardening is the failure mode.
+- Confirm the thread model before picking a sync tool. EventManager dispatch is main-thread only (workers just enqueue); scratch there is a `mutable` member buffer, never `thread_local`/pools.

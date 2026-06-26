@@ -55,7 +55,7 @@ void update() {
 
 ### **CRITICAL: Thread Safety**
 - No static variables in threaded code (use instance vars, thread_local, atomics)
-- Workers process parallel batches; main thread owns SDL (events, render)
+- Managers update sequentially on the main thread (no two concurrent); parallelism is internal to a manager, which joins its batches before returning. Main thread owns SDL (events, render). Events are drained next frame by EventManager.
 - Futures complete before dependent ops; cache-line align hot atomics (`alignas(64)`)
 - Background work through ThreadSystem (never raw std::thread)
 
@@ -87,6 +87,14 @@ void update() {
 - m_/mp_ prefixes
 - std::format() for logging (never string concatenation)
 - Copyright headers
+
+## Trace Before You Flag
+
+- Verify every finding in source (callers, thread context, lifetimes) before reporting it. State what you traced.
+- Mark a finding **latent** if it can't trigger in the current code. Latent findings are NOTES — never recommend code for them. Recommend a fix only when you've confirmed it actually triggers.
+- Don't recommend hardening/abstractions unless tracing shows a real, triggering problem. Smallest correct diff wins.
+- Confirm the thread model before flagging sync issues: EventManager dispatch is main-thread only (workers only enqueue) — reusable scratch is a `mutable` member buffer, not `thread_local`.
+- When the flow/ownership/threading isn't clear from the code, consult `docs/ARCHITECTURE.md` and the relevant `docs/<subsystem>/` doc (map: `docs/README.md`) before flagging — don't guess.
 
 ## Output Format
 

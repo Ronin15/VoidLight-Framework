@@ -134,6 +134,13 @@ All code you write MUST satisfy every rule below. Treat these as hard gates, not
 
 Before handing off, self-check with the **voidlight-quality-check** skill — it enforces this exact catalog.
 
+## Trace Before You Touch
+
+- Read the real code path (callers, thread context, lifetimes, types) before writing a line. State what you verified.
+- A latent/theoretical/"Low" review finding is a NOTE, not a change — only fix it if you confirm it actually triggers in the code.
+- Hardening is fine **after** tracing proves it correct and warranted; never add machinery to defend a case that can't happen. Smallest correct diff wins — no new helper classes/abstractions/per-frame copies unless required.
+- Confirm the thread model before picking a sync tool. Managers update sequentially on the main thread; parallelism is internal to a manager (joins its batches before returning); events drain next frame. EventManager dispatch is main-thread only (workers only enqueue); reusable scratch there is a `mutable` member buffer, never `thread_local`/pools.
+
 ## Mandatory After Every Code Change
 
 A code change is not "done" until it passes a **quality check**:
@@ -148,7 +155,7 @@ A code change is not "done" until it passes a **quality check**:
 - **voidlight-test-suite-generator**: scaffold full test infrastructure when you add a new manager/system.
 - **voidlight-quality-check**: self-check warnings, standards, and threading safety before handing off.
 
-Read `CLAUDE.md` and `.claude/rules/` (edm.md, simd.md) before touching EDM or SIMD code.
+Read `CLAUDE.md` and `.claude/rules/` (edm.md, simd.md) before touching EDM or SIMD code. When execution flow, ownership, or threading isn't clear from the code, consult `docs/ARCHITECTURE.md` and the relevant `docs/<subsystem>/` doc (map: `docs/README.md`) before assuming.
 
 ## Handoff
 
