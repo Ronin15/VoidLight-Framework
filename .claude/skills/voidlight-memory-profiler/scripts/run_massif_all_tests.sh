@@ -71,6 +71,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# valgrind/ms_print are not available on macOS/darwin. CLAUDE.md documents
+# AddressSanitizer as the supported memory-profiling path on this platform.
+if ! command -v valgrind >/dev/null 2>&1; then
+    echo -e "${RED}Error: valgrind not found (unavailable on macOS/darwin).${NC}"
+    echo -e "${YELLOW}massif requires valgrind. On macOS use the AddressSanitizer build from CLAUDE.md instead:${NC}"
+    echo '  cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug \'
+    echo '    -DCMAKE_CXX_FLAGS="-D_GLIBCXX_DEBUG -fsanitize=address -fno-omit-frame-pointer -g" \'
+    echo '    -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" -DUSE_MOLD_LINKER=OFF && ninja -C build'
+    exit 1
+fi
+
 # Validate directories
 if [ ! -d "$TEST_DIR" ]; then
     echo -e "${RED}Error: Test directory not found: $TEST_DIR${NC}"

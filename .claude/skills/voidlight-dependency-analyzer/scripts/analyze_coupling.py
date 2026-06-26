@@ -161,7 +161,7 @@ def analyze_manager_coupling(graph, base_dir):
                         elif ref_count > 5:
                             # Moderate coupling - just report
                             pass
-            except Exception as e:
+            except Exception:
                 pass
 
     return matrix, functional_coupling, problematic_coupling
@@ -300,6 +300,13 @@ def main():
             f.write(f"{node},{data['fan_out']},{data['fan_in']},{data['instability']:.3f}\n")
 
     print(f"Coupling metrics saved to: {output_file}")
+
+    # Persist functional/problematic counts so downstream tools
+    # (calc_health_score.py) consume measured values, not hardcoded assumptions.
+    summary_file = os.path.join(os.path.dirname(graph_file), 'coupling_summary.txt')
+    with open(summary_file, 'w') as f:
+        f.write(f"functional_coupling={len(functional_coupling)}\n")
+        f.write(f"problematic_coupling={len(problematic_coupling)}\n")
 
 if __name__ == '__main__':
     main()

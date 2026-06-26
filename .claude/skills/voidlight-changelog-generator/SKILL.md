@@ -1,7 +1,7 @@
 ---
 name: voidlight-changelog-generator
 description: Generates comprehensive, professionally-formatted changelogs for SDL3 VoidLight-Framework from git history. Analyzes code changes, runs tests, includes architect review, and produces detailed documentation as an ongoing engineering log. Use when documenting updates, preparing releases, or creating detailed change reports.
-allowed-tools: [Bash, Read, Write, Grep, Glob, AskUserQuestion]
+allowed-tools: [Bash, Read, Write, Grep, Glob, AskUserQuestion, Task]
 ---
 
 # Changelog Generator for SDL3 VoidLight-Framework

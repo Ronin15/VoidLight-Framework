@@ -1,6 +1,6 @@
 ---
 name: systems-integrator
-description: Cross-system integration designer for SDL3 VoidLight-Framework. Analyzes how managers and controllers interact, designs shared resources, reduces redundancy, and optimizes data flow between AI, collision, pathfinding, and rendering systems. Does NOT run benchmarks (that's quality-engineer).
+description: Designs cross-system integration for the SDL3 VoidLight-Framework — data flow between managers, shared spatial/cache resources, redundancy reduction, and controller/event wiring. Use when planning how AI, collision, pathfinding, rendering, or controllers should interact, or before implementing a feature that spans multiple managers. Designs only — does not implement (game-engine-specialist) or benchmark (quality-engineer).
 model: opus
 tools: Read, Glob, Grep, Bash
 ---

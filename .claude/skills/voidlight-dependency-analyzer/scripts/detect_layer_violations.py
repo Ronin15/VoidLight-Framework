@@ -5,7 +5,6 @@ Detect architectural layer violations in VoidLight-Framework
 
 import os
 import re
-from pathlib import Path
 
 def classify_layer(file_path):
     """Classify a file into architectural layers"""
@@ -15,6 +14,8 @@ def classify_layer(file_path):
         return 'Core'
     elif '/managers/' in path_lower:
         return 'Managers'
+    elif '/controllers/' in path_lower:
+        return 'Controllers'
     elif '/gamestates/' in path_lower or '/states/' in path_lower:
         return 'States'
     elif '/entities/' in path_lower:
@@ -29,6 +30,8 @@ def classify_layer(file_path):
         return 'Collisions'
     elif '/world/' in path_lower:
         return 'World'
+    elif '/gpu/' in path_lower:
+        return 'GPU'
     else:
         return 'Other'
 
@@ -37,6 +40,7 @@ def find_headers_by_layer(base_dir):
     layers = {
         'Core': [],
         'Managers': [],
+        'Controllers': [],
         'States': [],
         'Entities': [],
         'Utils': [],
@@ -44,10 +48,11 @@ def find_headers_by_layer(base_dir):
         'Events': [],
         'Collisions': [],
         'World': [],
+        'GPU': [],
         'Other': []
     }
 
-    for root, dirs, files in os.walk(os.path.join(base_dir, 'include')):
+    for root, _, files in os.walk(os.path.join(base_dir, 'include')):
         for file in files:
             if file.endswith('.hpp'):
                 full_path = os.path.join(root, file)
@@ -87,14 +92,16 @@ def check_layer_violations(base_dir):
     # Define allowed dependencies for each layer
     layer_rules = {
         'Core': [],  # Core should not depend on anything
-        'Managers': ['Core', 'Utils', 'Events', 'AI', 'Entities', 'Collisions', 'World'],  # Managers can use most things except States
-        'States': ['Core', 'Managers', 'Utils', 'Entities', 'Events', 'AI', 'Collisions', 'World'],  # States can use everything except other States
+        'Managers': ['Core', 'Utils', 'Events', 'AI', 'Entities', 'Collisions', 'World', 'GPU'],  # Managers can use most things except States/Controllers
+        'Controllers': ['Core', 'Utils', 'Managers', 'Events', 'AI', 'Entities', 'Collisions', 'World', 'GPU'],  # State-scoped; uses managers/entities but not States
+        'States': ['Core', 'Managers', 'Controllers', 'Utils', 'Entities', 'Events', 'AI', 'Collisions', 'World', 'GPU'],  # States can use everything except other States
         'Entities': ['Core', 'Utils', 'Events'],  # Entities should be minimal
         'Utils': [],  # Utils should be pure
         'AI': ['Core', 'Utils', 'Events'],  # AI behaviors should be reusable
         'Events': ['Core', 'Utils'],  # Events should be minimal
         'Collisions': ['Core', 'Utils'],  # Collision primitives should be minimal
         'World': ['Core', 'Utils', 'Events'],  # World data structures
+        'GPU': ['Core', 'Utils', 'Events'],  # GPU rendering primitives
     }
 
     print("=== Layer Violation Detection ===")

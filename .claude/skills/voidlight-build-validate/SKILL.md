@@ -80,20 +80,14 @@ timeout 60s ./bin/debug/VoidLight_Template > /tmp/app_log.txt 2>&1
 **Working Directory:** `$PROJECT_ROOT/`
 
 **What This Runs:**
-- Thread System Tests
-- Buffer Utilization Tests
-- Thread-Safe AI Tests
-- AI Optimization Tests
-- Behavior Functionality Tests (8 behaviors)
-- Save Manager Tests
-- Event Manager Tests
-- Collision System Tests
-- Pathfinding Tests
-- Integration Tests
-- JSON Reader Tests
-- Resource Tests
-- World Manager Tests
-- Particle Manager Tests
+The exact core suite is defined by the `TEST_SCRIPTS` array inside `tests/test_scripts/run_all_tests.sh` — do not assume a frozen list. Discover the current set at runtime instead of relying on a hardcoded snapshot:
+```bash
+# List the runner scripts that make up the suite
+ls tests/test_scripts/run_*tests*.sh
+# Or read the authoritative array the master runner executes
+grep '\$SCRIPT_DIR/run_' tests/test_scripts/run_all_tests.sh
+```
+This covers the Core/Manager/Controller/Integration test runners (thread system, AI, behavior, event, collision, pathfinding, resource, world, particle, EDM, controllers, GPU, etc.). The count grows as systems are added, so derive it from the output above rather than embedding a number.
 
 **Validation:**
 - Parse output for test results
@@ -102,7 +96,7 @@ timeout 60s ./bin/debug/VoidLight_Template > /tmp/app_log.txt 2>&1
 - Check for unexpected errors or crashes
 
 **Success Criteria:**
-- All tests pass (typically 18+ test suites)
+- All discovered test suites pass (count derived from the runner array above, not hardcoded)
 - No segfaults or crashes
 - Execution completes in reasonable time (~2-5 minutes)
 
@@ -155,7 +149,7 @@ timeout 60s ./bin/debug/VoidLight_Template > /tmp/app_log.txt 2>&1
 
 ✓ Build: Success (3 warnings)
 ✓ Smoke Test: Clean (60s timeout)
-✓ Core Tests: 18/18 passed
+✓ Core Tests: <passed>/<total> passed   # totals discovered from the runner, not fixed
 
 Total Time: 3m 42s
 

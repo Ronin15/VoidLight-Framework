@@ -4,6 +4,7 @@ Detect circular dependencies in VoidLight-Framework using DFS
 """
 
 import sys
+import os
 from collections import defaultdict
 
 def read_graph(graph_file):
@@ -85,6 +86,17 @@ def main():
     print()
 
     cycles = find_cycles_dfs(graph)
+
+    # Persist the cycle count so downstream tools (calc_health_score.py) can
+    # consume an actual measured value instead of a hardcoded assumption.
+    summary_file = os.path.join(os.path.dirname(graph_file), 'circular_dependencies.txt')
+    try:
+        with open(summary_file, 'w') as f:
+            f.write(f"circular_dependencies={len(cycles)}\n")
+            for i, cycle in enumerate(cycles, 1):
+                f.write(f"Cycle {i}: " + " -> ".join(cycle) + "\n")
+    except Exception:
+        pass
 
     if not cycles:
         print("✅ NO CIRCULAR DEPENDENCIES DETECTED")

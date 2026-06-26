@@ -3,7 +3,13 @@ import os
 import re
 import glob
 
-BASE_DIR = "/var/home/roninxv/Projects/cpp_projects/SDL3_VoidLight-Framework_Template/test_results/memory_profiles"
+# Resolve the profiles directory dynamically. Honors OUTPUT_DIR (set by the
+# companion shell scripts); otherwise defaults to test_results/memory_profiles
+# under the current working directory (project root).
+BASE_DIR = os.environ.get(
+    "OUTPUT_DIR",
+    os.path.join(os.getcwd(), "test_results", "memory_profiles"),
+)
 
 def parse_massif_report(report_path):
     """Extract peak memory data from massif report"""
@@ -54,7 +60,7 @@ def main():
     total_peak = sum(r[1]['total_bytes'] for r in results)
 
     print(f"\n=== VoidLight-Framework Comprehensive Memory Profile ===")
-    print(f"Tests Analyzed: {len(results)}/43")
+    print(f"Tests Analyzed: {len(results)}")
     print(f"Total Peak Memory: {total_peak / 1024 / 1024:.1f} MB\n")
 
     # Sort by peak memory

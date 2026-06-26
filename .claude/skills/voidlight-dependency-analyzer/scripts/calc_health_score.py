@@ -17,15 +17,26 @@ def read_metrics():
         'high_bloat_headers': 0,
         'high_depth_headers': 0,
         'total_headers': 0,
-        'avg_coupling': 0,
+        'avg_coupling': 0.0,
         'max_depth': 0
     }
 
-    # Read circular dependencies (from earlier run - we know it's 0)
-    metrics['circular_deps'] = 0
+    # Read circular dependencies from detect_cycles.py output (measured, not assumed)
+    circular_file = os.path.join(base_dir, 'circular_dependencies.txt')
+    if os.path.exists(circular_file):
+        with open(circular_file, 'r') as f:
+            for line in f:
+                if line.startswith('circular_dependencies='):
+                    metrics['circular_deps'] = int(line.strip().split('=', 1)[1])
+                    break
 
-    # Read layer violations (from earlier run - we know it's 0)
-    metrics['layer_violations'] = 0
+    # Read layer violations from detect_layer_violations.py output (measured)
+    violations_file = os.path.join(base_dir, 'layer_violations.txt')
+    if os.path.exists(violations_file):
+        with open(violations_file, 'r') as f:
+            metrics['layer_violations'] = sum(
+                1 for line in f if line.startswith('File:')
+            )
 
     # Read coupling metrics
     coupling_file = os.path.join(base_dir, 'coupling_metrics.txt')
@@ -44,25 +55,38 @@ def read_metrics():
             if fan_outs:
                 metrics['avg_coupling'] = sum(fan_outs) / len(fan_outs)
 
-    # Count tight coupling from analysis output
-    # NOTE: For game engines, most "tight coupling" is FUNCTIONAL and necessary
-    # Only count truly problematic coupling (circular, layer violations, unclear purpose)
+    # Read coupling severity from analyze_coupling.py output (measured).
+    # NOTE: For game engines, most manager coupling is FUNCTIONAL and necessary.
+    # Only PROBLEMATIC coupling (circular, layer-violating, unclear purpose) is penalized.
+    coupling_summary = os.path.join(base_dir, 'coupling_summary.txt')
+    if os.path.exists(coupling_summary):
+        with open(coupling_summary, 'r') as f:
+            for line in f:
+                if line.startswith('functional_coupling='):
+                    metrics['functional_coupling'] = int(line.strip().split('=', 1)[1])
+                elif line.startswith('problematic_coupling='):
+                    metrics['problematic_coupling'] = int(line.strip().split('=', 1)[1])
+    metrics['tight_coupling'] = (
+        metrics.get('functional_coupling', 0) + metrics.get('problematic_coupling', 0)
+    )
 
-    # All 9 tight coupling instances are functional game system dependencies:
-    # AIManager->CollisionManager, AIManager->PathfinderManager,
-    # CollisionManager->EventManager, CollisionManager->WorldManager,
-    # ResourceFactory->ResourceTemplateManager, UIManager->FontManager,
-    # UIManager->UIConstants, WorldManager->EventManager, WorldManager->WorldResourceManager
-
-    # These are ALL functionally necessary - game engines need manager interaction!
-    metrics['tight_coupling'] = 9  # Total coupling
-    metrics['functional_coupling'] = 9  # All are functional
-    metrics['problematic_coupling'] = 0  # None are problematic
-
-    # Count high bloat headers (>10 includes)
-    # From earlier: EventManager (19), ThreadSystem (16), CollisionManager (16),
-    # ParticleManager (15), AIManager (13), PathfinderManager (12), HierarchicalSpatialHash (11)
-    metrics['high_bloat_headers'] = 7
+    # Count high-bloat headers (>10 includes) from analyze_header_bloat.py output (measured)
+    bloat_file = os.path.join(base_dir, 'header_bloat_analysis.txt')
+    if os.path.exists(bloat_file):
+        with open(bloat_file, 'r') as f:
+            in_section = False
+            count = 0
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith('High-Bloat Headers:'):
+                    in_section = True
+                    continue
+                if in_section:
+                    if stripped.startswith('- '):
+                        count += 1
+                    elif stripped == '' or ':' in stripped:
+                        break
+            metrics['high_bloat_headers'] = count
 
     # Read dependency depths
     depth_file = os.path.join(base_dir, 'dependency_depths.txt')
