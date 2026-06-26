@@ -451,8 +451,13 @@ bool GameEngine::init(std::string_view title) {
   initTasks.reserve(12); // Reserve capacity for typical number of init tasks
 
   // CRITICAL: Initialize Event Manager FIRST - #1
-  // All other managers that register event handlers depend on this
-  initTasks.push_back(
+  // All other managers that register event handlers depend on this. Kept in its
+  // own future (not initTasks) so it can be awaited BEFORE the managers whose
+  // init() registers persistent EventManager handlers (CollisionManager::
+  // subscribeWorldEvents, PathfinderManager::subscribeToEvents). Without this
+  // ordering those subscribe paths race EventManager::init() and bail on their
+  // isInitialized() gate, permanently skipping registration.
+  auto eventFuture =
       VoidLight::ThreadSystem::Instance().enqueueTaskWithResult(
           []() -> bool {
             GAMEENGINE_INFO("Creating Event Manager");
@@ -463,7 +468,7 @@ bool GameEngine::init(std::string_view title) {
             }
             GAMEENGINE_INFO("Event Manager initialized successfully");
             return true;
-          }));
+          });
 
   // Initialize EntityDataManager - #1.5
   // Central data authority for all entities (Phase 1 of Entity System Overhaul)
@@ -594,6 +599,27 @@ bool GameEngine::init(std::string_view title) {
             }
             return true;
           }));
+
+  // Await EventManager before any manager whose init() registers persistent
+  // EventManager handlers. CollisionManager::init() (subscribeWorldEvents) and
+  // PathfinderManager::init() (subscribeToEvents) both register during init and
+  // are joined below, ahead of the initTasks join. Awaiting here guarantees
+  // EventManager has published its handler containers, so those subscribe paths
+  // never bail on their isInitialized() gate. EventManager::init() has no
+  // dependency on these managers, so this only serializes one-time startup.
+  GAMEENGINE_INFO(
+      "Waiting for EventManager (event-handler registration dependency)");
+  try {
+    if (!eventFuture.get()) {
+      GAMEENGINE_CRITICAL("EventManager initialization failed");
+      return false;
+    }
+  } catch (const std::exception &e) {
+    GAMEENGINE_CRITICAL(
+        std::format("EventManager initialization threw exception: {}",
+                    e.what()));
+    return false;
+  }
 
   // Initialize Pathfinder Manager - #6
   // CRITICAL: Must complete BEFORE AIManager (explicit dependency)

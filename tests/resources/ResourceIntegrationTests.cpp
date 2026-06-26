@@ -22,7 +22,12 @@ struct GlobalFixture {
         if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("Failed to initialize ThreadSystem for resource integration tests");
         }
-        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+        // Global fixtures run outside any test-case context; a Boost.Test
+        // assertion macro here raises a framework setup_error (exit 200) even
+        // when all cases pass. Fail via throw instead.
+        if (!ResourceTemplateManager::Instance().init()) {
+            throw std::runtime_error("ResourceTemplateManager::init() failed");
+        }
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }

@@ -622,6 +622,9 @@ private:
         bool isTrigger;
     };
     mutable std::vector<TriggerSweepEdge> m_triggerSweepEdges;
+    // Active-set scratch for the sweep (cleared each call, capacity retained)
+    mutable std::unordered_set<size_t> m_triggerSweepActiveEntities;
+    mutable std::unordered_set<size_t> m_triggerSweepActiveTriggers;
 
     // Performance metrics
     struct PerfStats {

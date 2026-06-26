@@ -101,8 +101,9 @@ void UIManager::update(float deltaTime) {
                 if (component->m_listItems.size() != component->m_listBindingBuffer.size() ||
                     !std::equal(component->m_listItems.begin(), component->m_listItems.end(),
                                 component->m_listBindingBuffer.begin())) {
-                    component->m_listItems = std::move(component->m_listBindingBuffer);
-                    component->m_listBindingBuffer.clear();  // Reset for next use
+                    // Copy (not move): reuses m_listItems' existing capacity and
+                    // preserves m_listBindingBuffer's storage for reuse next frame.
+                    component->m_listItems = component->m_listBindingBuffer;
                     component->m_listItemsDirty = true;
                 }
             }

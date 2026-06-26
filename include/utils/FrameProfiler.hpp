@@ -330,12 +330,16 @@ private:
 };
 
 // Debug macros - compile to actual profiling
+// Two-level concatenation so __LINE__ expands to its value before pasting,
+// giving each scoped timer a unique identifier.
+#define VOIDLIGHT_PROFILE_CONCAT_INNER(a, b) a##b
+#define VOIDLIGHT_PROFILE_CONCAT(a, b) VOIDLIGHT_PROFILE_CONCAT_INNER(a, b)
 #define PROFILE_FRAME_BEGIN() VoidLight::FrameProfiler::Instance().beginFrame()
 #define PROFILE_FRAME_END() VoidLight::FrameProfiler::Instance().endFrame()
-#define PROFILE_PHASE(p) VoidLight::ScopedPhaseTimer _scopedPhaseTimer##__LINE__(p)
-#define PROFILE_MANAGER(m) VoidLight::ScopedManagerTimer _scopedManagerTimer##__LINE__(m)
-#define PROFILE_RENDER(r) VoidLight::ScopedRenderTimer _scopedRenderTimer##__LINE__(r)
-#define PROFILE_RENDER_GPU(r) VoidLight::ScopedRenderTimerGPU _scopedRenderTimerGPU##__LINE__(r)
+#define PROFILE_PHASE(p) VoidLight::ScopedPhaseTimer VOIDLIGHT_PROFILE_CONCAT(_scopedPhaseTimer, __LINE__)(p)
+#define PROFILE_MANAGER(m) VoidLight::ScopedManagerTimer VOIDLIGHT_PROFILE_CONCAT(_scopedManagerTimer, __LINE__)(m)
+#define PROFILE_RENDER(r) VoidLight::ScopedRenderTimer VOIDLIGHT_PROFILE_CONCAT(_scopedRenderTimer, __LINE__)(r)
+#define PROFILE_RENDER_GPU(r) VoidLight::ScopedRenderTimerGPU VOIDLIGHT_PROFILE_CONCAT(_scopedRenderTimerGPU, __LINE__)(r)
 
 #else  // NDEBUG - Release build
 

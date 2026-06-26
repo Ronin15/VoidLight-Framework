@@ -222,6 +222,13 @@ bool GPURenderer::beginFrame() {
         return false;
     }
 
+    // Clear stale batch counts at frame start. Recording states call begin()
+    // later in recordGPUVertices (re-setting these), but non-recording states
+    // never call begin() and would otherwise leave last frame's counts, causing
+    // beginScenePass to upload garbage vertex data every frame.
+    m_spriteBatch.reset();
+    m_entityBatch.reset();
+
     // Begin vertex pool frames (maps transfer buffers)
     profiler.beginRender(RenderPhase::GPUVertexMap);
     const bool spriteMapped = m_spriteVertexPool.beginFrame() != nullptr;
@@ -287,8 +294,13 @@ bool GPURenderer::acquireSwapchainTexture() {
         return false;
     }
 
-    // Sync viewport before scene recording so the scene texture matches the
-    // swapchain dimensions for this frame.
+    // Sync the viewport/scene-texture to the swapchain dimensions. NOTE: this
+    // runs from beginScenePass(), which is AFTER GameStateManager::recordGPUVertices()
+    // in GameEngine::render(). On a resize frame the scene was therefore recorded
+    // against the previous viewport size while renderRecordedScene builds its ortho
+    // from the new scene-texture size, producing a one-frame shift. This is accepted:
+    // moving the swapchain acquisition before recording would restructure the frame
+    // lifecycle (acquisition must run on the active command buffer).
     if (m_swapchainWidth != m_viewportWidth || m_swapchainHeight != m_viewportHeight) {
         GAMEENGINE_INFO(std::format("Swapchain size changed: {}x{} -> {}x{}",
                                     m_viewportWidth, m_viewportHeight,
@@ -340,16 +352,11 @@ SDL_GPURenderPass* GPURenderer::beginScenePass() {
         m_uiVertexPool.endFrame(uiVertexCount);
 
         // Upload vertex data
-        if (!m_spriteVertexPool.upload(m_copyPass) ||
-            !m_entityVertexPool.upload(m_copyPass) ||
-            !m_particleVertexPool.upload(m_copyPass) ||
-            !m_primitiveVertexPool.upload(m_copyPass) ||
-            !m_uiVertexPool.upload(m_copyPass)) {
-            SDL_EndGPUCopyPass(m_copyPass);
-            m_copyPass = nullptr;
-            profiler.endRender(RenderPhase::GPUUpload);
-            return nullptr;
-        }
+        m_spriteVertexPool.upload(m_copyPass);
+        m_entityVertexPool.upload(m_copyPass);
+        m_particleVertexPool.upload(m_copyPass);
+        m_primitiveVertexPool.upload(m_copyPass);
+        m_uiVertexPool.upload(m_copyPass);
 
         SDL_EndGPUCopyPass(m_copyPass);
         m_copyPass = nullptr;
@@ -440,7 +447,6 @@ SDL_GPURenderPass* GPURenderer::beginSwapchainPass() {
     viewport.max_depth = 1.0f;
     SDL_SetGPUViewport(m_currentPass, &viewport);
 
-    m_frameReadyForPresentation = true;
     return m_currentPass;
 }
 
@@ -942,7 +948,6 @@ void GPURenderer::resetFrameState() {
     m_swapchainWidth = 0;
     m_swapchainHeight = 0;
     m_frameActive = false;
-    m_frameReadyForPresentation = false;
 }
 
 } // namespace VoidLight

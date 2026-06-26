@@ -22,7 +22,7 @@
  * - Uses WorkerBudget for adaptive batch sizing
  * - Submits batches to ThreadSystem for parallel processing
  * - Called at end of GameEngine::update() for power efficiency
- * - Handles tier updates (every 60 frames) + background entity processing (10Hz)
+ * - Handles tier updates (every 120 frames) + background entity processing (10Hz)
  */
 
 #include "utils/Vector2D.hpp"
@@ -92,7 +92,7 @@ public:
      * @brief Main update - handles tier recalc AND background entity processing
      *
      * Power-efficient single entry point called at end of GameEngine::update():
-     * - Phase 1: Tier updates every 60 frames (~1 sec at 60Hz)
+     * - Phase 1: Tier updates every 120 frames (~2 sec at 60Hz)
      * - Phase 2: Background entity processing at 10Hz (only if entities exist)
      *
      * When paused: immediate return, zero CPU cycles.
@@ -127,7 +127,7 @@ public:
     /**
      * @brief Update entity simulation tiers based on reference point
      *
-     * Should be called periodically (e.g., every 60 frames) to reassign
+     * Should be called periodically (e.g., every 120 frames) to reassign
      * entities to Active/Background/Hibernated tiers.
      * Uses EntityDataManager::updateSimulationTiers() internally.
      */

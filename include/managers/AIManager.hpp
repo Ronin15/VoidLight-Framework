@@ -21,14 +21,12 @@
 
 #include "ai/BehaviorConfig.hpp"
 #include "ai/AICommandBus.hpp"
-#include "entities/Entity.hpp"
 #include "entities/EntityHandle.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include <array>
 #include <atomic>
 #include <future>
-#include <memory>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>

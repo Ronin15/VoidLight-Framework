@@ -1041,6 +1041,17 @@ void CollisionManager::onTileChanged(int x, int y) {
 
 void CollisionManager::subscribeWorldEvents() {
   auto &em = EventManager::Instance();
+  // GameEngine::init() runs EventManager::init() and CollisionManager::init()
+  // on concurrent ThreadSystem workers. EventManager::init() resets its handler
+  // containers, and registering here before that completes is a data race on
+  // those containers. Gate on isInitialized() (acquire) so registration only
+  // touches the containers after EventManager::init() has published them —
+  // matching PathfinderManager::subscribeToEvents().
+  if (!em.isInitialized()) {
+    COLLISION_WARN("EventManager not initialized, skipping world event "
+                   "subscription");
+    return;
+  }
   auto token = em.registerPersistentHandlerWithToken(
       EventTypeId::World, [this](const EventData &data) {
         auto base = data.event;
@@ -2600,9 +2611,11 @@ void CollisionManager::detectEventOnlyTriggersSweep(
               return a.x < b.x || (a.x == b.x && a.isStart > b.isStart);
             });
 
-  // Sweep: track active entities and triggers
-  std::unordered_set<size_t> activeEntities;
-  std::unordered_set<size_t> activeTriggers;
+  // Sweep: track active entities and triggers (reuse buffers, retain capacity)
+  auto &activeEntities = m_triggerSweepActiveEntities;
+  auto &activeTriggers = m_triggerSweepActiveTriggers;
+  activeEntities.clear();
+  activeTriggers.clear();
 
   for (const auto &edge : m_triggerSweepEdges) {
     if (edge.isStart) {

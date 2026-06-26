@@ -12,6 +12,8 @@
 #include "managers/SoundManager.hpp"
 #include "events/ParticleEffectEvent.hpp"
 #include "events/WeatherEvent.hpp"
+#include "gpu/GPURenderer.hpp"
+#include "gpu/GPUTypes.hpp"
 #include "utils/SIMDMath.hpp"
 #include <algorithm>
 #include <chrono>
@@ -650,6 +652,7 @@ void ParticleManager::prepareForStateTransition() {
   m_storage.pendingIndices.clear();
   m_storage.readyIndices.clear();
   m_storage.particleCount.store(0, std::memory_order_release);
+  m_storage.maxActiveIndex = 0; // Reset active-span tracker now that storage is empty
 
   PARTICLE_INFO(std::format("Complete particle cleanup: cleared {} active particles from storage",
                             particlesCleared));
@@ -898,9 +901,6 @@ void ParticleManager::update(float deltaTime) {
     PARTICLE_ERROR(std::format("Exception in ParticleManager::update: {}", e.what()));
   }
 }
-
-#include "gpu/GPURenderer.hpp"
-#include "gpu/GPUTypes.hpp"
 
 void ParticleManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
                                         float cameraX, float cameraY,

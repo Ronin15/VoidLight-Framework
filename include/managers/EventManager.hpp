@@ -30,9 +30,9 @@
 #include <mutex>
 #include <queue>
 #include <shared_mutex>
+#include <unordered_map>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 #include <limits>
 #include <algorithm>
@@ -44,8 +44,6 @@ class WeatherEvent;
 class NPCSpawnEvent;
 class MerchantSpawnEvent;
 class ResourceChangeEvent;
-class WorldEvent;
-class CameraEvent;
 class CameraMovedEvent;
 class CameraZoomChangedEvent;
 class CameraShakeStartedEvent;
@@ -513,8 +511,6 @@ private:
   mutable EventPool<NPCSpawnEvent> m_npcSpawnPool;
   mutable EventPool<MerchantSpawnEvent> m_merchantSpawnPool;
   mutable EventPool<ResourceChangeEvent> m_resourceChangePool;
-  mutable EventPool<WorldEvent> m_worldPool;
-  mutable EventPool<CameraEvent> m_cameraPool;
 
   // Hot-path event pools (triggered frequently during gameplay)
   mutable EventPool<ParticleEffectEvent> m_particleEffectPool;

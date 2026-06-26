@@ -52,7 +52,8 @@ public:
    * @brief Plays a loaded sound effect
    * @param soundID Unique identifier of the sound effect to play
    * @param loops Number of additional loops to play (0 = play once, default: 0)
-   * @param volume Volume level from 0.0-1.0 (default: 1.0)
+   * @param volume Per-call gain multiplier (default: 1.0). Multiplied by the
+   *               global SFX volume; the product is clamped to 0.0-10.0.
    */
   void playSFX(const std::string &soundID, int loops = 0, float volume = 1.0f);
 
@@ -60,7 +61,8 @@ public:
    * @brief Plays a loaded music track
    * @param musicID Unique identifier of the music track to play
    * @param loops Number of loops (-1 = infinite loop, default: -1)
-   * @param volume Volume level from 0.0-1.0 (default: 1.0)
+   * @param volume Per-call gain multiplier (default: 1.0). Multiplied by the
+   *               global music volume; the product is clamped to 0.0-10.0.
    */
   void playMusic(const std::string &musicID, int loops = -1,
                  float volume = 1.0f);
@@ -88,13 +90,15 @@ public:
 
   /**
    * @brief Sets the global music volume level
-   * @param volume Volume level from 0.0-1.0
+   * @param volume Volume level from 0.0-10.0 (1.0 = unity gain; values >1.0
+   *               amplify). Inputs are clamped to this range.
    */
   void setMusicVolume(float volume);
 
   /**
    * @brief Sets the global sound effects volume level
-   * @param volume Volume level from 0.0-1.0
+   * @param volume Volume level from 0.0-10.0 (1.0 = unity gain; values >1.0
+   *               amplify). Inputs are clamped to this range.
    */
   void setSFXVolume(float volume);
 
@@ -131,13 +135,13 @@ public:
 
   /**
    * @brief Gets the current music volume level
-   * @return Current music volume (0.0-1.0)
+   * @return Current music volume (0.0-10.0; 1.0 = unity gain)
    */
   float getMusicVolume() const { return m_musicVolume; }
 
   /**
    * @brief Gets the current sound effects volume level
-   * @return Current SFX volume (0.0-1.0)
+   * @return Current SFX volume (0.0-10.0; 1.0 = unity gain)
    */
   float getSFXVolume() const { return m_sfxVolume; }
 
@@ -164,8 +168,6 @@ private:
 
   // State management
   bool m_initialized{false};
-  std::atomic<bool> m_sfxLoaded{false};
-  std::atomic<bool> m_musicLoaded{false};
   std::mutex m_loadMutex{};
   std::atomic<bool> m_isShutdown{false};
   float m_musicVolume{1.0f};

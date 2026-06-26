@@ -161,36 +161,14 @@ bool SoundManager::loadAudio(const std::string &filePath, const std::string &idP
 
 bool SoundManager::loadSFX(const std::string &filePath,
                            const std::string &soundID) {
-  if (m_sfxLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
   std::lock_guard<std::mutex> lock(m_loadMutex);
-  if (m_sfxLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
-
-  bool result = loadAudio(filePath, soundID);
-  if(result) {
-      m_sfxLoaded.store(true, std::memory_order_release);
-  }
-  return result;
+  return loadAudio(filePath, soundID);
 }
 
 bool SoundManager::loadMusic(const std::string &filePath,
                              const std::string &musicID) {
-  if (m_musicLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
   std::lock_guard<std::mutex> lock(m_loadMutex);
-  if (m_musicLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
-
-  bool result = loadAudio(filePath, std::format("music_{}", musicID));
-  if(result) {
-    m_musicLoaded.store(true, std::memory_order_release);
-  }
-  return result;
+  return loadAudio(filePath, std::format("music_{}", musicID));
 }
 
 MIX_Track *SoundManager::createAndConfigureTrack(MIX_Group *group,

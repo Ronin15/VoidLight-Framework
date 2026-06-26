@@ -196,8 +196,8 @@ private:
 public:
   JsonReader();
 
-  bool loadFromFile(const std::string &path);
-  bool parse(const std::string &jsonString);
+  [[nodiscard]] bool loadFromFile(const std::string &path);
+  [[nodiscard]] bool parse(const std::string &jsonString);
   const JsonValue &getRoot() const { return m_root; }
   const std::string &getLastError() const { return m_lastError; }
   void clearError() { m_lastError.clear(); }

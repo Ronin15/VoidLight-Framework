@@ -120,6 +120,17 @@ public:
     size_t end();
 
     /**
+     * Clear recorded counts to a clean idle state.
+     *
+     * Counts persist after end() because they are consumed later in the frame
+     * (GPURenderer::beginScenePass reads getVertexCount(); renderRecordedScene
+     * reads hasSprites()). Call this once per frame BEFORE recording so that
+     * non-recording states (which never call begin()) do not leave stale counts
+     * that cause beginScenePass to upload garbage vertex data.
+     */
+    void reset();
+
+    /**
      * Issue the draw call during render pass.
      * @param pass Active render pass
      * @param pipeline Pipeline to use

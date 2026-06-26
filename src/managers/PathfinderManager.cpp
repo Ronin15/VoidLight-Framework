@@ -1504,6 +1504,10 @@ void PathfinderManager::prewarmPathCache() {
 }
 
 void PathfinderManager::subscribeToEvents() {
+    // GameEngine::init() awaits EventManager::init() before PathfinderManager::init()
+    // runs, so this gate should never bail during normal startup. It remains as
+    // defense-in-depth (e.g. standalone/test init without that ordering): if it
+    // ever trips, registration is skipped permanently with no retry.
     if (!EventManager::Instance().isInitialized()) {
         PATHFIND_WARN("EventManager not initialized, delaying event subscription");
         return;

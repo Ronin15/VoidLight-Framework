@@ -488,6 +488,10 @@ void AIManager::update(float deltaTime) {
             for (uint32_t edmIdx : m_batchKnockbackClears[i]) {
                 edmDrain.clearKnockback(edmIdx);
             }
+            // Clear after draining so a later single-threaded frame (which fills
+            // only m_singleBatchKnockbackClears) does not re-drain stale indices
+            // left here by a prior threaded frame.
+            m_batchKnockbackClears[i].clear();
         }
     }
 

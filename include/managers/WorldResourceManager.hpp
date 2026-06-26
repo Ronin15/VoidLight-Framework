@@ -518,6 +518,11 @@ private:
     mutable WorldResourceStats m_stats;
     std::atomic<bool> m_initialized{false};
 
+    // Reusable scratch for findClosestDroppedItem candidate gathering.
+    // Main-thread-only (sole caller InventoryController::attemptPickup); avoids a
+    // per-call allocation on the pickup path.
+    mutable std::vector<size_t> m_closestItemScratch;
+
     // Fast-path counters for active world (avoid lock acquisition when empty)
     // These are updated on register/unregister and when active world changes
     std::atomic<size_t> m_activeWorldItemCount{0};

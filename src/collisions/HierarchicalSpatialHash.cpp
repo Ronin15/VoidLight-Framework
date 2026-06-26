@@ -24,8 +24,8 @@ HierarchicalSpatialHash::HierarchicalSpatialHash() {
 void HierarchicalSpatialHash::insert(size_t bodyIndex, const AABB& aabb) {
     // SINGLE-THREADED: No locks needed - collision runs on main thread only
 
-    // Get the coarse regions this body overlaps
-    std::vector<CoarseCoord> regions;
+    // Get the coarse regions this body overlaps (reuse scratch, retain capacity)
+    auto& regions = m_tempModifyRegions;
     getCoarseCoordsForAABB(aabb, regions);
 
     // Insert into all overlapping regions
@@ -64,8 +64,8 @@ void HierarchicalSpatialHash::remove(size_t bodyIndex) {
     const BodyLocation& location = locationIt->second;
     const AABB& aabb = location.lastAABB;
 
-    // Get all regions this body was in
-    std::vector<CoarseCoord> regions;
+    // Get all regions this body was in (reuse scratch, retain capacity)
+    auto& regions = m_tempModifyRegions;
     getCoarseCoordsForAABB(aabb, regions);
 
     // Remove from all regions
@@ -96,9 +96,11 @@ void HierarchicalSpatialHash::update(size_t bodyIndex, const AABB& oldAABB, cons
         return;
     }
 
-    // Check if regions changed
-    std::vector<CoarseCoord> oldRegions;
-    std::vector<CoarseCoord> newRegions;
+    // Check if regions changed (reuse scratch, retain capacity).
+    // Distinct from m_tempModifyRegions so the remove()/insert() fallback below
+    // cannot clobber these while they are still in use.
+    auto& oldRegions = m_tempUpdateOldRegions;
+    auto& newRegions = m_tempUpdateNewRegions;
     getCoarseCoordsForAABB(oldAABB, oldRegions);
     getCoarseCoordsForAABB(newAABB, newRegions);
 
@@ -434,10 +436,19 @@ HierarchicalSpatialHash::FineCoord HierarchicalSpatialHash::getFineCoord(const A
     float const relativeX = aabb.center.getX() - regionOriginX;
     float const relativeY = aabb.center.getY() - regionOriginY;
 
-    return {
-        static_cast<int32_t>(std::floor(relativeX / FINE_CELL_SIZE)),
-        static_cast<int32_t>(std::floor(relativeY / FINE_CELL_SIZE))
-    };
+    int32_t fineX = static_cast<int32_t>(std::floor(relativeX / FINE_CELL_SIZE));
+    int32_t fineY = static_cast<int32_t>(std::floor(relativeY / FINE_CELL_SIZE));
+
+    // Clamp to region bounds so a boundary-straddling body whose center lies
+    // outside this region is filed into the same boundary fine cell the query
+    // side inspects. getFineCoordList clamps query bounds identically; insert
+    // and query MUST agree or a straddling body becomes unreachable.
+    // (fine cells per coarse cell = COARSE_CELL_SIZE / FINE_CELL_SIZE = 4)
+    int32_t const maxCellIndex = static_cast<int32_t>(COARSE_CELL_SIZE / FINE_CELL_SIZE) - 1;
+    fineX = std::max(0, std::min(fineX, maxCellIndex));
+    fineY = std::max(0, std::min(fineY, maxCellIndex));
+
+    return {fineX, fineY};
 }
 
 void HierarchicalSpatialHash::getFineCoordList(const AABB& aabb, const CoarseCoord& region, std::vector<FineCoord>& out) const {

@@ -767,8 +767,9 @@ size_t WorldResourceManager::queryHarvestablesInRadius(const Vector2D& center, f
 }
 
 bool WorldResourceManager::findClosestDroppedItem(const Vector2D& center, float radius, size_t& outIndex) const {
-    std::vector<size_t> candidates;
-    candidates.reserve(16);  // Reasonable initial capacity
+    // Main-thread-only path; reuse member scratch to avoid a per-call allocation.
+    // queryDroppedItemsInRadius clear()s the buffer, so capacity is preserved.
+    std::vector<size_t>& candidates = m_closestItemScratch;
 
     if (queryDroppedItemsInRadius(center, radius, candidates) == 0) {
         return false;

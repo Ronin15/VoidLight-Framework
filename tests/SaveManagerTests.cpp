@@ -18,6 +18,16 @@ struct TestFixture {
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }
+        // Ensure the relative output directory exists before any test writes to
+        // it. Without this the suite is order/cwd-dependent: saveToFile() fails
+        // when tests/test_data/ is absent (fresh build tree, ctest working dir,
+        // or after cleanup), making tests flaky. std::filesystem is portable
+        // (forward slashes resolve correctly on Windows too).
+        std::error_code ec;
+        std::filesystem::create_directories("tests/test_data", ec);
+        if (ec) {
+            throw std::runtime_error("Failed to create tests/test_data directory: " + ec.message());
+        }
     }
 
     ~TestFixture() {

@@ -211,7 +211,6 @@ private:
     uint32_t m_swapchainWidth{0};
     uint32_t m_swapchainHeight{0};
     bool m_frameActive{false};
-    bool m_frameReadyForPresentation{false};
 
     // Intermediate scene texture
     std::unique_ptr<GPUTexture> m_sceneTexture;

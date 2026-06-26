@@ -6,10 +6,8 @@
 #include "managers/WorldManager.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
-#include "utils/Camera.hpp"
 #include "utils/ResourcePath.hpp"
 #include "core/ThreadSystem.hpp"
-#include "events/ResourceChangeEvent.hpp"
 #include "events/TimeEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
@@ -19,12 +17,9 @@
 #include "utils/JsonReader.hpp"
 #include "world/HarvestConfig.hpp"
 
-#include "events/HarvestResourceEvent.hpp"
 #include <algorithm>
-#include <cmath>
 #include <format>
 
-#include "gpu/GPURenderer.hpp"
 #include "gpu/SpriteBatch.hpp"
 
 bool WorldManager::init() {
@@ -520,7 +515,16 @@ void WorldManager::fireWorldLoadedEvent(const std::string &worldId) {
 
 void WorldManager::fireWorldUnloadedEvent(const std::string &worldId) {
   try {
-    // Trigger world unloaded via EventManager (no registration)
+    // Trigger world unloaded via EventManager (no registration).
+    // MUST be Immediate: world replacement (loadNewWorld over an existing world)
+    // relies on WorldUnloaded handlers firing synchronously BEFORE the new world
+    // is activated, so old-world state is torn down before new-world state is
+    // built. This is the documented invariant ("do not rely only on deferred
+    // WorldUnloaded after transition cleanup has begun") and is asserted by
+    // WorldManagerTests (TestWorldReplacementUnloadsBeforeActivatingNewWorld).
+    // The current World handlers are confirmation-only and safe to run inline;
+    // if heavier handlers are ever added, sequence the unload on the main thread
+    // ahead of the worker load rather than switching to Deferred.
     const EventManager &eventMgr = EventManager::Instance();
     eventMgr.triggerWorldUnloaded(worldId,
                                         EventManager::DispatchMode::Immediate);

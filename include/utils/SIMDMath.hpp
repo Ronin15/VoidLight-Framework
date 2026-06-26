@@ -18,7 +18,10 @@
  * for multiple platforms without duplicating logic.
  */
 
+#include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 
 // ============================================================================
 // Platform Detection
@@ -275,7 +278,7 @@ inline Float4 mul(Float4 a, Float4 b) {
  * More efficient than separate mul + add on modern CPUs
  */
 inline Float4 madd(Float4 a, Float4 b, Float4 c) {
-#if defined(VOIDLIGHT_SIMD_AVX2)
+#if defined(VOIDLIGHT_SIMD_AVX2) && defined(__FMA__)
     return _mm_fmadd_ps(a, b, c);
 #elif defined(VOIDLIGHT_SIMD_NEON)
     return vmlaq_f32(c, a, b);

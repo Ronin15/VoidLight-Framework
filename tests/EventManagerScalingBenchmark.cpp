@@ -250,7 +250,12 @@ struct GlobalFixture {
         if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("ThreadSystem::init() failed");
         }
-        BOOST_REQUIRE(EventManager::Instance().init());
+        // Global fixtures run outside any test-case context; a Boost.Test
+        // assertion macro here raises a framework setup_error (exit 200) even
+        // when all cases pass. Fail via throw instead.
+        if (!EventManager::Instance().init()) {
+            throw std::runtime_error("EventManager::init() failed");
+        }
     }
 
     ~GlobalFixture() {

@@ -171,6 +171,12 @@ private:
     mutable std::unordered_set<size_t> m_tempSeenBodies;
     mutable std::vector<CoarseCoord> m_tempQueryRegions;
     mutable std::vector<FineCoord> m_tempQueryFineCells;
+    // Persistent scratch for insert/remove/update (single-threaded safe).
+    // update() needs two separate buffers to compare old vs new region sets;
+    // insert()/remove() share one (never nested, getCoarseCoordsForAABB clears).
+    std::vector<CoarseCoord> m_tempModifyRegions;
+    std::vector<CoarseCoord> m_tempUpdateOldRegions;
+    std::vector<CoarseCoord> m_tempUpdateNewRegions;
 
     // Helper methods
     void getCoarseCoordsForAABB(const AABB& aabb, std::vector<CoarseCoord>& out) const;

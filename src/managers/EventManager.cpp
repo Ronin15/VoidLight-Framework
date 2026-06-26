@@ -843,6 +843,11 @@ EventManager::prepareCombatEvent(const PendingDispatch& pendingDispatch) const {
   const EntityHandle attackerHandle = damageEvent->getSource();
   preparedCombat.targetHandle = targetHandle;
   preparedCombat.attackerHandle = attackerHandle;
+  // Caches the EDM SoA index in a worker (prepareCombatBatch) for reuse on the
+  // main thread in commitPreparedCombatEvent. SAFE ONLY because EDM destruction
+  // is deferred and the SoA free-list bumps generation in place rather than
+  // compacting, so an index stays stable between prepare and commit. If EDM ever
+  // switches to synchronous/compacting destruction this cache must be revisited.
   const size_t targetIdx = edm.getIndex(targetHandle);
   preparedCombat.targetIdx = targetIdx;
   preparedCombat.damage = damageEvent->getDamage();
@@ -896,6 +901,10 @@ void EventManager::commitPreparedCombatEvent(const PendingDispatch& pendingDispa
   const bool destroyOnLethal = preparedCombat.valid
       ? preparedCombat.destroyOnLethal
       : !targetHandle.isPlayer();
+  // Reuses the index cached by prepareCombatEvent on a worker. Valid here only
+  // because EDM defers destruction and bumps generation in place without
+  // compacting (see prepareCombatEvent) — the index cannot have shifted between
+  // the worker prepare pass and this main-thread commit.
   const size_t targetIdx = preparedCombat.valid
       ? preparedCombat.targetIdx
       : edm.getIndex(targetHandle);
@@ -987,10 +996,13 @@ void EventManager::drainDispatchQueueWithBudget() {
       size_t combatIndex = 0;
       while (nonCombatIndex < m_localNonCombatBuffer.size() &&
              combatIndex < m_localCombatDispatchBuffer.size()) {
+        // Non-combat entries are not read again after the merge, so move them.
+        // Combat entries are still consumed by prepareCombatBatch() (and the
+        // all-combat path) from m_localCombatDispatchBuffer, so they are copied.
         if (m_localNonCombatBuffer[nonCombatIndex].sequence <
             m_localCombatDispatchBuffer[combatIndex].sequence) {
           m_localDispatchBuffer.emplace_back(
-              m_localNonCombatBuffer[nonCombatIndex++]);
+              std::move(m_localNonCombatBuffer[nonCombatIndex++]));
         } else {
           m_localDispatchBuffer.emplace_back(
               m_localCombatDispatchBuffer[combatIndex++]);
@@ -999,7 +1011,7 @@ void EventManager::drainDispatchQueueWithBudget() {
 
       while (nonCombatIndex < m_localNonCombatBuffer.size()) {
         m_localDispatchBuffer.emplace_back(
-            m_localNonCombatBuffer[nonCombatIndex++]);
+            std::move(m_localNonCombatBuffer[nonCombatIndex++]));
       }
       while (combatIndex < m_localCombatDispatchBuffer.size()) {
         m_localDispatchBuffer.emplace_back(
@@ -1007,9 +1019,10 @@ void EventManager::drainDispatchQueueWithBudget() {
       }
     } else if (!m_localNonCombatBuffer.empty()) {
       m_localDispatchBuffer.reserve(nonCombatCount);
-      m_localDispatchBuffer.insert(m_localDispatchBuffer.end(),
-                                   m_localNonCombatBuffer.begin(),
-                                   m_localNonCombatBuffer.end());
+      m_localDispatchBuffer.insert(
+          m_localDispatchBuffer.end(),
+          std::make_move_iterator(m_localNonCombatBuffer.begin()),
+          std::make_move_iterator(m_localNonCombatBuffer.end()));
     }
   }
   // Lock released - process events without holding lock
@@ -1205,16 +1218,6 @@ void EventManager::releaseEventToPool(EventTypeId typeId, const EventPtr& event)
         m_resourceChangePool.release(rce);
       }
       break;
-    case EventTypeId::World:
-      if (auto we = std::dynamic_pointer_cast<WorldEvent>(event)) {
-        m_worldPool.release(we);
-      }
-      break;
-    case EventTypeId::Camera:
-      if (auto ce = std::dynamic_pointer_cast<CameraEvent>(event)) {
-        m_cameraPool.release(ce);
-      }
-      break;
     case EventTypeId::ParticleEffect:
       if (auto pe = std::dynamic_pointer_cast<ParticleEffectEvent>(event)) {
         m_particleEffectPool.release(pe);
@@ -1260,8 +1263,6 @@ void EventManager::clearEventPools() {
   m_npcSpawnPool.clear();
   m_merchantSpawnPool.clear();
   m_resourceChangePool.clear();
-  m_worldPool.clear();
-  m_cameraPool.clear();
   m_particleEffectPool.clear();
   m_collisionObstacleChangedPool.clear();
   m_damagePool.clear();

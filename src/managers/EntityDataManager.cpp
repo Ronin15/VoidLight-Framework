@@ -455,7 +455,9 @@ void EntityDataManager::freeSlot(size_t index) {
     m_hotData[index] = EntityHotData{};
     m_entityIds[index] = 0;
 
-    // Increment generation for stale handle detection
+    // Increment generation for stale handle detection. The slot is NOT compacted
+    // away — its index stays valid (with a bumped generation) so raw SoA indices
+    // cached across frames/threads by AIManager and EventManager stay stable.
     m_generations[index]++;
 
     // Add to free list
@@ -1962,7 +1964,12 @@ void EntityDataManager::destroyEntity(EntityHandle handle) {
         return;
     }
 
-    // Dynamic pool destruction (deferred queue)
+    // Dynamic pool destruction (deferred queue).
+    // CONTRACT: destruction is deferred (queued here, applied later via freeSlot)
+    // and freeSlot bumps the slot generation in place rather than compacting the
+    // SoA. AIManager and EventManager cache raw SoA indices across the
+    // worker/main-thread boundary relying on this — switching to synchronous or
+    // compacting destruction would invalidate those caches and must audit them.
     std::lock_guard<std::mutex> lock(m_destructionMutex);
     m_destructionQueue.push_back(handle);
 }
