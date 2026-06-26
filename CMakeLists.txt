@@ -47,8 +47,8 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flt
 if(APPLE)
     # Apple Silicon specific optimizations
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -mcpu=apple-m1")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mcpu=apple-m1")
+        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -mcpu=native")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mcpu=native")
     endif()
 
     # Aggressive flags for our project targets only (not SDL3)
@@ -145,7 +145,7 @@ endif()
 
 # Check for Boost unit test framework (optional, only needed for tests)
 # SaveGameManager now uses header-only binary serialization (no Boost dependency)
-find_package(Boost QUIET COMPONENTS unit_test_framework)
+find_package(Boost 1.80.0 QUIET COMPONENTS unit_test_framework)
 
 if(Boost_FOUND AND TARGET Boost::unit_test_framework)
     message(STATUS "Found Boost Unit Test Framework - Tests will be enabled")
@@ -184,9 +184,9 @@ FetchContent_Declare(
 )
 
 # Build options for SDL3_ttf
-set(SDL3TTF_SAMPLES FALSE CACHE BOOL "Build the SDL3_ttf sample programs")
-set(SDL3TTF_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
-set(SDL3TTF_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
+set(SDLTTF_SAMPLES FALSE CACHE BOOL "Build the SDL3_ttf sample programs")
+set(SDLTTF_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
+set(SDLTTF_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
 
 # Download and configure SDL3_mixer
 FetchContent_Declare(
@@ -196,15 +196,19 @@ FetchContent_Declare(
 )
 
 # Build options for SDL3_mixer
-set(SDL3MIXER_SAMPLES FALSE CACHE BOOL "Build the SDL3_mixer sample programs")
-set(SDL3MIXER_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
-set(SDL3MIXER_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
+set(SDLMIXER_SAMPLES FALSE CACHE BOOL "Build the SDL3_mixer sample programs")
+set(SDLMIXER_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
+set(SDLMIXER_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
+# SDL3_mixer 3.2.0 vendored mpg123: its cmake exports the binary dir as the build-interface
+# include path but never generates or copies mpg123.h there (only via install()).
+# Disable mpg123 and rely on SDL_mixer's built-in drmp3 decoder for MP3 instead.
+set(SDLMIXER_MP3_MPG123 OFF CACHE BOOL "" FORCE)
 
 # Make the SDL3 packages available
 FetchContent_MakeAvailable(SDL3 SDL3_ttf SDL3_mixer)
 
 # Find all source files
-file(GLOB_RECURSE SOURCES
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     "src/core/*.cpp"
     "src/managers/*.cpp"
     "src/gameStates/*.cpp"
@@ -222,7 +226,7 @@ list(FILTER SOURCES EXCLUDE REGEX ".*VoidLightMain\\.cpp$")
 
 # SDL3_GPU support is mandatory for this project.
 # Add GPU module sources
-file(GLOB GPU_SOURCES "src/gpu/*.cpp")
+file(GLOB GPU_SOURCES CONFIGURE_DEPENDS "src/gpu/*.cpp")
 list(APPEND SOURCES ${GPU_SOURCES})
 
 if(WIN32)

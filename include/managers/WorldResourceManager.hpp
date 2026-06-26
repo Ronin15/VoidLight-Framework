@@ -195,7 +195,7 @@ public:
     // LIFECYCLE
     // ========================================================================
 
-    bool init();
+    [[nodiscard]] bool init();
     [[nodiscard]] bool isInitialized() const { return m_initialized.load(); }
     void clean();
 
@@ -216,7 +216,7 @@ public:
      * @param worldId Unique world identifier
      * @return true if created, false if already exists
      */
-    bool createWorld(const WorldId& worldId);
+    [[nodiscard]] bool createWorld(const WorldId& worldId);
 
     /**
      * @brief Remove a world and all its registrations

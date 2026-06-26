@@ -353,7 +353,7 @@ BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
   // Make sure EventFactory is properly initialized and Weather creator is
   // registered
   EventFactory::Instance().clean();
-  EventFactory::Instance().init();
+  BOOST_REQUIRE(EventFactory::Instance().init());
   registerWeatherCreator();
 
   // Test weather event creation

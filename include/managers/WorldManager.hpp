@@ -209,16 +209,16 @@ public:
         return instance;
     }
 
-    bool init();
+    [[nodiscard]] bool init();
     void clean();
     bool isInitialized() const { return m_initialized.load(std::memory_order_acquire); }
     bool isShutdown() const { return m_isShutdown; }
     void prepareForStateTransition();
     void setupEventHandlers();
 
-    bool loadNewWorld(const VoidLight::WorldGenerationConfig& config,
+    [[nodiscard]] bool loadNewWorld(const VoidLight::WorldGenerationConfig& config,
                      const VoidLight::WorldGenerationProgressCallback& progressCallback = nullptr);
-    bool loadWorld(const std::string& worldId);
+    [[nodiscard]] bool loadWorld(const std::string& worldId);
     void unloadWorld();
 
     std::optional<VoidLight::Tile> getTileCopyAt(int x, int y) const;

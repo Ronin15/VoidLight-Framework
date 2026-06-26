@@ -285,7 +285,7 @@ public:
    * @brief Initializes the ParticleManager and its internal systems
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Checks if the Particle Manager has been initialized
@@ -861,7 +861,11 @@ private:
   std::atomic<bool> m_useWorkerBudget{true};
   // Threading threshold now managed by WorkerBudget adaptive system
 
-  std::atomic<size_t> m_activeCount{0};
+  // Active particle count — fetch_add/fetch_sub'd from concurrent updateParticleRange()
+  // worker batches (ThreadSystem). Cache-line isolated to avoid false sharing with the
+  // read-mostly flags above (m_globallyPaused/m_globallyVisible/m_useThreading), which
+  // are read every frame in update().
+  alignas(64) std::atomic<size_t> m_activeCount{0};
 
   // Camera and culling
   struct CameraViewport {

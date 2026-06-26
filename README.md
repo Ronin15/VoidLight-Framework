@@ -97,7 +97,7 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 - CMake 3.28+, Ninja, C++20 compiler (GCC/Clang) - MSVC support planned
 - Platforms: Linux, macOS (Apple Silicon), Windows (MinGW)
 - [SDL3 dependencies](https://wiki.libsdl.org/SDL3/README-linux) (ttf, mixer)
-- Boost (for tests), cppcheck & clang-tidy (static analysis), Valgrind (optional, Linux only)
+- Boost 1.80.0 or newer (for tests; CI/dev tested with 1.90.0), cppcheck & clang-tidy (static analysis), Valgrind (optional, Linux only)
 - Platform shader tools (required only when regenerating checked-in shader binaries):
   - Linux: `glslangValidator` for Vulkan SPIR-V shaders
   - macOS: `glslangValidator` + `spirv-cross` for Metal shaders

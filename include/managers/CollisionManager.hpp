@@ -44,7 +44,7 @@ public:
         static CollisionManager s_instance; return s_instance;
     }
 
-    bool init();
+    [[nodiscard]] bool init();
     void clean();
 
     /**

@@ -62,7 +62,7 @@ public:
      * @param filepath Path to the JSON settings file
      * @return true if loading successful, false otherwise
      */
-    bool loadFromFile(const std::string& filepath);
+    [[nodiscard]] bool loadFromFile(const std::string& filepath);
 
     /**
      * @brief Saves current settings to a JSON file

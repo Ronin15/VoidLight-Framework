@@ -41,7 +41,7 @@ void setLeftMouseButton(float x, float y, bool pressed) {
 
 struct UIManagerFixture {
     UIManagerFixture() {
-        UIManager::Instance().init();
+        BOOST_REQUIRE(UIManager::Instance().init());
         InputManager::Instance().reset();
 
         // Set initial window size

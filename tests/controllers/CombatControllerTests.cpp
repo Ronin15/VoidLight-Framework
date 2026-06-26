@@ -59,10 +59,10 @@ BOOST_AUTO_TEST_CASE(TestUpdateDoesNothingWithoutPlayer)
 class CombatControllerRuntimeFixture {
 public:
     CombatControllerRuntimeFixture() {
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        UIManager::Instance().init();
+        BOOST_REQUIRE(UIManager::Instance().init());
 
         player = std::make_shared<Player>();
         player->initializeInventory();

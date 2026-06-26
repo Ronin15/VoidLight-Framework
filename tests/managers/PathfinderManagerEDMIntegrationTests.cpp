@@ -52,12 +52,12 @@ namespace {
 bool ensureActiveWorldForPathfindingTests() {
     auto& worldResMgr = WorldResourceManager::Instance();
     if (!worldResMgr.isInitialized()) {
-        worldResMgr.init();
+        if (!worldResMgr.init()) { return false; }
     }
 
     auto& resourceMgr = ResourceTemplateManager::Instance();
     if (!resourceMgr.isInitialized()) {
-        resourceMgr.init();
+        if (!resourceMgr.init()) { return false; }
     }
 
     auto& worldMgr = WorldManager::Instance();
@@ -128,12 +128,12 @@ private:
 struct PathfinderEDMFixture {
     PathfinderEDMFixture() {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        WorldResourceManager::Instance().init();
-        ResourceTemplateManager::Instance().init();
-        WorldManager::Instance().init();
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        BackgroundSimulationManager::Instance().init();
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+        BOOST_REQUIRE(WorldManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
         BOOST_REQUIRE(ensureActiveWorldForPathfindingTests());
     }
 

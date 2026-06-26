@@ -48,7 +48,7 @@ public:
    * @brief Initialize the factory
    * @return True if initialization succeeded, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Create an event from a definition

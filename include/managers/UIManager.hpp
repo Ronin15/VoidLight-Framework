@@ -288,7 +288,7 @@ public:
   }
 
   // Core system methods
-  bool init();
+  [[nodiscard]] bool init();
   void update(float deltaTime);
   void clean();
   bool isShutdown() const { return m_isShutdown; }

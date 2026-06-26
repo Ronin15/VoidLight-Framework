@@ -38,13 +38,13 @@ public:
     HarvestControllerTestFixture() {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         // Initialize EntityDataManager
         BOOST_REQUIRE(EntityDataManager::Instance().init());
 
         // Initialize WorldResourceManager
-        WorldResourceManager::Instance().init();
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
     }
 
     ~HarvestControllerTestFixture() {

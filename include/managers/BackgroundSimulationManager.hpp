@@ -47,7 +47,7 @@ public:
      * @brief Initialize the background simulation manager
      * @return true if initialization successful
      */
-    bool init();
+    [[nodiscard]] bool init();
 
     /**
      * @brief Clean up resources

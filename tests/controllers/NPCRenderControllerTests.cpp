@@ -72,9 +72,9 @@ class NPCRenderControllerFixture {
 public:
     NPCRenderControllerFixture() {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
     }
 
     ~NPCRenderControllerFixture() {

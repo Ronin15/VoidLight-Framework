@@ -22,7 +22,7 @@ struct GlobalFixture {
         if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("Failed to initialize ThreadSystem for resource integration tests");
         }
-        ResourceTemplateManager::Instance().init();
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }

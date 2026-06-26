@@ -17,12 +17,12 @@ class GameTimeManagerCalendarFixture {
 public:
     GameTimeManagerCalendarFixture() {
         gameTime = &GameTimeManager::Instance();
-        gameTime->init(12.0f, 1.0f);
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     }
 
     ~GameTimeManagerCalendarFixture() {
         gameTime->setGlobalPause(false);
-        gameTime->init(12.0f, 1.0f);
+        BOOST_CHECK(gameTime->init(12.0f, 1.0f));
     }
 
 protected:
@@ -95,7 +95,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(MonthProgressionTests, GameTimeManagerCalendarFixture)
 
 BOOST_AUTO_TEST_CASE(TestInitialCalendarState) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Day 1 should be in month 0 (Bloomtide)
     BOOST_CHECK_EQUAL(gameTime->getCurrentMonth(), 0);
@@ -104,7 +104,7 @@ BOOST_AUTO_TEST_CASE(TestInitialCalendarState) {
 }
 
 BOOST_AUTO_TEST_CASE(TestCurrentMonthName) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Day 1 is in Bloomtide
     std::string monthName(gameTime->getCurrentMonthName());
@@ -112,7 +112,7 @@ BOOST_AUTO_TEST_CASE(TestCurrentMonthName) {
 }
 
 BOOST_AUTO_TEST_CASE(TestDayOfMonthCalculation) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Day 1 -> dayOfMonth = 1
     BOOST_CHECK_EQUAL(gameTime->getDayOfMonth(), 1);
@@ -123,7 +123,7 @@ BOOST_AUTO_TEST_CASE(TestDayOfMonthCalculation) {
 }
 
 BOOST_AUTO_TEST_CASE(TestMonthProgressionByDays) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Day 1-30 = Bloomtide (month 0)
     gameTime->setGameDay(30);
@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE(TestMonthProgressionByDays) {
 }
 
 BOOST_AUTO_TEST_CASE(TestDaysInCurrentMonth) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // All months in default calendar have 30 days
     BOOST_CHECK_EQUAL(gameTime->getDaysInCurrentMonth(), 30);
@@ -179,7 +179,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(YearProgressionTests, GameTimeManagerCalendarFixture)
 
 BOOST_AUTO_TEST_CASE(TestYearProgression) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Year 1, Day 1
     BOOST_CHECK_EQUAL(gameTime->getGameYear(), 1);
@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(TestYearProgression) {
 }
 
 BOOST_AUTO_TEST_CASE(TestMultiYearProgression) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Year 3 starts at day 241
     gameTime->setGameDay(241);
@@ -227,7 +227,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(SeasonFromMonthTests, GameTimeManagerCalendarFixture)
 
 BOOST_AUTO_TEST_CASE(TestSeasonFromMonth) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Bloomtide = Spring
     gameTime->setGameDay(1);
@@ -251,7 +251,7 @@ BOOST_AUTO_TEST_CASE(TestSeasonFromMonth) {
 }
 
 BOOST_AUTO_TEST_CASE(TestSeasonCycleAcrossYears) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Year 2, Bloomtide = Spring again
     gameTime->setGameDay(121);

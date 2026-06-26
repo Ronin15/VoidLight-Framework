@@ -66,10 +66,10 @@ struct KBFixture
     KBFixture()
     {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        EventManager::Instance().init();
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
     }
 
     ~KBFixture()

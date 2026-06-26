@@ -210,7 +210,11 @@ bool AdvancedAIDemoState::enter() {
     // Initialize PathfinderManager for Follow behavior pathfinding
     PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
     if (!pathfinderMgr.isInitialized()) {
-      pathfinderMgr.init();
+      if (!pathfinderMgr.init()) {
+        GAMESTATE_ERROR(
+            "Failed to initialize PathfinderManager for Follow behavior");
+        return false;
+      }
       GAMESTATE_INFO("PathfinderManager initialized for Follow behavior");
     }
 

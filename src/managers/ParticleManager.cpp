@@ -340,6 +340,13 @@ bool ParticleManager::LockFreeParticleStorage::tryCreateParticle(
     const Vector2D &pos, const Vector2D &vel, const Vector2D &acc,
     uint32_t color, float life, float size, /*uint16_t texIndex,*/ uint8_t flags,
     uint8_t genId, ParticleEffectType effectType) {
+    // SPSC INVARIANT: This is the SOLE producer of the creation ring and is
+    // single-producer ONLY. All particle emits MUST originate on the main
+    // thread; creationHead is advanced here without any CAS/compare-exchange,
+    // so concurrent producers would corrupt the ring. The matching consumer
+    // (processCreationRequests) drains it on the main thread each frame.
+    // Do NOT call this from a worker thread or add a second producer without
+    // first converting the head advance to a multi-producer CAS scheme.
     size_t head = creationHead.load(std::memory_order_acquire);
     size_t next = (head + 1) & (CREATION_RING_SIZE - 1);
 
@@ -2628,8 +2635,8 @@ void ParticleManager::enableWorkerBudgetThreading(bool enable) {
     m_useThreading.store(true, std::memory_order_release);
   }
 
-  PARTICLE_INFO("WorkerBudget threading " +
-                std::string(enable ? "enabled" : "disabled"));
+  PARTICLE_INFO(std::format("WorkerBudget threading {}",
+                            enable ? "enabled" : "disabled"));
 }
 
 void ParticleManager::updateWithWorkerBudget(float deltaTime,

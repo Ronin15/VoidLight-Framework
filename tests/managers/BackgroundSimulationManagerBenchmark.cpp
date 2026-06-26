@@ -49,11 +49,11 @@ public:
             VOIDLIGHT_ENABLE_BENCHMARK_MODE();
             BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
             BOOST_REQUIRE(EntityDataManager::Instance().init());
-            PathfinderManager::Instance().init();
+            BOOST_REQUIRE(PathfinderManager::Instance().init());
             PathfinderManager::Instance().rebuildGrid();
-            CollisionManager::Instance().init();
-            AIManager::Instance().init();
-            BackgroundSimulationManager::Instance().init();
+            BOOST_REQUIRE(CollisionManager::Instance().init());
+            BOOST_REQUIRE(AIManager::Instance().init());
+            BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
 
             // Set simulation radii for headless testing - push entities to background tier
             // Active radius: very small so most entities are in background tier

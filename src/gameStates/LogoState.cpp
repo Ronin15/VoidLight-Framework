@@ -153,9 +153,10 @@ void LogoState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
      // Bottom-left
      v[3] = {.x=sx,      .y=bottom, .u=0.0f, .v=1.0f, .r=255, .g=255, .b=255, .a=255};
 
-    // Record draw command
+    // Record draw command — keep the owning texture handle; the raw
+    // SDL_GPUTexture* is resolved at the submission boundary in renderGPUScene().
     GPUDrawCommand cmd;
-    cmd.texture = texData->texture->get();
+    cmd.texture = texData->texture;
     cmd.vertexOffset = vertexOffset;
     cmd.vertexCount = 4;
     m_drawCommands.push_back(cmd);
@@ -288,9 +289,12 @@ void LogoState::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
 
   // Draw each texture with its vertices
   for (const auto& cmd : m_drawCommands) {
-    // Bind texture
+    // Bind texture — resolve the raw GPU handle only at the C-API boundary.
+    if (!cmd.texture) {
+      continue;
+    }
     SDL_GPUTextureSamplerBinding texSampler{};
-    texSampler.texture = cmd.texture;
+    texSampler.texture = cmd.texture->get();
     texSampler.sampler = gpuRenderer.getNearestSampler();
     SDL_BindGPUFragmentSamplers(scenePass, 0, &texSampler, 1);
 

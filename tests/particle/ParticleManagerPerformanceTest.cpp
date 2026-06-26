@@ -37,7 +37,7 @@ struct ParticleManagerPerformanceFixture {
     }
 
     // Initialize for performance tests
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
   }
 
@@ -495,7 +495,7 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
   for (size_t targetCount : testCounts) {
     // Test single-threaded
     if (manager->isInitialized()) manager->clean();
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
     #ifndef NDEBUG
     manager->enableThreading(false);
@@ -516,7 +516,7 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
 
     // Test multi-threaded
     if (manager->isInitialized()) manager->clean();
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
     #ifndef NDEBUG
     manager->enableThreading(true);
@@ -592,7 +592,7 @@ BOOST_FIXTURE_TEST_CASE(HighCountBenchmarks,
   for (size_t target : targets) {
     // Fresh state
     if (manager->isInitialized()) manager->clean();
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
     // Create many effects to reach target more quickly
@@ -643,7 +643,7 @@ BOOST_FIXTURE_TEST_CASE(WorkerBudgetAdaptiveTuning,
 
   // Fresh state
   if (manager->isInitialized()) manager->clean();
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Part 1: Batch Sizing Hill-Climb Convergence

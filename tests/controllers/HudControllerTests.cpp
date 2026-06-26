@@ -26,11 +26,11 @@ public:
     HudControllerFixture()
     {
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
-        GameTimeManager::Instance().init(12.0f, 1.0f);
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(GameTimeManager::Instance().init(12.0f, 1.0f));
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        UIManager::Instance().init();
+        BOOST_REQUIRE(UIManager::Instance().init());
         BOOST_REQUIRE(ProjectileManager::Instance().init());
     }
 

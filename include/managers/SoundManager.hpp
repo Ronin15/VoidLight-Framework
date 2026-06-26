@@ -27,7 +27,7 @@ public:
    * @brief Initializes the SoundManager and SDL audio subsystem
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Loads a sound effect from a file or all sound effects from a
@@ -38,7 +38,7 @@ public:
    * loading directory
    * @return true if at least one sound was loaded successfully, false otherwise
    */
-  bool loadSFX(const std::string &filePath, const std::string &soundID);
+  [[nodiscard]] bool loadSFX(const std::string &filePath, const std::string &soundID);
 
   /**
    * @brief Loads a music file for background music playback
@@ -46,7 +46,7 @@ public:
    * @param musicID Unique identifier for the music track(s)
    * @return true if music was loaded successfully, false otherwise
    */
-  bool loadMusic(const std::string &filePath, const std::string &musicID);
+  [[nodiscard]] bool loadMusic(const std::string &filePath, const std::string &musicID);
 
   /**
    * @brief Plays a loaded sound effect
@@ -172,7 +172,7 @@ private:
   float m_sfxVolume{1.0f};
 
   // Internal helper methods
-  bool loadAudio(const std::string &filePath, const std::string &idPrefix);
+  [[nodiscard]] bool loadAudio(const std::string &filePath, const std::string &idPrefix);
   MIX_Track *createAndConfigureTrack(MIX_Group *group, const std::string &tag);
   void cleanupStoppedTracks();
   std::vector<std::string> getSupportedExtensions() const;

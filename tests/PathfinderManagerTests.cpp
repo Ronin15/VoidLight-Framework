@@ -321,10 +321,10 @@ BOOST_AUTO_TEST_SUITE(PathfinderEventIntegrationTests)
 struct PathfinderEventFixture {
     PathfinderEventFixture() {
         // Initialize EventManager for event testing (following established pattern)
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         
         // Initialize PathfinderManager
-        PathfinderManager::Instance().init();
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
         
         // Reset tracking variables
         collisionVersionIncremented = false;
@@ -450,7 +450,7 @@ BOOST_FIXTURE_TEST_CASE(TestPathfinderEventHandlerLifecycle, PathfinderEventFixt
     BOOST_CHECK(!PathfinderManager::Instance().isInitialized());
     
     // Re-initialize
-    PathfinderManager::Instance().init();
+    BOOST_REQUIRE(PathfinderManager::Instance().init());
     BOOST_CHECK(PathfinderManager::Instance().isInitialized());
     
     // Should still be able to receive events after re-initialization

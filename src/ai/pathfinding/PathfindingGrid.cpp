@@ -659,6 +659,9 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
     m_stats.totalRequests++;
     m_stats.successfulPaths++;
     m_stats.totalIterations += 1; // Minimal iteration count
+    m_stats.totalPathLength += outPath.size();
+    m_stats.avgPathLength =
+        static_cast<uint32_t>(m_stats.totalPathLength / m_stats.successfulPaths);
 #endif
     return PathfindingResult::SUCCESS;
   }
@@ -674,6 +677,9 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
     m_stats.totalRequests++;
     m_stats.successfulPaths++;
     m_stats.totalIterations += 2; // Minimal iteration count for line-of-sight
+    m_stats.totalPathLength += outPath.size();
+    m_stats.avgPathLength =
+        static_cast<uint32_t>(m_stats.totalPathLength / m_stats.successfulPaths);
 #endif
     return PathfindingResult::SUCCESS;
   }
@@ -800,11 +806,9 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
       m_stats.totalRequests++;
       m_stats.successfulPaths++;
       m_stats.totalIterations += iterations;
-      uint64_t totalPathLength =
-          m_stats.avgPathLength * (m_stats.successfulPaths - 1) +
-          outPath.size();
+      m_stats.totalPathLength += outPath.size();
       m_stats.avgPathLength =
-          static_cast<uint32_t>(totalPathLength / m_stats.successfulPaths);
+          static_cast<uint32_t>(m_stats.totalPathLength / m_stats.successfulPaths);
 #endif
 
       return PathfindingResult::SUCCESS;

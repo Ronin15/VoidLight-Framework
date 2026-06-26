@@ -31,7 +31,7 @@ public:
     // Initialize ResourceTemplateManager
     resourceManager = &ResourceTemplateManager::Instance();
     if (!resourceManager->isInitialized()) {
-      resourceManager->init();
+      BOOST_REQUIRE(resourceManager->init());
     }
 
     // Get a test resource handle

@@ -54,19 +54,19 @@ public:
         std::cout << "WorkerBudget: " << budget.totalWorkers << " workers (all available per manager)\n";
 
         // Initialize resource managers first
-        ResourceTemplateManager::Instance().init();
-        WorldResourceManager::Instance().init();
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
 
         // Initialize EventManager for event-driven architecture
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         // Initialize EntityDataManager before collision manager (EDM owns static body data)
         BOOST_REQUIRE(EntityDataManager::Instance().init());
 
         // Initialize world and collision managers
-        WorldManager::Instance().init();
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
+        BOOST_REQUIRE(WorldManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
 
         // Set up a basic world for pathfinding tests
         setupTestWorld();

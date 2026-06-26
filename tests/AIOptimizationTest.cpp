@@ -49,10 +49,10 @@ struct AITestFixture {
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
-        BackgroundSimulationManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
     }
 
     ~AITestFixture() {

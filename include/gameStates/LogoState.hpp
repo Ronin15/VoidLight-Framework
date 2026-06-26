@@ -9,9 +9,10 @@
 #include "gameStates/GameState.hpp"
 #include "gpu/UIRenderBatches.hpp"
 #include <cstdint>
+#include <memory>
 #include <vector>
 
-struct SDL_GPUTexture;
+namespace VoidLight { class GPUTexture; }
 
 class LogoState : public GameState {
  public:
@@ -53,9 +54,11 @@ class LogoState : public GameState {
   int m_subtitleY{0};
   int m_versionY{0};
 
-  // Scene logo sprite batches.
+  // Scene logo sprite batches. Store the owning texture handle and materialize
+  // the raw SDL_GPUTexture* only at the GPU submission boundary in
+  // renderGPUScene().
   struct GPUDrawCommand {
-    SDL_GPUTexture* texture{nullptr};
+    std::shared_ptr<VoidLight::GPUTexture> texture{};
     uint32_t vertexOffset{0};
     uint32_t vertexCount{0};
   };

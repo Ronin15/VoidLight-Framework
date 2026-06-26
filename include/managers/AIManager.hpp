@@ -65,7 +65,7 @@ public:
    * @brief Initializes the AI Manager and its internal systems
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Checks if the AI Manager has been initialized

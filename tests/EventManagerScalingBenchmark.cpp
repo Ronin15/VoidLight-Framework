@@ -250,7 +250,7 @@ struct GlobalFixture {
         if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("ThreadSystem::init() failed");
         }
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
     }
 
     ~GlobalFixture() {
@@ -277,7 +277,7 @@ BOOST_GLOBAL_FIXTURE(GlobalFixture);
 struct EventManagerScalingFixture {
     EventManagerScalingFixture() {
         // Initialize EventManager
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
@@ -291,7 +291,7 @@ struct EventManagerScalingFixture {
 
         // Reset EventManager
         EventManager::Instance().clean();
-        EventManager::Instance().init();
+        BOOST_CHECK(EventManager::Instance().init());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
@@ -770,7 +770,7 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
     auto runBenchmark = [&](int numTriggers, bool useThreading) -> double {
         // Reset
         EventManager::Instance().clean();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         #ifndef NDEBUG
         EventManager::Instance().enableThreading(useThreading);
         #endif
@@ -890,7 +890,7 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
 
     // Setup handlers
     eventMgr.clean();
-    eventMgr.init();
+    BOOST_REQUIRE(eventMgr.init());
     std::atomic<int> callCount{0};
     for (int i = 0; i < 3; ++i) {
         eventMgr.registerHandler(EventTypeId::Weather,
@@ -968,7 +968,7 @@ BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
 
     auto& eventMgr = EventManager::Instance();
     eventMgr.clean();
-    eventMgr.init();
+    BOOST_REQUIRE(eventMgr.init());
 
     // Register a simple handler
     std::atomic<int> handlerCalls{0};
@@ -1120,7 +1120,7 @@ BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
     std::cout << "Batch speedup: " << std::setprecision(2) << (singleNoAlloc / batchNoAlloc) << "x" << std::endl;
 
     eventMgr.clean();
-    eventMgr.init();
+    BOOST_REQUIRE(eventMgr.init());
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,7 +1159,7 @@ BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
         EntityDataManager::Instance().clean();
 
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
     };
 
     auto setupCombatScene = [&resetCombatManagers](int totalEvents) {

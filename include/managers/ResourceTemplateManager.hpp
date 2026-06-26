@@ -59,7 +59,7 @@ public:
   static ResourceTemplateManager &Instance();
 
   // Core functionality
-  bool init();
+  [[nodiscard]] bool init();
   bool isInitialized() const { return m_initialized.load(); }
   void clean();
 
@@ -113,8 +113,8 @@ public:
   ResourcePtr createResource(VoidLight::ResourceHandle handle) const;
 
   // JSON loading methods
-  bool loadResourcesFromJson(const std::string &filename);
-  bool loadResourcesFromJsonString(const std::string &jsonString);
+  [[nodiscard]] bool loadResourcesFromJson(const std::string &filename);
+  [[nodiscard]] bool loadResourcesFromJsonString(const std::string &jsonString);
 
   // Query methods
   size_t getResourceTemplateCount() const;

@@ -89,6 +89,7 @@ public:
         uint64_t invalidStarts{0};
         uint64_t invalidGoals{0};
         uint64_t totalIterations{0};
+        uint64_t totalPathLength{0};
         uint32_t avgPathLength{0};
         uint32_t framesSinceReset{0};
     };

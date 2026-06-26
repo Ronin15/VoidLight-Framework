@@ -117,12 +117,12 @@ public:
     InventoryControllerTestFixture() {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        UIManager::Instance().init();
-        WorldResourceManager::Instance().init();
+        BOOST_REQUIRE(UIManager::Instance().init());
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
         if (!WorldResourceManager::Instance().hasWorld("test_world")) {
             BOOST_REQUIRE(WorldResourceManager::Instance().createWorld("test_world"));
         }

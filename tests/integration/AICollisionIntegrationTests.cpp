@@ -344,7 +344,7 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     worldConfig.mountainLevel = 0.7f;
 
     std::cout << "Setting up world for pathfinding grid..." << std::endl;
-    WorldManager::Instance().loadNewWorld(worldConfig);
+    BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
 
     // Wait for world generation to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(300));

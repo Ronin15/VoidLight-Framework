@@ -157,7 +157,12 @@ bool WorldManager::loadNewWorld(
       // Register world with WorldResourceManager and set as active immediately
       // (Must set active BEFORE initializing resources so spatial queries work)
       auto& wrm = WorldResourceManager::Instance();
-      wrm.createWorld(m_currentWorld->worldId);
+      if (!wrm.createWorld(m_currentWorld->worldId)) {
+        WORLD_MANAGER_WARN(std::format(
+            "WorldResourceManager::createWorld did not register a new world for "
+            "{} (may already exist); continuing with existing registry",
+            m_currentWorld->worldId));
+      }
       wrm.setActiveWorld(m_currentWorld->worldId);
 
       // Initialize world resources based on world data

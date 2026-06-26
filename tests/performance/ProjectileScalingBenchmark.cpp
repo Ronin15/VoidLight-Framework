@@ -46,9 +46,9 @@ public:
             VOIDLIGHT_ENABLE_BENCHMARK_MODE();
             BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
             BOOST_REQUIRE(EntityDataManager::Instance().init());
-            PathfinderManager::Instance().init();
-            CollisionManager::Instance().init();
-            EventManager::Instance().init();
+            BOOST_REQUIRE(PathfinderManager::Instance().init());
+            BOOST_REQUIRE(CollisionManager::Instance().init());
+            BOOST_REQUIRE(EventManager::Instance().init());
             BOOST_REQUIRE(ProjectileManager::Instance().init());
             s_initialized = true;
         }

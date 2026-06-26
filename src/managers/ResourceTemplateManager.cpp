@@ -126,8 +126,8 @@ bool ResourceTemplateManager::init() {
 
     return true;
   } catch (const std::exception &ex) {
-    RESOURCE_ERROR("ResourceTemplateManager::init - Exception: " +
-                   std::string(ex.what()));
+    RESOURCE_ERROR(std::format(
+        "ResourceTemplateManager::init - Exception: {}", ex.what()));
     return false;
   }
 }
@@ -534,8 +534,8 @@ ResourcePtr ResourceTemplateManager::createResource(
 
     return newResource;
   } catch (const std::exception &ex) {
-    RESOURCE_ERROR("ResourceTemplateManager::createResource - Exception: " +
-                   std::string(ex.what()));
+    RESOURCE_ERROR(std::format(
+        "ResourceTemplateManager::createResource - Exception: {}", ex.what()));
     return nullptr;
   }
 }
@@ -544,9 +544,10 @@ bool ResourceTemplateManager::loadResourcesFromJson(
     const std::string &filename) {
   JsonReader reader;
   if (!reader.loadFromFile(filename)) {
-    RESOURCE_ERROR("ResourceTemplateManager::loadResourcesFromJson - Failed to "
-                   "load file: " +
-                   filename + " - " + reader.getLastError());
+    RESOURCE_ERROR(std::format(
+        "ResourceTemplateManager::loadResourcesFromJson - Failed to load "
+        "file: {} - {}",
+        filename, reader.getLastError()));
     return false;
   }
 

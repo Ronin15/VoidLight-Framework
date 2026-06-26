@@ -120,7 +120,7 @@ public:
      * @param timeScale Scale factor for time progression (1.0 = real time)
      * @return True if initialization succeeded, false otherwise
      */
-    bool init(float startHour = 12.0f, float timeScale = 1.0f);
+    [[nodiscard]] bool init(float startHour = 12.0f, float timeScale = 1.0f);
 
     /**
      * @brief Update game time based on real elapsed time

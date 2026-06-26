@@ -13,17 +13,6 @@
 #include "gpu/GPUDevice.hpp"
 #include "gpu/GPURenderer.hpp"
 #include "utils/FrameProfiler.hpp"
-#include "gameStates/AIDemoState.hpp"
-#include "gameStates/AdvancedAIDemoState.hpp"
-#include "gameStates/EventDemoState.hpp"
-#include "gameStates/GamePlayState.hpp"
-#include "gameStates/GameOverState.hpp"
-#include "gameStates/LoadingState.hpp"
-#include "gameStates/LogoState.hpp"
-#include "gameStates/MainMenuState.hpp"
-#include "gameStates/OverlayDemoState.hpp"
-#include "gameStates/SettingsMenuState.hpp"
-#include "gameStates/UIDemoState.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -521,7 +510,10 @@ bool GameEngine::init(std::string_view title) {
   const std::string textureResPath = VoidLight::ResourcePath::resolve("res/img");
   constexpr std::string_view texturePrefix = "";
 
-  texMgr.loadGPU(textureResPath, std::string(texturePrefix));
+  if (!texMgr.loadGPU(textureResPath, std::string(texturePrefix)))
+  {
+    GAMEENGINE_ERROR("Failed to load one or more GPU textures");
+  }
 
   // Initialize sound manager in a separate thread - #3
   // Resolve paths before lambda capture
@@ -540,8 +532,14 @@ bool GameEngine::init(std::string_view title) {
             GAMEENGINE_INFO("Loading sounds and music");
             constexpr std::string_view sfxPrefix = "sfx";
             constexpr std::string_view musicPrefix = "music";
-            soundMgr.loadSFX(sfxPath, std::string(sfxPrefix));
-            soundMgr.loadMusic(musicPath, std::string(musicPrefix));
+            if (!soundMgr.loadSFX(sfxPath, std::string(sfxPrefix)))
+            {
+              GAMEENGINE_ERROR("Failed to load one or more sound effects");
+            }
+            if (!soundMgr.loadMusic(musicPath, std::string(musicPrefix)))
+            {
+              GAMEENGINE_ERROR("Failed to load one or more music tracks");
+            }
             return true;
           }));
 
@@ -742,19 +740,10 @@ bool GameEngine::init(std::string_view title) {
 
   GAMEENGINE_DEBUG("UI Manager initialized successfully");
 
-  // Setting Up initial game states
-  mp_gameStateManager->addState(std::make_unique<LogoState>());
-  mp_gameStateManager->addState(
-      std::make_unique<LoadingState>()); // Shared loading screen state
-  mp_gameStateManager->addState(std::make_unique<MainMenuState>());
-  mp_gameStateManager->addState(std::make_unique<SettingsMenuState>());
-  mp_gameStateManager->addState(std::make_unique<GamePlayState>());
-  mp_gameStateManager->addState(std::make_unique<GameOverState>());
-  mp_gameStateManager->addState(std::make_unique<AIDemoState>());
-  mp_gameStateManager->addState(std::make_unique<AdvancedAIDemoState>());
-  mp_gameStateManager->addState(std::make_unique<EventDemoState>());
-  mp_gameStateManager->addState(std::make_unique<UIDemoState>());
-  mp_gameStateManager->addState(std::make_unique<OverlayDemoState>());
+  // NOTE: Concrete game states are registered by the application composition
+  // root (VoidLightMain) after init() returns, before the initial state is
+  // pushed. This keeps Core dependent only on the GameState interface and
+  // GameStateManager, never on concrete GameState subclasses.
 
   // Wait for all initialization tasks to complete
   bool allTasksSucceeded = true;

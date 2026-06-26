@@ -214,7 +214,7 @@ public:
    * @brief Initializes the EventManager and its internal systems
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Checks if the Event Manager has been initialized

@@ -25,12 +25,12 @@ class GameTimeManagerSeasonFixture {
 public:
     GameTimeManagerSeasonFixture() {
         gameTime = &GameTimeManager::Instance();
-        gameTime->init(12.0f, 1.0f);
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     }
 
     ~GameTimeManagerSeasonFixture() {
         gameTime->setGlobalPause(false);
-        gameTime->init(12.0f, 1.0f);
+        BOOST_CHECK(gameTime->init(12.0f, 1.0f));
     }
 
 protected:
@@ -231,10 +231,10 @@ BOOST_AUTO_TEST_CASE(TestTemperatureVariesWithTimeOfDay) {
     gameTime->setGameDay(1);
 
     // Check temperature at different hours
-    gameTime->init(4.0f, 1.0f);  // 4 AM - coldest
+    BOOST_REQUIRE(gameTime->init(4.0f, 1.0f));  // 4 AM - coldest
     float tempAt4AM = gameTime->getCurrentTemperature();
 
-    gameTime->init(14.0f, 1.0f);  // 2 PM - warmest
+    BOOST_REQUIRE(gameTime->init(14.0f, 1.0f));  // 2 PM - warmest
     float tempAt2PM = gameTime->getCurrentTemperature();
 
     // 2 PM should be warmer than 4 AM

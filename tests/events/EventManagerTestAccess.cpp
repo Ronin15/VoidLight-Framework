@@ -1,6 +1,7 @@
 #include "EventManagerTestAccess.hpp"
 
 #include "managers/EventManager.hpp"
+#include <stdexcept>
 
 void EventManagerTestAccess::reset() {
     // Ensure any in-flight work is ended and internal state is consistent
@@ -9,6 +10,8 @@ void EventManagerTestAccess::reset() {
     EventManager::Instance().clearAllHandlers();
     // Full teardown and re-init
     EventManager::Instance().clean();
-    EventManager::Instance().init();
+    if (!EventManager::Instance().init()) {
+        throw std::runtime_error("EventManager re-init failed in EventManagerTestAccess::reset()");
+    }
 }
 

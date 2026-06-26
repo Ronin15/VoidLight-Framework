@@ -39,10 +39,10 @@ public:
     {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         // Initialize GameTime to noon (Day period) - safe default
-        GameTimeManager::Instance().init(12.0f, 1.0f);
+        BOOST_REQUIRE(GameTimeManager::Instance().init(12.0f, 1.0f));
     }
 
     ~ControllerTestFixture()

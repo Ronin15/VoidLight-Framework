@@ -7,14 +7,46 @@
 #include "core/ThreadSystem.hpp"
 #include "core/TimestepManager.hpp"
 #include "core/Logger.hpp"
+#include "managers/GameStateManager.hpp"
 #include "utils/FrameProfiler.hpp"
+#include "gameStates/AIDemoState.hpp"
+#include "gameStates/AdvancedAIDemoState.hpp"
+#include "gameStates/EventDemoState.hpp"
+#include "gameStates/GamePlayState.hpp"
+#include "gameStates/GameOverState.hpp"
+#include "gameStates/LoadingState.hpp"
+#include "gameStates/LogoState.hpp"
+#include "gameStates/MainMenuState.hpp"
+#include "gameStates/OverlayDemoState.hpp"
+#include "gameStates/SettingsMenuState.hpp"
+#include "gameStates/UIDemoState.hpp"
 #include <array>
 #include <chrono>
 #include <format>
+#include <memory>
 #include <numeric>
 #include <string_view>
 
 constexpr std::string_view GAME_NAME{"Game Template"};
+
+// Application composition root: registers all concrete game states with the
+// GameStateManager. Lives here (not in Core/GameEngine) so the engine depends
+// only on the GameState interface and GameStateManager, preserving the
+// Core -> Managers -> GameStates dependency direction.
+static void registerInitialStates(GameStateManager& stateManager) {
+  stateManager.addState(std::make_unique<LogoState>());
+  stateManager.addState(
+      std::make_unique<LoadingState>()); // Shared loading screen state
+  stateManager.addState(std::make_unique<MainMenuState>());
+  stateManager.addState(std::make_unique<SettingsMenuState>());
+  stateManager.addState(std::make_unique<GamePlayState>());
+  stateManager.addState(std::make_unique<GameOverState>());
+  stateManager.addState(std::make_unique<AIDemoState>());
+  stateManager.addState(std::make_unique<AdvancedAIDemoState>());
+  stateManager.addState(std::make_unique<EventDemoState>());
+  stateManager.addState(std::make_unique<UIDemoState>());
+  stateManager.addState(std::make_unique<OverlayDemoState>());
+}
 
 // maybe_unused is just a hint to the compiler that the variable is not used.
 // with -Wall -Wextra flags
@@ -60,7 +92,9 @@ int main(int, char*[]) {
                               ? "software frame limiting"
                               : "hardware VSync"));
 
-  // Push initial state before starting main loop
+  // Register all concrete game states now that the engine and its managers are
+  // fully initialized, then push the initial state before starting main loop.
+  registerInitialStates(*gameEngine.getGameStateManager());
   gameEngine.getGameStateManager()->pushState(GameStateId::LOGO);
 
   // Suppress hitch detection for first few frames while engine stabilizes
