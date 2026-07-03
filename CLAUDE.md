@@ -10,9 +10,10 @@ Guidance for Claude Code working in this repository.
 ## Build
 
 ```bash
-# Debug / Release
+# Debug / Release / ReleaseSafe
 cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build
 cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja -C build
+cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=ReleaseSafe && ninja -C build
 
 # Fast dev loop
 ninja -C build app   # main binary only
@@ -24,6 +25,10 @@ rm build/CMakeCache.txt && cmake -B build/ ...
 # Run
 ./bin/debug/VoidLight_Template
 ```
+
+Output binaries land in `bin/<build-type-lowercased>/` (`bin/debug`, `bin/release`, `bin/releasesafe`, `bin/profile`).
+
+**`ReleaseSafe`**: `-O2` (not `-O3`/LTO), no `-ffast-math`/aggressive vectorization, and STL bounds/precondition-check hardening applied only to project code (`_GLIBCXX_ASSERTIONS` on libstdc++, `-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE` on libc++/Apple) — scoped like `VOIDLIGHT_AGGRESSIVE_FLAGS`, not applied to FetchContent deps. Use for soak testing / extended playtesting at near-Release speed while still catching out-of-bounds container access as a loud failure instead of silent corruption.
 
 **Sanitizers** (mutually exclusive; remove `CMakeCache.txt` to switch):
 ```bash
@@ -202,6 +207,8 @@ m_controllers.get<WeatherController>()->getCurrentWeather();    // single use �
 - `WorldResourceManager` is a spatial index over EDM, not a quantity store.
 - `CollisionManager::subscribeWorldEvents()` is persistent manager infrastructure registered from `init()`; do not rewire it during state transitions.
 - **Before raising review findings, read `docs/review-non-issues.md`** — it lists findings already investigated and deliberately not changed (with rationale), plus intentional includes that must not be stripped on a clangd "unused" warning. Don't re-flag those unless you re-verify the code path changed; if so, update that file in the same change.
+- **`Release` does not define `-DNDEBUG`.** `CMakeLists.txt` overrides `CMAKE_CXX_FLAGS_RELEASE` outright (not appended), so CMake's normal `-DNDEBUG` default is dropped. `assert()` calls stay live in `Release`, same as `ReleaseSafe` and `Debug` — only `Profile` defines `NDEBUG`. Don't assume asserts are compiled out in Release.
+- **`Release`'s AVX2 requirement is a hard minimum-spec, not a soft optimization.** Non-Apple `Release` compiles with `-march=x86-64-v3 -mavx2 -mfma` globally, and `SIMDMath.hpp` selects AVX2 code paths via compile-time `#if defined(__AVX2__)` — there is no runtime CPU-feature dispatch (no `cpuid`/`target_clones`/`ifunc`). A shipped `Release` binary will crash with `SIGILL` on any CPU predating Haswell (Intel, 2013) / Excavator-Zen (AMD, 2015), or on feature-restricted VMs. `Profile` already demonstrates the safer fallback (`-march=x86-64-v2 -msse4.2`, no AVX) if wider hardware compatibility is ever needed for a shipped build.
 
 ## Working Principles
 

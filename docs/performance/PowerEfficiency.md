@@ -257,4 +257,5 @@ Key changes:
 - [WorkerBudget](../core/WorkerBudget.md) - Adaptive threading thresholds and batch optimization
 - [Power Profiling Tools](../../tests/power_profiling/README.md) - Full profiling documentation
 - [GPU Rendering](../gpu/GPURendering.md) - GPU rendering system documentation
+- [Build Safety Controls](BuildSafetyControls.md) - Build type safety/optimization tradeoffs
 - [Power Profile Analysis](../performance_reports/power_profile_edm_comparison_2026-01-29.md) - Detailed EDM vs OOP power analysis with core-level breakdown

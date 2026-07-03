@@ -705,8 +705,8 @@ BOOST_AUTO_TEST_CASE(TestByteAndOperation) {
     alignas(16) uint8_t dataB[16] = {0x80, 0x80, 0x00, 0x80, 0x80, 0x80, 0x00, 0x80,
                                      0x80, 0x80, 0x00, 0x80, 0x80, 0x80, 0x00, 0x80};
 
-    Byte16 a = load_byte16(dataA);
-    Byte16 b = load_byte16(dataB);
+    Byte16 a = load_byte16(dataA, 16);
+    Byte16 b = load_byte16(dataB, 16);
     Byte16 result = bitwise_and_byte(a, b);
 
     // Expected results (sign bits):
@@ -723,7 +723,7 @@ BOOST_AUTO_TEST_CASE(TestByteCompareGreater) {
     // cmpgt_byte - used for particle lifetime checks
     alignas(16) uint8_t dataA[16] = {10, 20, 30, 40, 50, 60, 70, 80,
                                      90, 100, 110, 120, 130, 140, 150, 160};
-    Byte16 a = load_byte16(dataA);
+    Byte16 a = load_byte16(dataA, 16);
     Byte16 threshold = broadcast_byte(50);
     Byte16 result = cmpgt_byte(a, threshold);
 
@@ -738,7 +738,7 @@ BOOST_AUTO_TEST_CASE(TestMovemaskByte) {
     // Used in ParticleManager for batch culling
     alignas(16) uint8_t data[16] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00,
                                     0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
-    Byte16 a = load_byte16(data);
+    Byte16 a = load_byte16(data, 16);
     int mask = movemask_byte(a);
 
     // Alternating pattern: bits 0,2,4,6,8,10,12,14 should be set

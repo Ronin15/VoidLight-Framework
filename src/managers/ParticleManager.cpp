@@ -2995,7 +2995,7 @@ void ParticleManager::updateParticlePhysicsSIMD(
     int maskBits = 0;
     if (i < simdFlagSafeEnd) {
       // Safe to load 16 bytes
-      const Byte16 flagsv = load_byte16(&particles.flags[i]);
+      const Byte16 flagsv = load_byte16(&particles.flags[i], particleCount - i);
       const Byte16 activeMask =
           broadcast_byte(static_cast<uint8_t>(UnifiedParticle::FLAG_ACTIVE));
       const Byte16 activev = bitwise_and_byte(flagsv, activeMask);
