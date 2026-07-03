@@ -141,17 +141,28 @@ BOOST_AUTO_TEST_CASE(TestBasicFunctionality) {
     Vector2D start(100.0f, 100.0f);
     Vector2D goal(200.0f, 200.0f);
     EntityID entityId = 54321;
-    
-    // Request a path without callback (should not crash)
-    auto requestId = manager.requestPath(entityId, start, goal, PathfinderManager::Priority::Low);
+
+    // Request a path with a completion callback so the test can wait for the
+    // async ThreadSystem task to finish before clean(). Direct-submission
+    // requests are fire-and-forget from PathfinderManager's perspective
+    // (clean() does not track or wait for them), so leaving one in flight
+    // here would let it complete during a later test case and pollute that
+    // test's stats counters.
+    std::atomic<bool> callbackCalled{false};
+    auto requestId = manager.requestPath(entityId, start, goal, PathfinderManager::Priority::Low,
+        [&callbackCalled](EntityID, const std::vector<Vector2D>&) {
+            callbackCalled.store(true, std::memory_order_release);
+        });
     BOOST_CHECK(requestId > 0);
-    
+
     // Direct-submission architecture: requestPath() queues onto ThreadSystem,
     // not an internal PathfinderManager queue.
     BOOST_CHECK_EQUAL(manager.getQueueSize(), 0U);
     BOOST_CHECK(!manager.hasPendingWork());
 
-    manager.update();
+    waitForPathfinder(manager, [&callbackCalled] {
+        return callbackCalled.load(std::memory_order_acquire);
+    });
 
     manager.clean();
 }

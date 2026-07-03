@@ -50,9 +50,9 @@ goto show_summary
 set test_name=%~1
 
 rem Check if test executable exists
-set "TEST_EXECUTABLE=..\..\bin\debug\%test_name%.exe"
+set "TEST_EXECUTABLE=%~dp0..\..\bin\debug\%test_name%.exe"
 if not exist "!TEST_EXECUTABLE!" (
-    set "TEST_EXECUTABLE=..\..\bin\debug\%test_name%"
+    set "TEST_EXECUTABLE=%~dp0..\..\bin\debug\%test_name%"
     if not exist "!TEST_EXECUTABLE!" (
         echo !RED!Error: Test executable not found: %test_name%!NC!
         set OVERALL_RESULT=1
@@ -67,17 +67,18 @@ if "%VERBOSE%"=="true" (
 )
 
 rem Create test results directory
-if not exist "..\..\test_results" mkdir "..\..\test_results"
+if not exist "%~dp0..\..\test_results" mkdir "%~dp0..\..\test_results"
 
-rem Run the test
+rem Run the test from the project root so resource-relative paths resolve correctly
 echo Running %test_name%...
+pushd "%~dp0..\.."
 if "%VERBOSE%"=="true" (
     "!TEST_EXECUTABLE!" !TEST_OPTS!
 ) else (
-    "!TEST_EXECUTABLE!" !TEST_OPTS! > "..\..\test_results\%test_name%_output.txt" 2>&1
+    "!TEST_EXECUTABLE!" !TEST_OPTS! > "%~dp0..\..\test_results\%test_name%_output.txt" 2>&1
 )
-
 set TEST_RESULT=!ERRORLEVEL!
+popd
 
 if !TEST_RESULT! neq 0 (
     echo !RED!%test_name% failed with exit code !TEST_RESULT!!NC!

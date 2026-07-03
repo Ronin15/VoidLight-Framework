@@ -104,6 +104,7 @@ for %%T in (
     run_entity_state_manager_tests.bat
     run_entity_data_manager_tests.bat
     run_ai_manager_edm_integration_tests.bat
+    run_sidecar_tests.bat
     run_collision_manager_edm_integration_tests.bat
     run_pathfinder_manager_edm_integration_tests.bat
     run_pathfinder_manager_tests.bat

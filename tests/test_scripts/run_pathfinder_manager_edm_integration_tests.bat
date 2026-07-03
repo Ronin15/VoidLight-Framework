@@ -43,9 +43,9 @@ rem Track overall result
 set OVERALL_RESULT=0
 
 rem Check if test executable exists
-set "TEST_EXECUTABLE=..\..\bin\debug\pathfinder_manager_edm_integration_tests.exe"
+set "TEST_EXECUTABLE=%~dp0..\..\bin\debug\pathfinder_manager_edm_integration_tests.exe"
 if not exist "!TEST_EXECUTABLE!" (
-    set "TEST_EXECUTABLE=..\..\bin\debug\pathfinder_manager_edm_integration_tests"
+    set "TEST_EXECUTABLE=%~dp0..\..\bin\debug\pathfinder_manager_edm_integration_tests"
     if not exist "!TEST_EXECUTABLE!" (
         echo !RED!Error: Test executable not found: pathfinder_manager_edm_integration_tests!NC!
         echo !YELLOW!Please build the project first with: cmake -B build -G Ninja ^&^& ninja -C build!NC!
@@ -60,17 +60,18 @@ if "%VERBOSE%"=="true" (
 )
 
 rem Create test results directory
-if not exist "..\..\test_results" mkdir "..\..\test_results"
+if not exist "%~dp0..\..\test_results" mkdir "%~dp0..\..\test_results"
 
-rem Run the test
+rem Run the test from the project root so resource-relative paths resolve correctly
 echo Running pathfinder_manager_edm_integration_tests...
+pushd "%~dp0..\.."
 if "%VERBOSE%"=="true" (
     "!TEST_EXECUTABLE!" !TEST_OPTS!
 ) else (
-    "!TEST_EXECUTABLE!" !TEST_OPTS! > "..\..\test_results\pathfinder_manager_edm_integration_tests_output.txt" 2>&1
+    "!TEST_EXECUTABLE!" !TEST_OPTS! > "%~dp0..\..\test_results\pathfinder_manager_edm_integration_tests_output.txt" 2>&1
 )
-
 set TEST_RESULT=!ERRORLEVEL!
+popd
 
 if !TEST_RESULT! neq 0 (
     echo !RED!pathfinder_manager_edm_integration_tests failed with exit code !TEST_RESULT!!NC!
