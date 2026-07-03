@@ -92,11 +92,18 @@ APPROVED_EXCEPTIONS = {
     # and docs/architecture/dependency_analysis_2026-03-31.md.
     ('GameEngine.hpp', 'GameStateManager.hpp'),
     ('GameStateManager.hpp', 'GameState.hpp'),
-    # AI is EDM-backed and executed through BehaviorExecutors + AICommandBus —
-    # documented architecture (docs/ARCHITECTURE.md "Overview"), not incidental
-    # coupling.
-    ('BehaviorExecutors.hpp', 'EntityDataManager.hpp'),
+    # EventManager::DeferredEvent is a struct NESTED inside class EventManager
+    # (not free-standing), so BehaviorExecutors.hpp genuinely needs the full
+    # header for that one nested type — verified 2026-07-03, not decoupled
+    # (would require restructuring EventManager.hpp itself).
     ('BehaviorExecutors.hpp', 'EventManager.hpp'),
+    # EntityDataTypes.hpp is EDM's free-standing data-type module (TransformData,
+    # EntityHotData, CharacterData, KnockbackData, NPCMemoryData, etc.) — split
+    # out of EntityDataManager.hpp on 2026-07-03 specifically so AI-layer
+    # consumers like BehaviorExecutors.hpp don't need the ~1900-line manager
+    # class, its singleton, or its threading machinery for these plain value
+    # types. Not the same header as EntityDataManager.hpp.
+    ('BehaviorExecutors.hpp', 'EntityDataTypes.hpp'),
 }
 
 # Lightweight cross-cutting type/tag/enum headers: pure value types with no
@@ -110,6 +117,7 @@ LIGHTWEIGHT_CROSS_CUTTING_HEADERS = {
     'TriggerTag.hpp',         # collision trigger tag enum — only includes <cstdint>
     'Season.hpp',             # season enum — only includes <cstdint>
     'ParticleEffectType.hpp', # particle effect type enum — only includes <cstdint>
+    'SparseSidecar.hpp',      # generic sparse-storage template, zero project includes (stdlib only)
     'EventTypeId.hpp',        # event type enum — only includes <cstdint>
 }
 

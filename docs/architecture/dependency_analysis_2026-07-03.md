@@ -3,7 +3,7 @@
 
 **Generated:** 2026-07-03
 **Branch:** review
-**Base commit:** 1c388083 (plus uncommitted working-tree fixes described below)
+**Base commit:** 1c388083 (plus uncommitted working-tree changes described below)
 **Analysis Mode:** Full Architecture Audit
 
 ---
@@ -15,116 +15,99 @@
 **Status:** ✅ HEALTHY
 
 **Key Findings:**
-- Zero circular dependencies across 130 headers (123 nodes with edges) and 231 dependency edges.
-- Zero layer violations — genuinely verified this time. An earlier pass today (see "What Changed" below) reported zero violations from a broken detector; the detector is now fixed, was re-run, surfaced 28 raw hits, and every one was individually traced to either a real code fix, a documented architecture exception, or a confirmed-lightweight cross-cutting type.
-- Zero problematic manager coupling: 13/13 flagged manager-to-manager dependencies are functional, each with an explicit one-line rationale in `analyze_coupling.py` (previously 5 of these were mis-flagged as "problematic" from an allowlist gap — also fixed).
-- Header bloat: 14 of 123 headers (11.4%) have forward-declaration opportunities (~10% compile-time savings) — unchanged in nature from prior audits, no new concerns.
-- Dependency depth shallow (avg 1.6, max 5, 4 headers at "moderate") — no cascading-recompile risk.
+- Zero circular dependencies across 132 headers (125 nodes with edges) and 243 dependency edges.
+- Zero layer violations — genuinely verified, and this time backed by real architecture changes, not just tool fixes or exceptions (see "What Changed Today" below).
+- Zero problematic manager coupling (13/13 functional, each with an explicit rationale).
+- 12 forward-declaration opportunities remain, down from an original 20 — all individually spot-checked and confirmed valid this time (see "Forward-Declaration Heuristic Fix" below); 4 of them require an accompanying out-of-line-destructor change the tool now explicitly flags.
 
-**Overall Assessment:** This audit found and fixed two real bugs in the dependency-analyzer tooling itself, and three real (small, now-fixed) code issues the repaired tooling surfaced. Every one of the resulting 41 raw findings across today's two tool runs was individually traced against actual code before being resolved as fixed, excepted-with-rationale, or reclassified — nothing was silenced by a blanket exception. The health score (92/100) reflects a genuinely clean, now-accurately-measured architecture.
+**Overall Assessment:** This audit went through three rounds of "don't trust the tool, verify the code" — first on the dependency-analyzer's own bugs, then on the exceptions this session had already added, then on the forward-declaration suggestions. Each round found real problems and fixed them at the appropriate level (tool bug vs. real code issue). The health score (92/100) now rests on a genuinely decoupled architecture: `BehaviorExecutors.hpp` (AI layer) no longer depends on the ~1900-line `EntityDataManager` class at all — it only needs plain data types, which now live in their own header.
 
 ---
 
-## What Changed Today (superseding the earlier same-day report)
+## What Changed Today (this round)
 
-An earlier version of this report (generated hours earlier, same date) claimed "zero layer violations, improved from 3" based on `detect_layer_violations.py`. That claim was a **false negative**: `classify_layer()` matched included-file layers via substrings like `/managers/`, but `extract_includes()` returns raw `#include "..."` paths (e.g. `"managers/GameStateManager.hpp"`) which never have a leading slash — so every included file silently classified as `'Other'` and was skipped from every violation check, for every header, always. The detector could never have reported a violation, regardless of the code's actual state.
+A prior version of this report (same date) fixed two dependency-analyzer bugs and cleared 28 raw findings via a mix of code fixes and documented exceptions. When asked "do the exceptions make sense, or are we just blindly excepting things?", one exception did **not** hold up under scrutiny:
 
-**Fix:** `classify_layer()` now normalizes by prepending `/` before matching, so both full filesystem paths and raw relative include strings classify correctly.
+### The `BehaviorExecutors.hpp → EntityDataManager.hpp` exception was too hasty
 
-Re-running the fixed detector surfaced 28 raw hits. Each was traced individually (file + line, actual usage, actual doc claims) rather than accepted at face value:
+It was originally justified by quoting `docs/ARCHITECTURE.md`'s "AI is EDM-backed" line — without checking what *this specific header* actually needed. On inspection: it only used `PathData`/`BehaviorData` (free-standing structs, not part of the `EntityDataManager` class) plus a stale/wrong comment claiming `BehaviorType` came from there too (it doesn't — it's in `ai/BehaviorConfig.hpp`, already included separately).
 
-| Category | Count | Resolution |
-|---|---|---|
-| Documented Core/Manager/GameState spine bends (`GameEngine.hpp`→`GameStateManager.hpp`, `GameStateManager.hpp`→`GameState.hpp`) | 2 | Already known (2026-03-31 report) and now also documented in `CLAUDE.md`. Added as `APPROVED_EXCEPTIONS` with rationale. |
-| Detector logic bug: every concrete `GameState` subclass including its own abstract base `GameState.hpp` was mis-flagged as "cross-state dependency" | 12 | **Fixed the detector**: a state including its own base-class header is required inheritance, not sibling-state coupling. Excluded from the check. |
-| Real, documented functional coupling: `BehaviorExecutors.hpp` → `EntityDataManager.hpp`/`EventManager.hpp` ("AI is EDM-backed... through BehaviorExecutors", `docs/ARCHITECTURE.md`) | 2 | Added as `APPROVED_EXCEPTIONS` with rationale. |
-| Confirmed lightweight, dependency-free cross-cutting value-type headers (`EntityHandle.hpp` — only includes `UniqueID.hpp`; `TriggerTag.hpp` — only `<cstdint>`) referenced from AI/Events/Collisions | 9 | Added a `LIGHTWEIGHT_CROSS_CUTTING_HEADERS` allowlist (by header basename) to the detector, analogous to how `Utils` is already allowed everywhere. |
-| **Real code issue**: `EntityID` (in `Entity.hpp`), `Season` (in `GameTimeManager.hpp`), and `ParticleEffectType` (in `ParticleManager.hpp`) were single type-alias/enum definitions embedded inside heavy manager/entity class headers, forcing lightweight consumers to pull in the whole class | 3 (affecting 6 consumer files: `Crowd.hpp`, `PathfindingRequest.hpp`, `WorldTriggerEvent.hpp`, `CollisionInfo.hpp`, `TimeEvent.hpp`, `ParticleEffectEvent.hpp`) | **Fixed in code**: extracted each into its own lightweight header (`EntityID` moved into the already-lightweight `EntityHandle.hpp`; new `include/managers/Season.hpp` and `include/managers/ParticleEffectType.hpp`), repointed the 6 consumers. Verified with a full debug build (222/222 targets) and 10 targeted test executables, all passing. |
+**First attempt** (extract just `PathData`/`BehaviorData` into `ai/BehaviorCommonState.hpp`) broke the build: the compiler revealed `BehaviorExecutors.hpp` *also* needs `TransformData`, `EntityHotData`, `CharacterData`, `KnockbackData`, `NPCMemoryData` — five more free-standing structs living in the same file, all likewise defined before `class EntityDataManager` starts. Rather than push a partial fix through, the small extraction was reverted and the real scope was measured properly.
 
-Extracting `Season.hpp`/`ParticleEffectType.hpp` into `include/managers/` then triggered a **second, pre-existing tool bug**: `analyze_coupling.py` treats every `.hpp` under `include/managers/` as a peer "manager" for its N×N coupling matrix (the same reason `UIConstants.hpp` needed a functional-coupling exception previously), so the two new type-only headers appeared as huge new "TIGHT" couplings (60–97 references, i.e. every enum use). Fixed by extending `functional_deps` in `analyze_coupling.py`, and — since already there — also fixed the 5 pre-existing allowlist gaps identified earlier today (`AIManager/CollisionManager/BackgroundSimulationManager → EntityDataManager`, `EntityDataManager → ResourceTemplateManager`, `GameTimeManager → EventManager`), all confirmed as documented, by-design coupling to EDM as the engine's central data hub.
+**Real fix:** `EntityDataManager.hpp` (2919 → 1838 lines) was split. Every SoA component/value-type struct that lives before `class EntityDataManager` (~1100 lines: `TransformData`, `KnockbackData`, `EntityHotData`, `CharacterData`, `ItemData`, `ProjectileData`, `ContainerData`, `HarvestableData`, `InventoryData`, `AreaEffectData`, race/class/monster/species/animal info structs, render-data structs, `FixedWaypointSlot`, NPC memory types, etc.) moved verbatim (extracted with `sed`, not hand-retyped, and diffed byte-for-byte against the original to guarantee fidelity) into a new `include/managers/EntityDataTypes.hpp`. `EntityDataManager.hpp` now just includes it. `BehaviorExecutors.hpp` includes `EntityDataTypes.hpp` + `ai/BehaviorCommonState.hpp` + `managers/SparseSidecar.hpp` instead of the full manager header. Along the way: `<algorithm>`, `<cassert>`, `<random>` were added as explicit includes to the new header (previously relied on transitive availability through other includes — a portability risk given this project targets three different toolchains — GCC/Linux, MinGW/Windows, Clang/macOS).
 
-**Net result:** every one of the 28 (layer) + 13 (coupling) raw findings across both scripts today has an explicit, auditable resolution — either a code fix or a rationale-bearing exception in the script itself. Nothing was silenced by an unexamined exception.
+`ProjectileManager.hpp` also had three now-provably-dead forward declarations (`class EntityDataManager;`, `struct EntityHotData;`, `struct TransformData;` — unused anywhere else in the file) — deleted per project convention rather than converted to includes.
+
+**Net effect:** `BehaviorExecutors.hpp → EntityDataManager.hpp` no longer exists at all — replaced by `BehaviorExecutors.hpp → EntityDataTypes.hpp` (a real, accurate, narrower dependency), documented with a rationale that reflects what was actually verified, not a doc quote.
+
+One new layer-adjacent finding fell out of this: `BehaviorExecutors.hpp → managers/SparseSidecar.hpp` (needed for `SparseSidecar<KnockbackData>`). Checked `SparseSidecar.hpp` directly — it's a 185-line standalone template with zero project-local includes (only `<cstdint>`, `<limits>`, `<span>`, `<vector>`). Added to the lightweight-header allowlist alongside `EntityHandle.hpp`/`TriggerTag.hpp`/etc.
+
+**Verification:** full debug build (176/176, then 106/106 after the `ProjectileManager.hpp` cleanup) with zero errors. All 84 test executables run: 83 passed cleanly (`No errors detected`); the one failure (`item_controller_tests`) is a pre-existing, unrelated environment issue — a stale April-22 binary missing a shared Boost library at runtime, not rebuilt by today's changes and not linked to anything touched here.
+
+### Forward-declaration heuristic fix
+
+Asked separately: "are the forward-declaration opportunities worth doing?" Spot-checking 4 of the original 20 found they were **actively wrong** — `analyze_header_bloat.py`'s regex for "is this type used by value" (`ClassName varname;`) missed the codebase's dominant style, brace-init (`ClassName varname{};`). Confirmed `WorldTriggerEvent.hpp`, `AICommandBus.hpp`, `EventManager.hpp`, and `InputManager.hpp` all store `Vector2D` **by value** with brace-init — forward-declaring it there would not compile. Separately, `GameEngine.hpp`'s suggestions (`GameStateManager`, `TimestepManager`) hold their targets via `unique_ptr` with an **inline** `~GameEngine() = default;` — forward-declaring without also moving the destructor out-of-line into the `.cpp` (the Pimpl requirement) would not compile either, and the tool didn't mention that companion step.
+
+**Fixed:** `count_usages_in_file()` in `analyze_header_bloat.py` now also matches brace-init (`Type var{`), copy-init (`Type var =`), and by-value container storage (`vector<Type>`, `array<Type, N>`) as "direct" (unsafe-to-forward-declare) usage. A new `smart_ptr` counter detects `unique_ptr<Type>`/`shared_ptr<Type>` members and, when found, the tool now prints an explicit warning that the owning class's destructor must also move out-of-line — rather than a blanket "safe" claim.
+
+**Result:** opportunities dropped from 20 to 12. Spot-checked 3 of the surviving `Vector2D` ones (`SaveGameManager.hpp`, `WorldResourceManager.hpp`, `BinarySerializer.hpp`) directly — all confirmed by-reference-only now. 4 of the 12 are flagged as requiring the destructor change; none have been applied to production headers yet (that's a separate, explicit ask — see Recommendations).
 
 ---
 
 ## Dependency Statistics
 
-**Codebase Size:**
-- Total headers analyzed: 130 (123 nodes with edges; 2 new lightweight headers added: `Season.hpp`, `ParticleEffectType.hpp`)
-- Core layer: 5 files · Managers layer: 25 files · Controllers layer: 13 files · States layer: 13 files
-- Entities layer: 15 files · Utils layer: 12 files · AI layer: 9 files · Events layer: 16 files
-- Collisions layer: 5 files · World layer: 4 files · GPU layer: 13 files
+**Codebase Size:** 132 headers analyzed (125 nodes with edges; 4 new headers today: `EntityDataTypes.hpp`, `BehaviorCommonState.hpp`, `Season.hpp`, `ParticleEffectType.hpp`)
 
-**Dependency Metrics:**
-- Total dependencies: 231
-- Average dependencies per file: 1.88
-- Circular dependencies: 0 ✅
+**Dependency Metrics:** 243 total dependencies · 1.94 average per file · 0 circular ✅
 
 ---
 
-## Circular Dependencies (CRITICAL)
+## Circular Dependencies
 
-✅ **NO CIRCULAR DEPENDENCIES DETECTED** — 123 nodes, 231 edges, acyclic.
+✅ **NO CIRCULAR DEPENDENCIES DETECTED** — 125 nodes, 243 edges, acyclic.
 
 ---
 
 ## Layer Violations
 
-All 11 layers: ✅ CLEAN (0 violations) — genuinely verified after fixing `classify_layer()`'s path-normalization bug and the cross-state-check false positive described above.
+All 11 layers: ✅ CLEAN (0 violations).
 
 ---
 
 ## Coupling Analysis
 
-**Functional Coupling (✅ Expected & Correct) — 13 of 13, zero problematic:**
-
-| Pair | References | Rationale |
-|---|---|---|
-| `CollisionManager → EventManager` | 22 | Game systems require interaction |
-| `EntityDataManager → WorldResourceManager` | 16 | EDM auto-registers static entities with WRM's spatial index |
-| `ResourceFactory → ResourceTemplateManager` | 13 | Game systems require interaction |
-| `UIManager → UIConstants` | 121 | Constants header, not a peer manager |
-| `WorldManager → EventManager` | 18 | Game systems require interaction |
-| `AIManager → EntityDataManager` | 26 | EDM is the engine's central SoA data hub (CLAUDE.md Key Systems) — documented design |
-| `BackgroundSimulationManager → EntityDataManager` | 12 | Same — central data hub |
-| `CollisionManager → EntityDataManager` | 24 | Same — central data hub |
-| `EntityDataManager → ResourceTemplateManager` | 12 | EDM resolves resource templates when spawning resource entities |
-| `GameTimeManager → EventManager` | 14 | Ordinary event-driven notification |
-| `GameTimeManager → Season` | 75 | `Season` is a single-enum type header living in `managers/`, not a peer manager |
-| `WorldManager → Season` | 60 | Same |
-| `ParticleManager → ParticleEffectType` | 97 | `ParticleEffectType` is a single-enum type header living in `managers/`, not a peer manager |
-
-**Status:** ✅ No problematic coupling. (The `Season`/`ParticleEffectType`/EDM-hub rows above were previously mis-flagged as "problematic" by allowlist gaps in `analyze_coupling.py`; both fixed today.)
+**13/13 functional, 0 problematic.** Full list unchanged from the prior pass except `BehaviorExecutors.hpp` no longer contributes an `EntityDataManager` coupling reference at all (real reduction, not reclassification).
 
 ---
 
 ## Header Bloat Analysis
 
-**High-Bloat Headers (14 of 123, 11.4%):** `EntityDataManager.hpp`, `EventManager.hpp`, `ThreadSystem.hpp`, `WorldManager.hpp`, `CollisionManager.hpp`, `EventDemoState.hpp`, `GPURenderer.hpp`, `ParticleManager.hpp`, `BinarySerializer.hpp`, `InventoryController.hpp`, `AIManager.hpp`, `PathfinderManager.hpp`, `UIManager.hpp`, `WorldResourceManager.hpp`
+**High-Bloat Headers (15 of 125, 12.0%):** `EntityDataManager.hpp`, `EventManager.hpp`, `ThreadSystem.hpp`, `EntityDataTypes.hpp` (new), `WorldManager.hpp`, `CollisionManager.hpp`, `EventDemoState.hpp`, `GPURenderer.hpp`, `ParticleManager.hpp`, `BinarySerializer.hpp`, `InventoryController.hpp`, `AIManager.hpp`, `PathfinderManager.hpp`, `UIManager.hpp`, `WorldResourceManager.hpp`
 
-**Ripple Effect Headers:** `EventManager.hpp` (included by 11 files, 19 includes)
+**Forward Declaration Opportunities: 12** (down from 20 — see fix above). Full breakdown:
 
-**Forward Declaration Opportunities:** 20 found (unchanged in nature from the prior audit — `Vector2D`, `TextureSource`, `WorldData`, etc.)
+| Header | Can forward-declare | Needs out-of-line destructor too? |
+|---|---|---|
+| `ControllerRegistry.hpp` | `ControllerBase` | ⚠️ Yes |
+| `ControllerRegistry.hpp` | `IUpdatable` | No |
+| `GameEngine.hpp` | `GameStateManager` | ⚠️ Yes |
+| `GameEngine.hpp` | `TimestepManager` | ⚠️ Yes |
+| `GPURenderer.hpp` | `GPUTexture` | ⚠️ Yes |
+| `ParticleManager.hpp` | `EventManager` | No |
+| `SaveGameManager.hpp` | `Vector2D` | No |
+| `UIManager.hpp` | `TextureSource` | No |
+| `WorldManager.hpp` | `WorldData` | No |
+| `WorldResourceManager.hpp` | `Vector2D` | No |
+| `BinarySerializer.hpp` | `Vector2D` | No |
+| `WorldGenerator.hpp` | `WorldData` | ⚠️ Yes |
 
-**Estimated Compile Time Savings:** ~10% reduction
-
-Full list: `test_results/dependency_analysis/header_bloat_analysis.txt`
+Not yet applied to production code — flagged for a follow-up decision (see Recommendations).
 
 ---
 
 ## Dependency Depth Analysis
 
-| Header | Depth | Impact |
-|--------|-------|--------|
-| `AIDemoState.hpp`, `AdvancedAIDemoState.hpp`, `EventDemoState.hpp`, `GamePlayState.hpp` | 5 | 🟡 MODERATE |
-| 13 controller/AI headers | 4 | ✅ LOW |
-| (rest) | ≤3 | ✅ LOW |
-
-**Total Dependency Depth:** 202 · **Average Depth:** 1.6 · **Maximum Depth:** 5
-
-The two new type headers (`Season.hpp`, `ParticleEffectType.hpp`) sit at depth 0 (pure leaf headers, no further local includes) — confirming they are genuinely lightweight, as intended.
-
-No headers fall into High or Very High — no cascading-recompile risk.
+Unchanged in character: max depth 5 (4 demo/gameplay state headers), average ~1.6-1.9, no cascading-recompile risk.
 
 ---
 
@@ -139,26 +122,23 @@ No headers fall into High or Very High — no cascading-recompile risk.
 | Dependency Depth | 8.0/10 | 10% | 8.0 | ✅ |
 | **TOTAL** | | **100%** | **92.0/100** | **A+** |
 
-**Grading Scale:** 90-100 A+ · 80-89 A · 70-79 B · 60-69 C · Below 60 F
-
 ---
 
-## Code Changes Made As Part Of This Audit
+## Code Changes Made As Part Of This Audit (both rounds today)
 
-1. `include/entities/EntityHandle.hpp` — added `using EntityID = VoidLight::UniqueID::IDType;` (moved from `Entity.hpp`).
-2. `include/entities/Entity.hpp` — removed the now-duplicate `EntityID` alias (still visible via its existing `EntityHandle.hpp` include).
-3. `include/ai/internal/Crowd.hpp`, `include/ai/pathfinding/PathfindingRequest.hpp`, `include/events/WorldTriggerEvent.hpp`, `include/collisions/CollisionInfo.hpp` — repointed from `entities/Entity.hpp` to `entities/EntityHandle.hpp` (the only symbol any of them used was `EntityID`; `CollisionInfo.hpp` also needed an explicit `utils/Vector2D.hpp` include it had previously gotten transitively through `Entity.hpp`).
-4. New `include/managers/Season.hpp` — `Season` enum extracted from `GameTimeManager.hpp`.
-5. `include/managers/GameTimeManager.hpp` — includes the new header instead of defining `Season` inline; dropped the now-unused `<cstdint>` include (clangd-confirmed).
-6. `include/events/TimeEvent.hpp` — repointed from `managers/GameTimeManager.hpp` (full manager class) to `managers/Season.hpp`.
-7. New `include/managers/ParticleEffectType.hpp` — `ParticleEffectType` enum extracted from `ParticleManager.hpp`.
-8. `include/managers/ParticleManager.hpp` — includes the new header instead of defining the enum inline.
-9. `include/events/ParticleEffectEvent.hpp` — repointed from `managers/ParticleManager.hpp` to `managers/ParticleEffectType.hpp`.
-10. `.claude/skills/voidlight-dependency-analyzer/scripts/detect_layer_violations.py` — fixed `classify_layer()` path normalization, fixed the states-cross-check false positive, added `APPROVED_EXCEPTIONS` for the 4 documented spine/AI bends, added `LIGHTWEIGHT_CROSS_CUTTING_HEADERS` allowlist.
-11. `.claude/skills/voidlight-dependency-analyzer/scripts/analyze_coupling.py` — extended `functional_deps` with the 5 EDM-hub pairs and the 3 new type-header pairs.
-12. `CLAUDE.md`, `docs/ARCHITECTURE.md` — architecture-documentation fixes from the earlier audit pass today (dependency-direction boundary bends, Key Systems inventory gaps, event-handler-persistence and rendering-path/state-teardown corrections); see git diff for details.
+1. `include/entities/EntityHandle.hpp` / `include/entities/Entity.hpp` — `EntityID` alias relocated.
+2. `include/ai/internal/Crowd.hpp`, `include/ai/pathfinding/PathfindingRequest.hpp`, `include/events/WorldTriggerEvent.hpp`, `include/collisions/CollisionInfo.hpp` — repointed to `entities/EntityHandle.hpp`.
+3. New `include/managers/Season.hpp`, `include/managers/ParticleEffectType.hpp` — enums extracted from `GameTimeManager.hpp`/`ParticleManager.hpp`; `include/events/TimeEvent.hpp`/`include/events/ParticleEffectEvent.hpp` repointed.
+4. New `include/ai/BehaviorCommonState.hpp` — `PathData`/`BehaviorData` extracted from `EntityDataManager.hpp`.
+5. **New `include/managers/EntityDataTypes.hpp`** — ~1100 lines of free-standing SoA component structs extracted from `EntityDataManager.hpp` (2919 → 1838 lines).
+6. `include/ai/BehaviorExecutors.hpp` — now includes `BehaviorCommonState.hpp` + `EntityDataTypes.hpp` + `SparseSidecar.hpp` instead of the full `EntityDataManager.hpp`.
+7. `include/managers/ProjectileManager.hpp` — removed 3 dead forward declarations.
+8. `.claude/skills/voidlight-dependency-analyzer/scripts/detect_layer_violations.py` — path-normalization bug, cross-state false positive, `APPROVED_EXCEPTIONS`/`LIGHTWEIGHT_CROSS_CUTTING_HEADERS` (including today's `SparseSidecar.hpp` addition and removal of the stale `BehaviorExecutors.hpp`/`EntityDataManager.hpp` entry).
+9. `.claude/skills/voidlight-dependency-analyzer/scripts/analyze_coupling.py` — functional-coupling allowlist gaps.
+10. `.claude/skills/voidlight-dependency-analyzer/scripts/analyze_header_bloat.py` — brace-init/copy-init/container-by-value detection, smart-pointer/Pimpl-destructor warning.
+11. `CLAUDE.md`, `docs/ARCHITECTURE.md` — architecture-documentation fixes (dependency-direction bends, Key Systems inventory, event-handler-persistence, rendering-path, state-teardown order).
 
-**Verification:** Full debug build (`ninja -C build`, 222/222 targets) succeeded with no errors. Targeted test executables run and passing: `entity_data_manager_tests`, `game_time_manager_tests`, `game_time_manager_season_tests`, `particle_manager_core_tests`, `collision_system_tests`, `pathfinder_manager_tests`, `pathfinder_ai_contention_tests`, `behavior_functionality_tests`, `event_types_tests`, `weather_event_tests` — all exit 0, "No errors detected."
+**Verification:** full debug build clean at every stage (176/176, then 106/106 after further cleanup). 83 of 84 test executables pass (`No errors detected`); the 1 failure is a pre-existing, unrelated stale-binary/shared-library issue, not caused by anything in this change set.
 
 None of these changes are committed yet.
 
@@ -166,35 +146,12 @@ None of these changes are committed yet.
 
 ## Recommendations
 
-### Optional (Consider)
-1. Apply the 20 forward-declaration opportunities in `header_bloat_analysis.txt` — ~10% compile-time reduction. LOW effort.
+### Open decision (not yet actioned)
+1. **Apply the 12 forward-declaration opportunities to production headers?** 8 are simple (no destructor change needed). 4 (`ControllerRegistry.hpp`→`ControllerBase`, `GameEngine.hpp`→`GameStateManager`/`TimestepManager`, `GPURenderer.hpp`→`GPUTexture`, `WorldGenerator.hpp`→`WorldData`) additionally require moving the owning class's destructor out-of-line into its `.cpp` — a real but small, well-understood change (declare `~ClassName();` in the header, `ClassName::~ClassName() = default;` in the `.cpp`, after the forward-declared type is complete there). ~10% compile-time estimate. Not applied yet — flag if you want this done as a follow-up.
 
-No Critical or Important items remain — circular dependencies, layer violations, and problematic coupling are all at zero, genuinely verified.
-
----
-
-## Comparison with Previous Analyses
-
-| Metric | 2026-03-31 | 2026-07-03 (earlier, buggy detector) | 2026-07-03 (this report) | Trend |
-|--------|----------|-------|-------|-------|
-| Total Headers | 119 | 121 | 130 | 📈 (+2 real headers, +9 test/type headers from ongoing work) |
-| Total Dependencies | 205 | 228 | 231 | 📈 |
-| Circular Dependencies | 0 | 0 | 0 | ➡️ |
-| Layer Violations (reported) | 3 | 0 (false negative) | 0 (verified) | 📉 real improvement, not tool artifact |
-| Problematic Coupling | n/a | 5 (allowlist gap) | 0 (fixed) | 📉 |
-| Health Score | 81 | 82 (unreliable) | 92 | 📈 |
-
-**Overall Trend:** Genuinely improving. The 81→82 delta from the prior audit was measured with a broken layer-violation detector; 92 is the first score computed with both known tool bugs fixed.
+No Critical or Important items remain — circular dependencies, layer violations, and problematic coupling are all at zero, genuinely verified this time.
 
 ---
 
-## Next Steps
-
-1. Apply forward-declaration opportunities opportunistically when touching the listed headers.
-2. Schedule the next full audit for 2026-08 (monthly cadence) or after any major refactor.
-3. Commit the code/doc/tooling changes from this audit (currently uncommitted on `review`).
-
----
-
-**Generated By:** voidlight-dependency-analyzer Skill (Full Architecture Audit mode), with detector fixes applied mid-audit
+**Generated By:** voidlight-dependency-analyzer Skill (Full Architecture Audit mode), with two rounds of tool-bug fixes and one real architectural decoupling applied mid-audit
 **Raw data:** `test_results/dependency_analysis/`
