@@ -75,6 +75,9 @@ class MainMenuState : public GameState {
     AtlasRect flowerYellow;
     AtlasRect flowerBlue;
     AtlasRect bush;
+    AtlasRect flowerPink;
+    AtlasRect mushroom;
+    AtlasRect stump;
   };
 
   DioramaTiles m_tiles{};

@@ -346,6 +346,9 @@ void MainMenuState::loadDioramaTiles() {
   ok = readRect("flower_yellow", m_tiles.flowerYellow) && ok;
   ok = readRect("flower_blue", m_tiles.flowerBlue) && ok;
   ok = readRect("bush_spring", m_tiles.bush) && ok;
+  ok = readRect("flower_pink", m_tiles.flowerPink) && ok;
+  ok = readRect("mushroom_tan", m_tiles.mushroom) && ok;
+  ok = readRect("stump_obstacle_small", m_tiles.stump) && ok;
 
   GAMESTATE_WARN_IF(!ok, "MainMenuState: one or more diorama atlas regions missing");
 
@@ -363,13 +366,15 @@ void MainMenuState::startCampfireEffects(float screenW, float screenH) {
   }
 
   // Must match the wood-pile placement in recordDiorama (campfireCenter,
-  // woodW). Emitters start at the top of the wood pile (not its center) so
-  // flames rise off the logs instead of from inside them, and smoke starts
-  // just above the flame tips so it reads as connected to the fire.
+  // woodW). Fire and smoke form one combined column: flames spawn at the top
+  // of the wood pile and climb roughly woodW*1.0-1.9 above center (see
+  // createFireEffect gravity/life), so smoke spawns above that flame
+  // envelope and climbs further still, keeping the two visually separated
+  // instead of overlapping at the base.
   const Vector2D campfireCenter(screenW * 0.26f, screenH * 0.80f);
   const float woodW = screenH * 0.065f;
   const Vector2D fireOrigin = campfireCenter - Vector2D(0.0f, woodW * 0.35f);
-  const Vector2D smokeOrigin = campfireCenter - Vector2D(0.0f, woodW * 0.65f);
+  const Vector2D smokeOrigin = campfireCenter - Vector2D(0.0f, woodW * 1.6f);
   m_fireEffectId = particleMgr.playIndependentEffect(
       ParticleEffectType::Fire, fireOrigin, 0.9f, -1.0f, "menu_ambient");
   m_smokeEffectId = particleMgr.playIndependentEffect(
@@ -430,7 +435,7 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
   // detailed tile) so stretching it full-width doesn't smear visible grass
   // texture across the sky.
   constexpr float kSkyFillTexel = 4.0f;
-  constexpr int kSkyBands = 18;
+  constexpr int kSkyBands = 32; // More bands than before for a smoother blend (less visible banding)
   for (int si = 0; si < kSkyBands; ++si) {
     const float s0 = static_cast<float>(si) / kSkyBands;
     const float s1 = static_cast<float>(si + 1) / kSkyBands;
@@ -438,9 +443,12 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
     const float ySkyBot = yH * s1;
     // Ease toward the horizon so the warm band concentrates near the ground.
     const float glow = s1 * s1 * s1;
+    // Horizon color leans orange rather than yellow (lower green, and blue
+    // fades out toward the horizon instead of holding steady) - dusk indigo
+    // (60,55,95) blends into a warm sunset orange (255,130,60).
     const uint8_t r = toByte((60.0f + 195.0f * glow));
-    const uint8_t g = toByte((55.0f + 130.0f * glow));
-    const uint8_t b = toByte((95.0f + 40.0f * glow));
+    const uint8_t g = toByte((55.0f + 75.0f * glow));
+    const uint8_t b = toByte((95.0f - 35.0f * glow));
     batch.draw(m_tiles.ground.x, m_tiles.ground.y, kSkyFillTexel, kSkyFillTexel,
                0.0f, ySkyTop, screenW,
                ySkyBot - ySkyTop + 1.0f, r, g, b, 255);
@@ -497,6 +505,20 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
   drawTile(m_tiles.tree, screenW * 0.17f, yH + screenH * 0.02f, treeMidW, 110, 128, 118);
   drawTile(m_tiles.tree, screenW * 0.62f, yH + screenH * 0.02f, treeMidW, 110, 128, 118);
 
+  // Mid-ground decorations, between the horizon and the foreground band
+  // below - previously this whole strip (behind/around the button column
+  // and the smaller framing trees) was empty. Kept clear of the button
+  // column (centered, ~490-790px wide, y~150-630), the mid-trees, and the
+  // river (whose left edge is still close to screen center up here, well
+  // before it widens toward the bottom of the screen).
+  const float midFlowerW = screenH * 0.045f;
+  drawTile(m_tiles.bush, screenW * 0.255f, screenH * 0.50f, midFlowerW * 1.2f, 140, 155, 130);
+  drawTile(m_tiles.mushroom, screenW * 0.33f, screenH * 0.58f, midFlowerW * 0.55f, 190, 180, 155);
+  drawTile(m_tiles.flowerPink, screenW * 0.29f, screenH * 0.68f, midFlowerW * 0.7f, 205, 180, 190);
+  drawTile(m_tiles.mushroom, screenW * 0.18f, screenH * 0.605f, midFlowerW * 0.6f, 190, 180, 155);
+  drawTile(m_tiles.bush, screenW * 0.655f, screenH * 0.60f, midFlowerW * 1.1f, 140, 155, 130);
+  drawTile(m_tiles.flowerYellow, screenW * 0.66f, screenH * 0.68f, midFlowerW * 0.7f, 195, 190, 155);
+
   // Campfire: a ring of small stones around the wood pile (the atlas has no
   // dedicated fire-pit sprite) so it reads as a proper pit rather than a bare
   // pile of logs sitting on the grass. Fire/Smoke particles (started in
@@ -517,19 +539,36 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
            campfireCenter.getY() - woodW * 0.5f, woodW, 225, 175, 120);
 
   // Riverbank rocks, and decorations scattered across the meadow foreground
-  // (kept clear of the centered button column and the moved river).
+  // (kept clear of the centered button column and the moved river - verified
+  // against the river's per-band bounds computed above, not just eyeballed).
   const float rockW = screenH * 0.05f;
   drawTile(m_tiles.rock, riverCx - nearHalf - rockW, screenH * 0.86f, rockW, 150, 152, 158);
-  drawTile(m_tiles.rock, riverCx + nearHalf * 0.3f, screenH * 0.94f, rockW * 0.8f, 150, 152, 158);
   const float flowerW = screenH * 0.045f;
   drawTile(m_tiles.bush, screenW * 0.55f, screenH * 0.84f, flowerW * 1.8f, 150, 165, 140);
   drawTile(m_tiles.bush, screenW * 0.08f, screenH * 0.87f, flowerW * 1.6f, 150, 165, 140);
   drawTile(m_tiles.bush, screenW * 0.93f, screenH * 0.90f, flowerW * 1.6f, 150, 165, 140);
   drawTile(m_tiles.flowerYellow, screenW * 0.20f, screenH * 0.90f, flowerW, 205, 200, 165);
   drawTile(m_tiles.flowerYellow, screenW * 0.12f, screenH * 0.96f, flowerW * 0.85f, 205, 200, 165);
-  drawTile(m_tiles.flowerBlue, screenW * 0.86f, screenH * 0.96f, flowerW, 195, 200, 190);
+  drawTile(m_tiles.flowerBlue, screenW * 0.90f, screenH * 0.96f, flowerW, 195, 200, 190);
   drawTile(m_tiles.flowerBlue, screenW * 0.58f, screenH * 0.97f, flowerW * 0.85f, 195, 200, 190);
   drawTile(m_tiles.rock, screenW * 0.46f, screenH * 0.97f, rockW * 0.6f, 150, 152, 158);
+
+  // Additional foreground decorations, filling gaps left of the campfire/
+  // river and in the far corners.
+  drawTile(m_tiles.flowerYellow, screenW * 0.242f, screenH * 0.94f, flowerW, 205, 200, 165);
+  drawTile(m_tiles.bush, screenW * 0.336f, screenH * 0.905f, flowerW * 1.5f, 150, 165, 140);
+  drawTile(m_tiles.flowerBlue, screenW * 0.406f, screenH * 0.955f, flowerW * 0.85f, 195, 200, 190);
+  drawTile(m_tiles.rock, screenW * 0.031f, screenH * 0.955f, rockW * 0.5f, 150, 152, 158);
+  drawTile(m_tiles.flowerYellow, screenW * 0.977f, screenH * 0.885f, flowerW * 0.8f, 205, 200, 165);
+
+  // Further decorations for variety (new atlas tiles not previously used
+  // here), positions checked against the river's per-band bounds above and
+  // against every other decoration's bounding box to avoid overlap.
+  drawTile(m_tiles.mushroom, screenW * 0.157f, screenH * 0.885f, flowerW * 0.7f, 200, 190, 165);
+  drawTile(m_tiles.stump, screenW * 0.30f, screenH * 0.965f, rockW * 0.7f, 150, 130, 110);
+  drawTile(m_tiles.flowerPink, screenW * 0.365f, screenH * 0.845f, flowerW * 0.85f, 215, 190, 200);
+  drawTile(m_tiles.mushroom, screenW * 0.485f, screenH * 0.955f, flowerW * 0.6f, 200, 190, 165);
+  drawTile(m_tiles.mushroom, screenW * 0.985f, screenH * 0.965f, flowerW * 0.55f, 200, 190, 165);
 
   batch.end();
 }
