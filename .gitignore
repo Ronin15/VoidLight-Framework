@@ -20,5 +20,4 @@ docs/doxygen/
 bin/
 *.txt
 *.log
-res/settings.json
-res/input_bindings.json
+res/*.json
