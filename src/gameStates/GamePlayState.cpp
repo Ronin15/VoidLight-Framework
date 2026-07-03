@@ -36,6 +36,7 @@
 #include "managers/WorldResourceManager.hpp"
 #include "managers/ProjectileManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include "managers/SoundManager.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Camera.hpp"
 #include "world/WorldData.hpp"
@@ -207,6 +208,14 @@ bool GamePlayState::enter() {
 
     registerEventHandlers();
 
+    // Start open-world background music loop. Use the default per-track
+    // volume (1.0) so the audible level always equals SoundManager's music
+    // volume alone — SoundManager::setMusicVolume() overwrites an active
+    // track's gain with the raw music volume (not volume * musicVolume), so
+    // baking any other multiplier in here would drift out of sync with live
+    // Settings-menu adjustments made while this track is already playing.
+    SoundManager::Instance().playMusic("music_adventure_loop");
+
     // Mark as initialized for future pause/resume cycles
     m_initialized = true;
 
@@ -339,6 +348,9 @@ bool GamePlayState::exit() {
   GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
   auto &wrm = WorldResourceManager::Instance();
   auto &eventMgr = EventManager::Instance();
+
+  // Stop background music before tearing down or transitioning
+  SoundManager::Instance().stopMusic();
 
   if (auto* socialCtrl = m_controllers.get<SocialController>();
       socialCtrl && socialCtrl->isTrading()) {

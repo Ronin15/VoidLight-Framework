@@ -28,8 +28,9 @@ class PauseState : public GameState {
   bool supportsGPURendering() const override { return true; }
 
  private:
-  static constexpr std::array<std::string_view, 2> kNavOrder{
+  static constexpr std::array<std::string_view, 3> kNavOrder{
       "pause_resume_btn",
+      "pause_settings_btn",
       "pause_mainmenu_btn",
   };
   size_t m_selectedIndex{0};

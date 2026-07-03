@@ -4,6 +4,7 @@
 */
 
 #include "gameStates/PauseState.hpp"
+#include "gameStates/SettingsMenuState.hpp"
 #include "managers/InputManager.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/UIConstants.hpp"
@@ -45,11 +46,20 @@ bool PauseState::enter() {
   int firstButtonY = 50;  // Offset from center
 
   ui.createCenteredButton("pause_resume_btn", firstButtonY, buttonWidth, buttonHeight, "Resume Game");
-  ui.createCenteredButton("pause_mainmenu_btn", firstButtonY + buttonSpacing, buttonWidth, buttonHeight, "Main Menu");
+  ui.createCenteredButton("pause_settings_btn", firstButtonY + buttonSpacing, buttonWidth, buttonHeight, "Settings");
+  ui.createCenteredButton("pause_mainmenu_btn", firstButtonY + 2 * buttonSpacing, buttonWidth, buttonHeight, "Main Menu");
 
   // Set button callbacks - capture mp_stateManager for proper architecture
   ui.setOnClick("pause_resume_btn", [this]() {
       mp_stateManager->popState();
+  });
+
+  ui.setOnClick("pause_settings_btn", [this]() {
+      if (auto* settingsState = dynamic_cast<SettingsMenuState*>(
+              mp_stateManager->getState(GameStateId::SETTINGS_MENU).get())) {
+        settingsState->setReturnState(GameStateId::PAUSE);
+      }
+      mp_stateManager->changeState(GameStateId::SETTINGS_MENU);
   });
 
   ui.setOnClick("pause_mainmenu_btn", [this]() {
@@ -81,6 +91,7 @@ bool PauseState::exit() {
   ui.clearKeyboardSelection();
   ui.removeComponent("pause_title");
   ui.removeComponent("pause_resume_btn");
+  ui.removeComponent("pause_settings_btn");
   ui.removeComponent("pause_mainmenu_btn");
   ui.removeOverlay();  // Remove the pause overlay to restore GamePlayState visibility
 

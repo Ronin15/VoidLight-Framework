@@ -546,6 +546,20 @@ bool GameEngine::init(std::string_view title) {
             {
               GAMEENGINE_ERROR("Failed to load one or more music tracks");
             }
+
+            // Apply persisted volume/mute settings so playback respects the
+            // Settings menu from the very first sound played this session.
+            auto &settingsMgr = VoidLight::SettingsManager::Instance();
+            bool const muted = settingsMgr.get<bool>("audio", "muted", false);
+            float const masterVolume =
+                settingsMgr.get<float>("audio", "master_volume", 1.0f);
+            float const musicVolume =
+                settingsMgr.get<float>("audio", "music_volume", 0.7f);
+            float const sfxVolume =
+                settingsMgr.get<float>("audio", "sfx_volume", 0.8f);
+            soundMgr.setMusicVolume(muted ? 0.0f : masterVolume * musicVolume);
+            soundMgr.setSFXVolume(muted ? 0.0f : masterVolume * sfxVolume);
+
             return true;
           }));
 

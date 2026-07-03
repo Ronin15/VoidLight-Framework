@@ -9,6 +9,7 @@
 #include "managers/InputManager.hpp"
 #include "managers/FontManager.hpp"
 #include "managers/SettingsManager.hpp"
+#include "managers/SoundManager.hpp"
 #include "managers/GameStateManager.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
@@ -108,7 +109,18 @@ bool SettingsMenuState::exit() {
     m_pendingRefreshCommand = InputManager::Command::COUNT;
 
     auto& ui = UIManager::Instance();
-    ui.prepareForStateTransition();
+    if (m_returnState == GameStateId::MAIN_MENU) {
+        // Full teardown — MainMenuState rebuilds its UI fresh in enter() and
+        // nothing else remains on the state stack to preserve.
+        ui.prepareForStateTransition();
+    } else {
+        // Returning to a state with UI still alive underneath (e.g. PauseState
+        // over a paused GamePlayState) — prepareForStateTransition() would
+        // wipe that surviving UI via its unconditional m_components.clear().
+        // Remove only this state's own components instead.
+        ui.clearKeyboardSelection();
+        ui.removeComponentsWithPrefix("settings_");
+    }
 
     return true;
 }
@@ -121,7 +133,7 @@ void SettingsMenuState::handleInput() {
         VoidLight::MenuNavigation::readInputs(m_navOrder, m_selectedIndex);
         handleSliderAdjust();
         if (VoidLight::MenuNavigation::cancelPressed()) {
-            mp_stateManager->changeState(GameStateId::MAIN_MENU);
+            mp_stateManager->changeState(m_returnState);
         }
     }
 }
@@ -289,6 +301,17 @@ void SettingsMenuState::applySettings() {
     settings.set("audio", "music_volume", m_tempSettings.musicVolume);
     settings.set("audio", "sfx_volume", m_tempSettings.sfxVolume);
     settings.set("audio", "muted", m_tempSettings.muted);
+
+    // Apply audio settings immediately so the change is audible without a restart
+    auto &soundMgr = SoundManager::Instance();
+    float const effectiveMusicVolume =
+        m_tempSettings.muted ? 0.0f
+                             : m_tempSettings.masterVolume * m_tempSettings.musicVolume;
+    float const effectiveSfxVolume =
+        m_tempSettings.muted ? 0.0f
+                             : m_tempSettings.masterVolume * m_tempSettings.sfxVolume;
+    soundMgr.setMusicVolume(effectiveMusicVolume);
+    soundMgr.setSFXVolume(effectiveSfxVolume);
 
     // Gameplay
     settings.set("gameplay", "difficulty", m_tempSettings.difficulty);
@@ -551,7 +574,7 @@ void SettingsMenuState::createActionButtons() {
         "Back");
     ui.setComponentPositioning("settings_back_btn", {UIPositionMode::BOTTOM_CENTERED, buttonWidth/2 + buttonSpacing/2, bottomOffset, buttonWidth, buttonHeight});
     ui.setOnClick("settings_back_btn", [this]() {
-        mp_stateManager->changeState(GameStateId::MAIN_MENU);
+        mp_stateManager->changeState(m_returnState);
     });
 }
 

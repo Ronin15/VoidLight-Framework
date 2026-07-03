@@ -7,15 +7,15 @@
   "audio": {
     "sfx_volume": 0.8,
     "muted": false,
-    "music_volume": 0.7,
+    "music_volume": 0.509727,
     "master_volume": 1
   },
   "graphics": {
     "vsync": true,
+    "show_fps": true,
     "resolution_height": 720,
-    "show_fps": false,
     "buffer_count": 3,
-    "fullscreen": false,
+    "fullscreen": true,
     "fps_limit": 60,
     "resolution_width": 1280
   }

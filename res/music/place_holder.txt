@@ -1,1 +1,0 @@
-This is just here to generate a folder for the music in the project. PLEASE DELETE THIS FILE WHEN YOU ADD YOUR OWN MUSIC FILES.

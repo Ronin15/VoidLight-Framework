@@ -28,6 +28,12 @@ public:
     bool exit() override;
     GameStateId getStateId() const override { return GameStateId::SETTINGS_MENU; }
 
+    // Sets which state Back/Cancel returns to (e.g. MAIN_MENU or PAUSE).
+    // Callers must set this before transitioning into SettingsMenuState —
+    // it is not reset automatically, since enter() runs before any of this
+    // state's own code could otherwise re-derive the caller's identity.
+    void setReturnState(GameStateId state) { m_returnState = state; }
+
     // GPU rendering support
     void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
                            float interpolationAlpha) override;
@@ -70,6 +76,10 @@ private:
         Controls
     };
     SettingsTab m_currentTab = SettingsTab::Graphics;
+
+    // State to return to on Back/Cancel — set via setReturnState() by whoever
+    // navigates here (MainMenuState, PauseState, ...).
+    GameStateId m_returnState = GameStateId::MAIN_MENU;
 
     // Track the command whose binding label we need to refresh after capture
     InputManager::Command m_pendingRefreshCommand{InputManager::Command::COUNT};

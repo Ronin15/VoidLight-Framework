@@ -4,6 +4,7 @@
 */
 
 #include "gameStates/MainMenuState.hpp"
+#include "gameStates/SettingsMenuState.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/InputManager.hpp"
 #include "managers/FontManager.hpp"
@@ -91,6 +92,10 @@ bool MainMenuState::enter() {
   });
 
   ui.setOnClick("mainmenu_settings_btn", [this]() {
+    if (auto* settingsState = dynamic_cast<SettingsMenuState*>(
+            mp_stateManager->getState(GameStateId::SETTINGS_MENU).get())) {
+      settingsState->setReturnState(GameStateId::MAIN_MENU);
+    }
     mp_stateManager->changeState(GameStateId::SETTINGS_MENU);
   });
 
