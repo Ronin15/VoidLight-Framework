@@ -35,13 +35,16 @@ Typical frame shape:
 
 ```text
 beginFrame
-acquireSwapchainTexture
-beginScenePass
+state.recordGPUVertices()
+beginScenePass         (internally acquires the swapchain texture on first use)
+state.renderGPUScene()
 beginSwapchainPass
-endFrame
+renderComposite         (scene texture -> swapchain, zoom applied here)
+state.renderGPUUI()
+endFrame                (called from GameEngine::present(), separate from render())
 ```
 
-States provide scene/UI hooks, but frame lifetime and presentation remain engine-owned.
+States provide `recordGPUVertices()`/`renderGPUScene()`/`renderGPUUI()` hooks, but frame lifetime, swapchain acquisition, compositing, and presentation remain engine/GPURenderer-owned.
 
 ## GameState Flow
 
@@ -66,12 +69,12 @@ Important transitions:
 
 AI/world-heavy states follow this pattern:
 
-1. unregister state-owned handlers
-2. call `prepareForStateTransition()` on active managers in dependency order
-3. clear controllers and UI
-4. tear down world/entity state
+1. destroy state-owned NPCs and unregister state-owned handlers
+2. call `prepareForStateTransition()` on active managers in dependency order — this is also where world unload (`WorldManager::unloadWorld()`) and EntityDataManager teardown happen, mid-sequence
+3. clear UI and controllers
+4. reset remaining cached state (camera, player pointer, init flag)
 
-This matters because deferred events, AI command commits, and WRM spatial indices all participate in runtime state now.
+This matters because deferred events, AI command commits, and WRM spatial indices all participate in runtime state now. Note the order: world/entity teardown happens *before* UI/controllers are cleared, not after — see `GamePlayState::exit()`.
 
 ## Related Docs
 

@@ -19,26 +19,15 @@
  * - Time-based events and scheduling
  */
 
+#include "managers/Season.hpp"
 #include <atomic>
 #include <chrono>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <cstdint>
 
 // Forward declaration
 enum class WeatherType;
-
-/**
- * @brief Type-safe season enumeration
- */
-enum class Season : uint8_t
-{
-    Spring = 0,
-    Summer = 1,
-    Fall = 2,
-    Winter = 3
-};
 
 /**
  * @brief Weather probability configuration for a season

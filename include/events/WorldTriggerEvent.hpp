@@ -9,7 +9,7 @@
 #include "events/Event.hpp"
 #include "events/EventTypeId.hpp"
 #include "collisions/TriggerTag.hpp"
-#include "entities/Entity.hpp" // for EntityID alias
+#include "entities/EntityHandle.hpp" // for EntityID alias
 #include "utils/Vector2D.hpp"
 
 enum class TriggerPhase { Enter = 0, Exit = 1 };

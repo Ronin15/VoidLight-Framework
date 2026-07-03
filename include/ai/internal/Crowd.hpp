@@ -7,7 +7,7 @@
 #ifndef AI_INTERNAL_CROWD_HPP
 #define AI_INTERNAL_CROWD_HPP
 
-#include "entities/Entity.hpp"
+#include "entities/EntityHandle.hpp"  // EntityID
 #include "utils/Vector2D.hpp"
 #include <cstdint>
 #include <vector>

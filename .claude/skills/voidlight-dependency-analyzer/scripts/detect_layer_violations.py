@@ -7,8 +7,14 @@ import os
 import re
 
 def classify_layer(file_path):
-    """Classify a file into architectural layers"""
-    path_lower = file_path.lower()
+    """Classify a file into architectural layers.
+
+    file_path may be a full filesystem path (from os.walk, always has a
+    leading '/' or './' before 'include/...') or a raw #include "..." string
+    (e.g. "managers/GameStateManager.hpp", no leading slash). Normalize by
+    prepending '/' so a bare relative include still matches '/managers/' etc.
+    """
+    path_lower = '/' + file_path.replace('\\', '/').lower().lstrip('/')
 
     if '/core/' in path_lower:
         return 'Core'
@@ -81,6 +87,30 @@ def extract_includes(file_path):
 APPROVED_EXCEPTIONS = {
     # Logger is a foundational utility used at all layers — not a layer violation.
     ('BinarySerializer.hpp', 'Logger.hpp'),
+    # GameEngine owns/drives the state machine; GameStateManager owns game states.
+    # Documented accepted boundary bends — see CLAUDE.md "Dependency direction"
+    # and docs/architecture/dependency_analysis_2026-03-31.md.
+    ('GameEngine.hpp', 'GameStateManager.hpp'),
+    ('GameStateManager.hpp', 'GameState.hpp'),
+    # AI is EDM-backed and executed through BehaviorExecutors + AICommandBus —
+    # documented architecture (docs/ARCHITECTURE.md "Overview"), not incidental
+    # coupling.
+    ('BehaviorExecutors.hpp', 'EntityDataManager.hpp'),
+    ('BehaviorExecutors.hpp', 'EventManager.hpp'),
+}
+
+# Lightweight cross-cutting type/tag/enum headers: pure value types with no
+# (or near-zero) further local includes, organizationally filed under a
+# domain layer (Entities/Collisions/Managers) but functionally equivalent to
+# a Utils-tier type (like Vector2D). Any layer may depend on these by
+# basename. Extend this set only for headers that are genuinely
+# dependency-free identity/tag/enum types — not full manager/entity classes.
+LIGHTWEIGHT_CROSS_CUTTING_HEADERS = {
+    'EntityHandle.hpp',       # EntityKind, SimulationTier, EntityHandle, EntityID — only includes UniqueID.hpp
+    'TriggerTag.hpp',         # collision trigger tag enum — only includes <cstdint>
+    'Season.hpp',             # season enum — only includes <cstdint>
+    'ParticleEffectType.hpp', # particle effect type enum — only includes <cstdint>
+    'EventTypeId.hpp',        # event type enum — only includes <cstdint>
 }
 
 
@@ -129,18 +159,27 @@ def check_layer_violations(base_dir):
                 violates = False
                 reason = ""
 
+                include_basename = os.path.basename(include)
+
                 if include_layer == layer_name:
                     # Same layer - check for cross-state dependencies
                     if layer_name == 'States':
-                        if os.path.basename(header) != os.path.basename(include):
+                        # Every concrete state includes the shared GameState.hpp
+                        # base interface — that's required inheritance, not a
+                        # sibling-state dependency the "cross-state" check
+                        # intends to catch.
+                        if (os.path.basename(header) != include_basename
+                                and include_basename != 'GameState.hpp'):
                             violates = True
                             reason = "Cross-state dependency (states should not depend on each other)"
+                elif include_basename in LIGHTWEIGHT_CROSS_CUTTING_HEADERS:
+                    pass  # Lightweight cross-cutting value type — not a violation
                 elif include_layer not in allowed and include_layer != 'Other':
                     violates = True
                     reason = f"Depends on {include_layer} layer (not allowed)"
 
                 if violates:
-                    key = (os.path.basename(header), os.path.basename(include))
+                    key = (os.path.basename(header), include_basename)
                     if key in APPROVED_EXCEPTIONS:
                         continue  # Intentional pattern, skip
                     violation = {

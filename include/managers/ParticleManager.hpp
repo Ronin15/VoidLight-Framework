@@ -23,6 +23,7 @@
  */
 
 #include "managers/EventManager.hpp"
+#include "managers/ParticleEffectType.hpp"
 #include "utils/Vector2D.hpp"
 #include <SDL3/SDL.h>
 #include <array>
@@ -88,29 +89,6 @@ struct WorkerBudget;
 // Use the proper logging system for thread-safe logging
 // Note: This header only contains the LOG macro declaration, the actual include
 // is in the .cpp file
-
-/**
- * @brief Particle effect type enumeration for fast dispatch
- */
-enum class ParticleEffectType : uint8_t {
-  Rain = 0,
-  HeavyRain = 1,
-  Snow = 2,
-  HeavySnow = 3,
-  Fog = 4,
-  Cloudy = 5,
-  Fire = 6,
-  Smoke = 7,
-  Sparks = 8,
-  Magic = 9,
-  Custom = 10,
-  Windy = 11,
-  WindyDust = 12,
-  WindyStorm = 13,
-  AmbientDust = 14,
-  AmbientFirefly = 15,
-  COUNT = 16
-};
 
 /**
  * @brief Particle blend modes for rendering

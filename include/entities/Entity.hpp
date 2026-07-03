@@ -28,9 +28,7 @@ namespace VoidLight {
 using EntityPtr = std::shared_ptr<Entity>;
 using EntityWeakPtr = std::weak_ptr<Entity>;
 
-// Type alias for entity ID
-using EntityID = VoidLight::UniqueID::IDType;
-
+// Note: EntityID is defined in EntityHandle.hpp (included above).
 // Note: EntityKind enum is now defined in EntityHandle.hpp
 // This provides the expanded entity type list (Player, NPC, DroppedItem, Container,
 // Harvestable, Projectile, AreaEffect, Prop, Trigger) and SimulationTier enum.

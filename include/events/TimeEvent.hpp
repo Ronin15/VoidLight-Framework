@@ -8,7 +8,7 @@
 
 #include "events/Event.hpp"
 #include "events/WeatherEvent.hpp"
-#include "managers/GameTimeManager.hpp"
+#include "managers/Season.hpp"
 #include <string>
 #include <string_view>
 

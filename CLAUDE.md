@@ -59,13 +59,13 @@ Test names use the `BOOST_AUTO_TEST_CASE` name directly (`ThreadingModeCompariso
 
 C++20 SDL3 engine, CMake/Ninja, data-oriented, 10K+ entities at 60+ FPS.
 
-**Dependency direction**: `Core → Managers → GameStates → Entities/Controllers`
+**Dependency direction**: `Core → Managers → GameStates → Entities/Controllers`. Three known, accepted boundary bends exist: `GameEngine.hpp` (Core) includes `GameStateManager.hpp` since the engine owns/drives the state machine; `GameStateManager.hpp` includes the `GameState` interface header since it owns game states; `BinarySerializer.hpp` (Utils) includes `core/Logger.hpp` for direct logging. See `docs/architecture/dependency_analysis_2026-03-31.md`. No other Core/Manager/GameState boundary is crossed.
 
 **Layout**: `src/` and `include/` mirror each other: `{core, managers, controllers, gameStates, entities, events, ai, collisions, utils, world, gpu}`. Tests in `tests/`, assets in `res/`, docs in `docs/`.
 
 ### Key Systems
-- **Core**: GameEngine (fixed timestep) | ThreadSystem (WorkerBudget) | Logger | TimestepManager
-- **Managers**: EntityDataManager (SoA) | AIManager (SIMD, 10K+) | EventManager (16 types) | CollisionManager (HierarchicalSpatialHash) | ParticleManager (SoA, pooled) | PathfinderManager | WorldManager (chunk-based procedural) | WorldResourceManager (spatial registry) | BackgroundSimulationManager (tiered) | UIManager | GameTimeManager | InputManager | TextureManager | FontManager | SoundManager
+- **Core**: GameEngine (fixed timestep) | ThreadSystem (WorkerBudget) | Logger | TimestepManager | GameStateManager (state push/pop/change, owned by GameEngine; lives in `managers/` but is core state-machine infrastructure)
+- **Managers**: EntityDataManager (SoA) | AIManager (SIMD, 10K+) | ProjectileManager (SIMD, WorkerBudget-driven) | EventManager (16 types) | CollisionManager (HierarchicalSpatialHash) | ParticleManager (SoA, pooled) | PathfinderManager | WorldManager (chunk-based procedural) | WorldResourceManager (spatial registry) | BackgroundSimulationManager (tiered) | UIManager | GameTimeManager | InputManager | TextureManager | FontManager | SoundManager | SaveGameManager (binary serialization) | SettingsManager (JSON-persisted, thread-safe) | ResourceTemplateManager (resource template registry, paired with ResourceFactory)
 - **Entities**: EntityKind (10 types) | SimulationTier (Active/Background/Hibernated) | EntityHandle (generation-safe)
 - **AI**: AIBehavior base → 9 behaviors (Idle, Wander, Patrol, Chase, Flee, Follow, Guard, Attack, Custom). Lock-free EDM access via `BehaviorContext`.
 - **Controllers**: State-scoped via ControllerRegistry. `controllers/{combat,render,social,ui,world}/`
@@ -99,7 +99,7 @@ AI-heavy cleanup order:
 
 EventManager has **persistent** and **transient** handlers. `prepareForStateTransition()` calls `clearTransientHandlers()` — persistents survive. `clearAllHandlers()` is shutdown-only.
 
-- **`init()` → `registerPersistentHandler[WithToken]()`**: manager infrastructure (CollisionManager world events, ProjectileManager collision handler, PathfinderManager world/obstacle events, WorldManager season events). Registered once.
+- **`init()` → `registerPersistentHandler[WithToken]()`**: manager infrastructure (CollisionManager world events, PathfinderManager world/obstacle events, WorldManager season events). Registered once. Note: `ProjectileManager` does NOT use this path for collisions — it receives hits via a direct callback sink (`CollisionManager::setProjectileHitSink()`, set in `ProjectileManager::init()`, cleared to `nullptr` in `clean()`), bypassing EventManager entirely.
 - **`enter()` → `registerHandler[WithToken]()`**: state-level handlers (GamePlayState time/weather/harvest, ControllerRegistry subscriptions). Auto-cleared on transition.
 
 Never manually unsubscribe/resubscribe manager handlers across transitions.
@@ -137,14 +137,19 @@ Sequential execution with parallel batching. Managers update one after another o
 **Manager pattern** (AIManager, ParticleManager):
 ```cpp
 auto decision = budgetMgr.shouldUseThreading(SystemType::AI, count);
+size_t batchCount = 1;
 if (decision.shouldThread) {
-    for (size_t i = 0; i < decision.batchCount; ++i) {
+    size_t optimalWorkers = budgetMgr.getOptimalWorkers(SystemType::AI, count);
+    size_t batchSize;
+    std::tie(batchCount, batchSize) = budgetMgr.getBatchStrategy(SystemType::AI, count, optimalWorkers);
+    for (size_t i = 0; i < batchCount; ++i) {
         m_futures.push_back(threadSystem.enqueueTaskWithResult([...] { processBatch(...); }));
     }
     for (auto& f : m_futures) { f.get(); }  // wait before frame ends
 }
-budgetMgr.reportExecution(SystemType::AI, count, decision.shouldThread, decision.batchCount, elapsedMs);
+budgetMgr.reportExecution(SystemType::AI, count, decision.shouldThread, batchCount, elapsedMs);
 ```
+(`ThreadingDecision` only carries `shouldThread`/`probePhase` — batch count comes from `getOptimalWorkers()` + `getBatchStrategy()`, not from the decision struct.)
 
 ## Memory
 

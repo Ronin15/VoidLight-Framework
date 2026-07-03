@@ -6,7 +6,8 @@
 #ifndef COLLISION_INFO_HPP
 #define COLLISION_INFO_HPP
 
-#include "entities/Entity.hpp"
+#include "entities/EntityHandle.hpp"  // EntityID
+#include "utils/Vector2D.hpp"
 
 namespace VoidLight {
 
