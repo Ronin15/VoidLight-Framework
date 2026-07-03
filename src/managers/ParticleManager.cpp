@@ -1046,7 +1046,7 @@ uint32_t ParticleManager::playEffect(ParticleEffectType effectType,
                             effectTypeToString(effectType), position.getX(), position.getY(), intensity));
 
   // PERFORMANCE: Exclusive lock needed for adding effect instances
-  std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
 
   // Check if effect definition exists
   auto it = m_effectDefinitions.find(effectType);
@@ -1079,8 +1079,9 @@ uint32_t ParticleManager::playEffect(ParticleEffectType effectType,
 }
 
 void ParticleManager::stopEffect(uint32_t effectId) {
-  // Thread safety: Use exclusive lock for modifying effect instances
-  // PERFORMANCE: No locks needed for lock-free particle system
+  // Thread safety: m_effectInstances/m_effectIdToIndex are mutated concurrently
+  // by playEffect() under m_effectsMutex, so this must take the same lock.
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
 
   auto it = m_effectIdToIndex.find(effectId);
   if (it != m_effectIdToIndex.end() && it->second < m_effectInstances.size()) {
@@ -1093,7 +1094,7 @@ void ParticleManager::stopWeatherEffects(float transitionTime) {
 
   // THREADING FIX: Use m_effectsMutex for consistent locking of effect instances
   {
-    std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+    std::lock_guard<std::mutex> lock(m_effectsMutex);
 
     // Early exit if no effects to process
     if (m_effectInstances.empty()) {
@@ -1281,7 +1282,7 @@ void ParticleManager::triggerWeatherEffect(ParticleEffectType effectType,
 
   // THREADING FIX: Single lock for effect instance mutations
   {
-    std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+    std::lock_guard<std::mutex> lock(m_effectsMutex);
 
     // Count and remove existing weather effects
     int stoppedCount = 0;
@@ -1350,7 +1351,7 @@ void ParticleManager::recordPerformance(bool isRender, double timeMs,
 }
 
 void ParticleManager::toggleFireEffect() {
-  std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
   if (!m_fireActive) {
     // Create a single central fire source for better performance
     Vector2D const basePosition(400, 300);
@@ -1368,7 +1369,7 @@ void ParticleManager::toggleFireEffect() {
 }
 
 void ParticleManager::toggleSmokeEffect() {
-  std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
   if (!m_smokeActive) {
     // Create single smoke source for better performance
     Vector2D const basePosition(400, 280); // Slightly above fire
@@ -1386,7 +1387,7 @@ void ParticleManager::toggleSmokeEffect() {
 }
 
 void ParticleManager::toggleSparksEffect() {
-  std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
   if (!m_sparksActive) {
     m_sparksEffectId =
         playIndependentEffect(ParticleEffectType::Sparks, Vector2D(400, 300));
@@ -2072,7 +2073,7 @@ ParticlePerformanceStats ParticleManager::getPerformanceStats() const {
 }
 
 bool ParticleManager::isEffectPlaying(uint32_t effectId) const {
-  std::shared_lock<std::shared_mutex> lock(m_effectsMutex);
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
   auto it = m_effectIdToIndex.find(effectId);
   if (it == m_effectIdToIndex.end())
     return false;
@@ -2086,7 +2087,7 @@ size_t ParticleManager::countActiveParticles() const {
 }
 
 void ParticleManager::updateEffectInstances(float deltaTime) {
-  std::unique_lock<std::shared_mutex> lock(m_effectsMutex);
+  std::lock_guard<std::mutex> lock(m_effectsMutex);
 
   bool hasInactiveEffects = false;
   auto it = m_effectInstances.begin();

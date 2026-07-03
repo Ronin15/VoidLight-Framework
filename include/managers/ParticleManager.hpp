@@ -30,7 +30,6 @@
 #include <future>
 #include <mutex>
 #include <new>
-#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -852,8 +851,11 @@ private:
   } m_viewport;
 
   // Lock-free synchronization - no mutexes needed for particles
-  mutable std::shared_mutex
-      m_effectsMutex;              // For effect instances and definitions
+  // m_effectsMutex guards effect instances/definitions; access is exclusive
+  // at every call site but one, so a plain mutex is used rather than
+  // std::shared_mutex (avoids the winpthreads rwlock implementation, which
+  // asserts under write-lock contention on MinGW/UCRT64).
+  mutable std::mutex m_effectsMutex;
   mutable std::mutex m_statsMutex; // Only for performance stats
 
   // Async batch tracking for safe shutdown using futures
