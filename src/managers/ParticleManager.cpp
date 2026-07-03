@@ -1930,13 +1930,13 @@ ParticleEffectDefinition ParticleManager::createAmbientFireflyEffect() {
   // Glowing fireflies at night - bright additive particles
   firefly.emitterConfig.spread =
       static_cast<float>(gameEngine.getWidthInPixels());  // Screen-wide
-  firefly.emitterConfig.emissionRate = 3.0f;  // Very sparse - fireflies are special
+  firefly.emitterConfig.emissionRate = 5.0f;  // Sparse but present - fireflies are special
   firefly.emitterConfig.minSpeed = 10.0f;     // Lazy floating
   firefly.emitterConfig.maxSpeed = 30.0f;
   firefly.emitterConfig.minLife = 2.0f;       // Short-ish blinks
   firefly.emitterConfig.maxLife = 5.0f;
-  firefly.emitterConfig.minSize = 2.0f;       // Small but visible glow
-  firefly.emitterConfig.maxSize = 4.0f;
+  firefly.emitterConfig.minSize = 2.5f;       // Small but visible glow - size drives brightness
+  firefly.emitterConfig.maxSize = 5.0f;       // less under additive blend than intensity/count do
   firefly.emitterConfig.minColor = 0xCCFF22FF; // Bright yellow-green, full alpha
   firefly.emitterConfig.maxColor = 0xAAFF66FF; // Bright lime, full alpha
   firefly.emitterConfig.gravity = Vector2D(0.0f, -5.0f);  // Float upward gently
@@ -1955,15 +1955,15 @@ ParticleEffectDefinition ParticleManager::createFireEffect() {
   fire.emitterConfig.position = Vector2D(0, 0);   // Will be set when played
   fire.emitterConfig.direction = Vector2D(0, -1); // Upward flames
   fire.emitterConfig.spread =
-      60.0f; // Tighter spread for a more controlled flame
+      90.0f; // Wider spread - was tuned tiny relative to native 4K displays
   fire.emitterConfig.emissionRate =
       100.0f; // Halved for performance
   fire.emitterConfig.minSpeed = 20.0f; // Faster base speed for more energy
   fire.emitterConfig.maxSpeed = 110.0f; // Higher max for more dynamic flicker
   fire.emitterConfig.minLife = 0.2f;    // Shorter life for faster flicker
   fire.emitterConfig.maxLife = 1.8f;    // Reduced max life
-  fire.emitterConfig.minSize = 4.0f;    // Larger base size
-  fire.emitterConfig.maxSize = 14.0f;   // Smaller max size for finer detail
+  fire.emitterConfig.minSize = 8.0f;    // Larger base size
+  fire.emitterConfig.maxSize = 24.0f;   // Larger max size - visible at 4K
   fire.emitterConfig.minColor = 0xFFD700FF; // Bright Gold/Yellow core
   fire.emitterConfig.maxColor = 0xFF450088; // Orange-Red, semi-transparent
   fire.emitterConfig.gravity =
@@ -1987,16 +1987,16 @@ ParticleEffectDefinition ParticleManager::createSmokeEffect() {
   smoke.emitterConfig.position = Vector2D(0, 0);   // Will be set when played
   smoke.emitterConfig.direction = Vector2D(0, -1); // Upward smoke
   smoke.emitterConfig.spread =
-      75.0f; // Tighter spread for a more focused plume
+      110.0f; // Wider plume - was tuned tiny relative to native 4K displays
   smoke.emitterConfig.emissionRate =
       75.0f; // Halved for performance
   smoke.emitterConfig.minSpeed = 15.0f;   // Faster initial speed
   smoke.emitterConfig.maxSpeed = 60.0f;  // Faster max speed
   smoke.emitterConfig.minLife =
       2.0f; // Shorter life for a more energetic effect
-  smoke.emitterConfig.maxLife = 6.0f; 
-  smoke.emitterConfig.minSize = 5.0f;  // Smaller particles
-  smoke.emitterConfig.maxSize = 20.0f; 
+  smoke.emitterConfig.maxLife = 6.0f;
+  smoke.emitterConfig.minSize = 9.0f;  // Larger particles - visible at 4K
+  smoke.emitterConfig.maxSize = 32.0f;
   smoke.emitterConfig.minColor = 0x333333DD; // Dark, dense smoke core
   smoke.emitterConfig.maxColor = 0x80808044; // Light grey, very transparent
   smoke.emitterConfig.gravity = Vector2D(0, -30.0f); // Faster rise

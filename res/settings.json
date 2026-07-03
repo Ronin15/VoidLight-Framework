@@ -15,7 +15,7 @@
     "show_fps": true,
     "resolution_height": 720,
     "buffer_count": 3,
-    "fullscreen": true,
+    "fullscreen": false,
     "fps_limit": 60,
     "resolution_width": 1280
   }
