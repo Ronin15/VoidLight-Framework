@@ -14,6 +14,10 @@ Guidance for Claude Code working in this repository.
 cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build
 cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja -C build
 
+# Fast dev loop
+ninja -C build app   # main binary only
+ninja -C build       # main binary + all tests (default)
+
 # Reconfigure (required when switching sanitizers or build options)
 rm build/CMakeCache.txt && cmake -B build/ ...
 

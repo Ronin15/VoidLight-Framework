@@ -471,6 +471,9 @@ add_executable(${PROJECT_NAME}
     src/core/VoidLightMain.cpp
 )
 
+# Convenience alias for the dev loop: build and link just the main binary
+add_custom_target(app DEPENDS ${PROJECT_NAME})
+
 # Configure window icon
 # Note: The icon is set programmatically via SDL_SetWindowIcon in GameEngine.cpp
 # This section handles platform-specific icon integration
