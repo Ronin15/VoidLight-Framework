@@ -105,3 +105,8 @@ See the `cross-platform-include-caution` rule.
   that may rely on it transitively on Windows/Linux.
 - **`SaveManagerTests.cpp` `<thread>`** — used only by a `#ifdef _WIN32` `std::this_thread::sleep_for`,
   compiled out on macOS/Linux. Required on the Windows build.
+- **`BehaviorCommonState.hpp` `<utility>`** — used unconditionally for `PathData`'s
+  `std::move` in the move ctor/assignment (both platforms). Only appears "unused" because
+  libstdc++/Linux happens to pull it in transitively (via `<atomic>`) today; libc++/macOS
+  does not, hence the missing-include build failure this was added to fix. Not a
+  macOS-only need — do not gate behind `#ifdef __APPLE__` or drop on Linux.

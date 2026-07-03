@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <utility> // IWYU pragma: keep - std::move; only transitively provided on libstdc++/Linux
 
 /**
  * @brief Path state for AI entities (indexed by edmIndex)
