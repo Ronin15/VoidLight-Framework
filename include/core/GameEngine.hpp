@@ -6,8 +6,6 @@
 #ifndef GAME_ENGINE_HPP
 #define GAME_ENGINE_HPP
 
-#include "managers/GameStateManager.hpp"
-#include "core/TimestepManager.hpp"
 #include <SDL3/SDL.h>
 #include <memory>
 #include <string_view>
@@ -17,6 +15,8 @@ class GPURenderer;
 }
 
 // Forward declarations
+class GameStateManager;
+class TimestepManager;
 class AIManager;
 class BackgroundSimulationManager;
 class EventManager;
@@ -31,7 +31,7 @@ class ProjectileManager;
 
 class GameEngine {
 public:
-  ~GameEngine() = default;
+  ~GameEngine();
 
   /**
    * @brief Gets the singleton instance of GameEngine
@@ -283,7 +283,7 @@ public:
    * @brief Checks if the engine is using software frame limiting.
    * @return true if using software frame limiting, false if using hardware VSync.
    */
-  bool isUsingSoftwareFrameLimiting() const { return m_timestepManager->isUsingSoftwareFrameLimiting(); }
+  bool isUsingSoftwareFrameLimiting() const;
 
   /**
    * @brief Toggles fullscreen mode at runtime
@@ -403,6 +403,6 @@ private:
   GameEngine(const GameEngine &) = delete;            // Prevent copying
   GameEngine &operator=(const GameEngine &) = delete; // Prevent assignment
 
-  GameEngine() : m_windowWidth{1280}, m_windowHeight{720} {}
+  GameEngine();
 };
 #endif // GAME_ENGINE_HPP

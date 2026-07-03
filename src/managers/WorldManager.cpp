@@ -11,10 +11,12 @@
 #include "events/TimeEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/GameTimeManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
 #include "managers/TextureManager.hpp"
 #include "managers/WorldResourceManager.hpp"
 #include "utils/JsonReader.hpp"
+#include "utils/Vector2D.hpp"
 #include "world/HarvestConfig.hpp"
 
 #include <algorithm>

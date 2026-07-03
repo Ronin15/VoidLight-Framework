@@ -8,9 +8,7 @@
 
 #include "utils/Vector2D.hpp"
 #include "gpu/UIRenderBatches.hpp"
-#include "utils/TextureSource.hpp"
 #include <SDL3/SDL.h>
-#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -23,6 +21,7 @@
 // Forward declarations
 class FontManager;
 class InputManager;
+struct TextureSource;
 struct SDL_GPURenderPass;
 
 namespace VoidLight {

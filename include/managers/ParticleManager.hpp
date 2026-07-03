@@ -22,7 +22,6 @@
  * - Thread-safe design with minimal lock contention
  */
 
-#include "managers/EventManager.hpp"
 #include "managers/ParticleEffectType.hpp"
 #include "utils/Vector2D.hpp"
 #include <SDL3/SDL.h>
@@ -81,6 +80,7 @@ constexpr bool operator!=(const AlignedAllocator<T1, A1> &,
 
 // Forward declarations
 class TextureManager;
+struct EventData;
 
 namespace VoidLight {
 struct WorkerBudget;

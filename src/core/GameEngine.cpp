@@ -21,6 +21,7 @@
 #include "managers/FontManager.hpp"  // For FrameProfiler overlay
 #include "managers/GameStateManager.hpp"
 #include "managers/GameTimeManager.hpp"
+#include "core/TimestepManager.hpp"
 #include "managers/InputManager.hpp"
 #include "managers/ParticleManager.hpp"
 #include "managers/PathfinderManager.hpp"
@@ -1034,6 +1035,14 @@ void GameEngine::handleEvents() {
 
   // Handle game state input on main thread where SDL events are processed
   mp_gameStateManager->handleInput();
+}
+
+GameEngine::GameEngine() : m_windowWidth{1280}, m_windowHeight{720} {}
+
+GameEngine::~GameEngine() = default;
+
+bool GameEngine::isUsingSoftwareFrameLimiting() const {
+  return m_timestepManager->isUsingSoftwareFrameLimiting();
 }
 
 void GameEngine::setRunning(bool running) { m_running = running; }

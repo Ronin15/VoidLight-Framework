@@ -6,11 +6,11 @@
 #define BOOST_TEST_MODULE UIManagerFunctionalTests
 #include <boost/test/unit_test.hpp>
 
-#include <memory>
 #include <atomic>
 
 #include "managers/InputManager.hpp"
 #include "managers/UIManager.hpp"
+#include "utils/TextureSource.hpp"
 
 namespace {
 

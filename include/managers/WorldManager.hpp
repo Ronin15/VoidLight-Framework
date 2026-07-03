@@ -8,8 +8,7 @@
 
 #include "world/WorldData.hpp"
 #include "world/WorldGenerator.hpp"
-#include "managers/GameTimeManager.hpp"
-#include "utils/Vector2D.hpp"
+#include "managers/Season.hpp"
 #include <functional>
 #include <memory>
 #include <mutex>

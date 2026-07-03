@@ -2,6 +2,9 @@
  * Licensed under the MIT License */
 
 #include "gpu/GPURenderer.hpp"
+#include "gpu/GPUDevice.hpp"
+#include "gpu/GPUTexture.hpp"
+#include "gpu/GPUTypes.hpp"
 #include "gpu/GPUShaderManager.hpp"
 #include "managers/TextureManager.hpp"
 #include "core/Logger.hpp"
@@ -15,6 +18,8 @@ GPURenderer& GPURenderer::Instance() {
     static GPURenderer instance;
     return instance;
 }
+
+GPURenderer::~GPURenderer() = default;
 
 bool GPURenderer::init() {
     if (m_initialized) {

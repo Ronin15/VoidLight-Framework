@@ -13,6 +13,7 @@
 #include "events/ParticleEffectEvent.hpp"
 #include "events/WeatherEvent.hpp"
 #include "gpu/GPURenderer.hpp"
+#include "gpu/GPUTexture.hpp"
 #include "gpu/GPUTypes.hpp"
 #include "utils/SIMDMath.hpp"
 #include <algorithm>

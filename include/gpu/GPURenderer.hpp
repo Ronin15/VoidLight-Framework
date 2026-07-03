@@ -4,12 +4,7 @@
 #ifndef GPU_RENDERER_HPP
 #define GPU_RENDERER_HPP
 
-#include "gpu/GPUTypes.hpp"
-#include "gpu/GPUDevice.hpp"
-#include "gpu/GPUTexture.hpp"
 #include "gpu/GPUSampler.hpp"
-#include "gpu/GPUBuffer.hpp"
-#include "gpu/GPUTransferBuffer.hpp"
 #include "gpu/GPUPipeline.hpp"
 #include "gpu/GPUVertexPool.hpp"
 #include "gpu/SpriteBatch.hpp"
@@ -17,9 +12,10 @@
 #include <SDL3/SDL_gpu.h>
 #include <memory>
 #include <span>
-#include <vector>
 
 namespace VoidLight {
+
+class GPUTexture;
 
 /**
  * Main GPU renderer singleton.
@@ -185,7 +181,7 @@ public:
 
 private:
     GPURenderer() = default;
-    ~GPURenderer() = default;
+    ~GPURenderer();
 
     // Non-copyable
     GPURenderer(const GPURenderer&) = delete;

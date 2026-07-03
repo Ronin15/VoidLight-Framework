@@ -13,6 +13,7 @@
 
 #include "gpu/GPURenderer.hpp"
 
+#include <format>
 #include <string>
 
 // OverlayDemoState Implementation
