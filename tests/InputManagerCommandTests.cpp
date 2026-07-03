@@ -327,7 +327,7 @@ BOOST_AUTO_TEST_CASE(SaveLoadRoundTrip)
         originalBindings.push_back(b);
     }
 
-    const std::string tmpPath = "/tmp/voidlight_test_bindings.json";
+    const std::string tmpPath = (std::filesystem::temp_directory_path() / "voidlight_test_bindings.json").string();
 
     BOOST_REQUIRE(mgr.saveBindingsToFile(tmpPath));
 
@@ -508,7 +508,7 @@ BOOST_AUTO_TEST_CASE(GarbageJsonKeepsDefaults)
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
-    const std::string tmpPath = "/tmp/voidlight_bad_bindings.json";
+    const std::string tmpPath = (std::filesystem::temp_directory_path() / "voidlight_bad_bindings.json").string();
 
     {
         std::ofstream f(tmpPath);
@@ -538,7 +538,7 @@ BOOST_AUTO_TEST_CASE(MissingFileKeepsDefaults)
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
-    bool result = mgr.loadBindingsFromFile("/tmp/voidlight_nonexistent_XYZZY.json");
+    bool result = mgr.loadBindingsFromFile((std::filesystem::temp_directory_path() / "voidlight_nonexistent_XYZZY.json").string());
     BOOST_CHECK(!result);
 
     // Defaults must still be present
@@ -558,7 +558,7 @@ BOOST_AUTO_TEST_CASE(SchemaVersionTwoIsRejected)
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
-    const std::string tmpPath = "/tmp/voidlight_v2_bindings.json";
+    const std::string tmpPath = (std::filesystem::temp_directory_path() / "voidlight_v2_bindings.json").string();
     {
         std::ofstream f(tmpPath);
         f << "{\n";
@@ -590,7 +590,7 @@ BOOST_AUTO_TEST_CASE(MissingSchemaVersionIsRejected)
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
-    const std::string tmpPath = "/tmp/voidlight_noschema_bindings.json";
+    const std::string tmpPath = (std::filesystem::temp_directory_path() / "voidlight_noschema_bindings.json").string();
     {
         std::ofstream f(tmpPath);
         f << "{\n";
