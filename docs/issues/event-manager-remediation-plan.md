@@ -2,8 +2,8 @@
 
 **Code:** `include/managers/EventManager.hpp`, `src/managers/EventManager.cpp`, `include/core/GameEngine.hpp`, `src/core/GameEngine.cpp`
 
-**Status:** Planned  
-**Priority:** High  
+**Status:** Resolved — superseded by shipped design, verified against current code 2026-07-03
+**Priority:** ~~High~~ (was accurate when written; no longer reflects open work)
 **Scope:** Event delivery contract, handler safety model, lifecycle integration
 
 ## Goal
@@ -197,3 +197,17 @@ Potential policy model:
 - [EventManager](../events/EventManager.md)
 - [GameEngine](../core/GameEngine.md)
 - [ThreadSystem](../core/ThreadSystem.md)
+
+## Resolution (verified 2026-07-03)
+
+Every "Current Problem" and every item in "Acceptance Criteria" is satisfied by shipped code today — but via a simpler mechanism than this plan proposed, not the literal per-event-type policy enum / handler classification table described below. Those two constructs (`DispatchPolicy` enum, `MAIN_THREAD_ONLY`/`ORDER_SENSITIVE`/`PARALLEL_SAFE`/`SHOULD_BE_REWRITTEN` table) do not exist anywhere in the codebase — grepped across `include/`, `src/`, `docs/` and found zero occurrences outside this doc. They were never needed because the actual design makes *all* handler execution main-thread by construction, so no per-handler certification step exists to formalize.
+
+**Problem-by-problem status:**
+
+1. **Deferred contract underspecified** — Resolved. `DispatchMode` is just `enum class DispatchMode : uint8_t { Deferred = 0, Immediate = 1 }` (`EventManager.hpp:209`). A single drain path, `drainDispatchQueueWithBudget()`, runs only from `EventManager::update()`, called directly from `GameEngine`'s main-thread manager sequence (`GameEngine.cpp:1112-1113`) — not enqueued as worker work.
+2. **Blanket threaded dispatch unsafe** — Resolved. No handler ever runs on a worker thread. Non-combat handlers execute inline on the main thread under a `shared_lock` (`EventManager.cpp:1118-1163`). The only `enqueueTaskWithResult` call in the dispatch path is combat *preparation* (read-only EDM lookup), never handler execution.
+3. **Ordering matters for lifecycle** — Resolved. Every deferred event carries a sequence number; the drain merges the combat and non-combat queues back into enqueue order before dispatch (`EventManager.cpp:992-1019`), documented in `EventManager_Advanced.md`.
+4. **State transitions not consistently routed through cleanup** — Resolved (mechanism verified). `prepareForStateTransition()` (`EventManager.cpp:182-211`) waits all pending batch futures, then `clearTransientHandlers()` → `clearPendingDispatchQueues()` → `clearEventPools()`, in that order — persistent (manager-level) handlers survive, transient (state-level) ones don't. Not independently re-verified: every `GameState::exit()` actually calls this in the right relative order against other manager teardown (see [State Transitions](../../CLAUDE.md#state-transitions) for the documented required order).
+5. **Combat special-case needs re-evaluation** — Resolved and safe as implemented. `prepareCombatEvent`/`prepareCombatBatch` run on worker threads but only *read* EDM into a `PreparedCombatEvent` (disjoint per-batch output ranges); all mutation — health, knockback, combat-memory recording, lethal/destroy — happens in `commitPreparedCombatEvent()` on the main thread after the worker sync point (`EventManager.cpp:829-964`). This is the same mechanism verified in [cross-entity-write-race-condition.md](cross-entity-write-race-condition.md).
+
+`docs/events/EventManager.md` and `docs/events/EventManager_Advanced.md` already document this shipped contract and supersede this plan as the authoritative reference — read those for current behavior, not this doc.
