@@ -4,11 +4,11 @@ project(VoidLight_Template VERSION 1.0.0 LANGUAGES C CXX)
 # Set build configurations
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
-        "Choose the type of build (Debug, Release, or Profile)" FORCE)
+        "Choose the type of build (Debug, Release, Profile, or ReleaseSafe)" FORCE)
 endif()
 
 # Define available build configurations
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Profile" CACHE STRING "" FORCE)
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Profile;ReleaseSafe" CACHE STRING "" FORCE)
 
 # Set output directory paths based on build type
 set(OUTPUT_BASE_DIR "${CMAKE_SOURCE_DIR}/bin")
@@ -63,6 +63,24 @@ else()
     set(VOIDLIGHT_AGGRESSIVE_FLAGS
         "-ffunction-sections -fdata-sections -Wl,--gc-sections -ffast-math -ftree-vectorize \
         -funroll-loops -march=x86-64-v3 -mtune=generic -msse4.2 -mavx -mavx2 -mfma")
+endif()
+
+# ReleaseSafe build settings - optimized but with assertions and STL bounds checks preserved
+# Deliberately omits -DNDEBUG so assert()/BOOST_REQUIRE-style checks stay live, and skips
+# the aggressive Release-only flags (-ffast-math, unrolling, wide SIMD) below.
+# STL hardening (VOIDLIGHT_HARDENING_FLAGS) is applied only to our project targets further
+# below, not here, to keep FetchContent dependencies (SDL3, SDL3_ttf, SDL3_mixer) unaffected -
+# same reasoning as VOIDLIGHT_AGGRESSIVE_FLAGS for Release.
+set(CMAKE_C_FLAGS_RELEASESAFE "-O2 -g")
+set(CMAKE_CXX_FLAGS_RELEASESAFE "-O2 -g -Wall -Wextra -Wpedantic")
+
+if(APPLE)
+    # libc++ (Xcode 16.3+/recent LLVM) removed _LIBCPP_ENABLE_ASSERTIONS in favor of
+    # _LIBCPP_HARDENING_MODE. EXTENSIVE covers container bounds/precondition checks,
+    # matching what _GLIBCXX_ASSERTIONS provides on libstdc++ platforms.
+    set(VOIDLIGHT_HARDENING_FLAGS "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE")
+else()
+    set(VOIDLIGHT_HARDENING_FLAGS "-D_GLIBCXX_ASSERTIONS")
 endif()
 
 # Profile build settings - Valgrind-compatible optimized build
@@ -450,6 +468,10 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
 elseif(CMAKE_BUILD_TYPE STREQUAL "Profile")
     # Profile build: Valgrind-compatible optimization (no AVX, SSE4.2 max)
     separate_arguments(_voidlight_opt_flags NATIVE_COMMAND "${VOIDLIGHT_PROFILE_FLAGS}")
+    target_compile_options(VoidLightObjects PRIVATE ${_voidlight_opt_flags})
+elseif(CMAKE_BUILD_TYPE STREQUAL "ReleaseSafe")
+    # ReleaseSafe build: STL hardening (bounds/precondition checks) for our code only
+    separate_arguments(_voidlight_opt_flags NATIVE_COMMAND "${VOIDLIGHT_HARDENING_FLAGS}")
     target_compile_options(VoidLightObjects PRIVATE ${_voidlight_opt_flags})
 endif()
 
