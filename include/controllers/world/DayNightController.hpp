@@ -122,6 +122,13 @@ private:
 
     // Transition timing
     static constexpr float TRANSITION_DURATION{30.0f};  // seconds for full transition
+
+    // True once subscribe() has run at least once. Distinct from
+    // ControllerBase's m_subscribed: that flag also flips on every
+    // resume()-triggered resubscribe after suspend(). Combined with a
+    // same-period check in subscribe(), this prevents re-snapping lighting
+    // or re-dispatching TimePeriodChangedEvent when nothing actually changed.
+    bool m_everInitialized{false};
 };
 
 #endif // DAY_NIGHT_CONTROLLER_HPP

@@ -26,25 +26,38 @@ void DayNightController::subscribe()
     );
     addHandlerToken(timeToken);
 
-    // Initialize to current time period
+    // Recompute period from current game time — GameTimeManager may have
+    // advanced (or been re-initialized) while unsubscribed.
     float currentHour = GameTimeManager::Instance().getGameHour();
-    m_currentPeriod = hourToTimePeriod(currentHour);
-    m_previousPeriod = m_currentPeriod;
+    TimePeriod newPeriod = hourToTimePeriod(currentHour);
 
-    // Initialize lighting to current period (no interpolation needed at start)
-    auto visuals = TimePeriodVisuals::getForPeriod(m_currentPeriod);
-    m_currentR = m_targetR = static_cast<float>(visuals.overlayR);
-    m_currentG = m_targetG = static_cast<float>(visuals.overlayG);
-    m_currentB = m_targetB = static_cast<float>(visuals.overlayB);
-    m_currentA = m_targetA = static_cast<float>(visuals.overlayA);
+    // Only reset lighting / announce the period on true first-ever subscribe,
+    // or if the period actually changed while unsubscribed. A resubscribe via
+    // resume() after suspend() (pause menu) happens with game time frozen
+    // (GameTimeManager global pause), so newPeriod == m_currentPeriod there;
+    // skipping this avoids snapping in-progress lighting interpolation and
+    // re-dispatching a duplicate TimePeriodChangedEvent for an unchanged period.
+    if (!m_everInitialized || newPeriod != m_currentPeriod) {
+        m_previousPeriod = m_everInitialized ? m_currentPeriod : newPeriod;
+        m_currentPeriod = newPeriod;
 
-    // Update GPU with initial lighting state
-    updateGPULighting();
+        // Initialize lighting to current period (no interpolation needed at start)
+        auto visuals = TimePeriodVisuals::getForPeriod(m_currentPeriod);
+        m_currentR = m_targetR = static_cast<float>(visuals.overlayR);
+        m_currentG = m_targetG = static_cast<float>(visuals.overlayG);
+        m_currentB = m_targetB = static_cast<float>(visuals.overlayB);
+        m_currentA = m_targetA = static_cast<float>(visuals.overlayA);
 
-    // Dispatch initial event so subscribers know the current state
-    // This allows GamePlayState (and other subscribers) to set up ambient particles
-    auto event = std::make_shared<TimePeriodChangedEvent>(m_currentPeriod, m_previousPeriod, visuals);
-    eventMgr.dispatchEvent(event, EventManager::DispatchMode::Deferred);
+        // Update GPU with initial lighting state
+        updateGPULighting();
+
+        // Dispatch initial event so subscribers know the current state
+        // This allows GamePlayState (and other subscribers) to set up ambient particles
+        auto event = std::make_shared<TimePeriodChangedEvent>(m_currentPeriod, m_previousPeriod, visuals);
+        eventMgr.dispatchEvent(event, EventManager::DispatchMode::Deferred);
+
+        m_everInitialized = true;
+    }
 
     setSubscribed(true);
     DAYNIGHT_INFO(std::format("Subscribed to time events, period: {}",

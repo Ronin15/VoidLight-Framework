@@ -26,6 +26,7 @@
 #include "common/ControllerSubscriptionTests.hpp"
 #include "common/ControllerSuspendResumeTests.hpp"
 #include "common/ControllerGetNameTests.hpp"
+#include "common/ControllerResubscribeTests.hpp"
 
 // ============================================================================
 // Common ControllerBase Tests (generated via macros)
@@ -210,6 +211,27 @@ BOOST_AUTO_TEST_CASE(TestNightPeriod) {
     m_controller.subscribe();
     BOOST_CHECK(m_controller.getCurrentPeriod() == TimePeriod::Night);
     m_controller.unsubscribe();
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+// --- Resubscribe Tests ---
+
+BOOST_FIXTURE_TEST_SUITE(ResubscribeTests, DayNightControllerFixture)
+
+BOOST_AUTO_TEST_CASE(TestResumeDoesNotReDispatchTimePeriodChangedEvent) {
+    BOOST_REQUIRE(GameTimeManager::Instance().init(12.0f, 1.0f));
+
+    checkNoDuplicateAnnounceOnResume(
+        m_controller,
+        EventTypeId::Time,
+        [](const EventData& data) {
+            if (!data.event) {
+                return false;
+            }
+            const auto* timeEvent = static_cast<const TimeEvent*>(data.event.get());
+            return timeEvent->getTimeEventType() == TimeEventType::TimePeriodChanged;
+        });
 }
 
 BOOST_AUTO_TEST_SUITE_END()
