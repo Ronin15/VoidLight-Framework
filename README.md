@@ -121,6 +121,9 @@ cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja -C build
 # Run the engine
 ./bin/debug/VoidLight_Template   # Debug build
 ./bin/release/VoidLight_Template # Release build
+
+# Fast dev loop: build only the main binary, skipping all test targets
+ninja -C build app
 ```
 
 When `ccache` is installed, CMake enables it by default for C and C++ compilation. Disable it with `-DUSE_CCACHE=OFF` if you need uncached compiler invocations.
