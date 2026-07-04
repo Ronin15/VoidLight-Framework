@@ -100,7 +100,7 @@ static thread_local SpatialQueryCache g_spatialCache;
 // Avoids per-call allocations when callers use GetNearbyPositionBuffer()
 static thread_local std::vector<Vector2D> g_nearbyPositionBuffer;
 
-#ifndef NDEBUG
+VOIDLIGHT_STATS_ONLY(
 static std::atomic<uint64_t> g_queryCount{0};
 static std::atomic<uint64_t> g_cacheHits{0};
 static std::atomic<uint64_t> g_cacheMisses{0};
@@ -122,15 +122,13 @@ inline void recordCrowdResults(int count) {
   g_resultsCount.fetch_add(static_cast<uint64_t>(count),
                            std::memory_order_relaxed);
 }
-#endif
+)
 
 int CountNearbyEntities(EntityID excludeId, const Vector2D &center,
                         float radius) {
   const auto &cm = CollisionManager::Instance();
 
-#ifndef NDEBUG
-  recordCrowdQuery();
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
   // Use thread-local vector to avoid repeated allocations
   static thread_local std::vector<EntityID> queryResults;
@@ -142,9 +140,7 @@ int CountNearbyEntities(EntityID excludeId, const Vector2D &center,
 
   // PERFORMANCE: Check spatial cache before expensive queryArea call
   bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
-#ifndef NDEBUG
-  recordCrowdCache(cacheHit);
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
   if (!cacheHit) {
     // Cache miss - perform actual collision query
     VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
@@ -161,9 +157,7 @@ int CountNearbyEntities(EntityID excludeId, const Vector2D &center,
         return id != excludeId && (cm.isDynamic(id) || cm.isKinematic(id)) &&
                !cm.isTrigger(id);
       }));
-#ifndef NDEBUG
-  recordCrowdResults(count);
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdResults(count);)
   return count;
 }
 
@@ -174,9 +168,7 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center,
 
   const auto &cm = CollisionManager::Instance();
 
-#ifndef NDEBUG
-  recordCrowdQuery();
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
   // Use thread-local vector to avoid repeated allocations
   static thread_local std::vector<EntityID> queryResults;
@@ -188,9 +180,7 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center,
 
   // PERFORMANCE: Check spatial cache before expensive queryArea call
   bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
-#ifndef NDEBUG
-  recordCrowdCache(cacheHit);
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
   if (!cacheHit) {
     // Cache miss - perform actual collision query
     VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
@@ -214,9 +204,7 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center,
   }
 
   int count = static_cast<int>(outPositions.size());
-#ifndef NDEBUG
-  recordCrowdResults(count);
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdResults(count);)
   return count;
 }
 
@@ -228,7 +216,7 @@ void InvalidateSpatialCache(uint64_t frameNumber) {
   g_authoritativeFrame.store(frameNumber, std::memory_order_relaxed);
 }
 
-#ifndef NDEBUG
+VOIDLIGHT_STATS_ONLY(
 CrowdStats GetCrowdStats() {
   CrowdStats stats{};
   stats.queryCount = g_queryCount.load(std::memory_order_relaxed);
@@ -244,7 +232,7 @@ void ResetCrowdStats() {
   g_cacheMisses.store(0, std::memory_order_relaxed);
   g_resultsCount.store(0, std::memory_order_relaxed);
 }
-#endif
+)
 
 std::vector<Vector2D> &GetNearbyPositionBuffer() { return g_nearbyPositionBuffer; }
 

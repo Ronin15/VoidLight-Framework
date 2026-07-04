@@ -157,16 +157,12 @@ int main(int argc, char* argv[]) {
 
         // Configure threading mode
         if (config.threadingMode == "single") {
-            #ifndef NDEBUG
-            AIManager::Instance().enableThreading(false);
-            #endif
+            VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(false);)
             if (config.verbose) {
                 std::cout << "[CONFIG] Threading DISABLED (single-threaded mode)\n";
             }
         } else if (config.threadingMode == "multi") {
-            #ifndef NDEBUG
-            AIManager::Instance().enableThreading(true);
-            #endif
+            VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
             if (config.verbose) {
                 std::cout << "[CONFIG] Threading ENABLED (multi-threaded mode)\n";
             }

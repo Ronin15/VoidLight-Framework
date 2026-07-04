@@ -116,14 +116,14 @@ bool GamePlayState::enter() {
 
     // Enable automatic weather changes
     gameTimeMgr.enableAutoWeather(true);
-#ifdef NDEBUG
-    // Release: normal pacing
-    gameTimeMgr.setWeatherCheckInterval(4.0f);
-    gameTimeMgr.setTimeScale(60.0f);
-#else
+#ifdef DEBUG
     // Debug: faster changes for testing seasons/weather
     gameTimeMgr.setWeatherCheckInterval(1.0f);
     gameTimeMgr.setTimeScale(3600.0f);
+#else
+    // Release/ReleaseSafe/Profile: normal pacing
+    gameTimeMgr.setWeatherCheckInterval(4.0f);
+    gameTimeMgr.setTimeScale(60.0f);
 #endif
 
     // Cache UI manager reference for better performance
@@ -691,7 +691,7 @@ void GamePlayState::handleInput() {
     m_controllers.get<CombatController>()->tryAttack();
   }
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Debug: R to spawn a hostile Warrior NPC near player (test hook)
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
     auto& edm = EntityDataManager::Instance();
@@ -721,7 +721,7 @@ void GamePlayState::handleInput() {
 
     edm.createProjectile(spawnPos, velocity, playerHandle, 15.0f, 3.0f);
   }
-#endif
+  )
 
   // Interaction — trade/pickup/harvest command (default: E, rebindable)
   if (inputMgr.isCommandPressed(InputManager::Command::Interact) && mp_Player) {
@@ -745,7 +745,7 @@ void GamePlayState::handleInput() {
     m_camera->zoomOut();
   }
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Debug time speed controls: < (comma) = normal speed, > (period) = max speed
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_COMMA)) {
     gameTimeMgr.setTimeScale(60.0f);
@@ -757,7 +757,7 @@ void GamePlayState::handleInput() {
     GAMEPLAY_INFO("Time scale set to MAX (3600x)");
     ui.addEventLogEntry("event_log", "Time: MAX speed (3600x)");
   }
-#endif
+  )
 
   // Mouse input for world interaction
   if (inputMgr.getMouseButtonState(LEFT) && m_camera) {

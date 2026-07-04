@@ -152,6 +152,7 @@ void GPURenderer::shutdown() {
     m_spriteOpaquePipeline.release();
     m_spriteAlphaPipeline.release();
     m_particlePipeline.release();
+    m_particlePipelineAdditive.release();
     m_primitivePipeline.release();
     m_compositePipeline.release();
     m_uiSpritePipeline.release();
@@ -191,6 +192,7 @@ void GPURenderer::cleanupPartialInit() {
     m_spriteOpaquePipeline.release();
     m_spriteAlphaPipeline.release();
     m_particlePipeline.release();
+    m_particlePipelineAdditive.release();
     m_primitivePipeline.release();
     m_compositePipeline.release();
     m_uiSpritePipeline.release();
@@ -493,6 +495,10 @@ SDL_GPUGraphicsPipeline* GPURenderer::getSpriteAlphaPipeline() const {
 
 SDL_GPUGraphicsPipeline* GPURenderer::getParticlePipeline() const {
     return m_particlePipeline.get();
+}
+
+SDL_GPUGraphicsPipeline* GPURenderer::getParticlePipelineAdditive() const {
+    return m_particlePipelineAdditive.get();
 }
 
 SDL_GPUGraphicsPipeline* GPURenderer::getPrimitivePipeline() const {
@@ -832,9 +838,23 @@ bool GPURenderer::createPipelines() {
         auto config = GPUPipeline::createParticleConfig(
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
-            sceneFormat
+            sceneFormat,
+            false  // alpha
         );
         if (!m_particlePipeline.create(m_device, config)) {
+            return false;
+        }
+    }
+
+    // Additive particle pipeline (glow effects: fireflies, fire, sparks)
+    {
+        auto config = GPUPipeline::createParticleConfig(
+            shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
+            shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
+            sceneFormat,
+            true  // additive
+        );
+        if (!m_particlePipelineAdditive.create(m_device, config)) {
             return false;
         }
     }

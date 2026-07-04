@@ -61,7 +61,7 @@ enum class RenderPhase : uint8_t {
     COUNT
 };
 
-#ifndef NDEBUG
+#ifdef VOIDLIGHT_FRAME_PROFILER_ENABLED
 
 /**
  * @brief Debug-only frame profiler for detecting and reporting hitches
@@ -341,7 +341,7 @@ private:
 #define PROFILE_RENDER(r) VoidLight::ScopedRenderTimer VOIDLIGHT_PROFILE_CONCAT(_scopedRenderTimer, __LINE__)(r)
 #define PROFILE_RENDER_GPU(r) VoidLight::ScopedRenderTimerGPU VOIDLIGHT_PROFILE_CONCAT(_scopedRenderTimerGPU, __LINE__)(r)
 
-#else  // NDEBUG - Release build
+#else  // VOIDLIGHT_FRAME_PROFILER_ENABLED - Release build (stub)
 
 // Stub class for release builds - completely empty
 class FrameProfiler {
@@ -381,7 +381,7 @@ public:
 #define PROFILE_RENDER(r) ((void)0)
 #define PROFILE_RENDER_GPU(r) ((void)0)
 
-#endif  // NDEBUG
+#endif  // VOIDLIGHT_FRAME_PROFILER_ENABLED
 
 }  // namespace VoidLight
 

@@ -109,9 +109,7 @@ struct EventManagerFixture {
 
   ~EventManagerFixture() {
     // Disable threading before cleanup
-    #ifndef NDEBUG
-    EventManager::Instance().enableThreading(false);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(false);)
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
     // Clean up the EventManager
@@ -513,7 +511,7 @@ BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManage
 
 // ==================== Threading Control Tests (Debug Only) ====================
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 BOOST_FIXTURE_TEST_CASE(DynamicThreadingControl, EventManagerFixture) {
   EventManager::Instance().clean();
   BOOST_REQUIRE(EventManager::Instance().init());
@@ -547,7 +545,7 @@ BOOST_FIXTURE_TEST_CASE(DynamicThreadingControl, EventManagerFixture) {
 
   EventManager::Instance().enableThreading(false);
 }
-#endif // NDEBUG
+)
 
 // ==================== Additional Trigger Method Tests ====================
 

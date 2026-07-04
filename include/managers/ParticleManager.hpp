@@ -22,6 +22,7 @@
  * - Thread-safe design with minimal lock contention
  */
 
+#include "core/Logger.hpp"
 #include "managers/ParticleEffectType.hpp"
 #include "utils/Vector2D.hpp"
 #include <SDL3/SDL.h>
@@ -181,6 +182,8 @@ struct UnifiedParticle {
   static constexpr uint8_t FLAG_FADE_OUT = 1 << 5;
   static constexpr uint8_t FLAG_RECENTLY_DEACTIVATED =
       1 << 6; // Marks particle for pool collection (single-thread)
+  static constexpr uint8_t FLAG_ADDITIVE =
+      1 << 7; // Render with additive GPU blending instead of alpha
 
   UnifiedParticle()
       : position(0, 0), velocity(0, 0), acceleration(0, 0), life(0.0f),
@@ -526,10 +529,10 @@ public:
    */
   void setCameraViewport(float x, float y, float width, float height);
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Threading configuration (benchmarking only - compiles out in release)
   void enableThreading(bool enable);
-#endif
+  )
 
   /**
    * @brief Enables WorkerBudget-aware threading with intelligent resource
@@ -834,7 +837,7 @@ private:
   std::atomic<bool> m_isShutdown{false};
   std::atomic<bool> m_globallyPaused{false};
   std::atomic<bool> m_globallyVisible{true};
-  std::atomic<bool> m_useThreading{true};
+  VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
   std::atomic<bool> m_useWorkerBudget{true};
   // Threading threshold now managed by WorkerBudget adaptive system
 
@@ -849,6 +852,12 @@ private:
     float x{0}, y{0}, width{1920}, height{1080};
     float margin{100}; // Extra margin for smooth culling
   } m_viewport;
+
+  // Split point in the GPU vertex pool between alpha-blended particle quads
+  // (written first, [0, m_alphaVertexCount)) and additive-blended ones
+  // (written second, [m_alphaVertexCount, total)). Set by recordGPUVertices(),
+  // consumed by renderGPU() to issue two draw calls with two pipelines.
+  size_t m_alphaVertexCount{0};
 
   // Lock-free synchronization - no mutexes needed for particles
   // m_effectsMutex guards effect instances/definitions; access is exclusive

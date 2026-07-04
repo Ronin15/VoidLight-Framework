@@ -675,7 +675,7 @@ bool CollisionManager::isGloballyPaused() const {
 }
 
 void CollisionManager::logCollisionStatistics() const {
-#ifndef NDEBUG
+   VOIDLIGHT_STATS_ONLY(
    // Only recalculate expensive statistics when dirty
    if (m_statisticsDirty) {
      m_cachedStaticBodies = getStaticBodyCount();
@@ -757,7 +757,7 @@ void CollisionManager::logCollisionStatistics() const {
      }
      COLLISION_INFO(std::format("    {}: {}", layerName, layerCount.second));
    }
-#endif
+   )
 }
 
 size_t CollisionManager::getStaticBodyCount() const {
@@ -815,7 +815,7 @@ void CollisionManager::rebuildStaticFromWorld() {
         std::format("World colliders built: solid={}, water triggers={}",
                     solidBodies, waterTriggers));
 
-#ifndef NDEBUG
+    VOIDLIGHT_STATS_ONLY(
     int buildingBodyCount = 0;
     for (size_t i = 0; i < m_storage.entityIds.size(); ++i) {
       EntityID id = m_storage.entityIds[i];
@@ -831,7 +831,7 @@ void CollisionManager::rebuildStaticFromWorld() {
     COLLISION_INFO(std::format(
         "Total building collision bodies in storage: {}", buildingBodyCount));
     logCollisionStatistics();
-#endif
+    )
 
     rebuildStaticSpatialHashUnlocked();
   }

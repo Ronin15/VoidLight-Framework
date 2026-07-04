@@ -5,7 +5,7 @@
 
 #include "utils/FrameProfiler.hpp"
 
-#ifndef NDEBUG
+#ifdef VOIDLIGHT_FRAME_PROFILER_ENABLED
 
 #include "core/Logger.hpp"
 #include "managers/UIConstants.hpp"
@@ -423,4 +423,4 @@ void FrameProfiler::updateOverlayText()
 
 }  // namespace VoidLight
 
-#endif  // NDEBUG
+#endif  // VOIDLIGHT_FRAME_PROFILER_ENABLED

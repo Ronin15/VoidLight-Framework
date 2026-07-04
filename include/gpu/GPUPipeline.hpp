@@ -107,11 +107,15 @@ public:
                                               bool alpha);
 
     /**
-     * Create a particle pipeline configuration (additive blending).
+     * Create a particle pipeline configuration.
+     * @param additive If true, particles add onto the scene (glow effects
+     *                 like fireflies/fire/sparks); if false, standard alpha
+     *                 blending.
      */
     static PipelineConfig createParticleConfig(SDL_GPUShader* vertShader,
                                                 SDL_GPUShader* fragShader,
-                                                SDL_GPUTextureFormat colorFormat);
+                                                SDL_GPUTextureFormat colorFormat,
+                                                bool additive = false);
 
     /**
      * Create a primitive (colored quad) pipeline configuration.

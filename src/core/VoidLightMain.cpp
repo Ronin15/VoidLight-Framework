@@ -105,14 +105,14 @@ int main(int, char*[]) {
   // Get TimestepManager reference for main loop
   TimestepManager& ts = gameEngine.getTimestepManager();
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Update performance tracking (DEBUG only)
   static constexpr size_t PERF_SAMPLE_COUNT = 10;
   std::array<double, PERF_SAMPLE_COUNT> updateSamples{};
   size_t sampleIndex = 0;
   size_t intervalUpdateIterations = 0;
   auto lastPerfLogTime = std::chrono::high_resolution_clock::now();
-#endif
+  )
 
   // Main game loop - classic fixed timestep pattern
   // Updates drain accumulator, THEN render reads alpha - no race conditions
@@ -132,25 +132,23 @@ int main(int, char*[]) {
     }
 
     // Fixed timestep updates - run until accumulator is drained
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     auto updateStart = std::chrono::high_resolution_clock::now();
     size_t updateIterations = 0;
-#endif
+    )
 
     {
       PROFILE_PHASE(VoidLight::FramePhase::Update);
       while (gameEngine.isRunning() && ts.shouldUpdate()) {
         gameEngine.update(ts.getUpdateDeltaTime());
-#ifndef NDEBUG
-        ++updateIterations;
-#endif
+        VOIDLIGHT_DEBUG_ONLY(++updateIterations;)
       }
     }
     if (!gameEngine.isRunning()) {
       break;
     }
 
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     auto updateEnd = std::chrono::high_resolution_clock::now();
     double updateMs = std::chrono::duration<double, std::milli>(updateEnd - updateStart).count();
     updateSamples[sampleIndex++ % PERF_SAMPLE_COUNT] = updateMs;
@@ -170,7 +168,7 @@ int main(int, char*[]) {
                                    ts.isUsingSoftwareFrameLimiting()));
       intervalUpdateIterations = 0;
     }
-#endif
+    )
 
     // Render with interpolation alpha (calculated from remaining accumulator)
     {

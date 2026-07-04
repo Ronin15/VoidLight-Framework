@@ -487,10 +487,6 @@ private:
     std::vector<std::future<void>> m_reusableGridRebuildFutures;  // Swap target to preserve capacity
     std::mutex m_gridRebuildFuturesMutex;
 
-    // WorkerBudget integration for coordinated batch processing
-    std::vector<std::future<void>> m_batchFutures;
-    std::vector<std::future<void>> m_reusableBatchFutures;  // Swap target to preserve capacity
-    // No mutex needed: update and state transitions never run concurrently
 
     struct PathCompletion {
         static constexpr size_t MAX_WAYPOINTS = 32;
@@ -527,9 +523,6 @@ private:
     // Auto-scaling cache optimization
     void calculateOptimalCacheSettings(); // Calculate dynamic parameters based on world size
     void prewarmPathCache(); // Seed cache with sector-based paths for fast warmup
-
-    // Batch completion synchronization
-    void waitForBatchCompletion(); // Wait for all pending batch futures to complete
 
     // Event handlers
     void onCollisionObstacleChanged(const Vector2D& position, float radius, const std::string& description);

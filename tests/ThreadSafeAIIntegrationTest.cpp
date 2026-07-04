@@ -13,6 +13,7 @@
 #include <thread>
 #include <vector>
 
+#include "core/Logger.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/PathfinderManager.hpp"
@@ -76,9 +77,7 @@ struct GlobalTestFixture {
         if (!AIManager::Instance().init()) {
             throw std::runtime_error("AIManager::init() failed");
         }
-        #ifndef NDEBUG
-        AIManager::Instance().enableThreading(true);
-        #endif
+        VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
     }
 
     ~GlobalTestFixture() {

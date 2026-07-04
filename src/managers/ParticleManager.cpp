@@ -496,11 +496,15 @@ ParticleManager::LockFreeParticleStorage::getCurrentBuffer() {
 // Submit new particle implementation
 bool ParticleManager::LockFreeParticleStorage::submitNewParticle(
     const NewParticleRequest &request) {
+  const uint8_t blendFlag = request.blendMode == ParticleBlendMode::Additive
+                                ? UnifiedParticle::FLAG_ADDITIVE
+                                : 0;
   return tryCreateParticle(request.position, request.velocity,
                            request.acceleration, request.color, request.life,
                            request.size, /*textureIndex*/
                            static_cast<uint8_t>(UnifiedParticle::FLAG_ACTIVE |
-                                                UnifiedParticle::FLAG_VISIBLE),
+                                                UnifiedParticle::FLAG_VISIBLE |
+                                                blendFlag),
                            0, request.effectType);
 }
 
@@ -901,9 +905,9 @@ void ParticleManager::update(float deltaTime) {
                         .count() /
                     1000.0;
 
-#ifndef NDEBUG
-    // Interval stats logging - zero overhead in release (entire block compiles
-    // out)
+    VOIDLIGHT_STATS_ONLY(
+    // Interval stats logging - zero overhead outside Debug/ReleaseSafe (entire
+    // block compiles out)
     static thread_local uint64_t logFrameCounter = 0;
     if (++logFrameCounter % 2400 ==
         0) { // ~40 seconds at 60fps (staggered: AI@30s, Collision@35s)
@@ -926,7 +930,7 @@ void ParticleManager::update(float deltaTime) {
         }
       }
     }
-#endif
+    )
 
     // Report tight per-path timing for adaptive tuning (not
     // preprocessing/postprocessing)
@@ -979,25 +983,18 @@ void ParticleManager::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
   size_t maxVertices = vertexPool.getMaxVertices();
   size_t vertexOffset = 0;
 
-  for (size_t i = 0; i < n; ++i) {
-    if (!(particles.flags[i] & UnifiedParticle::FLAG_ACTIVE) ||
-        !(particles.flags[i] & UnifiedParticle::FLAG_VISIBLE))
-      continue;
+  // Emits one particle's quad at the current vertexOffset. Returns false if
+  // there was no room (caller should stop the pass).
+  auto emitQuad = [&](size_t i) -> bool {
+    if (vertexOffset + VERTICES_PER_QUAD > maxVertices)
+      return false;
 
     const uint32_t c = particles.colors[i];
-    const uint8_t a8 = c & 0xFF;
-    if (a8 == 0)
-      continue;
-
-    // Check we have space for another quad
-    if (vertexOffset + VERTICES_PER_QUAD > maxVertices)
-      break;
-
     // Extract RGBA (stored as RGBA in uint32_t)
     const uint8_t r = static_cast<uint8_t>((c >> 24) & 0xFF);
     const uint8_t g = static_cast<uint8_t>((c >> 16) & 0xFF);
     const uint8_t b = static_cast<uint8_t>((c >> 8) & 0xFF);
-    const uint8_t a = a8;
+    const uint8_t a = c & 0xFF;
 
     const float size = particles.sizes[i];
 
@@ -1039,6 +1036,34 @@ void ParticleManager::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
     writeVertex(x2, y2);
     writeVertex(x3, y3);
     writeVertex(x0, y0);
+    return true;
+  };
+
+  auto isRenderable = [&](size_t i) {
+    if (!(particles.flags[i] & UnifiedParticle::FLAG_ACTIVE) ||
+        !(particles.flags[i] & UnifiedParticle::FLAG_VISIBLE))
+      return false;
+    return (particles.colors[i] & 0xFF) != 0; // alpha != 0
+  };
+
+  // Pass 1: alpha-blended particles, written first so they occupy
+  // [0, m_alphaVertexCount).
+  for (size_t i = 0; i < n; ++i) {
+    if (!isRenderable(i) || (particles.flags[i] & UnifiedParticle::FLAG_ADDITIVE))
+      continue;
+    if (!emitQuad(i))
+      break;
+  }
+  m_alphaVertexCount = vertexOffset;
+
+  // Pass 2: additive-blended particles (fireflies/fire/sparks), written
+  // second so renderGPU() can draw them as a separate batch with the
+  // additive pipeline via a [m_alphaVertexCount, total) vertex range.
+  for (size_t i = 0; i < n; ++i) {
+    if (!isRenderable(i) || !(particles.flags[i] & UnifiedParticle::FLAG_ADDITIVE))
+      continue;
+    if (!emitQuad(i))
+      break;
   }
 
   // Record actual vertex count written
@@ -1073,21 +1098,33 @@ void ParticleManager::renderGPU(VoidLight::GPURenderer &gpuRenderer,
   // Push view-projection matrix
   gpuRenderer.pushViewProjection(scenePass, orthoMatrix);
 
-  // Bind particle pipeline
-  SDL_GPUGraphicsPipeline *particlePipeline = gpuRenderer.getParticlePipeline();
-  if (!particlePipeline)
-    return;
-
-  SDL_BindGPUGraphicsPipeline(scenePass, particlePipeline);
-
-  // Bind vertex buffer
+  // Bind vertex buffer (shared by both draw calls below)
   SDL_GPUBufferBinding vertexBinding{};
   vertexBinding.buffer = vertexPool.getGPUBuffer();
   vertexBinding.offset = 0;
   SDL_BindGPUVertexBuffers(scenePass, 0, &vertexBinding, 1);
 
-  // Draw particles
-  SDL_DrawGPUPrimitives(scenePass, static_cast<uint32_t>(vertexCount), 1, 0, 0);
+  // recordGPUVertices() writes alpha-blended particles first, then
+  // additive-blended ones -- draw them as two batches with two pipelines.
+  const size_t alphaCount = std::min(m_alphaVertexCount, vertexCount);
+  const size_t additiveCount = vertexCount - alphaCount;
+
+  if (alphaCount > 0) {
+    SDL_GPUGraphicsPipeline *alphaPipeline = gpuRenderer.getParticlePipeline();
+    if (alphaPipeline) {
+      SDL_BindGPUGraphicsPipeline(scenePass, alphaPipeline);
+      SDL_DrawGPUPrimitives(scenePass, static_cast<uint32_t>(alphaCount), 1, 0, 0);
+    }
+  }
+
+  if (additiveCount > 0) {
+    SDL_GPUGraphicsPipeline *additivePipeline = gpuRenderer.getParticlePipelineAdditive();
+    if (additivePipeline) {
+      SDL_BindGPUGraphicsPipeline(scenePass, additivePipeline);
+      SDL_DrawGPUPrimitives(scenePass, static_cast<uint32_t>(additiveCount), 1,
+                            static_cast<uint32_t>(alphaCount), 0);
+    }
+  }
 }
 
 uint32_t ParticleManager::playEffect(ParticleEffectType effectType,
@@ -2794,9 +2831,11 @@ void ParticleManager::enableWorkerBudgetThreading(bool enable) {
   m_useWorkerBudget.store(enable, std::memory_order_release);
 
   // When enabled, ensure main threading is also enabled
+  VOIDLIGHT_DEBUG_ONLY(
   if (enable) {
     m_useThreading.store(true, std::memory_order_release);
   }
+  )
 
   PARTICLE_INFO(std::format("WorkerBudget threading {}",
                             enable ? "enabled" : "disabled"));
@@ -2825,12 +2864,12 @@ void ParticleManager::updateWithWorkerBudget(
                           activeParticleCount, outThreadingInfo);
 }
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 void ParticleManager::enableThreading(bool enable) {
   m_useThreading.store(enable, std::memory_order_release);
   PARTICLE_INFO(std::format("Threading {}", enable ? "enabled" : "disabled"));
 }
-#endif
+)
 
 // Helper methods for enum-based classification system
 ParticleEffectType

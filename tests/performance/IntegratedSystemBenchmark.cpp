@@ -303,9 +303,7 @@ namespace {
             PathfinderManager::Instance().rebuildGrid();
             BOOST_REQUIRE(CollisionManager::Instance().init());
             BOOST_REQUIRE(AIManager::Instance().init());
-            #ifndef NDEBUG
-            AIManager::Instance().enableThreading(true);
-            #endif
+            VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
             BOOST_REQUIRE(ParticleManager::Instance().init());  // Initialize without texture manager
             ParticleManager::Instance().registerBuiltInEffects();
 

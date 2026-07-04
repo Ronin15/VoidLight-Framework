@@ -17,6 +17,7 @@
  * - Built-in processing for selected engine-level event types
  */
 
+#include "core/Logger.hpp"
 #include "entities/EntityHandle.hpp"
 #include "events/EventTypeId.hpp"
 #include "utils/ResourceHandle.hpp"
@@ -332,11 +333,11 @@ public:
 
   // ==================== Global Controls ====================
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Threading control (benchmarking only - compiles out in release)
   void enableThreading(bool enable);
   bool isThreadingEnabled() const;
-#endif
+  )
 
   /**
    * @brief Sets global pause state (for menu states)
@@ -524,7 +525,7 @@ private:
 
   // Threading and synchronization
   mutable std::shared_mutex m_handlersMutex;
-  std::atomic<bool> m_threadingEnabled{true};
+  VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_threadingEnabled{true};)
   std::atomic<bool> m_initialized{false};
   std::atomic<bool> m_globallyPaused{false};
 
@@ -559,6 +560,14 @@ private:
   mutable std::vector<PendingDispatch> m_localCombatDispatchBuffer;
   mutable std::vector<PreparedCombatEvent> m_preparedCombatBuffer;
   mutable std::vector<std::future<void>> m_combatPrepFutures;
+
+  // Snapshot of m_handlersByType taken once per drain, under m_handlersMutex,
+  // then used lock-free for the rest of drainDispatchQueueWithBudget(). Safe
+  // as a reused member (not a local): this function has exactly one caller
+  // (EventManager::update(), main-thread, once per frame) and is not itself
+  // reentrant, so nothing can clobber it mid-use.
+  mutable std::array<std::vector<HandlerEntry>, static_cast<size_t>(EventTypeId::COUNT)>
+      m_handlersSnapshotBuffer;
 
   void dispatchPendingEvent(const PendingDispatch& pendingDispatch,
                             std::string_view errorContext) const;

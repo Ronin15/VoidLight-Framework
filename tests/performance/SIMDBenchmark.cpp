@@ -44,10 +44,10 @@ std::string getDetectedSIMDPlatform() {
 }
 
 std::string getBuildConfiguration() {
-#ifdef NDEBUG
-    return "Release";
-#else
+#ifdef DEBUG
     return "Debug";
+#else
+    return "Release";
 #endif
 }
 
@@ -728,8 +728,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkAIDistanceCalculation) {
         std::cout << "\nCLAUDE.md claim: 3-4x speedup in Release builds" << std::endl;
         std::cout << "Measured: " << result.speedup << "x in " << getBuildConfiguration() << " build" << std::endl;
 
-#ifdef NDEBUG
-        // Release build: Require actual speedup
+#ifndef DEBUG
+        // Optimized build (Release/ReleaseSafe/Profile): Require actual speedup
         BOOST_REQUIRE_GE(result.speedup, MIN_SPEEDUP_THRESHOLD);
         if (result.speedup >= 3.0f) {
             std::cout << "Performance: Meets or exceeds claimed speedup" << std::endl;
@@ -751,8 +751,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkCollisionBoundsExpansion) {
     result.print();
 
     if (isSIMDAvailable()) {
-#ifdef NDEBUG
-        // Release build: Compiler auto-vectorization is very effective for this pattern
+#ifndef DEBUG
+        // Optimized build (Release/ReleaseSafe/Profile): Compiler auto-vectorization is very effective for this pattern
         // SIMD benefit comes from pipeline integration in real code, not isolated operations
         if (result.speedup >= 0.95f) {
             std::cout << "\nNote: Performance parity with scalar (compiler auto-vectorization)" << std::endl;
@@ -798,8 +798,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkParticlePhysicsUpdate) {
     result.print();
 
     if (isSIMDAvailable()) {
-#ifdef NDEBUG
-        // Release build: Require actual speedup
+#ifndef DEBUG
+        // Optimized build (Release/ReleaseSafe/Profile): Require actual speedup
         BOOST_REQUIRE_GE(result.speedup, MIN_SPEEDUP_THRESHOLD);
 #else
         // Debug build: Just verify correctness

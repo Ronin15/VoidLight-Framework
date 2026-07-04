@@ -83,6 +83,7 @@ public:
     SDL_GPUGraphicsPipeline* getSpriteOpaquePipeline() const;
     SDL_GPUGraphicsPipeline* getSpriteAlphaPipeline() const;
     SDL_GPUGraphicsPipeline* getParticlePipeline() const;
+    SDL_GPUGraphicsPipeline* getParticlePipelineAdditive() const;
     SDL_GPUGraphicsPipeline* getPrimitivePipeline() const;
     SDL_GPUGraphicsPipeline* getCompositePipeline() const;
 
@@ -219,6 +220,7 @@ private:
     GPUPipeline m_spriteOpaquePipeline;
     GPUPipeline m_spriteAlphaPipeline;
     GPUPipeline m_particlePipeline;
+    GPUPipeline m_particlePipelineAdditive;
     GPUPipeline m_primitivePipeline;
     GPUPipeline m_compositePipeline;
 

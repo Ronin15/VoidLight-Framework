@@ -157,6 +157,17 @@ public:
 #define VOIDLIGHT_DEBUG_ONLY(...)
 #endif
 
+// Stats/telemetry code block — compiles into Debug and ReleaseSafe (the
+// soak-testing tier; see VOIDLIGHT_STATS_ENABLED in CMakeLists.txt) but
+// never into Release or Profile, regardless of NDEBUG. Use this instead of
+// VOIDLIGHT_DEBUG_ONLY for counters/telemetry that are acceptable overhead
+// during extended playtesting but must not ship in the final build.
+#if defined(DEBUG) || defined(VOIDLIGHT_STATS_ENABLED)
+#define VOIDLIGHT_STATS_ONLY(...) __VA_ARGS__
+#else
+#define VOIDLIGHT_STATS_ONLY(...)
+#endif
+
 // Convenience macros for each manager and core system
 
 // Core Systems

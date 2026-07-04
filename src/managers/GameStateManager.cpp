@@ -84,18 +84,53 @@ void GameStateManager::popState() {
 }
 
 void GameStateManager::changeState(GameStateId stateId) {
-  // Pop the current state if one exists (waits for exit to complete)
-  if (!m_activeStates.empty()) {
-    popState();
+  auto it = m_registeredStates.find(stateId);
+  if (it == m_registeredStates.end()) {
+    GAMESTATE_ERROR(std::format("State not found: {}", static_cast<int>(stateId)));
+    return;
   }
-  // Push the new state (waits for enter to complete)
-  pushState(stateId);
+
+  // Suppress profiler hitch detection during state transition
+  VoidLight::FrameProfiler::Instance().suppressFrames(5);
+
+  // CRITICAL: Enter the new state BEFORE exiting the old one. If enter()
+  // fails, the old state must still be fully active (never paused/exited)
+  // so the stack can't be left empty with no way to recover.
+  auto newState = it->second;
+  if (!newState->enter()) {
+    GAMESTATE_ERROR(std::format("Failed to enter state: {}", static_cast<int>(stateId)));
+    return;
+  }
+
+  if (!m_activeStates.empty()) {
+    auto currentState = m_activeStates.back();
+    currentState->exit(); // Wait for exit to complete fully
+    m_activeStates.pop_back();
+  }
+
+  m_activeStates.push_back(newState);
+  GAMESTATE_INFO(std::format("Changed state to: {}", static_cast<int>(stateId)));
 }
 
 void GameStateManager::changeStateClearingStack(GameStateId stateId) {
+  auto it = m_registeredStates.find(stateId);
+  if (it == m_registeredStates.end()) {
+    GAMESTATE_ERROR(std::format("State not found: {}", static_cast<int>(stateId)));
+    return;
+  }
+
   if (!m_activeStates.empty()) {
     // Suppress profiler hitch detection during state transition
     VoidLight::FrameProfiler::Instance().suppressFrames(5);
+  }
+
+  // CRITICAL: Enter the new state BEFORE exiting the old stack, for the same
+  // reason as changeState() above -- a failed enter() must leave the
+  // existing stack untouched rather than emptied with no recovery path.
+  auto newState = it->second;
+  if (!newState->enter()) {
+    GAMESTATE_ERROR(std::format("Failed to enter state: {}", static_cast<int>(stateId)));
+    return;
   }
 
   while (!m_activeStates.empty()) {
@@ -104,7 +139,8 @@ void GameStateManager::changeStateClearingStack(GameStateId stateId) {
     m_activeStates.pop_back();
   }
 
-  pushState(stateId);
+  m_activeStates.push_back(newState);
+  GAMESTATE_INFO(std::format("Changed state (clearing stack) to: {}", static_cast<int>(stateId)));
 }
 
 void GameStateManager::update(float deltaTime) {

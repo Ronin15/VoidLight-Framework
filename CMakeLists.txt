@@ -22,19 +22,19 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR})
 # Debug build settings
 if(APPLE)
     # macOS-specific debug flags with dSYM generation and LLDB compatibility
-    set(CMAKE_C_FLAGS_DEBUG 
-        "-g3 -O0 -gdwarf-4 -glldb -fno-limit-debug-info -DDEBUG")
+    set(CMAKE_C_FLAGS_DEBUG
+        "-g3 -O0 -gdwarf-4 -glldb -fno-limit-debug-info -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
     set(CMAKE_CXX_FLAGS_DEBUG
-        "-g3 -O0 -Wall -Wextra -Wpedantic -gdwarf-4 -glldb -fno-limit-debug-info -fstandalone-debug -DDEBUG")
+        "-g3 -O0 -Wall -Wextra -Wpedantic -gdwarf-4 -glldb -fno-limit-debug-info -fstandalone-debug -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
     
     # Ensure debug symbols are preserved (don't strip them)
     set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -g")
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -g")
 else()
     # Other platforms
-    set(CMAKE_C_FLAGS_DEBUG 
-        "${CMAKE_C_FLAGS_DEBUG} -g3 -O0 -DDEBUG")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g3 -O0 -Wall -Wextra -Wpedantic -DDEBUG")
+    set(CMAKE_C_FLAGS_DEBUG
+        "${CMAKE_C_FLAGS_DEBUG} -g3 -O0 -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g3 -O0 -Wall -Wextra -Wpedantic -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
 endif()
 
 # Release build settings - keep minimal safe flags for dependencies (SDL3 etc.)
@@ -71,8 +71,11 @@ endif()
 # STL hardening (VOIDLIGHT_HARDENING_FLAGS) is applied only to our project targets further
 # below, not here, to keep FetchContent dependencies (SDL3, SDL3_ttf, SDL3_mixer) unaffected -
 # same reasoning as VOIDLIGHT_AGGRESSIVE_FLAGS for Release.
-set(CMAKE_C_FLAGS_RELEASESAFE "-O2 -g")
-set(CMAKE_CXX_FLAGS_RELEASESAFE "-O2 -g -Wall -Wextra -Wpedantic")
+# VOIDLIGHT_STATS_ENABLED gates telemetry/counter code that is fine to keep
+# in a soak-testing build but must never ship in Release or Profile (see
+# VOIDLIGHT_STATS_ONLY in core/Logger.hpp).
+set(CMAKE_C_FLAGS_RELEASESAFE "-O2 -g -DVOIDLIGHT_STATS_ENABLED -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
+set(CMAKE_CXX_FLAGS_RELEASESAFE "-O2 -g -Wall -Wextra -Wpedantic -DVOIDLIGHT_STATS_ENABLED -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
 
 if(APPLE)
     # libc++ (Xcode 16.3+/recent LLVM) removed _LIBCPP_ENABLE_ASSERTIONS in favor of

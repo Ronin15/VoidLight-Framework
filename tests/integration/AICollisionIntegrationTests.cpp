@@ -14,6 +14,7 @@
 #include <random>
 #include <memory>
 
+#include "core/Logger.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -143,9 +144,7 @@ struct AICollisionGlobalFixture {
         }
 
         // Enable threading for AI
-        #ifndef NDEBUG
-        AIManager::Instance().enableThreading(true);
-        #endif
+        VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
 
         std::cout << "=== Global Setup Complete ===" << std::endl;
     }

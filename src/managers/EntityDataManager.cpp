@@ -4186,7 +4186,7 @@ void EntityDataManager::updateSimulationTiers(const Vector2D& referencePoint,
     if (m_tierIndicesDirty) {
         rebuildTierIndicesFromHotData();
 
-#ifndef NDEBUG
+        VOIDLIGHT_STATS_ONLY(
         // Rolling log every 60 seconds using time-based check
         thread_local auto lastLogTime = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
@@ -4214,7 +4214,7 @@ void EntityDataManager::updateSimulationTiers(const Vector2D& referencePoint,
                 tierTotal, dynamicCount, m_staticHotData.size(),
                 resourceCount, itemCount, containerCount, obstacleCount));
         }
-#endif
+        )
     }
 }
 

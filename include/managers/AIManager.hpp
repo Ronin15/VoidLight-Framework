@@ -21,6 +21,7 @@
 
 #include "ai/BehaviorConfig.hpp"
 #include "ai/AICommandBus.hpp"
+#include "core/Logger.hpp"
 #include "entities/EntityHandle.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
@@ -201,10 +202,10 @@ public:
   static constexpr int DEFAULT_PRIORITY = 5;
   void resetBehaviors();
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Threading configuration (benchmarking only - compiles out in release)
   void enableThreading(bool enable);
-#endif
+  )
 
   // Performance monitoring
   size_t getBehaviorCount() const;
@@ -264,9 +265,7 @@ private:
 
   // Threading and state
   std::atomic<bool> m_initialized{false};
-#ifndef NDEBUG
-  std::atomic<bool> m_useThreading{true};
-#endif
+  VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
   std::atomic<bool> m_globallyPaused{false};
 
   // Behavior execution tracking — worker threads fetch_add once per batch;

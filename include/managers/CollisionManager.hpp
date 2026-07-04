@@ -16,6 +16,7 @@
 #include <chrono>
 #include <span>
 
+#include "core/Logger.hpp"
 #include "entities/Entity.hpp" // EntityID
 #include "collisions/CollisionBody.hpp"
 #include "collisions/CollisionInfo.hpp"
@@ -98,14 +99,14 @@ public:
      * @brief Enable or disable threading for collision processing (debug/benchmark only)
      * @param enable true to enable threading, false for single-threaded
      */
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     void enableThreading(bool enable) {
         m_useThreading.store(enable, std::memory_order_release);
     }
     bool isThreadingEnabled() const {
         return m_useThreading.load(std::memory_order_acquire);
     }
-#endif
+    )
 
     // Tick: run collision detection/resolution only (no movement integration)
     void update(float dt);
@@ -331,7 +332,7 @@ private:
     bool m_initialized{false};
     bool m_isShutdown{false};
     std::atomic<bool> m_globallyPaused{false}; // Global pause state for update() early exit
-    std::atomic<bool> m_useThreading{true};    // Threading control for benchmarking
+    VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)    // Threading control for benchmarking
     AABB m_worldBounds{0,0, 100000.0f, 100000.0f}; // large default box (centered at 0,0)
 
     // NEW SOA STORAGE SYSTEM: Following AIManager pattern for better cache performance

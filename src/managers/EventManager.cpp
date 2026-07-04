@@ -253,7 +253,7 @@ void EventManager::drainAllDeferredEvents() {
 
 // ==================== Threading & Pause Controls ====================
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 void EventManager::enableThreading(bool enable) {
   m_threadingEnabled.store(enable);
 }
@@ -261,7 +261,7 @@ void EventManager::enableThreading(bool enable) {
 bool EventManager::isThreadingEnabled() const {
   return m_threadingEnabled.load();
 }
-#endif
+)
 
 void EventManager::setGlobalPause(bool paused) {
   m_globallyPaused.store(paused, std::memory_order_release);
@@ -797,9 +797,18 @@ void EventManager::enqueueBatch(std::vector<DeferredEvent>&& events) const {
 
 void EventManager::dispatchPendingEvent(const PendingDispatch& pendingDispatch,
                                         std::string_view errorContext) const {
-  std::shared_lock<std::shared_mutex> lock(m_handlersMutex);
-  const auto& typeHandlers =
-      m_handlersByType[static_cast<size_t>(pendingDispatch.typeId)];
+  // Copy the handler list under the lock, then invoke outside it. A handler
+  // can itself trigger another Immediate-mode dispatch (e.g. CollisionManager
+  // rebuilding static colliders on WorldLoaded), which would otherwise
+  // re-enter this non-recursive shared_mutex on the same thread -- UB per
+  // shared_mutex::lock_shared()'s precondition. Local (not a reused member):
+  // this is the function in the reentrant chain, so a shared buffer would be
+  // clobbered mid-use by the very reentrant call this avoids.
+  std::vector<HandlerEntry> typeHandlers;
+  {
+    std::shared_lock<std::shared_mutex> lock(m_handlersMutex);
+    typeHandlers = m_handlersByType[static_cast<size_t>(pendingDispatch.typeId)];
+  }
 
   dispatchPendingEventWithHandlers(pendingDispatch, typeHandlers, errorContext);
 }
@@ -1116,10 +1125,21 @@ void EventManager::drainDispatchQueueWithBudget() {
   }
 
   {
-    std::shared_lock<std::shared_mutex> handlerLock(m_handlersMutex);
+    // Snapshot handler lists under the lock, then dispatch without holding
+    // it. A handler can trigger further Immediate-mode dispatch (e.g.
+    // CollisionManager rebuilding static colliders on WorldLoaded), which
+    // would otherwise re-enter this non-recursive shared_mutex on this
+    // thread mid-loop. Reused member buffer is safe here: this function has
+    // exactly one caller (update(), main-thread, once per frame) and is not
+    // itself reentrant.
+    {
+      std::shared_lock<std::shared_mutex> handlerLock(m_handlersMutex);
+      m_handlersSnapshotBuffer = m_handlersByType;
+    }
+
     if (allCombatEvents) {
       const auto& combatHandlers =
-          m_handlersByType[static_cast<size_t>(EventTypeId::Combat)];
+          m_handlersSnapshotBuffer[static_cast<size_t>(EventTypeId::Combat)];
       const bool hasCombatHandlers = !combatHandlers.empty();
 
       for (size_t combatIndex = 0; combatIndex < combatEventCount; ++combatIndex) {
@@ -1153,7 +1173,7 @@ void EventManager::drainDispatchQueueWithBudget() {
         }
 
         const auto& typeHandlers =
-            m_handlersByType[static_cast<size_t>(pendingDispatch.typeId)];
+            m_handlersSnapshotBuffer[static_cast<size_t>(pendingDispatch.typeId)];
         if (!typeHandlers.empty()) {
           dispatchPendingEventWithHandlers(pendingDispatch, typeHandlers,
                                            "deferred dispatch");

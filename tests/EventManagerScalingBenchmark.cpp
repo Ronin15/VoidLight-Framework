@@ -308,9 +308,7 @@ struct EventManagerScalingFixture {
         cleanup();
         handlers.clear();
 
-        #ifndef NDEBUG
-        EventManager::Instance().enableThreading(true);
-        #endif
+        VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(true);)
         // Use default threshold (100) - matches EventManager::m_threadingThreshold
 
         // WorkerBudget: all workers available to each manager during its update window
@@ -776,9 +774,7 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
         // Reset
         EventManager::Instance().clean();
         BOOST_REQUIRE(EventManager::Instance().init());
-        #ifndef NDEBUG
-        EventManager::Instance().enableThreading(useThreading);
-        #endif
+        VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(useThreading);)
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
 
         // Register handlers
@@ -868,9 +864,7 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
     std::cout << "========================================\n" << std::endl;
 
     // Restore threading
-    #ifndef NDEBUG
-    EventManager::Instance().enableThreading(true);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(true);)
 }
 
 // ---------------------------------------------------------------------------

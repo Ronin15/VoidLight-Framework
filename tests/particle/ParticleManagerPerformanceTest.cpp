@@ -6,6 +6,7 @@
 #define BOOST_TEST_MODULE ParticleManagerPerformanceTest
 #include <boost/test/unit_test.hpp>
 
+#include "core/Logger.hpp"
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
 #include "events/ParticleEffectEvent.hpp"
@@ -497,9 +498,7 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
     if (manager->isInitialized()) manager->clean();
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
-    #ifndef NDEBUG
-    manager->enableThreading(false);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(manager->enableThreading(false);)
 
     createParticles(targetCount);
     size_t actualCount = manager->getActiveParticleCount();
@@ -518,9 +517,7 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
     if (manager->isInitialized()) manager->clean();
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
-    #ifndef NDEBUG
-    manager->enableThreading(true);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(manager->enableThreading(true);)
 
     createParticles(targetCount);
 
@@ -577,9 +574,7 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
   std::cout << "==========================================\n" << std::endl;
 
   // Restore threading
-  #ifndef NDEBUG
-  manager->enableThreading(true);
-  #endif
+  VOIDLIGHT_DEBUG_ONLY(manager->enableThreading(true);)
 }
 
 // Ad-hoc high-count benchmarks for update cost at scale (Debug build)

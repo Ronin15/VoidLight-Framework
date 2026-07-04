@@ -176,7 +176,8 @@ PipelineConfig GPUPipeline::createSpriteConfig(SDL_GPUShader* vertShader,
 
 PipelineConfig GPUPipeline::createParticleConfig(SDL_GPUShader* vertShader,
                                                   SDL_GPUShader* fragShader,
-                                                  SDL_GPUTextureFormat colorFormat) {
+                                                  SDL_GPUTextureFormat colorFormat,
+                                                  bool additive) {
     PipelineConfig config{};
     config.vertexShader = vertShader;
     config.fragmentShader = fragShader;
@@ -202,10 +203,21 @@ PipelineConfig GPUPipeline::createParticleConfig(SDL_GPUShader* vertShader,
     config.vertexAttributes[1].offset = sizeof(float) * 2;
     config.vertexAttributeCount = 2;
 
-    // Standard alpha blending for particles.
     config.enableBlend = true;
-    config.srcColorFactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    config.dstColorFactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    if (additive) {
+        // Additive blending: particle color adds onto the scene rather than
+        // replacing it (glow effects -- fireflies, fire, sparks).
+        config.srcColorFactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        config.dstColorFactor = SDL_GPU_BLENDFACTOR_ONE;
+        config.colorBlendOp = SDL_GPU_BLENDOP_ADD;
+        config.srcAlphaFactor = SDL_GPU_BLENDFACTOR_ONE;
+        config.dstAlphaFactor = SDL_GPU_BLENDFACTOR_ONE;
+        config.alphaBlendOp = SDL_GPU_BLENDOP_ADD;
+    } else {
+        // Standard alpha blending for particles.
+        config.srcColorFactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        config.dstColorFactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    }
 
     return config;
 }

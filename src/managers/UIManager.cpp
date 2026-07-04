@@ -141,14 +141,19 @@ void UIManager::update(float deltaTime) {
 }
 
 void UIManager::executeDeferredCallbacks() {
-    // Safely execute all queued callbacks
-    for (const auto& callback : m_deferredCallbacks) {
+    // Swap out before invoking anything: a callback can synchronously trigger
+    // a state transition (prepareForStateTransition() clears
+    // m_deferredCallbacks), which would otherwise invalidate this loop
+    // mid-iteration. A local vector is safe against that same reentrant
+    // clear happening again while this drain is still running.
+    std::vector<std::function<void()>> callbacksToRun;
+    callbacksToRun.swap(m_deferredCallbacks);
+
+    for (const auto& callback : callbacksToRun) {
         if (callback) {
             callback();
         }
     }
-    // Clear the queue for the next frame
-    m_deferredCallbacks.clear();
 }
 
 void UIManager::clean() {

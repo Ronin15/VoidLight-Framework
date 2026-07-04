@@ -119,9 +119,6 @@ void PathfinderManager::clean() {
     // Wait for grid rebuild tasks to complete before shutdown
     waitForGridRebuildCompletion();
 
-    // Wait for batch processing to complete before shutdown
-    waitForBatchCompletion();
-
     commitCompletedPaths();
 
     // Unsubscribe from events
@@ -159,9 +156,6 @@ void PathfinderManager::prepareForStateTransition() {
     // Wait for any running grid rebuild tasks to complete BEFORE clearing data
     // This prevents async tasks from accessing deleted world data during state transitions
     waitForGridRebuildCompletion();
-
-    // Wait for batch processing to complete before clearing data
-    waitForBatchCompletion();
 
     commitCompletedPaths();
 
@@ -844,8 +838,13 @@ void PathfinderManager::clearWeightFields() {
         return;
     }
 
+    // Publish a fresh grid with weights reset instead of mutating the live
+    // one in place. In-flight findPath() calls on worker threads hold their
+    // own gridSnapshot shared_ptr (captured at request time) and keep
+    // reading the old grid safely until they finish -- there is nothing to
+    // wait for, since nobody mutates the instance they're holding.
     if (auto grid = getGridSnapshot()) {
-        grid->resetWeights(1.0f);
+        setGrid(grid->cloneWithResetWeights(1.0f));
     }
 }
 
@@ -1752,23 +1751,6 @@ void PathfinderManager::waitForGridRebuildCompletion() {
         }
 
         PATHFIND_INFO("Grid rebuild synchronization complete - safe to proceed with state transition");
-    }
-}
-
-void PathfinderManager::waitForBatchCompletion() {
-    // No lock needed: only called during state transitions when update is paused
-    // Use swap to preserve capacity for next use
-    m_reusableBatchFutures.clear();
-    std::swap(m_reusableBatchFutures, m_batchFutures);
-
-    for (auto& future : m_reusableBatchFutures) {
-        if (future.valid()) {
-            try {
-                future.wait();
-            } catch (const std::exception& e) {
-                PATHFIND_ERROR(std::format("Exception waiting for batch completion: {}", e.what()));
-            }
-        }
     }
 }
 

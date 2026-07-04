@@ -1449,12 +1449,12 @@ void AIManager::resetBehaviors() {
   m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
 }
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 void AIManager::enableThreading(bool enable) {
   m_useThreading.store(enable, std::memory_order_release);
   AI_INFO(std::format("Threading {}", enable ? "enabled" : "disabled"));
 }
-#endif
+)
 
 size_t AIManager::getBehaviorCount() const {
   // m_behaviorTypeMap is immutable after init() — no lock needed
