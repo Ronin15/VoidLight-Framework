@@ -645,7 +645,6 @@ void GamePlayState::handleInput() {
   // Cache manager references for better performance
   const InputManager &inputMgr = InputManager::Instance();
   auto &ui = UIManager::Instance();
-  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
 
   // Trade dialog is modal — it consumes all input so Pause cannot fire behind it.
   auto* socialCtrl = m_controllers.get<SocialController>();
@@ -747,6 +746,7 @@ void GamePlayState::handleInput() {
 
   VOIDLIGHT_DEBUG_ONLY(
   // Debug time speed controls: < (comma) = normal speed, > (period) = max speed
+  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_COMMA)) {
     gameTimeMgr.setTimeScale(60.0f);
     GAMEPLAY_INFO("Time scale set to NORMAL (60x)");

@@ -229,7 +229,7 @@ public:
  * Convenience functions for simple save/load operations
  */
 template <typename T>
-bool saveToFile(const std::string &filename, const T &object) {
+[[nodiscard]] bool saveToFile(const std::string &filename, const T &object) {
   SAVEGAME_DEBUG(std::format("Saving object to file: {}", filename));
   auto writer = Writer::createFileWriter(filename);
   if (!writer) {

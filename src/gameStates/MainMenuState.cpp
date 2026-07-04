@@ -241,8 +241,6 @@ bool MainMenuState::exit() {
 }
 
 void MainMenuState::handleInput() {
-  const auto& inputManager = InputManager::Instance();
-
   if (m_quitDialogOpen) {
     VoidLight::MenuNavigation::readInputs(kQuitDialogNavOrder, m_selectedIndex);
     if (VoidLight::MenuNavigation::cancelPressed()) {
@@ -258,6 +256,7 @@ void MainMenuState::handleInput() {
 
   // Developer debug shortcuts for demo states — Debug builds only.
   VOIDLIGHT_DEBUG_ONLY(
+    const auto& inputManager = InputManager::Instance();
     if (inputManager.wasKeyPressed(SDL_SCANCODE_A)) {
         mp_stateManager->changeState(GameStateId::AI_DEMO);
     }

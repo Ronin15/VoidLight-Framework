@@ -127,9 +127,6 @@ bool EventManager::init() {
     return std::make_shared<DamageEvent>();
   });
 
-  // Reset performance stats
-  resetPerformanceStats();
-
   m_lastUpdateTime.store(getCurrentTimeNanos());
   m_initialized.store(true);
 
@@ -174,9 +171,6 @@ void EventManager::clean() {
   // Clear event pools after draining queued events to avoid carrying stale
   // combat state across shutdown and subsequent init().
   clearEventPools();
-
-  // Reset performance stats
-  resetPerformanceStats();
 }
 
 void EventManager::prepareForStateTransition() {
@@ -206,9 +200,6 @@ void EventManager::prepareForStateTransition() {
 
   // Clear event pools after queued events have been released and discarded.
   clearEventPools();
-
-  // Reset performance stats
-  resetPerformanceStats();
 
   EVENT_INFO("EventManager prepared for state transition");
 }
@@ -1260,18 +1251,6 @@ void EventManager::releaseEventToPool(EventTypeId typeId, const EventPtr& event)
 }
 
 // ==================== Performance & Diagnostics ====================
-
-PerformanceStats EventManager::getPerformanceStats(EventTypeId typeId) const {
-  std::lock_guard<std::mutex> lock(m_perfMutex);
-  return m_performanceStats[static_cast<size_t>(typeId)];
-}
-
-void EventManager::resetPerformanceStats() const {
-  std::lock_guard<std::mutex> lock(m_perfMutex);
-  for (auto &stats : m_performanceStats) {
-    stats.reset();
-  }
-}
 
 size_t EventManager::getPendingEventCount() const {
   std::lock_guard<std::mutex> lock(m_dispatchMutex);

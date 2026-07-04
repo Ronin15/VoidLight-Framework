@@ -170,33 +170,6 @@ private:
 };
 
 /**
- * @brief Performance statistics for monitoring
- */
-struct PerformanceStats {
-  double totalTime{0.0};
-  uint64_t callCount{0};
-  double avgTime{0.0};
-  double minTime{std::numeric_limits<double>::max()};
-  double maxTime{0.0};
-
-  void addSample(double time) {
-    totalTime += time;
-    callCount++;
-    avgTime = totalTime / callCount;
-    minTime = std::min(minTime, time);
-    maxTime = std::max(maxTime, time);
-  }
-
-  void reset() {
-    totalTime = 0.0;
-    callCount = 0;
-    avgTime = 0.0;
-    minTime = std::numeric_limits<double>::max();
-    maxTime = 0.0;
-  }
-};
-
-/**
  * @brief High-performance event processing hub
  *
  * EventManager owns handler registration, deferred queue draining,
@@ -461,16 +434,6 @@ public:
   // ==================== Performance & Diagnostics ====================
 
   /**
-   * @brief Gets performance stats for an event type
-   */
-  PerformanceStats getPerformanceStats(EventTypeId typeId) const;
-
-  /**
-   * @brief Resets all performance statistics
-   */
-  void resetPerformanceStats() const;
-
-  /**
    * @brief Gets the number of pending events in the dispatch queue
    */
   size_t getPendingEventCount() const;
@@ -528,11 +491,6 @@ private:
   VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_threadingEnabled{true};)
   std::atomic<bool> m_initialized{false};
   std::atomic<bool> m_globallyPaused{false};
-
-  // Performance monitoring
-  mutable std::array<PerformanceStats, static_cast<size_t>(EventTypeId::COUNT)>
-      m_performanceStats;
-  mutable std::mutex m_perfMutex;
 
   // Timing
   std::atomic<uint64_t> m_lastUpdateTime{0};

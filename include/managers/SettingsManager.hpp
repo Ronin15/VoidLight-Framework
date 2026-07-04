@@ -69,7 +69,7 @@ public:
      * @param filepath Path to save the JSON settings file
      * @return true if saving successful, false otherwise
      */
-    bool saveToFile(const std::string& filepath);
+    [[nodiscard]] bool saveToFile(const std::string& filepath);
 
     /**
      * @brief Gets a typed setting value with optional default

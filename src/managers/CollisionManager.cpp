@@ -815,7 +815,7 @@ void CollisionManager::rebuildStaticFromWorld() {
         std::format("World colliders built: solid={}, water triggers={}",
                     solidBodies, waterTriggers));
 
-    VOIDLIGHT_STATS_ONLY(
+    VOIDLIGHT_DEBUG_ONLY(
     int buildingBodyCount = 0;
     for (size_t i = 0; i < m_storage.entityIds.size(); ++i) {
       EntityID id = m_storage.entityIds[i];
@@ -830,8 +830,8 @@ void CollisionManager::rebuildStaticFromWorld() {
     }
     COLLISION_INFO(std::format(
         "Total building collision bodies in storage: {}", buildingBodyCount));
-    logCollisionStatistics();
     )
+    VOIDLIGHT_STATS_ONLY(logCollisionStatistics();)
 
     rebuildStaticSpatialHashUnlocked();
   }
@@ -2235,7 +2235,7 @@ void CollisionManager::update(float) {
     return;
 
   using clock = std::chrono::steady_clock; // Needed for WorkerBudget timing
-  VOIDLIGHT_DEBUG_ONLY(auto t0 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t0 = clock::now();)
 
   // Check storage state at start of update (statics only now)
   size_t staticBodyCount = m_storage.size();
@@ -2310,15 +2310,15 @@ void CollisionManager::update(float) {
 
   // BROADPHASE: Generate collision pairs using spatial hash
   // Pairs stored in pools.movableMovablePairs and pools.movableStaticPairs
-  VOIDLIGHT_DEBUG_ONLY(auto t1 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t1 = clock::now();)
   broadphase();
-  VOIDLIGHT_DEBUG_ONLY(auto t2 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t2 = clock::now();)
 
   // NARROWPHASE: Detailed collision detection and response calculation
   const size_t pairCount = m_collisionPool.movableMovablePairs.size() +
                            m_collisionPool.movableStaticPairs.size();
   narrowphase(m_collisionPool.collisionBuffer);
-  VOIDLIGHT_DEBUG_ONLY(auto t3 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t3 = clock::now();)
 
   // RESOLUTION: Apply collision responses and update positions.
   // Skip resolve() for triggers (no position correction) and for
@@ -2335,15 +2335,15 @@ void CollisionManager::update(float) {
       }
     }
   }
-  VOIDLIGHT_DEBUG_ONLY(auto t4 = clock::now();)
-  VOIDLIGHT_DEBUG_ONLY(auto t5 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t4 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t5 = clock::now();)
 
   // TRIGGER PROCESSING: Handle trigger enter/exit events
   // PHASE 3.2: Detect EventOnly triggers (bypassed broadphase)
   detectEventOnlyTriggers();
   processTriggerEvents();
 
-  VOIDLIGHT_DEBUG_ONLY(
+  VOIDLIGHT_STATS_ONLY(
   auto t6 = clock::now();
   updatePerformanceMetrics(
       t0, t1, t2, t3, t4, t5, t6, bodyCount, activeMovableBodies, pairCount,
@@ -2914,8 +2914,8 @@ void CollisionManager::updatePerformanceMetrics(
   m_perf.bodyCount = bodyCount;
   m_perf.frames += 1;
 
-  VOIDLIGHT_DEBUG_ONLY(
-  // TRIGGER DETECTION METRICS: Debug/benchmark only
+  VOIDLIGHT_STATS_ONLY(
+  // TRIGGER DETECTION METRICS: stats/telemetry (Debug + ReleaseSafe)
   m_perf.lastTriggerDetectors =
       EntityDataManager::Instance().getTriggerDetectionIndices().size();
   m_perf.lastTriggerOverlaps = m_collisionPool.eventOnlyOverlaps.size();
@@ -2980,7 +2980,7 @@ void CollisionManager::updatePerformanceMetrics(
         "resolve:{:.2f}ms | triggerDetect:{} overlaps:{}",
         d01, d12, d23, d34, triggerDetectionEntities, eventOnlyOverlaps));
   }
-  ) // VOIDLIGHT_DEBUG_ONLY
+  ) // VOIDLIGHT_STATS_ONLY
 }
 
 // Helper: Apply a single kinematic update to EDM and cached AABB

@@ -611,10 +611,10 @@ private:
   void workerThread(size_t threadIndex = 0) {
     std::function<void()> task;
 
-    // Statistics tracking — compiled out in release via Logger macro
-    VOIDLIGHT_DEBUG_ONLY(auto startTime = std::chrono::steady_clock::now();)
-    VOIDLIGHT_DEBUG_ONLY(size_t tasksProcessed = 0;)
-    VOIDLIGHT_DEBUG_ONLY(size_t highPriorityTasks = 0;)
+    // Statistics tracking — feeds Logger calls only, negligible per-thread-lifetime cost
+    auto startTime = std::chrono::steady_clock::now();
+    size_t tasksProcessed = 0;
+    size_t highPriorityTasks = 0;
 
     // Set thread as interruptible (platform-specific if needed)
     try {
@@ -642,7 +642,7 @@ private:
           // engine/urgent tasks)
           if (taskQueue.pop(task)) {
             gotTask = true;
-            VOIDLIGHT_DEBUG_ONLY(highPriorityTasks++;)
+            highPriorityTasks++;
             lastTaskTime = std::chrono::steady_clock::now();
           }
           // All tasks go through single global queue - simple and reliable
@@ -680,7 +680,7 @@ private:
           try {
             // Execute the task
             task();
-            VOIDLIGHT_DEBUG_ONLY(tasksProcessed++;)
+            tasksProcessed++;
 
             // Update comprehensive statistics
             m_totalTasksProcessed.fetch_add(1, std::memory_order_relaxed);
@@ -735,12 +735,10 @@ private:
                                      threadIndex));
     }
 
-    VOIDLIGHT_DEBUG_ONLY(
     auto endTime = std::chrono::steady_clock::now();
     auto totalDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
                              endTime - startTime)
                              .count();
-    )
     THREADSYSTEM_INFO(std::format("Worker {} exiting after processing {} tasks over {}ms",
                                   threadIndex, tasksProcessed, totalDuration));
   }

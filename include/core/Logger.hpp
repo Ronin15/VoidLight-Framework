@@ -140,14 +140,20 @@ public:
 #define VOIDLIGHT_ERROR(system, msg)                                              \
   VoidLight::Logger::Log("ERROR", system, msg)
 
-#define VOIDLIGHT_WARN(system, msg) ((void)0)  // Zero overhead
-#define VOIDLIGHT_INFO(system, msg) ((void)0)  // Zero overhead
-#define VOIDLIGHT_DEBUG(system, msg) ((void)0) // Zero overhead
+// Zero overhead in release (dead-code-eliminated), but the argument is still
+// referenced under `if (false)` rather than discarded outright — this keeps
+// any variable used only inside a log message from tripping -Wunused-variable
+// in ReleaseSafe (the only non-Debug config with warnings enabled), without
+// needing per-call-site VOIDLIGHT_DEBUG_ONLY/STATS_ONLY wrapping.
+#define VOIDLIGHT_WARN(system, msg) do { if (false) { (void)(msg); } } while (0)
+#define VOIDLIGHT_INFO(system, msg) do { if (false) { (void)(msg); } } while (0)
+#define VOIDLIGHT_DEBUG(system, msg) do { if (false) { (void)(msg); } } while (0)
 
-// Conditional logging macros - compiled out entirely in release
-#define VOIDLIGHT_WARN_IF(cond, system, msg) ((void)0)
-#define VOIDLIGHT_INFO_IF(cond, system, msg) ((void)0)
-#define VOIDLIGHT_DEBUG_IF(cond, system, msg) ((void)0)
+// Conditional logging macros - compiled out entirely in release (same
+// zero-overhead-but-referenced rationale as above)
+#define VOIDLIGHT_WARN_IF(cond, system, msg) do { if (false) { (void)(cond); (void)(msg); } } while (0)
+#define VOIDLIGHT_INFO_IF(cond, system, msg) do { if (false) { (void)(cond); (void)(msg); } } while (0)
+#define VOIDLIGHT_DEBUG_IF(cond, system, msg) do { if (false) { (void)(cond); (void)(msg); } } while (0)
 #endif
 
 // Debug-only code block — compiles out entirely in release

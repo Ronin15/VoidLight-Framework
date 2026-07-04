@@ -774,6 +774,11 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
         // Reset
         EventManager::Instance().clean();
         BOOST_REQUIRE(EventManager::Instance().init());
+        // enableThreading() is a Debug-only benchmark toggle (same convention as
+        // AIManager/ParticleManager/CollisionManager's m_useThreading); outside
+        // Debug this reference is dead-code-eliminated (same technique as the
+        // Logger.hpp macros), so useThreading is never actually unused.
+        if (false) { (void)useThreading; }
         VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(useThreading);)
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
 

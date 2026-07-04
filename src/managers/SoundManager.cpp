@@ -92,7 +92,7 @@ bool SoundManager::loadAudio(const std::string &filePath, const std::string &idP
     if (fs::is_directory(filePath)) {
       // Load all supported audio files from directory
       bool loadedAny = false;
-      int fileCount = 0;
+      VOIDLIGHT_DEBUG_ONLY(int fileCount = 0;)
       const auto supportedExts = getSupportedExtensions();
 
       for (const auto &entry : fs::directory_iterator(filePath)) {
@@ -120,7 +120,7 @@ bool SoundManager::loadAudio(const std::string &filePath, const std::string &idP
           }
 
           m_audioMap[fullSoundID] = audio;
-          fileCount++;
+          VOIDLIGHT_DEBUG_ONLY(fileCount++;)
           loadedAny = true;
         }
       }

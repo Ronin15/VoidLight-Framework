@@ -321,8 +321,10 @@ void SettingsMenuState::applySettings() {
     // Apply VSync (pure mode switch — writes graphics.vsync to in-memory settings).
     gameEngine.setVSyncEnabled(m_tempSettings.vsync);
 
-    // Single explicit persist for the whole settings file.
-    settings.saveToFile(VoidLight::ResourcePath::resolve("res/settings.json"));
+    // Single explicit persist for the whole settings file; log on failure but don't abort apply
+    if (!settings.saveToFile(VoidLight::ResourcePath::resolve("res/settings.json"))) {
+        GAMESTATE_WARN("Failed to save settings to disk");
+    }
 
     // Save input bindings alongside other settings; log on failure but don't abort apply
     if (!InputManager::Instance().saveBindingsToFile(
