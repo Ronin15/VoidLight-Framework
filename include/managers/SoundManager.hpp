@@ -58,7 +58,11 @@ public:
   void playSFX(const std::string &soundID, int loops = 0, float volume = 1.0f);
 
   /**
-   * @brief Plays a loaded music track
+   * @brief Stops whatever music is currently playing and requests a new
+   * track to start after a short delay (MUSIC_START_DELAY_SEC), rather than
+   * immediately. A later playMusic()/stopMusic() call replaces or cancels a
+   * still-pending request. Requires update() to be called each frame for
+   * the delay to advance.
    * @param musicID Unique identifier of the music track to play
    * @param loops Number of loops (-1 = infinite loop, default: -1)
    * @param volume Per-call gain multiplier (default: 1.0). Multiplied by the
@@ -66,6 +70,13 @@ public:
    */
   void playMusic(const std::string &musicID, int loops = -1,
                  float volume = 1.0f);
+
+  /**
+   * @brief Advances the pending delayed music-start timer (see playMusic()).
+   * Call once per frame from the main loop.
+   * @param deltaTime Seconds elapsed since the last update
+   */
+  void update(float deltaTime);
 
   /**
    * @brief Pauses currently playing music
@@ -173,11 +184,26 @@ private:
   float m_musicVolume{1.0f};
   float m_sfxVolume{1.0f};
 
+  // Delayed music start: playMusic() queues a request instead of playing
+  // immediately; update() starts it once the delay elapses. A later
+  // playMusic()/stopMusic() call replaces/cancels the pending request.
+  static constexpr float MUSIC_START_DELAY_SEC = 2.0f;
+  struct PendingMusicRequest {
+    std::string musicID;
+    int loops{-1};
+    float volume{1.0f};
+    float delayRemaining{0.0f};
+    bool active{false};
+  };
+  PendingMusicRequest m_pendingMusic{};
+
   // Internal helper methods
   [[nodiscard]] bool loadAudio(const std::string &filePath, const std::string &idPrefix);
   MIX_Track *createAndConfigureTrack(MIX_Group *group, const std::string &tag);
   void cleanupStoppedTracks();
   std::vector<std::string> getSupportedExtensions() const;
+  void playMusicImmediate(const std::string &musicID, int loops, float volume);
+  void stopActiveMusicTracks();
 
   // Delete copy constructor and assignment operator
   SoundManager(const SoundManager &) = delete;            // Prevent copying

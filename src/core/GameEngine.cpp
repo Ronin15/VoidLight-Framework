@@ -1115,6 +1115,10 @@ void GameEngine::update(float deltaTime) {
     return;
   }
 
+  // 1.5 Sound system - advances any pending delayed music start
+  //     (SoundManager::playMusic() delays the actual start; see there).
+  SoundManager::Instance().update(deltaTime);
+
   // 2. Game states - player movement and state logic
   //    MUST update BEFORE AIManager so NPCs react to current player position.
   //    Push FPS to GameStateManager so states don't need to call GameEngine::Instance()

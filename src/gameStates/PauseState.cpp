@@ -63,9 +63,61 @@ bool PauseState::enter() {
   });
 
   ui.setOnClick("pause_mainmenu_btn", [this]() {
+      openMainMenuConfirm();
+  });
+
+  // --- Return-to-main-menu confirm dialog (hidden by default) ---
+  // Going to the main menu abandons the current run (matches
+  // changeStateClearingStack's full teardown), so this warns before
+  // discarding progress -- mirrors MainMenuState's quit-confirm dialog.
+  const int dialogWidth  = UIConstants::DEFAULT_DIALOG_WIDTH;
+  const int dialogHeight = UIConstants::DEFAULT_DIALOG_HEIGHT;
+  const int dialogX = (UIConstants::BASELINE_WIDTH  - dialogWidth)  / 2;
+  const int dialogY = (UIConstants::BASELINE_HEIGHT - dialogHeight) / 2;
+
+  ui.createPanel("pause_confirm_panel", {dialogX, dialogY, dialogWidth, dialogHeight});
+  ui.setComponentPositioning("pause_confirm_panel",
+                             {UIPositionMode::CENTERED_BOTH, 0, 0, dialogWidth, dialogHeight});
+
+  ui.createLabel("pause_confirm_title",
+                 {dialogX + 20, dialogY + 20, 360, 30},
+                 "Return to Main Menu?",
+                 "pause_confirm_panel");
+  ui.setComponentPositioning("pause_confirm_title",
+                             {UIPositionMode::CENTERED_BOTH, 0, -65, 360, 30});
+
+  ui.createLabel("pause_confirm_text",
+                 {dialogX + 20, dialogY + 60, 360, 40},
+                 "Unsaved progress will be lost.",
+                 "pause_confirm_panel");
+  ui.setComponentPositioning("pause_confirm_text",
+                             {UIPositionMode::CENTERED_BOTH, 0, -20, 360, 40});
+
+  ui.createButtonDanger("pause_confirm_yes_btn",
+                        {dialogX + 25, dialogY + 120, 150, 40},
+                        "Main Menu",
+                        "pause_confirm_panel");
+  ui.setComponentPositioning("pause_confirm_yes_btn",
+                             {UIPositionMode::CENTERED_BOTH, 100, 40, 150, 40});
+  ui.setOnClick("pause_confirm_yes_btn", [this]() {
       mp_stateManager->changeStateClearingStack(GameStateId::MAIN_MENU);
   });
 
+  ui.createButtonWarning("pause_confirm_cancel_btn",
+                         {dialogX + 225, dialogY + 120, 150, 40},
+                         "Cancel",
+                         "pause_confirm_panel");
+  ui.setComponentPositioning("pause_confirm_cancel_btn",
+                             {UIPositionMode::CENTERED_BOTH, -100, 40, 150, 40});
+  ui.setOnClick("pause_confirm_cancel_btn", [this]() {
+      closeMainMenuConfirm();
+  });
+
+  // Hidden until "Main Menu" is clicked — visibility cascades to all
+  // linked children (title/text/buttons) via their parentId.
+  ui.setComponentVisible("pause_confirm_panel", false);
+
+  m_confirmDialogOpen = false;
   m_selectedIndex = 0;
   VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
 
@@ -78,7 +130,11 @@ void PauseState::update(float) {
     if (!ui.isShutdown()) {
         ui.update(0.0f);
     }
-    VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
+    if (m_confirmDialogOpen) {
+        VoidLight::MenuNavigation::applySelection(kConfirmNavOrder, m_selectedIndex);
+    } else {
+        VoidLight::MenuNavigation::applySelection(kNavOrder, m_selectedIndex);
+    }
 }
 
 bool PauseState::exit() {
@@ -87,13 +143,20 @@ bool PauseState::exit() {
 
   // Only clean up PauseState-specific UI components
   // Do NOT use prepareForStateTransition() as it would clear GamePlayState's preserved UI
+  //
+  // NOTE: deliberately does NOT call ui.removeOverlay() here. This exit()
+  // also runs when changeStateClearingStack(MAIN_MENU) replaces Pause
+  // instead of popping back to GamePlayState — MainMenuState::enter() (which
+  // runs before this) already rebuilt "__overlay" for its own quit-confirm
+  // dialog, and removing it here would delete that. GamePlayState::resume()
+  // removes the overlay itself on the actual pop-back-to-gameplay path.
   auto& ui = UIManager::Instance();
   ui.clearKeyboardSelection();
   ui.removeComponent("pause_title");
   ui.removeComponent("pause_resume_btn");
   ui.removeComponent("pause_settings_btn");
   ui.removeComponent("pause_mainmenu_btn");
-  ui.removeOverlay();  // Remove the pause overlay to restore GamePlayState visibility
+  ui.removeComponent("pause_confirm_panel");  // cascades to its linked children
 
   return true;
 }
@@ -101,6 +164,16 @@ bool PauseState::exit() {
 
 void PauseState::handleInput() {
   const auto& inputMgr = InputManager::Instance();
+
+  // Confirm dialog is modal — it consumes all input so Pause/R cannot
+  // resume or fall through to the pause menu behind it.
+  if (m_confirmDialogOpen) {
+    VoidLight::MenuNavigation::readInputs(kConfirmNavOrder, m_selectedIndex);
+    if (VoidLight::MenuNavigation::cancelPressed()) {
+      closeMainMenuConfirm();
+    }
+    return;
+  }
 
   VoidLight::MenuNavigation::readInputs(kNavOrder, m_selectedIndex);
   // MenuCancel or Pause both resume gameplay — symmetric with GamePlayState
@@ -115,6 +188,34 @@ void PauseState::handleInput() {
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
       mp_stateManager->popState();
   }
+}
+
+void PauseState::openMainMenuConfirm() {
+  m_confirmDialogOpen = true;
+  auto& ui = UIManager::Instance();
+
+  ui.setComponentVisible("pause_resume_btn", false);
+  ui.setComponentVisible("pause_settings_btn", false);
+  ui.setComponentVisible("pause_mainmenu_btn", false);
+  ui.setComponentVisible("pause_confirm_panel", true);
+
+  // Default focus: Cancel (index 0 in kConfirmNavOrder)
+  m_selectedIndex = 0;
+  VoidLight::MenuNavigation::reset();
+}
+
+void PauseState::closeMainMenuConfirm() {
+  m_confirmDialogOpen = false;
+  auto& ui = UIManager::Instance();
+
+  ui.setComponentVisible("pause_confirm_panel", false);
+  ui.setComponentVisible("pause_resume_btn", true);
+  ui.setComponentVisible("pause_settings_btn", true);
+  ui.setComponentVisible("pause_mainmenu_btn", true);
+
+  // Return focus to the Main Menu button (last item in kNavOrder)
+  m_selectedIndex = kNavOrder.size() - 1;
+  VoidLight::MenuNavigation::reset();
 }
 
 void PauseState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,

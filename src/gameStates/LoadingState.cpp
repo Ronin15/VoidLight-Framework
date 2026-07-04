@@ -51,6 +51,11 @@ bool LoadingState::enter() {
   // Pause game time during loading (time shouldn't advance while loading)
   GameTimeManager::Instance().setGlobalPause(true);
 
+  // GameStateManager::changeState() enters this state BEFORE the previous
+  // state's exit() runs, so whatever UI the previous state left behind is
+  // still registered here. Clear it before building the loading screen.
+  UIManager::Instance().prepareForStateTransition();
+
   // Initialize loading screen UI
   initializeUI();
 

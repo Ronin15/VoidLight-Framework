@@ -7,6 +7,7 @@
 #include "core/GameEngine.hpp"
 #include "managers/GameStateManager.hpp"
 #include "managers/InputManager.hpp"
+#include "managers/SoundManager.hpp"
 #include "managers/UIConstants.hpp"
 #include "managers/UIManager.hpp"
 
@@ -17,6 +18,17 @@ bool GameOverState::enter() {
   auto& ui = UIManager::Instance();
 
   gameEngine.setGlobalPause(true);
+
+  // GamePlayState::exit() no longer stops the music itself (that would
+  // silence a destination's own music right after it started, since
+  // changeState() enters the destination before exiting GamePlayState) — so
+  // this state, which wants silence, stops it here instead.
+  SoundManager::Instance().stopMusic();
+
+  // GameStateManager::changeState() enters this state BEFORE GamePlayState's
+  // exit() runs, so GamePlayState's HUD/inventory/hotbar UI is still
+  // registered here. Clear it before building the game-over screen.
+  ui.prepareForStateTransition();
 
   const int windowWidth = gameEngine.getWidthInPixels();
   const int windowHeight = gameEngine.getHeightInPixels();
@@ -80,8 +92,14 @@ void GameOverState::handleInput() {
 }
 
 bool GameOverState::exit() {
+  // Scoped removal, not a full ui.prepareForStateTransition(): the destination
+  // state (GamePlayState or MainMenuState) already entered and built its own
+  // UI — including its own overlay, where applicable — by the time this
+  // runs, via its own wipe-first prepareForStateTransition(). A blanket wipe
+  // or removeOverlay() call here would destroy what it just built.
   auto& ui = UIManager::Instance();
-  ui.prepareForStateTransition();
+  ui.clearKeyboardSelection();
+  ui.removeComponentsWithPrefix("gameover_");
   return true;
 }
 

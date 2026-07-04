@@ -296,6 +296,36 @@ void SoundManager::playMusic(const std::string &musicID, int loops,
     return;
   }
 
+  // Silence whatever's currently playing immediately — the requested track
+  // itself starts after MUSIC_START_DELAY_SEC, via update() below.
+  stopActiveMusicTracks();
+
+  m_pendingMusic.musicID = musicID;
+  m_pendingMusic.loops = loops;
+  m_pendingMusic.volume = volume;
+  m_pendingMusic.delayRemaining = MUSIC_START_DELAY_SEC;
+  m_pendingMusic.active = true;
+}
+
+void SoundManager::update(float deltaTime) {
+  if (!m_pendingMusic.active) {
+    return;
+  }
+
+  m_pendingMusic.delayRemaining -= deltaTime;
+  if (m_pendingMusic.delayRemaining <= 0.0f) {
+    // Copy out before clearing — playMusicImmediate() below does not touch
+    // m_pendingMusic, but this keeps the pending state consistent either way.
+    const std::string musicID = m_pendingMusic.musicID;
+    const int loops = m_pendingMusic.loops;
+    const float volume = m_pendingMusic.volume;
+    m_pendingMusic.active = false;
+    playMusicImmediate(musicID, loops, volume);
+  }
+}
+
+void SoundManager::playMusicImmediate(const std::string &musicID, int loops,
+                                      float volume) {
   cleanupStoppedTracks();
 
   const std::string fullMusicID = std::format("music_{}", musicID);
@@ -388,6 +418,13 @@ void SoundManager::stopMusic() {
     return;
   }
 
+  // Cancel any not-yet-started delayed playMusic() request too.
+  m_pendingMusic.active = false;
+
+  stopActiveMusicTracks();
+}
+
+void SoundManager::stopActiveMusicTracks() {
   cleanupStoppedTracks();
 
   // Stop all music tracks

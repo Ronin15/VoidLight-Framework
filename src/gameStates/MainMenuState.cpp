@@ -46,6 +46,12 @@ bool MainMenuState::enter() {
   auto& ui = UIManager::Instance();
   auto& fontMgr = FontManager::Instance();
 
+  // GameStateManager::changeState() enters this state BEFORE the previous
+  // state's exit() runs, so whatever UI the previous state (GamePlayState,
+  // GameOverState, SettingsMenuState, a demo state, ...) left behind is
+  // still registered here. Clear it before building the main menu UI.
+  ui.prepareForStateTransition();
+
   // Wait briefly for fonts to be loaded before creating UI components.
   // Avoid unbounded waits on macOS where early resize/display events can trigger
   // a reload loop. Proceed after a short timeout and let UI relayout when fonts finish.
@@ -233,9 +239,15 @@ bool MainMenuState::exit() {
   // Clear the twilight composite grade so it does not bleed into other states.
   VoidLight::GPURenderer::Instance().setDayNightParams(1.0f, 1.0f, 1.0f, 0.0f);
 
-  // Clean up UI components using simplified method
+  // Scoped removal, not a full ui.prepareForStateTransition(): destinations
+  // that don't wipe-first in their own enter() (e.g. SettingsMenuState) build
+  // their UI without touching ours, and destinations that do wipe-first
+  // (e.g. GamePlayState) already ran before this — a blanket wipe here would
+  // either be redundant or destroy UI the destination just built.
   auto& ui = UIManager::Instance();
-  ui.prepareForStateTransition();
+  ui.clearKeyboardSelection();
+  ui.removeComponentsWithPrefix("mainmenu_");
+  ui.removeOverlay();
 
   return true;
 }

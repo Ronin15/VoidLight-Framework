@@ -129,6 +129,13 @@ bool GamePlayState::enter() {
     // Cache UI manager reference for better performance
     auto &ui = UIManager::Instance();
 
+    // GameStateManager::changeState() enters this state BEFORE the previous
+    // state's exit() runs, so whatever UI the previous state (LoadingState,
+    // GameOverState, etc.) left behind is still registered here. Clear it
+    // before building gameplay UI so that state's exit() can do its own
+    // (non-UI) cleanup afterward without needing to touch UIManager itself.
+    ui.prepareForStateTransition();
+
     // Create event log for time/weather messages
     ui.createEventLog("event_log",
                       {10, ui.getHeightInPixels() - 200, 730, 180}, 7);
@@ -214,6 +221,8 @@ bool GamePlayState::enter() {
     // track's gain with the raw music volume (not volume * musicVolume), so
     // baking any other multiplier in here would drift out of sync with live
     // Settings-menu adjustments made while this track is already playing.
+    // SoundManager itself delays the actual start (see
+    // SoundManager::MUSIC_START_DELAY_SEC) so this call is not immediate.
     SoundManager::Instance().playMusic("music_adventure_loop");
 
     // Mark as initialized for future pause/resume cycles
@@ -343,15 +352,17 @@ bool GamePlayState::exit() {
   CollisionManager &collisionMgr = CollisionManager::Instance();
   PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
   ParticleManager &particleMgr = ParticleManager::Instance();
-  auto &ui = UIManager::Instance();
   WorldManager &worldMgr = WorldManager::Instance();
   GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
   auto &wrm = WorldResourceManager::Instance();
   auto &eventMgr = EventManager::Instance();
 
-  // Stop background music before tearing down or transitioning
-  SoundManager::Instance().stopMusic();
-
+  // NOTE: deliberately does NOT call SoundManager::stopMusic() here.
+  // changeState() enters the destination BEFORE this exit() runs, so a
+  // destination that starts its own music (MainMenuState, or this state's
+  // own re-entry after LoadingState) would have that music silenced right
+  // after it started. Destinations that want silence (GameOverState) stop
+  // the music themselves in their own enter().
   if (auto* socialCtrl = m_controllers.get<SocialController>();
       socialCtrl && socialCtrl->isTrading()) {
     socialCtrl->closeTrade();
@@ -415,8 +426,9 @@ bool GamePlayState::exit() {
     // Clean up camera and GPU scene recorder
     m_camera.reset();
 
-    // Clean up UI
-    ui.prepareForStateTransition();
+    // NOTE: UI is intentionally left alone here — LoadingState::enter() (the
+    // destination for this branch) already ran and wiped/rebuilt it, since
+    // changeState() enters the new state before exiting this one.
 
     // Destroy all controllers so re-entry creates fresh instances with valid refs
     m_controllers.clear();
@@ -490,8 +502,10 @@ bool GamePlayState::exit() {
   // Clean up camera and GPU scene recorder first to stop world rendering
   m_camera.reset();
 
-  // Full UI cleanup using standard pattern
-  ui.prepareForStateTransition();
+  // NOTE: UI is intentionally left alone here — the destination state
+  // (GameOverState or MainMenuState) already ran enter() and wiped/rebuilt
+  // it, since changeState()/changeStateClearingStack() enter the new state
+  // before exiting this one.
 
   // Reset player
   mp_Player = nullptr;
@@ -610,6 +624,15 @@ void GamePlayState::pause() {
 void GamePlayState::resume() {
   // Show gameplay UI when resuming from pause
   auto &ui = UIManager::Instance();
+
+  // PauseState's exit() no longer removes the shared "__overlay" component
+  // itself, since doing so unconditionally would also delete it out from
+  // under MainMenuState when Pause transitions there instead of resuming
+  // here (MainMenuState rebuilds its own overlay for its quit-confirm dialog
+  // during its enter(), which runs before PauseState::exit()). GamePlayState
+  // has no use for it, so clear it here on the actual resume path.
+  ui.removeOverlay();
+
   ui.setComponentVisible("event_log", true);
   ui.setComponentVisible("time_label", true);
 
