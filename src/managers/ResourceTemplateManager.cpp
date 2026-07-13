@@ -217,15 +217,17 @@ bool ResourceTemplateManager::removeResourceTemplate(
     return false;
   }
 
+  // Remove from indexes first: removeFromIndexes() relies on the cached
+  // m_categories/m_types entries to locate the category/type index buckets,
+  // so it must run before those caches are erased below.
+  removeFromIndexes(handle);
+
   // Remove from all data structures
   m_resourceTemplates.erase(it);
   m_maxStackSizes.erase(handle);
   m_values.erase(handle);
   m_categories.erase(handle);
   m_types.erase(handle);
-
-  // Remove from indexes
-  removeFromIndexes(handle);
 
   // Release the handle for reuse with incremented generation
   releaseHandle(handle);
@@ -710,14 +712,13 @@ size_t ResourceTemplateManager::getMemoryUsage() const {
 
   size_t totalSize = 0;
 
-  // Account for m_resourceTemplates map itself
-  totalSize +=
-      m_resourceTemplates.size() * (sizeof(std::string) + sizeof(ResourcePtr));
+  // Account for m_resourceTemplates map itself (key is a ResourceHandle)
+  totalSize += m_resourceTemplates.size() *
+               (sizeof(VoidLight::ResourceHandle) + sizeof(ResourcePtr));
 
-  // Account for the actual strings and Resource objects in
-  // m_resourceTemplates
-  for (const auto &[resourceId, resource] : m_resourceTemplates) {
-    totalSize += sizeof(resourceId); // Size of the handle
+  // Account for the actual Resource objects in m_resourceTemplates
+  for (const auto &entry : m_resourceTemplates) {
+    const ResourcePtr &resource = entry.second;
     if (resource) {
       totalSize += sizeof(Resource);           // Base Resource object size
       totalSize += resource->getName().size(); // Resource name
@@ -953,38 +954,18 @@ std::vector<int> ResourceTemplateManager::getMaxStackSizes(
     return results;
   }
 
-  // PERFORMANCE OPTIMIZATION: Filter out invalid handles first to avoid lock
-  // overhead
-  std::vector<VoidLight::ResourceHandle> validHandles;
-  validHandles.reserve(handles.size());
+  // PERFORMANCE OPTIMIZATION: Single lock acquisition for all valid handles
+  std::shared_lock<std::shared_mutex> lock(m_resourceMutex);
 
   for (const auto &handle : handles) {
     if (handle.isValid()) {
-      validHandles.push_back(handle);
+      auto it = m_maxStackSizes.find(handle);
+      results.push_back((it != m_maxStackSizes.end()) ? it->second : 1);
     } else {
       results.push_back(1); // Default value for invalid handles
     }
   }
 
-  if (!validHandles.empty()) {
-    std::shared_lock<std::shared_mutex> lock(m_resourceMutex);
-
-    // Process valid handles with single lock acquisition
-    size_t validIndex = 0;
-    for (size_t i = 0; i < handles.size(); ++i) {
-      if (handles[i].isValid() && validIndex < validHandles.size()) {
-        auto it = m_maxStackSizes.find(validHandles[validIndex]);
-        if (results.size() <= i) {
-          results.resize(i + 1, 1); // Fill gaps with default values
-        }
-        results[i] = (it != m_maxStackSizes.end()) ? it->second : 1;
-        validIndex++;
-      }
-    }
-  }
-
-  // Ensure results vector has correct size
-  results.resize(handles.size(), 1);
   return results;
 }
 

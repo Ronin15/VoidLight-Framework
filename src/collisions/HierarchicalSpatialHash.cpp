@@ -28,6 +28,23 @@ void HierarchicalSpatialHash::insert(size_t bodyIndex, const AABB& aabb) {
     auto& regions = m_tempModifyRegions;
     getCoarseCoordsForAABB(aabb, regions);
 
+    if (regions.empty()) {
+        return;
+    }
+
+    // Track the body's location BEFORE the region-insertion loop. If this
+    // insertion crosses REGION_ACTIVE_THRESHOLD, insertIntoRegion() calls
+    // subdivideRegion(), which re-files every body in the coarse region by
+    // looking up its lastAABB in m_bodyLocations. If this body's entry did not
+    // exist yet (written after the loop), the current body would be skipped and
+    // then discarded by bodyIndices.clear() — dropping it from all fine cells.
+    // unordered_map references are only invalidated by erasing that element, so
+    // this reference stays valid across the loop below.
+    BodyLocation& location = m_bodyLocations[bodyIndex];
+    location.region = regions[0]; // Use first region as primary
+    location.fineCell = 0; // Refined below once fine subdivision is known
+    location.lastAABB = aabb;
+
     // Insert into all overlapping regions
     for (const auto& regionCoord : regions) {
         Region& region = m_regions[regionCoord];
@@ -35,21 +52,11 @@ void HierarchicalSpatialHash::insert(size_t bodyIndex, const AABB& aabb) {
         insertIntoRegion(region, bodyIndex, aabb);
     }
 
-    // Track the body's location for updates/removals
-    if (!regions.empty()) {
-        BodyLocation location;
-        location.region = regions[0]; // Use first region as primary
-        location.fineCell = 0; // Will be set if region has fine subdivision
-        location.lastAABB = aabb;
-
-        // If primary region has fine subdivision, compute fine cell
-        auto regionIt = m_regions.find(regions[0]);
-        if (regionIt != m_regions.end() && regionIt->second.hasFineSplit) {
-            FineCoord fineCoord = getFineCoord(aabb, regions[0]);
-            location.fineCell = computeGridKey(fineCoord);
-        }
-
-        m_bodyLocations[bodyIndex] = location;
+    // If primary region has fine subdivision, compute fine cell
+    auto regionIt = m_regions.find(regions[0]);
+    if (regionIt != m_regions.end() && regionIt->second.hasFineSplit) {
+        FineCoord fineCoord = getFineCoord(aabb, regions[0]);
+        location.fineCell = computeGridKey(fineCoord);
     }
 }
 

@@ -492,9 +492,6 @@ private:
   std::atomic<bool> m_initialized{false};
   std::atomic<bool> m_globallyPaused{false};
 
-  // Timing
-  std::atomic<uint64_t> m_lastUpdateTime{0};
-
   // Deferred dispatch queue
   struct PendingDispatch {
     uint64_t sequence{0};
@@ -503,10 +500,6 @@ private:
   };
   mutable std::mutex m_dispatchMutex;  // Protects concurrent enqueue from AI workers
 
-  // Async batch tracking for safe shutdown
-  std::vector<std::future<void>> m_batchFutures;
-  std::vector<std::future<void>> m_reusableBatchFutures;
-  std::mutex m_batchFuturesMutex;
   mutable std::deque<PendingDispatch> m_pendingDispatch;
   mutable std::deque<PendingDispatch> m_pendingCombatDispatch;
   mutable uint64_t m_nextDeferredSequence{0};
@@ -537,7 +530,6 @@ private:
   void commitPreparedCombatEvent(const PendingDispatch& pendingDispatch,
                                  const PreparedCombatEvent& preparedCombat,
                                  float gameTime) const;
-  uint64_t getCurrentTimeNanos() const;
   void enqueueDispatch(EventTypeId typeId, EventData&& data) const;
   size_t getPendingQueueSizeUnsafe() const;
   void dropOldestPendingUnsafe() const;

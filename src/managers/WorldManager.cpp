@@ -658,6 +658,9 @@ void WorldManager::initializeWorldResources() {
       if (gridHeight == 0) return;
       const size_t gridWidth = m_currentWorld->grid[0].size();
 
+      // resourceId is loop-invariant, so resolve its harvest type once.
+      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
+
       // Spawn harvestables at ALL tiles that have the matching obstacle
       for (size_t y = 0; y < gridHeight; ++y) {
         for (size_t x = 0; x < gridWidth; ++x) {
@@ -667,7 +670,6 @@ void WorldManager::initializeWorldResources() {
           Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
                        static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
 
-          auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
           EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
           if (h.isValid()) {
             ++spawned;
@@ -697,6 +699,9 @@ void WorldManager::initializeWorldResources() {
       if (gridHeight == 0) return;
       const size_t gridWidth = m_currentWorld->grid[0].size();
 
+      // resourceId is loop-invariant, so resolve its harvest type once.
+      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
+
       // Distribute harvestables across the world
       for (size_t y = 0; y < gridHeight && spawned < count; ++y) {
         for (size_t x = 0; x < gridWidth && spawned < count; ++x) {
@@ -712,14 +717,12 @@ void WorldManager::initializeWorldResources() {
           Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
                        static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
 
-          auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
           EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
           if (h.isValid()) {
             ++spawned;
           }
         }
       }
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
       WORLD_MANAGER_INFO(std::format("Spawned {} harvestables of type {} ({}) in {} biome",
                                      spawned, handle.toString(),
                                      VoidLight::harvestTypeToString(harvestType),
@@ -744,6 +747,10 @@ void WorldManager::initializeWorldResources() {
       if (gridHeight == 0) return;
       const size_t gridWidth = m_currentWorld->grid[0].size();
 
+      // createHarvestable auto-registers with WRM using worldId.
+      // resourceId is loop-invariant, so derive its HarvestType once via HarvestConfig.
+      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
+
       for (size_t y = 0; y < gridHeight && spawned < count; ++y) {
         for (size_t x = 0; x < gridWidth && spawned < count; ++x) {
           const auto& tile = m_currentWorld->grid[y][x];
@@ -757,16 +764,12 @@ void WorldManager::initializeWorldResources() {
           Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
                        static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
 
-          // createHarvestable auto-registers with WRM using worldId
-          // Use HarvestConfig to derive the correct HarvestType from resource
-          auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
           EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
           if (h.isValid()) {
             ++spawned;
           }
         }
       }
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
       WORLD_MANAGER_INFO(std::format("Spawned {} high-elevation harvestables of type {} ({})",
                                      spawned, handle.toString(),
                                      VoidLight::harvestTypeToString(harvestType)));

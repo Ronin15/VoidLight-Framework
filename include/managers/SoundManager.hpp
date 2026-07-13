@@ -171,10 +171,11 @@ private:
   // Audio storage
   std::unordered_map<std::string, MIX_Audio *> m_audioMap{};
 
-  // Track management for active sounds
-  std::unordered_map<std::string, std::vector<MIX_Track *>> m_activeSfxTracks{};
-  std::vector<MIX_Track *> m_activeMusicTracks{};
-  std::unordered_map<MIX_Track *, std::string>
+  // Track management for active sounds. Mutable because cleanupStoppedTracks()
+  // reaps dead tracks from const observer paths (e.g. isMusicPlaying()).
+  mutable std::unordered_map<std::string, std::vector<MIX_Track *>> m_activeSfxTracks{};
+  mutable std::vector<MIX_Track *> m_activeMusicTracks{};
+  mutable std::unordered_map<MIX_Track *, std::string>
       m_trackToAudioMap{}; // Track -> AudioID mapping
 
   // State management
@@ -200,7 +201,7 @@ private:
   // Internal helper methods
   [[nodiscard]] bool loadAudio(const std::string &filePath, const std::string &idPrefix);
   MIX_Track *createAndConfigureTrack(MIX_Group *group, const std::string &tag);
-  void cleanupStoppedTracks();
+  void cleanupStoppedTracks() const;
   std::vector<std::string> getSupportedExtensions() const;
   void playMusicImmediate(const std::string &musicID, int loops, float volume);
   void stopActiveMusicTracks();

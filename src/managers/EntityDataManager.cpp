@@ -694,8 +694,10 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
     auto& charData = m_characterData[typeIndex];
     charData.category = CreatureCategory::NPC;
     charData.sex = sex;
-    charData.typeId = m_raceNameToId.count(race) ? m_raceNameToId[race] : 0;
-    charData.subtypeId = m_classNameToId.count(charClass) ? m_classNameToId[charClass] : 0;
+    auto raceIdIt = m_raceNameToId.find(race);
+    charData.typeId = (raceIdIt != m_raceNameToId.end()) ? raceIdIt->second : 0;
+    auto classIdIt = m_classNameToId.find(charClass);
+    charData.subtypeId = (classIdIt != m_classNameToId.end()) ? classIdIt->second : 0;
     charData.maxHealth = raceInfo.baseHealth * classInfo.healthMult;
     charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
@@ -831,8 +833,10 @@ EntityHandle EntityDataManager::createMonster(const Vector2D& position,
     auto& charData = m_characterData[typeIndex];
     charData.category = CreatureCategory::Monster;
     charData.sex = sex;
-    charData.typeId = m_monsterTypeNameToId.count(monsterType) ? m_monsterTypeNameToId[monsterType] : 0;
-    charData.subtypeId = m_monsterVariantNameToId.count(variant) ? m_monsterVariantNameToId[variant] : 0;
+    auto monsterTypeIdIt = m_monsterTypeNameToId.find(monsterType);
+    charData.typeId = (monsterTypeIdIt != m_monsterTypeNameToId.end()) ? monsterTypeIdIt->second : 0;
+    auto monsterVariantIdIt = m_monsterVariantNameToId.find(variant);
+    charData.subtypeId = (monsterVariantIdIt != m_monsterVariantNameToId.end()) ? monsterVariantIdIt->second : 0;
     charData.maxHealth = typeInfo.baseHealth * variantInfo.healthMult;
     charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
@@ -931,8 +935,10 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     auto& charData = m_characterData[typeIndex];
     charData.category = CreatureCategory::Animal;
     charData.sex = sex;
-    charData.typeId = m_speciesNameToId.count(species) ? m_speciesNameToId[species] : 0;
-    charData.subtypeId = m_animalRoleNameToId.count(role) ? m_animalRoleNameToId[role] : 0;
+    auto speciesIdIt = m_speciesNameToId.find(species);
+    charData.typeId = (speciesIdIt != m_speciesNameToId.end()) ? speciesIdIt->second : 0;
+    auto animalRoleIdIt = m_animalRoleNameToId.find(role);
+    charData.subtypeId = (animalRoleIdIt != m_animalRoleNameToId.end()) ? animalRoleIdIt->second : 0;
     charData.maxHealth = speciesInfo.baseHealth * roleInfo.healthMult;
     charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;

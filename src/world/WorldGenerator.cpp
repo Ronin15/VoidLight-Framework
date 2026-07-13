@@ -86,7 +86,9 @@ namespace Deposits {
     // Base chance for any deposit to spawn when placing a MOUNTAIN obstacle
     constexpr float BASE_CHANCE = 0.08f;  // 8% of MOUNTAIN rocks become deposits
 
-    // Per-resource rarity weights (must sum to 1.0)
+    // Per-resource rarity weights. These sum to 0.99; the remaining ~1% of the
+    // [0,1) roll range falls through every cumulative branch in selectDepositType
+    // and is intentionally routed to IRON (so IRON is effectively ~26%).
     // Common ores (80% of deposits)
     constexpr float IRON_WEIGHT = 0.25f;       // 25% of deposits
     constexpr float COPPER_WEIGHT = 0.20f;     // 20%
@@ -330,6 +332,14 @@ void WorldGenerator::assignBiomes(
   int height = world.grid.size();
   int width = world.grid[0].size();
 
+  // Single generation-scoped RNG stream for special-biome scatter (like the
+  // other passes, e.g. createWaterBodies/distributeObstacles). Reseeding a bare
+  // LCG per tile and taking its first output produced near-linear values that
+  // formed vertical banding instead of scattered patches; advancing one stream
+  // per roll gives proper scatter.
+  std::default_random_engine specialRng(config.seed + 30000);
+  std::uniform_real_distribution<float> specialDist(0.0f, 1.0f);
+
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; ++x) {
       float elevation = elevationMap[y][x];
@@ -373,10 +383,7 @@ void WorldGenerator::assignBiomes(
         }
         // Remaining land: check for special biomes, else default to PLAINS
         else {
-          std::default_random_engine rng(config.seed + x * 1000 + y);
-          std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-
-          float special = dist(rng);
+          float special = specialDist(specialRng);
           if (special < BiomeCfg::HAUNTED_CHANCE) {
             biome = Biome::HAUNTED;
           } else if (special < BiomeCfg::HAUNTED_CHANCE + BiomeCfg::CELESTIAL_CHANCE) {
@@ -520,7 +527,8 @@ void WorldGenerator::distributeObstacles(WorldData &world,
     cumulative += DepCfg::DIAMOND_WEIGHT;
     if (roll < cumulative) return ObstacleType::DIAMOND_DEPOSIT;
 
-    // Fallback (should never reach due to weight distribution)
+    // Remainder routing: weights sum to 0.99, so rolls in [0.99, 1.0) reach here
+    // and are intentionally assigned to IRON (its effective share becomes ~26%).
     return ObstacleType::IRON_DEPOSIT;
   };
 

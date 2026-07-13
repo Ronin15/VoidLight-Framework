@@ -127,7 +127,6 @@ bool EventManager::init() {
     return std::make_shared<DamageEvent>();
   });
 
-  m_lastUpdateTime.store(getCurrentTimeNanos());
   m_initialized.store(true);
 
   registerBuiltInHandlers(*this);
@@ -145,20 +144,9 @@ void EventManager::clean() {
   m_isShutdown = true;
   m_initialized.store(false, std::memory_order_release);
 
-  // Wait for any pending async batches to complete before cleanup
-  {
-    std::vector<std::future<void>> localFutures;
-    {
-      std::lock_guard<std::mutex> lock(m_batchFuturesMutex);
-      localFutures = std::move(m_batchFutures);
-    }
-
-    for (auto &future : localFutures) {
-      if (future.valid()) {
-        future.wait();
-      }
-    }
-  }
+  // Combat-prep worker batches are the only async EventManager work, and they
+  // are joined synchronously inside drainDispatchQueueWithBudget() before it
+  // returns on the main thread, so no outstanding batch can exist here.
 
   EVENT_INFO_IF(!m_isShutdown, "Cleaning up EventManager");
 
@@ -176,20 +164,9 @@ void EventManager::clean() {
 void EventManager::prepareForStateTransition() {
   EVENT_INFO("Preparing EventManager for state transition...");
 
-  // Wait for any pending async batches
-  {
-    std::vector<std::future<void>> localFutures;
-    {
-      std::lock_guard<std::mutex> lock(m_batchFuturesMutex);
-      localFutures = std::move(m_batchFutures);
-    }
-
-    for (auto &future : localFutures) {
-      if (future.valid()) {
-        future.wait();
-      }
-    }
-  }
+  // Combat-prep worker batches are joined synchronously in
+  // drainDispatchQueueWithBudget() on the main thread, so no async batch is
+  // outstanding at transition time.
 
   // Clear transient handlers (state-level). Persistent handlers (manager-level,
   // registered via registerPersistentHandler) survive across transitions.
@@ -1285,8 +1262,3 @@ void EventManager::clearPendingDispatchQueues() const {
   }
 }
 
-uint64_t EventManager::getCurrentTimeNanos() const {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(
-             std::chrono::high_resolution_clock::now().time_since_epoch())
-      .count();
-}

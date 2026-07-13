@@ -199,8 +199,9 @@ bool InputManager::wasKeyPressed(SDL_Scancode key) const {
 }
 
 void InputManager::clearFrameInput() {
-  // This is now handled automatically in update()
-  // but keeping for backward compatibility
+  // Clears keys tracked for wasKeyPressed()/rebind capture this frame. Called
+  // once per frame by GameEngine::handleEvents() before the SDL poll loop —
+  // this is the sole per-frame reset of m_pressedThisFrame.
   m_pressedThisFrame.clear();
 }
 

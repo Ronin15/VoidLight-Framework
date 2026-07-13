@@ -48,8 +48,6 @@ static void registerInitialStates(GameStateManager& stateManager) {
   stateManager.addState(std::make_unique<OverlayDemoState>());
 }
 
-// maybe_unused is just a hint to the compiler that the variable is not used.
-// with -Wall -Wextra flags
 int main(int, char*[]) {
   GAMEENGINE_INFO(std::format("Initializing {}", GAME_NAME));
   THREADSYSTEM_INFO("Initializing Thread System");

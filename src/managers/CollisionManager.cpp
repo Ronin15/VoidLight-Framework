@@ -82,17 +82,6 @@ bool CollisionManager::init() {
 
    m_statisticsDirty = true; // Statistics need recalculation after init
 
-   // PERFORMANCE: Pre-allocate vector pool to prevent FPS dips from
-  // reallocations Initialize vector pool (moved from lazy initialization in
-  // getPooledVector)
-  m_vectorPool.clear();
-  m_vectorPool.reserve(32);
-  for (size_t i = 0; i < 16; ++i) {
-    m_vectorPool.emplace_back();
-    m_vectorPool.back().reserve(64); // Pre-allocate reasonable capacity
-  }
-  m_nextPoolIndex.store(0, std::memory_order_relaxed);
-
   // Pre-reserve reusable containers to avoid per-frame allocations
   m_currentTriggerPairsBuffer.reserve(1000); // Typical trigger count
   // Note: pools.staticIndices is reserved by CollisionPool::ensureCapacity()
@@ -164,16 +153,6 @@ void CollisionManager::prepareForStateTransition() {
 
   // Clear collision buffers to prevent dangling references to deleted bodies
   m_collisionPool.resetFrame();
-
-  // Re-initialize vector pool (must not leave it empty to prevent
-  // divide-by-zero in getPooledVector)
-  m_vectorPool.clear();
-  m_vectorPool.reserve(32);
-  for (size_t i = 0; i < 16; ++i) {
-    m_vectorPool.emplace_back();
-    m_vectorPool.back().reserve(64);
-  }
-  m_nextPoolIndex.store(0, std::memory_order_relaxed);
 
   // Clear trigger tracking state completely
   m_activeTriggerPairs.clear();
@@ -3101,37 +3080,4 @@ CollisionManager::createDefaultCullingArea() const {
   area.maxX = refPoint.getX() + radius;
   area.maxY = refPoint.getY() + radius;
   return area;
-}
-
-// ========== PERFORMANCE: VECTOR POOLING METHODS ==========
-
-std::vector<size_t> &CollisionManager::getPooledVector() {
-  /* THREAD SAFETY: Lock-free vector pool with atomic index
-   *
-   * THREAD SAFE because:
-   * - m_nextPoolIndex is std::atomic<size_t> with relaxed memory order
-   * - Pool initialized once in init(), never reallocated
-   * - fetch_add() provides lock-free thread-safe index allocation
-   * - Each thread gets a unique vector from the pool (no contention)
-   *
-   * PERFORMANCE:
-   * - No mutex overhead (lock-free atomic operations)
-   * - Round-robin allocation distributes load across pool
-   * - Vectors retain capacity across frames (no allocations)
-   */
-
-  // Pool is initialized in init(), not here (removed lazy initialization)
-  // Use atomic round-robin allocation for thread-safe access
-  size_t idx = m_nextPoolIndex.fetch_add(1, std::memory_order_relaxed) %
-               m_vectorPool.size();
-
-  auto &vec = m_vectorPool[idx];
-  vec.clear(); // Clear but retain capacity
-  return vec;
-}
-
-void CollisionManager::returnPooledVector(std::vector<size_t> &vec) {
-  // Vector is automatically returned to pool via reference
-  // Just clear it to avoid holding onto data
-  vec.clear();
 }

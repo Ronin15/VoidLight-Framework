@@ -517,8 +517,8 @@ public:
   void calculateOptimalSize(
       const std::string &id); // Calculate and apply optimal size for component
   void calculateOptimalSize(
-      std::shared_ptr<UIComponent>
-          component); // Calculate and apply optimal size for component
+      const std::shared_ptr<UIComponent>
+          &component); // Calculate and apply optimal size for component
   bool measureComponentContent(const std::shared_ptr<UIComponent> &component,
                                int *width,
                                int *height); // Measure content dimensions
@@ -649,6 +649,10 @@ private:
   // Performance optimization: Cached sorted components to avoid per-frame allocation + sorting
   mutable std::vector<std::shared_ptr<UIComponent>> m_sortedComponentsCache{};
   mutable bool m_sortedComponentsDirty{true};
+
+  // Reusable scratch key for per-item text-cache lookups in recordGPUVertices,
+  // so per-frame list/log/checkbox keys don't heap-allocate a fresh std::string.
+  std::string m_scratchTextKey{};
 
   // Performance optimization: Value caches to avoid hash lookup when values unchanged
   std::unordered_map<std::string, float> m_valueCache{};

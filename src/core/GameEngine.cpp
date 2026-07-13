@@ -590,10 +590,11 @@ bool GameEngine::init(std::string_view title) {
 
   // Initialize save game manager in a separate thread - #5
   // Use SDL_GetPrefPath for a writable save location (works with bundles)
-  const char* prefPath = SDL_GetPrefPath("HammerForgedGames", VOIDLIGHT_APP_NAME);
+  char* prefPath = SDL_GetPrefPath("HammerForgedGames", VOIDLIGHT_APP_NAME);
   std::string saveDir;
   if (prefPath) {
     saveDir = prefPath;
+    SDL_free(prefPath);
     GAMEENGINE_INFO(std::format("Using SDL pref path for saves: {}", saveDir));
   } else {
     saveDir = VoidLight::ResourcePath::resolve("res");

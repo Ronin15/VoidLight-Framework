@@ -35,7 +35,7 @@ class HudController : public ControllerBase, public IUpdatable
 public:
     static constexpr float TARGET_DISPLAY_DURATION{3.0f};
 
-    explicit HudController(std::shared_ptr<Player> player);
+    explicit HudController(const std::shared_ptr<Player>& player);
 
     ~HudController() override = default;
 

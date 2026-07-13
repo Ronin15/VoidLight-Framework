@@ -778,10 +778,10 @@ void ParticleManager::update(float deltaTime) {
     return;
   }
 
-  // NOTE: We do NOT wait for previous frame's batches here - they can overlap
-  // with current frame ParticleManager batches don't update collision data, so
-  // frame overlap is safe This allows better frame pipelining on low-core
-  // systems
+  // NOTE: This frame's physics batches are joined below (before Phase 5 buffer
+  // swap and the Phase 5.5 deactivation scan), so no cross-frame batch overlap
+  // occurs. The join is required for correctness: Phase 5.5 reads/writes flags[]
+  // on the same buffer the workers write, and must not race still-running batches.
 
   auto startTime = std::chrono::steady_clock::now();
 
@@ -1243,6 +1243,9 @@ void ParticleManager::stopWeatherEffects(float transitionTime) {
           (particles.flags[i] & UnifiedParticle::FLAG_WEATHER)) {
         particles.flags[i] &= ~UnifiedParticle::FLAG_ACTIVE;
         particles.flags[i] |= UnifiedParticle::FLAG_RECENTLY_DEACTIVATED;
+        // Immediate clear bypasses updateParticleRange's death path, so
+        // decrement here to mirror the fetch_sub at natural death.
+        m_activeCount.fetch_sub(1, std::memory_order_relaxed);
         affectedCount++;
       }
     }
@@ -1294,6 +1297,9 @@ void ParticleManager::clearWeatherGeneration(uint8_t generationId,
           // Immediate removal
           particles.flags[i] &= ~UnifiedParticle::FLAG_ACTIVE;
           particles.flags[i] |= UnifiedParticle::FLAG_RECENTLY_DEACTIVATED;
+          // Immediate clear bypasses updateParticleRange's death path, so
+          // decrement here to mirror the fetch_sub at natural death.
+          m_activeCount.fetch_sub(1, std::memory_order_relaxed);
         } else {
           // Set fade-out and limit life to fade time
           particles.flags[i] |= UnifiedParticle::FLAG_FADE_OUT;
@@ -1440,6 +1446,9 @@ void ParticleManager::triggerWeatherEffect(ParticleEffectType effectType,
           (particles.flags[i] & UnifiedParticle::FLAG_WEATHER)) {
         particles.flags[i] &= ~UnifiedParticle::FLAG_ACTIVE;
         particles.flags[i] |= UnifiedParticle::FLAG_RECENTLY_DEACTIVATED;
+        // Immediate clear bypasses updateParticleRange's death path, so
+        // decrement here to mirror the fetch_sub at natural death.
+        m_activeCount.fetch_sub(1, std::memory_order_relaxed);
         affectedCount++;
       }
     }

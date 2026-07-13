@@ -278,7 +278,9 @@ bool hasRequiredAmmoForRangedAttack(const CharacterData& charData) {
         return false;
     }
 
+    const std::string& requiredAmmo = weapon->getAmmoTypeRequired();
     auto& edm = EntityDataManager::Instance();
+    auto& resourceMgr = ResourceTemplateManager::Instance();
     const size_t maxSlots = edm.getInventoryData(charData.inventoryIndex).maxSlots;
     for (size_t slot = 0; slot < maxSlots; ++slot) {
         const InventorySlotData inventorySlot =
@@ -287,13 +289,15 @@ bool hasRequiredAmmoForRangedAttack(const CharacterData& charData) {
             continue;
         }
 
-        auto ammoTemplate =
-            ResourceTemplateManager::Instance().getResourceTemplate(
-                inventorySlot.resourceHandle);
-        const auto ammunition =
-            std::dynamic_pointer_cast<Ammunition>(ammoTemplate);
-        if (ammunition &&
-            ammunition->getAmmoType() == weapon->getAmmoTypeRequired()) {
+        // Cheap type check first: skip the shared_ptr copy for non-ammo slots.
+        if (resourceMgr.getType(inventorySlot.resourceHandle) != ResourceType::Ammunition) {
+            continue;
+        }
+
+        // Type is confirmed Ammunition, so a static cast is sufficient (no RTTI).
+        const auto ammunition = std::static_pointer_cast<Ammunition>(
+            resourceMgr.getResourceTemplate(inventorySlot.resourceHandle));
+        if (ammunition && ammunition->getAmmoType() == requiredAmmo) {
             return true;
         }
     }

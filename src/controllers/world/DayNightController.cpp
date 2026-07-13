@@ -70,8 +70,8 @@ void DayNightController::onTimeEvent(const EventData& data)
         return;
     }
 
-    // Use TimeEventType enum to check event type
-    auto timeEvent = std::static_pointer_cast<TimeEvent>(data.event);
+    // Use TimeEventType enum to check event type (no RTTI/refcount overhead)
+    const auto* timeEvent = static_cast<const TimeEvent*>(data.event.get());
     TimeEventType eventType = timeEvent->getTimeEventType();
 
     // Only care about hour changes for day/night transitions
@@ -79,7 +79,7 @@ void DayNightController::onTimeEvent(const EventData& data)
         return;
     }
 
-    auto hourEvent = std::static_pointer_cast<HourChangedEvent>(data.event);
+    const auto* hourEvent = static_cast<const HourChangedEvent*>(data.event.get());
     int hour = hourEvent->getHour();
 
     // Determine current time period from hour

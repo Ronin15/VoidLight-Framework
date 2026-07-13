@@ -48,7 +48,8 @@ ResourceQuantitySnapshot collectInventoryResourceSnapshot(
     EntityDataManager& edm,
     EntityHandle ownerHandle,
     uint32_t inventoryIndex,
-    VoidLight::ResourceHandle explicitHandle) {
+    VoidLight::ResourceHandle explicitHandle,
+    std::vector<InventorySlotData>& slotScratch) {
   ResourceQuantitySnapshot snapshot;
   if (!edm.isValidInventoryIndex(inventoryIndex)) {
     return snapshot;
@@ -57,10 +58,10 @@ ResourceQuantitySnapshot collectInventoryResourceSnapshot(
   addTrackedResource(snapshot, edm, inventoryIndex, explicitHandle);
 
   const size_t maxSlots = edm.getInventoryData(inventoryIndex).maxSlots;
-  std::vector<InventorySlotData> slots(maxSlots);
-  const size_t slotCount = edm.getInventorySlots(inventoryIndex, slots);
+  slotScratch.resize(maxSlots);  // Reuses capacity across calls (clear() semantics)
+  const size_t slotCount = edm.getInventorySlots(inventoryIndex, slotScratch);
   for (size_t i = 0; i < slotCount; ++i) {
-    addTrackedResource(snapshot, edm, inventoryIndex, slots[i].resourceHandle);
+    addTrackedResource(snapshot, edm, inventoryIndex, slotScratch[i].resourceHandle);
   }
 
   if (ownerHandle.isValid() && ownerHandle.hasHealth()) {
@@ -312,12 +313,6 @@ void Player::update(float deltaTime) {
   auto &cm = CollisionManager::Instance();
   cm.updateCollisionBodyPosition(m_id, newPos);
   cm.updateCollisionBodyVelocity(m_id, currentVel);
-
-  // If the texture dimensions haven't been loaded yet, try loading them
-  if (m_frameWidth == 0 &&
-      TextureManager::Instance().getGPUTextureData(m_textureID).has_value()) {
-    loadDimensionsFromTexture();
-  }
 }
 
 void Player::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
@@ -589,14 +584,14 @@ float Player::getMovementSpeed() const {
 bool Player::equipItem(VoidLight::ResourceHandle itemHandle) {
   auto& edm = EntityDataManager::Instance();
   const auto before = collectInventoryResourceSnapshot(
-      edm, m_handle, m_inventoryIndex, itemHandle);
+      edm, m_handle, m_inventoryIndex, itemHandle, m_inventorySnapshotSlots);
   const bool result = edm.equipCharacterItem(m_handle, itemHandle);
   if (!result) {
     return false;
   }
 
   const auto after = collectInventoryResourceSnapshot(
-      edm, m_handle, m_inventoryIndex, itemHandle);
+      edm, m_handle, m_inventoryIndex, itemHandle, m_inventorySnapshotSlots);
   for (const auto& [handle, oldQuantity] : before) {
     const auto afterIt = after.find(handle);
     const int newQuantity =
@@ -618,14 +613,14 @@ bool Player::unequipItem(const std::string &slotName) {
   const VoidLight::ResourceHandle equippedHandle =
       edm.getEquippedCharacterItem(m_handle, slotName);
   const auto before = collectInventoryResourceSnapshot(
-      edm, m_handle, m_inventoryIndex, equippedHandle);
+      edm, m_handle, m_inventoryIndex, equippedHandle, m_inventorySnapshotSlots);
   const bool result = edm.unequipCharacterItem(m_handle, slotName);
   if (!result) {
     return false;
   }
 
   const auto after = collectInventoryResourceSnapshot(
-      edm, m_handle, m_inventoryIndex, equippedHandle);
+      edm, m_handle, m_inventoryIndex, equippedHandle, m_inventorySnapshotSlots);
   for (const auto& [handle, oldQuantity] : before) {
     const auto afterIt = after.find(handle);
     const int newQuantity =

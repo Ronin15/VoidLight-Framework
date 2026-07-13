@@ -55,6 +55,20 @@ References are by symbol/function (not line numbers) so they survive edits.
   the cache/use sites and at `EntityDataManager` `destroyEntity`/`freeSlot`. If destruction
   ever becomes synchronous/compacting, audit these callers.
 
+- **ResourceTemplateManager `loadResourcesFromJson/*String/*File` unlocked map mutation** — the
+  public loaders write `m_resourceTemplates` etc. without taking `m_resourceMutex`. Latent-only:
+  the sole production caller is `init()`, which takes the exclusive lock and then calls the
+  loaders while holding it (`shared_mutex` is non-recursive, so the loaders must stay lock-free);
+  all other callers are single-threaded tests. Self-synchronizing the loaders would deadlock
+  `init()`; a correct fix needs a public-locking-wrapper + lock-free-internal split (locking-
+  architecture change), and making them private breaks the `[[nodiscard]]` public loader API the
+  tests exercise. Reviewed 2026-07-13; left as-is.
+- **CollisionManager `createStaticObstacleBodies` flood-fill neighbor bounds** — neighbor cells are
+  bounds-checked against the current row's width, not `grid[ny]`'s width. Cannot trigger: worlds
+  are always built rectangular (`WorldGenerator` `grid.resize(height, vector<Tile>(width))`), so
+  every row has identical width. Adding a per-row bound would be blind hardening of an unreachable
+  case. Reviewed 2026-07-13; left as-is.
+
 ## C. Behavior pinned / range decisions
 
 - **SoundManager volume range `[0, 10]`** — the runtime clamp is intentionally 0.0–10.0
@@ -69,6 +83,15 @@ References are by symbol/function (not line numbers) so they survive edits.
   (asserted by `WorldManagerTests::TestWorldReplacementUnloadsBeforeActivatingNewWorld`, and
   per the documented "do not rely only on deferred WorldUnloaded" invariant). A prior review
   pass changed this to Deferred and it was reverted. Documented inline.
+
+- **`EntityDataManager::addToInventory` inline slots ignore `maxSlots`** — a review pass flagged this
+  as inconsistent with `transferInventoryItem` (which clamps via `inlineSlotCountFor()`) and clamped
+  the three inline loops to `min(INLINE_SLOT_COUNT, maxSlots)`. That change was reverted: it breaks
+  `ResourceEdgeCaseTests::TestInventoryAddFailureDoesNotPartiallyMutate`, which creates
+  `createInventory(1, true)` and requires `INLINE_SLOT_COUNT * maxStack - 2` items to fit in the inline
+  fast-path regardless of `maxSlots`. The inline slots are intentionally a fixed-size fast path;
+  `maxSlots` governs logical/overflow capacity, not inline occupancy. Pinned behavior — do not re-clamp
+  without updating that test. Reviewed 2026-07-13.
 
 ## D. Real but deliberately out-of-scope (deferred work, not a quick fix)
 
@@ -92,6 +115,25 @@ References are by symbol/function (not line numbers) so they survive edits.
 - **ProjectileManager SIMD vs scalar-tail FP rounding** — full 4-wide batches use FMA
   (single rounding) while a `<4` trailing batch uses mul+add (two roundings), so positions can
   differ by ~1 ulp. Determinism micro-note, not a correctness bug.
+
+- **SettingsManager `loadFromFile` collapses whole-valued floats to int** — a setting authored as a
+  whole-number float (e.g. `masterVolume: 1.0`) reloads as an `int` variant, so a later typed
+  `get<float>` returns the default instead of round-tripping. Real but blocked on a core-type change:
+  `JsonValue` stores every number as a bare `double` with no integer-vs-decimal token flag, so the
+  authored type cannot be recovered inside SettingsManager. Both self-contained workarounds break
+  pinned `SettingsManagerTests` (`TestLoadFromFile` needs `get<int>("graphics","width")==1920`;
+  `TestTypeMismatch` needs `get<float>` on an int-holding variant to return the default). A correct fix
+  requires `JsonReader`/`JsonValue` to preserve and expose the integer-vs-decimal distinction (wide
+  blast radius across SaveGame/resource-templates/world-config) plus forcing a decimal on float
+  serialization — out of scope for a review-hardening pass. Reviewed 2026-07-13.
+- **WorldManager `initializeWorldResources` ~13–18 full-grid scans at world load** — the three spawn
+  lambdas each rescan the grid. Collapsing the ~12 obstacle passes into one bucketing scan needs new
+  reusable member buckets and a lambda restructure; it is a one-time, off-render-hot-path load cost
+  with no measured world-load-time concern. Per the finding's own conditional suggestion, deferred.
+- **WorldGenerator `tryConnectBuildings` rescans the whole grid per connected building** — a correct
+  fix needs a `buildingId → tiles/origin` map populated in `createBuilding` and threaded through the
+  static placement signatures; connected buildings are known only by id at the relabel site. Bounded
+  one-time async generation cost; structural change with world-geometry regression risk, deferred.
 
 ## E. Intentional includes — do NOT strip on a clangd "unused" warning
 

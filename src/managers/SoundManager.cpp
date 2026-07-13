@@ -193,7 +193,7 @@ MIX_Track *SoundManager::createAndConfigureTrack(MIX_Group *group,
   return track;
 }
 
-void SoundManager::cleanupStoppedTracks() {
+void SoundManager::cleanupStoppedTracks() const {
   // Clean up stopped SFX tracks
   for (auto it = m_activeSfxTracks.begin(); it != m_activeSfxTracks.end();) {
     auto &tracks = it->second;
@@ -443,8 +443,8 @@ bool SoundManager::isMusicPlaying() const {
     return false;
   }
 
-  // Cast away const for this method
-  const_cast<SoundManager*>(this)->cleanupStoppedTracks();
+  // Reap any tracks that finished playing (const via mutable containers).
+  cleanupStoppedTracks();
 
   // Check if any music track is currently playing
   return std::any_of(m_activeMusicTracks.begin(), m_activeMusicTracks.end(),

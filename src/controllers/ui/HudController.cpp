@@ -74,7 +74,7 @@ int getHotbarDisplayQuantity(EntityDataManager& edm,
 
 } // namespace
 
-HudController::HudController(std::shared_ptr<Player> player)
+HudController::HudController(const std::shared_ptr<Player>& player)
     : mp_player(player)
     , m_playerHandle(player ? player->getHandle() : EntityHandle{})
 {

@@ -211,6 +211,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         if (distanceSquared > minRangeSquared && ctx.pathData) {
             auto& pathData = *ctx.pathData;
             pathData.pathUpdateTimer += ctx.deltaTime;
+            pathData.progressTimer += ctx.deltaTime;
 
             const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
                                       pathData.progressTimer < 0.8f);
@@ -264,22 +265,6 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                     Vector2D direction = toWaypoint / dist;
                     ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
                     pathData.progressTimer = 0.0f;
-
-                    chase.crowdCheckTimer += ctx.deltaTime;
-                    if (chase.crowdCheckTimer >= config.crowdCheckInterval) {
-                        chase.crowdCheckTimer = 0.0f;
-                    }
-
-                    if (chase.cachedChaserCount > 3) {
-                        Vector2D lateral(-direction.getY(), direction.getX());
-                        float lateralBias = ((float)(ctx.entityId % 3) - 1.0f) * 15.0f;
-                        Vector2D adjustedTarget = targetPos + lateral * lateralBias;
-                        Vector2D diff = adjustedTarget - entityPos;
-                        float diffLenSq = diff.lengthSquared();
-                        if (diffLenSq > 0.001f) {
-                            ctx.transform.velocity = diff * ((shared.moveSpeed * chaseSpeed) / std::sqrt(diffLenSq));
-                        }
-                    }
                 } else {
                     Vector2D direction = (targetPos - entityPos).normalized();
                     ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;

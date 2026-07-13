@@ -116,15 +116,14 @@ bool GamePlayState::enter() {
 
     // Enable automatic weather changes
     gameTimeMgr.enableAutoWeather(true);
-#ifdef DEBUG
-    // Debug: faster changes for testing seasons/weather
-    gameTimeMgr.setWeatherCheckInterval(1.0f);
-    gameTimeMgr.setTimeScale(3600.0f);
-#else
-    // Release/ReleaseSafe/Profile: normal pacing
+    // Normal pacing (Release/ReleaseSafe/Profile)
     gameTimeMgr.setWeatherCheckInterval(4.0f);
     gameTimeMgr.setTimeScale(60.0f);
-#endif
+    // Debug: faster changes for testing seasons/weather
+    VOIDLIGHT_DEBUG_ONLY(
+        gameTimeMgr.setWeatherCheckInterval(1.0f);
+        gameTimeMgr.setTimeScale(3600.0f);
+    );
 
     // Cache UI manager reference for better performance
     auto &ui = UIManager::Instance();

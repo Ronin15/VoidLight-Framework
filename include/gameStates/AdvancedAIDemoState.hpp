@@ -57,8 +57,6 @@ private:
     void setupTestVillage();  // Spawns merchant NPCs, guards, and villagers
     void initializeCamera();
     void updateCamera(float deltaTime);
-    void registerEventHandlers();
-    void unregisterEventHandlers();
 
     // Data-driven NPC rendering (velocity-based animation)
     NPCRenderController m_npcRenderCtrl{};

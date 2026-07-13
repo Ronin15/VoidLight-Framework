@@ -351,22 +351,22 @@ void AIManager::update(float deltaTime) {
       cachedPlayerHandle = m_playerHandle;
       cachedPlayerValid = m_playerHandle.isValid();
       if (cachedPlayerValid) {
+        // Cache player edmIndex once per frame (avoids hash lookup per query),
+        // reusing this single lookup under the lock.
         size_t playerIdx = edm.getIndex(m_playerHandle);
+        m_cachedPlayerEdmIdx = playerIdx;
         if (playerIdx != SIZE_MAX) {
           const auto &playerTransform = edm.getTransformByIndex(playerIdx);
           cachedPlayerPosition = playerTransform.position;
           cachedPlayerVelocity = playerTransform.velocity;
         }
+      } else {
+        m_cachedPlayerEdmIdx = SIZE_MAX;
       }
     }
 
     // Cache game time ONCE per frame for combat timing comparisons
     float cachedGameTime = GameTimeManager::Instance().getTotalGameTimeSeconds();
-
-    // Cache player edmIndex once per frame (avoids hash lookup per query)
-    m_cachedPlayerEdmIdx = m_playerHandle.isValid()
-        ? edm.getIndex(m_playerHandle)
-        : SIZE_MAX;
 
     // WorkerBudget manager — used per-type bucket below.
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();

@@ -233,10 +233,6 @@ public:
     [[nodiscard]] bool isEventOnlyTriggerOverlap(size_t storageIdx, float px, float py,
                                                   float hw, float hh, uint16_t mask) const;
 
-    // PERFORMANCE: Vector pooling for temporary allocations
-    std::vector<size_t>& getPooledVector();
-    void returnPooledVector(std::vector<size_t>& vec);
-
     /* Body Type Distinctions:
      * - STATIC: World obstacles, buildings, triggers (never move, handled separately)
      * - KINEMATIC: NPCs, script-controlled entities (move via script, not physics)
@@ -604,10 +600,6 @@ private:
                         size_t sampleSize = 100) const;
     void insertionSortByMinX(std::vector<size_t>& indices,
                              const std::vector<CollisionPool::MovableAABB>& aabbs) const;
-
-    // PERFORMANCE: Vector pool for temporary allocations in hot paths
-    mutable std::vector<std::vector<size_t>> m_vectorPool;
-    mutable std::atomic<size_t> m_nextPoolIndex{0};
 
     // PERFORMANCE: Reusable containers to avoid per-frame allocations
     // These are cleared each frame but capacity is retained to eliminate heap churn

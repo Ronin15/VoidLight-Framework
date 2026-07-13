@@ -164,7 +164,7 @@ void JsonValue::writeToStream(std::ostream &stream, int depth) const {
     if (std::floor(num) == num && std::abs(num) < 1e15) {
       stream << static_cast<long long>(num);
     } else {
-      stream << num;
+      stream << std::format("{}", num);
     }
     break;
   }

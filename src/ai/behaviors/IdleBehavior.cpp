@@ -61,6 +61,9 @@ void updateSubtleSway(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig&
         ctx.transform.velocity = swayDirection * config.swaySpeed;
         idle.movementTimer = 0.0f;
         idle.movementInterval = getRandomMovementInterval(config.movementFrequency);
+    } else {
+        // Clear velocity between bursts so idle sway does not drift continuously.
+        ctx.transform.velocity = Vector2D(0, 0);
     }
 }
 
@@ -88,6 +91,9 @@ void updateLightFidget(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig
         ctx.transform.velocity = fidgetDirection * config.fidgetSpeed;
         idle.movementTimer = 0.0f;
         idle.movementInterval = getRandomMovementInterval(config.movementFrequency);
+    } else {
+        // Clear velocity between bursts so light fidget does not drift continuously.
+        ctx.transform.velocity = Vector2D(0, 0);
     }
 
     if (config.turnFrequency > 0.0f && idle.turnTimer >= idle.turnInterval) {

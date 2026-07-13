@@ -228,15 +228,12 @@ bool AdvancedAIDemoState::enter() {
 
     // Set player reference in AIManager BEFORE registering behaviors
     // This ensures Follow/Flee/Attack behaviors can access the player target
-    // Explicitly cast PlayerPtr to EntityPtr to ensure proper conversion
-    EntityPtr playerAsEntity = std::static_pointer_cast<Entity>(m_player);
-    aiMgr.setPlayerHandle(playerAsEntity->getHandle());
+    aiMgr.setPlayerHandle(m_player->getHandle());
 
     // Register CombatController (follows GamePlayState pattern)
     m_controllers.add<CombatController>(m_player);
     m_controllers.add<HudController>(m_player);
     m_controllers.subscribeAll();
-    registerEventHandlers();
 
     // Spawn test village with merchants, guards, and villagers
     setupTestVillage();
@@ -341,10 +338,11 @@ bool AdvancedAIDemoState::exit() {
     // NPCs hold EDM indices - must be destroyed while EDM data is still valid
     aiMgr.destroyAllNPCsForStateTransition();
     if (m_player) {
+      // Clear the camera pointer before camera teardown below
+      m_player->setCamera(nullptr);
       m_player.reset();
     }
 
-    unregisterEventHandlers();
     aiMgr.prepareForStateTransition();
     ProjectileManager::Instance().prepareForStateTransition();
     bgSimMgr.prepareForStateTransition();
@@ -364,9 +362,6 @@ bool AdvancedAIDemoState::exit() {
     VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
     WorldManager::Instance().setActiveCamera(nullptr);
-    if (m_player) {
-      m_player->setCamera(nullptr);
-    }
 
     // Clean up camera and GPU scene renderer
     m_camera.reset();
@@ -408,7 +403,6 @@ bool AdvancedAIDemoState::exit() {
     m_player.reset();
   }
 
-  unregisterEventHandlers();
   aiMgr.prepareForStateTransition();
   ProjectileManager::Instance().prepareForStateTransition();
   bgSimMgr.prepareForStateTransition();
@@ -456,12 +450,6 @@ bool AdvancedAIDemoState::exit() {
 
   GAMESTATE_INFO("AdvancedAIDemoState exit complete");
   return true;
-}
-
-void AdvancedAIDemoState::registerEventHandlers() {
-}
-
-void AdvancedAIDemoState::unregisterEventHandlers() {
 }
 
 void AdvancedAIDemoState::update(float deltaTime) {

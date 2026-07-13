@@ -449,7 +449,9 @@ void PathfindingGrid::smoothPath(std::vector<Vector2D> &path) {
     smoothed.push_back(path.back());
   }
 
-  path = std::move(smoothed);
+  // Copy results into caller's path (reusing its capacity) instead of moving,
+  // so the thread_local scratch buffer retains its capacity across calls.
+  path.assign(smoothed.begin(), smoothed.end());
 }
 
 bool PathfindingGrid::hasLineOfSight(const Vector2D &start,

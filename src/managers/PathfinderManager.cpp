@@ -292,18 +292,28 @@ uint64_t PathfinderManager::requestPath(
         std::vector<Vector2D> path;
         bool cacheHit = false;
 
-        // Cache lookup (brief lock, shared across all pathfinding tasks)
+        // Cache lookup (shared_lock allows concurrent readers)
         {
-            std::unique_lock<std::shared_mutex> lock(m_cacheMutex);
+            std::shared_lock<std::shared_mutex> lock(m_cacheMutex);
             auto it = m_pathCache.find(cacheKey);
             if (it != m_pathCache.end()) {
                 path = it->second.path;
-                it->second.lastUsed = std::chrono::steady_clock::now();
-                it->second.useCount++;
                 cacheHit = true;
                 m_cacheHits.fetch_add(1, std::memory_order_relaxed);
             } else {
                 m_cacheMisses.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+
+        // Bump cache-entry metadata under a separate try-lock so reads stay concurrent
+        if (cacheHit) {
+            std::unique_lock<std::shared_mutex> lock(m_cacheMutex, std::try_to_lock);
+            if (lock.owns_lock()) {
+                auto it = m_pathCache.find(cacheKey);
+                if (it != m_pathCache.end()) {
+                    it->second.lastUsed = std::chrono::steady_clock::now();
+                    it->second.useCount++;
+                }
             }
         }
 
@@ -1726,20 +1736,23 @@ void PathfinderManager::onTileChanged(int x, int y) {
 }
 
 void PathfinderManager::waitForGridRebuildCompletion() {
-    // Swap out futures to avoid holding lock during wait (mirrors AIManager pattern)
-    std::vector<std::future<void>> localFutures;
-
+    // Swap out futures into the reusable member buffer to avoid holding the lock
+    // during the wait while preserving capacity across rebuilds (mirrors AIManager pattern).
+    // waitForGridRebuildCompletion runs on the main thread during state transitions, so
+    // m_reusableGridRebuildFutures is not accessed concurrently outside the lock.
     {
         std::lock_guard<std::mutex> lock(m_gridRebuildFuturesMutex);
-        localFutures = std::move(m_gridRebuildFutures);
-        // m_gridRebuildFutures is now empty, new tasks can be added concurrently
+        m_reusableGridRebuildFutures.clear();
+        m_reusableGridRebuildFutures.swap(m_gridRebuildFutures);
+        // m_gridRebuildFutures now retains the reusable buffer's capacity, so new
+        // tasks can be added concurrently without reallocating.
     }
 
-    if (!localFutures.empty()) {
+    if (!m_reusableGridRebuildFutures.empty()) {
         PATHFIND_INFO(std::format("Waiting for {} grid rebuild task(s) to complete before state transition...",
-                      localFutures.size()));
+                      m_reusableGridRebuildFutures.size()));
 
-        for (auto& future : localFutures) {
+        for (auto& future : m_reusableGridRebuildFutures) {
             if (future.valid()) {
                 try {
                     future.wait(); // Block until task completes

@@ -735,6 +735,11 @@ void EventDemoState::triggerWeatherDemo() {
 }
 
 void EventDemoState::triggerNPCSpawnDemo() {
+  if (!m_player) {
+    addLogEntry("NPC: no player");
+    return;
+  }
+
   std::string npcType = m_npcTypes[m_currentNPCTypeIndex];
   m_currentNPCTypeIndex = (m_currentNPCTypeIndex + 1) % m_npcTypes.size();
 
@@ -939,6 +944,11 @@ void EventDemoState::triggerResourceDemo() {
 }
 
 void EventDemoState::triggerMassNPCSpawnDemo() {
+  if (!m_player) {
+    addLogEntry("NPC: no player");
+    return;
+  }
+
   // Check NPC limit
   if (EntityDataManager::Instance().getEntityCount(EntityKind::NPC) >= 5000) {
     addLogEntry("NPC limit reached (5000)");

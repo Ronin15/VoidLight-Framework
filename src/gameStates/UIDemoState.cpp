@@ -149,9 +149,6 @@ bool UIDemoState::enter() {
 }
 
 void UIDemoState::update(float deltaTime) {
-    // Store deltaTime for ui.update() in render()
-    m_lastDeltaTime = deltaTime;
-
     // Update progress bar animation
     updateProgressBar(deltaTime);
 
