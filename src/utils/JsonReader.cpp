@@ -161,10 +161,16 @@ void JsonValue::writeToStream(std::ostream &stream, int depth) const {
     break;
   case JsonType::Number: {
     double num = asNumber();
-    if (std::floor(num) == num && std::abs(num) < 1e15) {
+    if (isIntegerNumber() && std::floor(num) == num && std::abs(num) < 1e15) {
       stream << static_cast<long long>(num);
     } else {
-      stream << std::format("{}", num);
+      // Real number: emit the shortest round-trip form, but guarantee a
+      // fractional/exponent marker so it re-parses as a real, not an integer.
+      std::string s = std::format("{}", num);
+      stream << s;
+      if (s.find_first_of(".eEnN") == std::string::npos) {
+        stream << ".0";
+      }
     }
     break;
   }
@@ -647,7 +653,11 @@ JsonValue JsonReader::Parser::parseValue() {
     std::string numStr = advance().value;
     try {
       double num = std::stod(numStr);
-      return JsonValue(num);
+      // An integer literal has no fractional or exponent part; preserve that
+      // distinction so consumers can tell `1` from `1.0`.
+      const bool isInteger =
+          numStr.find_first_of(".eE") == std::string::npos;
+      return JsonValue::makeNumber(num, isInteger);
     } catch (const std::exception &) {
       setError(std::format("Invalid number format: {}", numStr));
       return JsonValue();

@@ -116,16 +116,6 @@ References are by symbol/function (not line numbers) so they survive edits.
   (single rounding) while a `<4` trailing batch uses mul+add (two roundings), so positions can
   differ by ~1 ulp. Determinism micro-note, not a correctness bug.
 
-- **SettingsManager `loadFromFile` collapses whole-valued floats to int** — a setting authored as a
-  whole-number float (e.g. `masterVolume: 1.0`) reloads as an `int` variant, so a later typed
-  `get<float>` returns the default instead of round-tripping. Real but blocked on a core-type change:
-  `JsonValue` stores every number as a bare `double` with no integer-vs-decimal token flag, so the
-  authored type cannot be recovered inside SettingsManager. Both self-contained workarounds break
-  pinned `SettingsManagerTests` (`TestLoadFromFile` needs `get<int>("graphics","width")==1920`;
-  `TestTypeMismatch` needs `get<float>` on an int-holding variant to return the default). A correct fix
-  requires `JsonReader`/`JsonValue` to preserve and expose the integer-vs-decimal distinction (wide
-  blast radius across SaveGame/resource-templates/world-config) plus forcing a decimal on float
-  serialization — out of scope for a review-hardening pass. Reviewed 2026-07-13.
 - **WorldManager `initializeWorldResources` ~13–18 full-grid scans at world load** — the three spawn
   lambdas each rescan the grid. Collapsing the ~12 obstacle passes into one bucketing scan needs new
   reusable member buckets and a lambda restructure; it is a one-time, off-render-hot-path load cost
