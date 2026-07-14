@@ -8,6 +8,7 @@
 #include "managers/EntityDataManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include <chrono>
+#include <limits>
 #include <numeric>
 #include <random>
 
@@ -213,6 +214,59 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
             pathData.pathUpdateTimer += ctx.deltaTime;
             pathData.progressTimer += ctx.deltaTime;
 
+            // Movement + progress first (Flee pattern): only clear progressTimer when the
+            // entity actually closes on the waypoint/target. Stuck detection uses that timer.
+            if (pathData.isFollowingPath()) {
+                Vector2D waypoint = ctx.pathData->currentWaypoint;
+                Vector2D toWaypoint = waypoint - entityPos;
+                float dist = toWaypoint.length();
+
+                if (dist < config.navRadius) {
+                    edm.advanceWaypointWithCache(ctx.edmIndex);
+                    // New waypoint: rebaseline progress metric (advanceWaypoint zeros progressTimer).
+                    pathData.lastNodeDistance = std::numeric_limits<float>::max();
+                    if (pathData.isFollowingPath()) {
+                        waypoint = ctx.pathData->currentWaypoint;
+                        toWaypoint = waypoint - entityPos;
+                        dist = toWaypoint.length();
+                    }
+                }
+
+                if (dist + 1.0f < pathData.lastNodeDistance) {
+                    pathData.lastNodeDistance = dist;
+                    pathData.progressTimer = 0.0f;
+                }
+
+                bool following = (pathData.isFollowingPath() && dist > 0.001f);
+
+                if (following) {
+                    Vector2D direction = toWaypoint / dist;
+                    ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
+                } else {
+                    Vector2D direction = (targetPos - entityPos).normalized();
+                    ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
+                }
+            } else {
+                // Direct chase: progress is closing distance to the target.
+                float distToTarget = std::sqrt(distanceSquared);
+                if (distToTarget + 1.0f < pathData.lastNodeDistance) {
+                    pathData.lastNodeDistance = distToTarget;
+                    pathData.progressTimer = 0.0f;
+                }
+
+                Vector2D direction = (targetPos - entityPos).normalized();
+                int nearbyCount = shared.cachedNearbyCount;
+
+                if (nearbyCount > 1) {
+                    Vector2D lateral(-direction.getY(), direction.getX());
+                    float offset = ((float)(ctx.entityId % 3) - 1.0f) * 20.0f;
+                    direction = direction + lateral * (offset / 400.0f);
+                    direction.normalize();
+                }
+
+                ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
+            }
+
             const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
                                       pathData.progressTimer < 0.8f);
             bool needsNewPath = false;
@@ -243,46 +297,6 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                 PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, entityPos, targetPos,
                                                                PathfinderManager::Priority::High);
                 applyPathCooldown(chase, config.pathRequestCooldown);
-            }
-
-            if (pathData.isFollowingPath()) {
-                Vector2D waypoint = ctx.pathData->currentWaypoint;
-                Vector2D toWaypoint = waypoint - entityPos;
-                float dist = toWaypoint.length();
-
-                if (dist < config.navRadius) {
-                    edm.advanceWaypointWithCache(ctx.edmIndex);
-                    if (pathData.isFollowingPath()) {
-                        waypoint = ctx.pathData->currentWaypoint;
-                        toWaypoint = waypoint - entityPos;
-                        dist = toWaypoint.length();
-                    }
-                }
-
-                bool following = (pathData.isFollowingPath() && dist > 0.001f);
-
-                if (following) {
-                    Vector2D direction = toWaypoint / dist;
-                    ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
-                    pathData.progressTimer = 0.0f;
-                } else {
-                    Vector2D direction = (targetPos - entityPos).normalized();
-                    ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
-                    pathData.progressTimer = 0.0f;
-                }
-            } else {
-                Vector2D direction = (targetPos - entityPos).normalized();
-                int nearbyCount = shared.cachedNearbyCount;
-
-                if (nearbyCount > 1) {
-                    Vector2D lateral(-direction.getY(), direction.getX());
-                    float offset = ((float)(ctx.entityId % 3) - 1.0f) * 20.0f;
-                    direction = direction + lateral * (offset / 400.0f);
-                    direction.normalize();
-                }
-
-                ctx.transform.velocity = direction * shared.moveSpeed * chaseSpeed;
-                pathData.progressTimer = 0.0f;
             }
 
             chase.isChasing = true;

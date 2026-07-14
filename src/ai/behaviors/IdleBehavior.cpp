@@ -51,20 +51,53 @@ void updateStationary(BehaviorContext& ctx) {
     ctx.transform.velocity = Vector2D(0, 0);
 }
 
+void updateIdleBurstMotion(BehaviorContext& ctx, VoidLight::IdleStateData& idle,
+                           float movementFrequency, float idleRadius, float moveSpeed) {
+    // Drive toward a random offset inside idleRadius, then stop until the next interval.
+    // Uses IdleStateData::currentOffset as the active target relative to originalPosition.
+    constexpr float kArrivalRadius = 2.0f;
+    constexpr float kArrivalRadiusSq = kArrivalRadius * kArrivalRadius;
+
+    const Vector2D target = idle.originalPosition + idle.currentOffset;
+    const Vector2D toTarget = target - ctx.transform.position;
+    const float distSq = toTarget.lengthSquared();
+    const bool hasTarget = idle.currentOffset.lengthSquared() > 0.0001f;
+
+    if (hasTarget && distSq > kArrivalRadiusSq) {
+        const float dist = std::sqrt(distSq);
+        ctx.transform.velocity = toTarget * (moveSpeed / dist);
+        return;
+    }
+
+    // Arrived or no target: stop and wait for the next burst.
+    ctx.transform.velocity = Vector2D(0, 0);
+    if (hasTarget) {
+        idle.currentOffset = Vector2D(0, 0);
+    }
+
+    idle.movementTimer += ctx.deltaTime;
+    if (movementFrequency <= 0.0f || idle.movementTimer < idle.movementInterval) {
+        return;
+    }
+
+    idle.currentOffset = generateRandomOffset(idleRadius);
+    idle.movementTimer = 0.0f;
+    idle.movementInterval = getRandomMovementInterval(movementFrequency);
+
+    const Vector2D newTarget = idle.originalPosition + idle.currentOffset;
+    const Vector2D toNew = newTarget - ctx.transform.position;
+    const float newDistSq = toNew.lengthSquared();
+    if (newDistSq > kArrivalRadiusSq) {
+        const float newDist = std::sqrt(newDistSq);
+        ctx.transform.velocity = toNew * (moveSpeed / newDist);
+    } else {
+        idle.currentOffset = Vector2D(0, 0);
+    }
+}
+
 void updateSubtleSway(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
                       VoidLight::IdleStateData& idle) {
-    idle.movementTimer += ctx.deltaTime;
-
-    if (config.movementFrequency > 0.0f && idle.movementTimer >= idle.movementInterval) {
-        Vector2D swayDirection = generateRandomOffset(config.idleRadius);
-        swayDirection.normalize();
-        ctx.transform.velocity = swayDirection * config.swaySpeed;
-        idle.movementTimer = 0.0f;
-        idle.movementInterval = getRandomMovementInterval(config.movementFrequency);
-    } else {
-        // Clear velocity between bursts so idle sway does not drift continuously.
-        ctx.transform.velocity = Vector2D(0, 0);
-    }
+    updateIdleBurstMotion(ctx, idle, config.movementFrequency, config.idleRadius, config.swaySpeed);
 }
 
 void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
@@ -82,20 +115,9 @@ void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorCon
 
 void updateLightFidget(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
                        VoidLight::IdleStateData& idle) {
-    idle.movementTimer += ctx.deltaTime;
+    updateIdleBurstMotion(ctx, idle, config.movementFrequency, config.idleRadius, config.fidgetSpeed);
+
     idle.turnTimer += ctx.deltaTime;
-
-    if (config.movementFrequency > 0.0f && idle.movementTimer >= idle.movementInterval) {
-        Vector2D fidgetDirection = generateRandomOffset(config.idleRadius);
-        fidgetDirection.normalize();
-        ctx.transform.velocity = fidgetDirection * config.fidgetSpeed;
-        idle.movementTimer = 0.0f;
-        idle.movementInterval = getRandomMovementInterval(config.movementFrequency);
-    } else {
-        // Clear velocity between bursts so light fidget does not drift continuously.
-        ctx.transform.velocity = Vector2D(0, 0);
-    }
-
     if (config.turnFrequency > 0.0f && idle.turnTimer >= idle.turnInterval) {
         idle.currentAngle = s_angleDistribution(s_rng);
         idle.turnTimer = 0.0f;
