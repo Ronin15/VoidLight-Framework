@@ -4,79 +4,75 @@
 
 ## Overview
 
-The `GameStateManager` is responsible for managing the collection of `GameState` objects that represent the different states/screens of your game (e.g., main menu, gameplay, pause, etc). It provides methods to add, switch, update, render, and remove game states, ensuring only one state is active at a time.
+`GameStateManager` owns the **active game-state stack** and transition order (push / pop / change / clear-stack). It is **state-machine infrastructure**: it lives under `managers/` for historical layout reasons, but it is not a domain manager like AI or World.
 
-## Key Features
-- Add, remove, and switch between named game states
-- Delegates update, render, and input handling to the current state
-- Smart pointer ownership for safe memory management
-- Efficient state lookup and management
+**Managers serve the states.** Domain managers do not advance the state graph. States request transitions via this API; domain managers are called by states during `enter` / `exit` (or by this class only for the shared full-screen UI clear).
 
-## API Reference
+See [ARCHITECTURE.md](../ARCHITECTURE.md) for the ownership table and transition model.
 
-### Construction & Destruction
-```cpp
-GameStateManager();
-```
+## Transition model
 
-### State Management
+Standard **exit-then-enter** for replaces:
+
+| API | Behavior |
+|-----|----------|
+| `changeState(id)` | Exit top → if stack empty, clear UI → enter new. On enter failure, re-enter previous top when possible. |
+| `changeStateClearingStack(id)` | Exit entire stack → clear UI → enter new. On enter failure, best-effort restore previous stack. |
+| `pushState(id)` | Pause top → enter overlay (no full UI clear). |
+| `popState()` | Exit top → resume new top (no full UI clear). |
+
+Full-screen UI clear uses `UIManager::prepareForStateTransition()` as a **service** after exits, before destination `enter()`.
+
+States are identified by `GameStateId` (not free-form strings).
+
+## API (current)
+
 ```cpp
 void addState(std::unique_ptr<GameState> state);
-    // Adds a new game state. Takes ownership.
+void pushState(GameStateId stateId);
+void popState();
+void changeState(GameStateId stateId);
+void changeStateClearingStack(GameStateId stateId);
 
-void setState(const std::string& stateName);
-    // Switches to the named state. Only one state is active at a time.
-
-bool hasState(const std::string& stateName) const;
-    // Returns true if a state with the given name exists.
-
-std::shared_ptr<GameState> getState(const std::string& stateName) const;
-    // Returns a shared pointer to the named state, or nullptr if not found.
-
-void removeState(const std::string& stateName);
-    // Removes the named state. If it was active, no state will be active after removal.
-
-void clearAllStates();
-    // Removes all states.
-```
-
-### State Update & Rendering
-```cpp
 void update(float deltaTime);
-    // Calls update on the currently active state (if any).
-
-void render();
-    // Calls render on the currently active state (if any).
-
 void handleInput();
-    // Calls input handling on the currently active state (if any).
+void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer, float interpolationAlpha);
+void renderGPUScene(VoidLight::GPURenderer& gpuRenderer, SDL_GPURenderPass* scenePass, float interpolationAlpha);
+void renderGPUUI(VoidLight::GPURenderer& gpuRenderer, SDL_GPURenderPass* swapchainPass);
+
+bool hasState(GameStateId stateId) const;
+std::shared_ptr<GameState> getState(GameStateId stateId) const;
+void removeState(GameStateId stateId);
+void clearAllStates();
 ```
 
-## Usage Example
+## Usage sketch
+
 ```cpp
 GameStateManager gsm;
 gsm.addState(std::make_unique<MainMenuState>());
 gsm.addState(std::make_unique<GamePlayState>());
-gsm.setState("MainMenuState");
+gsm.pushState(GameStateId::MAIN_MENU);
 
-// In your main loop:
+// Frame:
 gsm.handleInput();
 gsm.update(deltaTime);
-gsm.render();
+// GPU path via GameEngine → gsm.recordGPUVertices / renderGPU*
 
-// Switch state on some event:
-gsm.setState("GamePlayState");
+// From a state:
+mp_stateManager->changeState(GameStateId::GAME_PLAY);
+// Pause over gameplay:
+mp_stateManager->pushState(GameStateId::PAUSE);
+// Leave gameplay stack to menu:
+mp_stateManager->changeStateClearingStack(GameStateId::MAIN_MENU);
 ```
 
-## Best Practices
-- Use unique, descriptive names for each state.
-- Always check `hasState()` before switching or removing states.
-- Remove unused states to free memory.
-- Only one state should be active at a time.
+## Thread safety
 
-## Thread Safety
-This class is **not** thread-safe. All state changes and updates should occur on the main/game thread.
+Not thread-safe. All transitions and updates run on the main thread.
 
-## See Also
-- `GameState` (base class for game states)
-- Example states: `MainMenuState`, `GamePlayState`, `PauseState`
+## See also
+
+- [ARCHITECTURE.md](../ARCHITECTURE.md) — managers serve states; transition lifecycle
+- [gameStates/README.md](../gameStates/README.md) — state patterns
+- `GameStateId` in `include/gameStates/GameState.hpp`

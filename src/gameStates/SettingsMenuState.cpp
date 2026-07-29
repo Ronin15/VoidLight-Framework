@@ -108,12 +108,11 @@ bool SettingsMenuState::exit() {
     inputMgr.restoreBindings(m_bindingSnapshot);
     m_pendingRefreshCommand = InputManager::Command::COUNT;
 
-    // Scoped removal regardless of return state: GameStateManager::changeState()
-    // enters the destination BEFORE this exit() runs, so MainMenuState (when
-    // m_returnState == MAIN_MENU) has already wiped-and-rebuilt its own UI in
-    // its own enter() — a blanket ui.prepareForStateTransition() here would
-    // destroy it. PauseState (the other return target) keeps its UI alive
-    // underneath the whole time, so it must never be blanket-wiped either.
+    // Remove only this state's widgets. When returning to MainMenu (full-screen
+    // replace), GameStateManager also clears all UI after exit. When returning
+    // to Pause over GamePlay, the stack still has GamePlay underneath — no
+    // full UI clear — so scoped removal is required to not leave settings UI
+    // on top of gameplay.
     auto& ui = UIManager::Instance();
     ui.clearKeyboardSelection();
     ui.removeComponentsWithPrefix("settings_");

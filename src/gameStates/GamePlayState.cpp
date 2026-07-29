@@ -128,11 +128,9 @@ bool GamePlayState::enter() {
     // Cache UI manager reference for better performance
     auto &ui = UIManager::Instance();
 
-    // GameStateManager::changeState() enters this state BEFORE the previous
-    // state's exit() runs, so whatever UI the previous state (LoadingState,
-    // GameOverState, etc.) left behind is still registered here. Clear it
-    // before building gameplay UI so that state's exit() can do its own
-    // (non-UI) cleanup afterward without needing to touch UIManager itself.
+    // Full-screen owner: ensure a clean UI slate before building gameplay UI.
+    // GameStateManager already clears UI on full-screen replace; this is
+    // defensive if enter() is reached without that path.
     ui.prepareForStateTransition();
 
     // Create event log for time/weather messages
@@ -301,6 +299,12 @@ void GamePlayState::update(float deltaTime) {
       if (!mp_stateManager->hasState(GameStateId::GAME_OVER)) {
         mp_stateManager->addState(std::make_unique<GameOverState>());
       }
+      if (auto* gameOverState = dynamic_cast<GameOverState*>(
+              mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
+        // Sticky return target: always re-pin before transition so a prior
+        // Advanced AI death cannot leave Retry pointed at the wrong state.
+        gameOverState->setReturnState(GameStateId::GAME_PLAY);
+      }
 
       mp_stateManager->changeState(GameStateId::GAME_OVER);
       return;
@@ -356,12 +360,9 @@ bool GamePlayState::exit() {
   auto &wrm = WorldResourceManager::Instance();
   auto &eventMgr = EventManager::Instance();
 
-  // NOTE: deliberately does NOT call SoundManager::stopMusic() here.
-  // changeState() enters the destination BEFORE this exit() runs, so a
-  // destination that starts its own music (MainMenuState, or this state's
-  // own re-entry after LoadingState) would have that music silenced right
-  // after it started. Destinations that want silence (GameOverState) stop
-  // the music themselves in their own enter().
+  // Music: leave playing for destinations that replace the track in enter()
+  // (MainMenuState, re-entry after Loading). Destinations that want silence
+  // (GameOverState) call stopMusic() in their own enter().
   if (auto* socialCtrl = m_controllers.get<SocialController>();
       socialCtrl && socialCtrl->isTrading()) {
     socialCtrl->closeTrade();
@@ -425,9 +426,8 @@ bool GamePlayState::exit() {
     // Clean up camera and GPU scene recorder
     m_camera.reset();
 
-    // NOTE: UI is intentionally left alone here — LoadingState::enter() (the
-    // destination for this branch) already ran and wiped/rebuilt it, since
-    // changeState() enters the new state before exiting this one.
+    // UI: full-screen replace clears via GameStateManager after this exit();
+    // LoadingState::enter() rebuilds the loading screen.
 
     // Destroy all controllers so re-entry creates fresh instances with valid refs
     m_controllers.clear();
@@ -501,10 +501,8 @@ bool GamePlayState::exit() {
   // Clean up camera and GPU scene recorder first to stop world rendering
   m_camera.reset();
 
-  // NOTE: UI is intentionally left alone here — the destination state
-  // (GameOverState or MainMenuState) already ran enter() and wiped/rebuilt
-  // it, since changeState()/changeStateClearingStack() enter the new state
-  // before exiting this one.
+  // UI: full-screen replace clears via GameStateManager after this exit();
+  // destination enter() rebuilds its own UI.
 
   // Reset player
   mp_Player = nullptr;
@@ -624,12 +622,8 @@ void GamePlayState::resume() {
   // Show gameplay UI when resuming from pause
   auto &ui = UIManager::Instance();
 
-  // PauseState's exit() no longer removes the shared "__overlay" component
-  // itself, since doing so unconditionally would also delete it out from
-  // under MainMenuState when Pause transitions there instead of resuming
-  // here (MainMenuState rebuilds its own overlay for its quit-confirm dialog
-  // during its enter(), which runs before PauseState::exit()). GamePlayState
-  // has no use for it, so clear it here on the actual resume path.
+  // Popping Pause leaves its dim overlay unless we remove it here. Full-stack
+  // leave to MainMenu clears UI in GameStateManager after exits.
   ui.removeOverlay();
 
   ui.setComponentVisible("event_log", true);

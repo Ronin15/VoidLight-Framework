@@ -141,15 +141,10 @@ bool PauseState::exit() {
   // Resume all game managers via GameEngine (collision, pathfinding, AI, particles, GameTime)
   GameEngine::Instance().setGlobalPause(false);
 
-  // Only clean up PauseState-specific UI components
-  // Do NOT use prepareForStateTransition() as it would clear GamePlayState's preserved UI
-  //
-  // NOTE: deliberately does NOT call ui.removeOverlay() here. This exit()
-  // also runs when changeStateClearingStack(MAIN_MENU) replaces Pause
-  // instead of popping back to GamePlayState — MainMenuState::enter() (which
-  // runs before this) already rebuilt "__overlay" for its own quit-confirm
-  // dialog, and removing it here would delete that. GamePlayState::resume()
-  // removes the overlay itself on the actual pop-back-to-gameplay path.
+  // Overlay / stacked state: remove only our widgets. Never full-wipe UI —
+  // GamePlay HUD must remain when popping back or when replacing this top
+  // with Settings. Full-screen leave (changeStateClearingStack to MainMenu)
+  // clears UI in GameStateManager after the whole stack has exited.
   auto& ui = UIManager::Instance();
   ui.clearKeyboardSelection();
   ui.removeComponent("pause_title");
@@ -157,6 +152,8 @@ bool PauseState::exit() {
   ui.removeComponent("pause_settings_btn");
   ui.removeComponent("pause_mainmenu_btn");
   ui.removeComponent("pause_confirm_panel");  // cascades to its linked children
+  // Overlay is shared; resume() removes it when returning to GamePlay. Full
+  // stack teardown clears it via GameStateManager's full-screen UI clear.
 
   return true;
 }

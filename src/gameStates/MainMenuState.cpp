@@ -46,10 +46,9 @@ bool MainMenuState::enter() {
   auto& ui = UIManager::Instance();
   auto& fontMgr = FontManager::Instance();
 
-  // GameStateManager::changeState() enters this state BEFORE the previous
-  // state's exit() runs, so whatever UI the previous state (GamePlayState,
-  // GameOverState, SettingsMenuState, a demo state, ...) left behind is
-  // still registered here. Clear it before building the main menu UI.
+  // Full-screen owner: ensure a clean UI slate before building menu UI.
+  // GameStateManager already clears UI on full-screen replace; this is
+  // defensive if enter() is reached without that path.
   ui.prepareForStateTransition();
 
   // Wait briefly for fonts to be loaded before creating UI components.
@@ -239,15 +238,9 @@ bool MainMenuState::exit() {
   // Clear the twilight composite grade so it does not bleed into other states.
   VoidLight::GPURenderer::Instance().setDayNightParams(1.0f, 1.0f, 1.0f, 0.0f);
 
-  // Scoped removal, not a full ui.prepareForStateTransition(): destinations
-  // that don't wipe-first in their own enter() (e.g. SettingsMenuState) build
-  // their UI without touching ours, and destinations that do wipe-first
-  // (e.g. GamePlayState) already ran before this — a blanket wipe here would
-  // either be redundant or destroy UI the destination just built.
-  auto& ui = UIManager::Instance();
-  ui.clearKeyboardSelection();
-  ui.removeComponentsWithPrefix("mainmenu_");
-  ui.removeOverlay();
+  // Full-screen replace: GameStateManager clears all UI after this exit() and
+  // before the destination enter(). No per-widget teardown required here.
+  UIManager::Instance().clearKeyboardSelection();
 
   return true;
 }
@@ -282,6 +275,10 @@ void MainMenuState::handleInput() {
         mp_stateManager->changeState(GameStateId::OVERLAY_DEMO);
     }
     if (inputManager.wasKeyPressed(SDL_SCANCODE_S)) {
+        if (auto* settingsState = dynamic_cast<SettingsMenuState*>(
+                mp_stateManager->getState(GameStateId::SETTINGS_MENU).get())) {
+          settingsState->setReturnState(GameStateId::MAIN_MENU);
+        }
         mp_stateManager->changeState(GameStateId::SETTINGS_MENU);
     }
   )

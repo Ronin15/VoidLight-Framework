@@ -114,6 +114,7 @@ See `tests/TESTING.md` for broader test documentation.
 - Headers mirror source under `include/`
 - Other important dirs: `tests/`, `docs/`, `res/`, `res/shaders/`
 - Dependency direction: `Core -> Managers -> GameStates -> Entities/Controllers`
+- **Managers serve the states:** states own screen lifecycle and policy; domain managers provide services states call. `GameStateManager` is state-stack infrastructure (not a domain manager). Full-screen transitions use exit-then-enter; UI is cleared in the transition and rebuilt in `enter()`. See `docs/ARCHITECTURE.md`.
 - Common architectural anchors: `GameEngine`, `ThreadSystem`, `EntityDataManager`, `AIManager`, `EventManager`, `ControllerRegistry`, `GPURenderer`, `GPUSceneRecorder`, `SpriteBatch`
 
 ## Core Rules

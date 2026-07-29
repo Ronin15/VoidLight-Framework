@@ -24,9 +24,9 @@ OverlayDemoState::OverlayDemoState() {
 bool OverlayDemoState::enter() {
     GAMESTATE_INFO("Entering Overlay Demo State");
 
-    // Reset theme to prevent contamination from other states
     auto& ui = UIManager::Instance();
-    ui.resetToDefaultTheme();
+    // Full-screen owner: clean slate before building demo UI.
+    ui.prepareForStateTransition();
 
     // Create persistent control components using auto-detecting methods
 
@@ -74,10 +74,8 @@ void OverlayDemoState::update(float deltaTime) {
 bool OverlayDemoState::exit() {
     GAMESTATE_INFO("Exiting Overlay Demo State");
 
-    // Clean up UI components using simplified method
-    auto& ui = UIManager::Instance();
-    ui.prepareForStateTransition();
-
+    // Full-screen replace: GameStateManager clears UI after exit(); destination
+    // enter() rebuilds.
     return true;
 }
 

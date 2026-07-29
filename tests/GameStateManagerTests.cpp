@@ -169,8 +169,10 @@ BOOST_AUTO_TEST_CASE(TestChangeStateFailureDoesNotEmptyStack) {
 
     manager.changeState(GameStateId::GAME_PLAY);
 
+    // Standard exit-then-enter: old exits first; failed enter restores old via re-enter.
     BOOST_CHECK(failingStatePtr->wasEnterCalled());
-    BOOST_CHECK(!currentStatePtr->wasExitCalled()); // old state must survive a failed changeState()
+    BOOST_CHECK(currentStatePtr->wasExitCalled());
+    BOOST_CHECK(currentStatePtr->wasEnterCalled());
 
     // The stack must still be usable -- this is the actual freeze this test guards against
     currentStatePtr->resetFlags();

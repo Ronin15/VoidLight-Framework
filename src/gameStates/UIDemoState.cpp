@@ -25,6 +25,9 @@ bool UIDemoState::enter() {
 
     auto& ui = UIManager::Instance();
 
+    // Full-screen owner: clean slate before building demo UI.
+    ui.prepareForStateTransition();
+
     // Calculate relative positioning for cross-resolution compatibility
     int leftColumnX = 50;
     int leftColumnWidth = 220;
@@ -165,9 +168,8 @@ void UIDemoState::update(float deltaTime) {
 bool UIDemoState::exit() {
     GAMESTATE_INFO("Exiting UI Example State");
 
-    // Clean up UI components using simplified method
-    UIManager::Instance().prepareForStateTransition();
-
+    // Full-screen replace: GameStateManager clears UI after exit(); destination
+    // enter() rebuilds.
     return true;
 }
 

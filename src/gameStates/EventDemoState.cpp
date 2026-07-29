@@ -345,7 +345,6 @@ bool EventDemoState::exit() {
   CollisionManager &collisionMgr = CollisionManager::Instance();
   PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
   ParticleManager &particleMgr = ParticleManager::Instance();
-  UIManager &ui = UIManager::Instance();
   WorldManager &worldMgr = WorldManager::Instance();
   BackgroundSimulationManager &bgSimMgr = BackgroundSimulationManager::Instance();
   auto &wrm = WorldResourceManager::Instance();
@@ -414,8 +413,8 @@ bool EventDemoState::exit() {
       // Clean up camera and GPU scene renderer
       m_camera.reset();
 
-      // Clean up UI
-      ui.prepareForStateTransition();
+      // UI: full-screen replace clears via GameStateManager after exit();
+      // LoadingState::enter() rebuilds the loading screen.
 
       // Reset initialized flag so state re-initializes after loading
       m_initialized = false;
@@ -487,8 +486,7 @@ bool EventDemoState::exit() {
     // Clean up camera and GPU scene renderer first to stop world rendering
     m_camera.reset();
 
-    // Clean up UI components before world cleanup
-    ui.prepareForStateTransition();
+    // UI: full-screen replace clears via GameStateManager after exit().
 
     // Reset initialization flag for next fresh start
     m_initialized = false;

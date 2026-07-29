@@ -19,15 +19,11 @@ bool GameOverState::enter() {
 
   gameEngine.setGlobalPause(true);
 
-  // GamePlayState::exit() no longer stops the music itself (that would
-  // silence a destination's own music right after it started, since
-  // changeState() enters the destination before exiting GamePlayState) — so
-  // this state, which wants silence, stops it here instead.
+  // Want silence on this screen; gameplay may still have been playing music.
   SoundManager::Instance().stopMusic();
 
-  // GameStateManager::changeState() enters this state BEFORE GamePlayState's
-  // exit() runs, so GamePlayState's HUD/inventory/hotbar UI is still
-  // registered here. Clear it before building the game-over screen.
+  // Full-screen owner: ensure a clean UI slate before building this screen.
+  // GameStateManager already clears UI on full-screen replace; this is defensive.
   ui.prepareForStateTransition();
 
   const int windowWidth = gameEngine.getWidthInPixels();
@@ -62,7 +58,7 @@ bool GameOverState::enter() {
                           buttonWidth, buttonHeight, "Main Menu");
 
   ui.setOnClick("gameover_retry_btn", [this]() {
-    mp_stateManager->changeState(GameStateId::GAME_PLAY);
+    mp_stateManager->changeState(m_returnState);
   });
 
   ui.setOnClick("gameover_mainmenu_btn", [this]() {
@@ -83,7 +79,7 @@ void GameOverState::handleInput() {
   const auto& inputMgr = InputManager::Instance();
 
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
-    mp_stateManager->changeState(GameStateId::GAME_PLAY);
+    mp_stateManager->changeState(m_returnState);
   }
 
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_M)) {
@@ -92,14 +88,8 @@ void GameOverState::handleInput() {
 }
 
 bool GameOverState::exit() {
-  // Scoped removal, not a full ui.prepareForStateTransition(): the destination
-  // state (GamePlayState or MainMenuState) already entered and built its own
-  // UI — including its own overlay, where applicable — by the time this
-  // runs, via its own wipe-first prepareForStateTransition(). A blanket wipe
-  // or removeOverlay() call here would destroy what it just built.
-  auto& ui = UIManager::Instance();
-  ui.clearKeyboardSelection();
-  ui.removeComponentsWithPrefix("gameover_");
+  // Full-screen replace: GameStateManager clears all UI after this exit().
+  UIManager::Instance().clearKeyboardSelection();
   return true;
 }
 
