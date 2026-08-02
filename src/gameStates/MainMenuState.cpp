@@ -464,9 +464,16 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
 
   // Meadow floor, tiled from the horizon down. Lightened from the original
   // night-dark tint now that the composite grade itself is less severe.
+  // Integer tile indices avoid float loop counters (clang-analyzer security).
   constexpr float kTile = 48.0f;
-  for (float ty = yH; ty < screenH; ty += kTile) {
-    for (float tx = 0.0f; tx < screenW; tx += kTile) {
+  const int meadowRows =
+      std::max(0, static_cast<int>(std::ceil((screenH - yH) / kTile)));
+  const int meadowCols =
+      std::max(0, static_cast<int>(std::ceil(screenW / kTile)));
+  for (int row = 0; row < meadowRows; ++row) {
+    const float ty = yH + static_cast<float>(row) * kTile;
+    for (int col = 0; col < meadowCols; ++col) {
+      const float tx = static_cast<float>(col) * kTile;
       batch.draw(m_tiles.ground.x, m_tiles.ground.y, m_tiles.ground.w,
                  m_tiles.ground.h, tx, ty, kTile, kTile, 175, 190, 155, 255);
     }
@@ -497,8 +504,16 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
     const uint8_t g = toByte(bright * 195.0f);
     const uint8_t b = toByte(bright * 235.0f);
     const float tw = 6.0f + 34.0f * depth;
-    for (float x = riverCx - halfW; x < riverCx + halfW; x += tw) {
-      const float w = std::min(tw, riverCx + halfW - x);
+    const float riverLeft = riverCx - halfW;
+    const float riverRight = riverCx + halfW;
+    const float riverSpan = riverRight - riverLeft;
+    const int riverTiles =
+        (tw > 0.0f)
+            ? std::max(0, static_cast<int>(std::ceil(riverSpan / tw)))
+            : 0;
+    for (int ti = 0; ti < riverTiles; ++ti) {
+      const float x = riverLeft + static_cast<float>(ti) * tw;
+      const float w = std::min(tw, riverRight - x);
       batch.draw(m_tiles.water.x, m_tiles.water.y, m_tiles.water.w,
                  m_tiles.water.h, x, yTop, w, bandH, r, g, b, 255);
     }

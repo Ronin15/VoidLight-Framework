@@ -175,7 +175,7 @@ inline std::ostream& operator<<(std::ostream& os, const DecorationType& decorati
 }
 
 struct Tile {
-    Biome biome;
+    Biome biome = Biome::PLAINS;
     ObstacleType obstacleType = ObstacleType::NONE;
     DecorationType decorationType = DecorationType::NONE;
     float elevation = 0.0f;

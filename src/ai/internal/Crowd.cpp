@@ -36,9 +36,9 @@ static std::atomic<uint64_t> g_authoritativeFrame{0};
 // - Reuses vector capacity across frames (CLAUDE.md requirement)
 struct SpatialQueryCache {
   struct CacheEntry {
-    uint64_t frameNumber;
-    uint64_t queryKey; // Store hash for fast validation (cheap integer compare)
-    std::vector<EntityID> results;
+    uint64_t frameNumber{0};
+    uint64_t queryKey{0}; // Store hash for fast validation (cheap integer compare)
+    std::vector<EntityID> results{};
   };
 
   static constexpr size_t CACHE_SIZE = 64;

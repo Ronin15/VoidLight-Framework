@@ -877,14 +877,14 @@ enum class MemoryType : uint8_t {
  * - Location: distance traveled to reach
  */
 struct MemoryEntry {
-    EntityHandle subject;      // 12 bytes: Who/what is remembered
-    Vector2D location;         // 8 bytes: Where it happened
-    float timestamp;           // 4 bytes: Game time when it occurred
-    float value;               // 4 bytes: Context-dependent value (damage, etc.)
-    MemoryType type;           // 1 byte: Type of memory
-    uint8_t importance;        // 1 byte: 0-255 importance score
-    uint8_t flags;             // 1 byte: Additional state
-    uint8_t _pad;              // 1 byte: Alignment padding
+    EntityHandle subject{};                 // Who/what is remembered
+    Vector2D location{};                    // Where it happened
+    float timestamp{0.0f};                  // Game time when it occurred
+    float value{0.0f};                      // Context-dependent value (damage, etc.)
+    MemoryType type{MemoryType::AttackedBy};// Type of memory
+    uint8_t importance{0};                  // 0-255 importance score
+    uint8_t flags{0};                       // Additional state (FLAG_VALID = live entry)
+    uint8_t _pad{0};                        // Alignment padding
 
     static constexpr uint8_t FLAG_VALID = 0x01;
 
@@ -898,6 +898,7 @@ struct MemoryEntry {
         type = MemoryType::AttackedBy;
         importance = 0;
         flags = 0;
+        _pad = 0;
     }
 };
 

@@ -4086,12 +4086,12 @@ void EntityDataManager::recordCombatEvent(size_t index, EntityHandle attacker,
     memData.lastCombatTime = 0.0f;  // Delta semantics: starts at 0, incremented by updateEmotionalDecay
     memData.combatEncounters++;
 
-    // Create memory entry
+    // Create memory entry (MemoryEntry defaults keep unset fields determinate)
     MemoryEntry mem;
     mem.subject = wasAttacked ? attacker : target;
-    if (index < m_hotData.size()) {
-        mem.location = m_hotData[index].transform.position;
-    }
+    mem.location = (index < m_hotData.size())
+                       ? m_hotData[index].transform.position
+                       : Vector2D{};
     mem.timestamp = gameTime;
     mem.value = damage;
     mem.type = wasAttacked ? MemoryType::DamageReceived : MemoryType::DamageDealt;

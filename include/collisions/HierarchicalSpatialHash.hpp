@@ -41,8 +41,8 @@ public:
     using GridKey = uint64_t; // Packed: (x << 32) | y
 
     // Coordinate types
-    struct CoarseCoord { int32_t x, y; };
-    struct FineCoord { int32_t x, y; };
+    struct CoarseCoord { int32_t x{0}; int32_t y{0}; };
+    struct FineCoord { int32_t x{0}; int32_t y{0}; };
 
     // Hash functors for coordinates (public for use in CollisionManager)
     struct CoarseCoordHash {
@@ -72,7 +72,7 @@ public:
 
     // Region: A coarse cell with optional fine subdivision
     struct Region {
-        CoarseCoord coord;
+        CoarseCoord coord{};
         size_t bodyCount{0};
         bool hasFineSplit{false};
 
@@ -159,9 +159,9 @@ private:
 
     // Body tracking for updates/removals
     struct BodyLocation {
-        CoarseCoord region;
-        GridKey fineCell; // 0 if not in fine cell
-        AABB lastAABB;
+        CoarseCoord region{};
+        GridKey fineCell{0}; // 0 if not in fine cell
+        AABB lastAABB{};
     };
     std::unordered_map<size_t, BodyLocation> m_bodyLocations;
 

@@ -225,8 +225,9 @@ public:
    *          then enqueue in a single batch with one lock acquisition.
    */
   struct DeferredEvent {
-    EventTypeId typeId;
-    EventData data;
+    // Custom is a safe empty default; producers always overwrite before enqueue.
+    EventTypeId typeId{EventTypeId::Custom};
+    EventData data{};
   };
 
   /**
@@ -495,8 +496,8 @@ private:
   // Deferred dispatch queue
   struct PendingDispatch {
     uint64_t sequence{0};
-    EventTypeId typeId;
-    EventData data;
+    EventTypeId typeId{EventTypeId::Custom};
+    EventData data{};
   };
   mutable std::mutex m_dispatchMutex;  // Protects concurrent enqueue from AI workers
 

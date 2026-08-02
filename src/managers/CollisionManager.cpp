@@ -1080,7 +1080,7 @@ void CollisionManager::subscribeWorldEvents() {
 
 size_t CollisionManager::addStaticBody(EntityID id, const Vector2D &position,
                                        const Vector2D &halfSize, uint32_t layer,
-                                       uint32_t collidesWith, bool isTrigger,
+                                       uint32_t collidesWith, bool asTrigger,
                                        uint8_t triggerTag, uint8_t triggerType,
                                        size_t edmIndex) {
   // Check if entity already exists
@@ -1101,9 +1101,27 @@ size_t CollisionManager::addStaticBody(EntityID id, const Vector2D &position,
       hot.aabbMaxY = py + hh;
       hot.layers = layer;
       hot.collidesWith = collidesWith;
+      hot.bodyType = static_cast<uint8_t>(BodyType::STATIC);
       hot.active = true;
+      hot.isTrigger = asTrigger ? 1 : 0;
+      hot.triggerTag = triggerTag;
       hot.triggerType = triggerType;
       hot.edmIndex = edmIndex;
+
+      // Keep coarse-cell cache and static hash in sync with the updated AABB.
+      AABB updatedAABB(px, py, hw, hh);
+      auto coarseCell = m_staticSpatialHash.getCoarseCoord(updatedAABB);
+      hot.coarseCellX = static_cast<int16_t>(coarseCell.x);
+      hot.coarseCellY = static_cast<int16_t>(coarseCell.y);
+
+      float radius = std::max(hw, hh) + 16.0f;
+      std::string description =
+          std::format("Static obstacle updated at ({}, {})", px, py);
+      EventManager::Instance().triggerCollisionObstacleChanged(
+          position, radius, description, EventManager::DispatchMode::Deferred);
+      m_staticHashDirty = true;
+      m_staticQueryCacheDirty = true;
+      m_statisticsDirty = true;
     }
     return it->second;
   }
@@ -1126,7 +1144,7 @@ size_t CollisionManager::addStaticBody(EntityID id, const Vector2D &position,
   hotData.triggerTag = triggerTag;
   hotData.triggerType = triggerType;
   hotData.active = true;
-  hotData.isTrigger = isTrigger;
+  hotData.isTrigger = asTrigger ? 1 : 0;
   hotData.edmIndex = edmIndex;
 
   // Initialize coarse cell coords for cache optimization
@@ -2963,8 +2981,8 @@ void CollisionManager::updatePerformanceMetrics(
 }
 
 // Helper: Apply a single kinematic update to EDM and cached AABB
-void CollisionManager::applyKinematicUpdate(const KinematicUpdate& update) {
-  auto it = m_storage.entityToIndex.find(update.id);
+void CollisionManager::applyKinematicUpdate(const KinematicUpdate& kinematicUpdate) {
+  auto it = m_storage.entityToIndex.find(kinematicUpdate.id);
   if (it == m_storage.entityToIndex.end() || it->second >= m_storage.size()) {
     return;
   }
@@ -2980,13 +2998,13 @@ void CollisionManager::applyKinematicUpdate(const KinematicUpdate& update) {
   // Update EDM - it owns position/velocity
   auto& edm = EntityDataManager::Instance();
   auto& transform = edm.getTransformByIndex(hot.edmIndex);
-  transform.position = update.position;
-  transform.velocity = update.velocity;
+  transform.position = kinematicUpdate.position;
+  transform.velocity = kinematicUpdate.velocity;
 
   // Update cached AABB immediately for spatial queries
   const auto& edmHot = edm.getHotDataByIndex(hot.edmIndex);
-  float px = update.position.getX();
-  float py = update.position.getY();
+  float px = kinematicUpdate.position.getX();
+  float py = kinematicUpdate.position.getY();
   float hw = edmHot.halfWidth;
   float hh = edmHot.halfHeight;
 
@@ -3059,10 +3077,10 @@ void CollisionManager::setVelocity(EntityID id, const Vector2D &velocity) {
   }
 }
 
-void CollisionManager::setBodyTrigger(EntityID id, bool isTrigger) {
+void CollisionManager::setBodyTrigger(EntityID id, bool asTrigger) {
   size_t index;
   if (getCollisionBody(id, index)) {
-    m_storage.hotData[index].isTrigger = isTrigger ? 1 : 0;
+    m_storage.hotData[index].isTrigger = asTrigger ? 1 : 0;
   }
 }
 

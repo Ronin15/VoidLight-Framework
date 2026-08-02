@@ -42,9 +42,9 @@ public:
       static_cast<size_t>(EquipmentSlot::COUNT);
 
   struct EquipmentSlotInfo {
-    EquipmentSlot slot;
-    std::string_view id;
-    std::string_view label;
+    EquipmentSlot slot{EquipmentSlot::Weapon};
+    std::string_view id{};
+    std::string_view label{};
   };
 
   Equipment(VoidLight::ResourceHandle handle, const std::string &id,

@@ -240,17 +240,17 @@ private:
         std::atomic<double> prevMultiThroughput{0.0};       // Previous for hill-climb (8 bytes)
         std::atomic<float> multiplier{1.0f};                // Batch multiplier (4 bytes)
         std::atomic<int8_t> direction{1};                   // Hill-climb direction (1 byte)
-        char _pad1[64 - 21];  // Pad to 64-byte boundary (43 bytes)
+        char _pad1[64 - 21]{};  // Pad to 64-byte boundary (43 bytes)
 
         // ===== Cache line 2: Single-threaded path (threshold learning only) =====
         std::atomic<double> smoothedSingleTime{0.0};        // EMA of single-threaded ms (8 bytes)
         std::atomic<uint32_t> singleSampleCount{0};         // Warmup counter for EMA stabilization (4 bytes)
-        char _pad2[64 - 12];  // Pad to 64-byte boundary (52 bytes)
+        char _pad2[64 - 12]{};  // Pad to 64-byte boundary (52 bytes)
 
         // ===== Cache line 3: Mode state (written occasionally) =====
         std::atomic<size_t> learnedThreshold{0};            // Entity count threshold (8 bytes)
         std::atomic<bool> thresholdActive{false};           // Above threshold flag (1 byte)
-        char _pad3[64 - 9];  // Pad to 64-byte boundary (55 bytes)
+        char _pad3[64 - 9]{};  // Pad to 64-byte boundary (55 bytes)
 
         // ===== Constants (read-only, no padding needed) =====
         static constexpr float MIN_MULTIPLIER = 0.4f;

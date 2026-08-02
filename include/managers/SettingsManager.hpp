@@ -173,9 +173,9 @@ private:
      * @brief Change listener storage
      */
     struct ListenerInfo {
-        size_t id;
-        std::string category;
-        ChangeCallback callback;
+        size_t id{0};
+        std::string category{};
+        ChangeCallback callback{};
     };
     std::vector<ListenerInfo> m_listeners;
     mutable std::mutex m_listenersMutex;

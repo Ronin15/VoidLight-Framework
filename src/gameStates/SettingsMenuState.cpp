@@ -726,10 +726,10 @@ std::string SettingsMenuState::bindingButtonId(InputManager::Command c,
         {C::MenuRight,     "menu_right"},
     };
     const char* catSuffix = (cat == DC::KeyboardMouse) ? "kbd" : "ctrl";
-    for (const auto& e : kTable) {
-        if (e.cmd == c) {
-            return std::format("settings_ctrl_{}_{}", e.key, catSuffix);
-        }
+    const auto* entry = std::find_if(std::begin(kTable), std::end(kTable),
+                                     [c](const Entry& e) { return e.cmd == c; });
+    if (entry != std::end(kTable)) {
+        return std::format("settings_ctrl_{}_{}", entry->key, catSuffix);
     }
     return std::format("settings_ctrl_unknown_{}", catSuffix);
 }
@@ -792,7 +792,7 @@ void SettingsMenuState::createControlsUI()
         ui.setComponentPositioning(labelId, {UIPositionMode::TOP_ALIGNED, leftX, y, labelW, btnH});
 
         // One binding button per category, in column order
-        struct ColumnSpec { DC cat; int x; };
+        struct ColumnSpec { DC cat{DC::KeyboardMouse}; int x{0}; };
         const ColumnSpec cols[] = {
             {DC::KeyboardMouse, colKbdX},
             {DC::Controller,    colCtrlX},

@@ -91,8 +91,8 @@ public:
 
 private:
     struct SearchPath {
-        std::string path;
-        int priority;
+        std::string path{};
+        int priority{0};
     };
 
     static std::vector<SearchPath> s_searchPaths;

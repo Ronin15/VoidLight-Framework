@@ -172,8 +172,13 @@ struct EntityHandle {
 
     // Construct with all components
     constexpr EntityHandle(IDType entityId, EntityKind entityKind,
-                          Generation gen) noexcept
-        : id(entityId), kind(entityKind), padding{}, generation(gen) {}
+                          Generation entityGeneration) noexcept
+        : id(entityId)
+        , kind(entityKind)
+        , padding{}
+        , generation(entityGeneration)
+    {
+    }
 
     // Validity check
     [[nodiscard]] constexpr bool isValid() const noexcept {

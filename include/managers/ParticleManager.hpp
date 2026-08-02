@@ -659,15 +659,15 @@ private:
 
   // New particle request structure for lock-free creation
   struct NewParticleRequest {
-    Vector2D position;
-    Vector2D velocity;
-    Vector2D acceleration;
-    float life;
-    float size;
-    uint32_t color;
-    ParticleBlendMode blendMode;
-    ParticleEffectType effectType;
-    uint8_t flags;
+    Vector2D position{};
+    Vector2D velocity{};
+    Vector2D acceleration{};
+    float life{0.0f};
+    float size{0.0f};
+    uint32_t color{0};
+    ParticleBlendMode blendMode{ParticleBlendMode::Alpha};
+    ParticleEffectType effectType{ParticleEffectType::Custom};
+    uint8_t flags{0};
   };
 
   // Lock-free high-performance storage with double buffering
@@ -734,8 +734,8 @@ private:
     // Indices are held in pending for 2 frames before becoming available,
     // ensuring background threads from previous frames have completed.
     struct ReleasedIndex {
-      size_t index;
-      uint64_t releaseEpoch;
+      size_t index{0};
+      uint64_t releaseEpoch{0};
     };
     std::vector<ReleasedIndex> pendingIndices;  // Recently freed, not yet safe
     std::vector<size_t> readyIndices;           // Safe to reuse (2+ frames old)
@@ -744,15 +744,15 @@ private:
 
     // Lock-free ring buffer for new particle requests
     struct alignas(16) ParticleCreationRequest {
-      Vector2D position;
-      Vector2D velocity;
-      Vector2D acceleration;
-      uint32_t color;
-      float life;
-      float size;
-      uint8_t flags;
-      uint8_t generationId;
-      ParticleEffectType effectType;
+      Vector2D position{};
+      Vector2D velocity{};
+      Vector2D acceleration{};
+      uint32_t color{0};
+      float life{0.0f};
+      float size{0.0f};
+      uint8_t flags{0};
+      uint8_t generationId{0};
+      ParticleEffectType effectType{ParticleEffectType::Custom};
       std::atomic<bool> ready{false};
     };
 

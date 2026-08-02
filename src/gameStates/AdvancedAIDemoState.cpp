@@ -586,8 +586,8 @@ void AdvancedAIDemoState::setupTestVillage() {
   // MERCHANTS - Arranged in a semi-circle for easy access
   // ========================================================================
   struct MerchantSpawn {
-    const char* npcClass;
-    Vector2D offset;
+    const char* npcClass{nullptr};
+    Vector2D offset{};
   };
 
   std::vector<MerchantSpawn> merchants = {
@@ -642,9 +642,9 @@ void AdvancedAIDemoState::setupTestVillage() {
   // WANDERING VILLAGERS - Farmer, Miner, Woodcutter around the edges
   // ========================================================================
   struct VillagerSpawn {
-    const char* npcClass;
-    Vector2D offset;
-    const char* behavior;
+    const char* npcClass{nullptr};
+    Vector2D offset{};
+    const char* behavior{nullptr};
   };
 
   std::vector<VillagerSpawn> villagers = {
