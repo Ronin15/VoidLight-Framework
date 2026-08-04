@@ -26,7 +26,7 @@ namespace
 // Constant text keys/strings for recordGPUVertices — hoisted to file scope so
 // the per-frame render path constructs no temporary std::strings.
 const std::string TITLE_KEY = "logo:title";
-const std::string TITLE_TEXT = "*.:[ VoidLight Engine ]:.*";
+const std::string TITLE_TEXT = "*.:[ VoidLight ]:.*";
 const std::string SUBTITLE_KEY = "logo:subtitle";
 const std::string SUBTITLE_TEXT = "Powered by SDL3";
 const std::string VERSION_KEY = "logo:version";
