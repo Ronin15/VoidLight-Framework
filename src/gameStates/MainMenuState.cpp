@@ -62,7 +62,7 @@ bool MainMenuState::enter() {
   }
 
   // Create title using auto-positioning
-  ui.createTitleAtTop("mainmenu_title", "VoidLight Engine - Main Menu", 60);
+  ui.createTitleAtTop("mainmenu_title", "VoidLight - Main Menu", 60);
 
   // Create menu buttons with centered positioning
   int buttonWidth = 300;
