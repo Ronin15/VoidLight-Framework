@@ -97,7 +97,7 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 - CMake 3.28+, Ninja, C++20 compiler (GCC/Clang) - MSVC support planned
 - Platforms: Linux, macOS (Apple Silicon), Windows (MinGW)
 - [SDL3 dependencies](https://wiki.libsdl.org/SDL3/README-linux) (ttf, mixer)
-- Boost (for tests), cppcheck & clang-tidy (static analysis), Valgrind (optional, Linux only)
+- Boost 1.80.0 or newer (for tests; CI/dev tested with 1.90.0), cppcheck & clang-tidy (static analysis), Valgrind (optional, Linux only)
 - Platform shader tools (required only when regenerating checked-in shader binaries):
   - Linux: `glslangValidator` for Vulkan SPIR-V shaders
   - macOS: `glslangValidator` + `spirv-cross` for Metal shaders
@@ -121,6 +121,9 @@ cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja -C build
 # Run the engine
 ./bin/debug/VoidLight_Template   # Debug build
 ./bin/release/VoidLight_Template # Release build
+
+# Fast dev loop: build only the main binary, skipping all test targets
+ninja -C build app
 ```
 
 When `ccache` is installed, CMake enables it by default for C and C++ compilation. Disable it with `-DUSE_CCACHE=OFF` if you need uncached compiler invocations.
@@ -232,11 +235,24 @@ For the full, up-to-date documentation map, see [docs/README.md](docs/README.md)
 
 ## Core Design Principles
 
-- **Data-Oriented Design:** EntityDataManager as single source of truth, Structure-of-Arrays (SOA) storage.
-- **Memory Safety:** Smart pointers, RAII, no raw pointers
-- **Performance:** Cache-friendly, batch processing, optimized threading
-- **Type Safety:** Strong typing, compile-time and runtime validation
-- **Cross-Platform:** Unified codebase, platform-specific optimizations
+VoidLight-Framework is built around three commitments held simultaneously, not traded off against each other: **performance**, **correctness**, and **safety**. The build tooling, data layout, and test infrastructure exist specifically to hold all three at once.
+
+**Performance**
+- Data-oriented design: EntityDataManager as the single source of truth, Structure-of-Arrays (SoA) storage for cache locality.
+- SIMD-accelerated hot paths (SSE2/NEON/AVX2 — see [SIMDMath](docs/utils/SIMDMath.md)) and adaptive threading via [WorkerBudget](docs/core/WorkerBudget.md) that scales from single-core to many-core with no manual tuning.
+- No per-frame allocations — reused buffers, `reserve()`d containers.
+- Race-to-idle scheduling for battery efficiency — see [Power Efficiency](docs/performance/PowerEfficiency.md).
+
+**Correctness**
+- Deterministic update ordering: managers run sequentially on the main thread; `EventManager` dispatch and deferred draining are main-thread-only and sequence-preserved.
+- Strong typing, `[[nodiscard]]` on critical fallible calls (`init()`, `load()`, `create()`), compile-time validation over runtime guessing.
+- Boost.Test coverage across managers, controllers, and cross-manager integration; ASan/TSan sanitizer builds catch memory errors and data races before they reach a shipped build.
+
+**Safety**
+- Memory safety by default: smart pointers and RAII throughout. Raw pointers are never stored for ownership or long-lived state — only materialized momentarily at a final API boundary (GPU submission, SIMD intrinsics).
+- Four build types (`Debug`/`ReleaseSafe`/`Release`/`Profile`) make safety-check-versus-optimization tradeoffs explicit and deliberate rather than an accident of one flag — see [Build Safety Controls](docs/performance/BuildSafetyControls.md) for exactly what's checked in which build.
+- Explicit contracts instead of silent assumptions: the little-endian save format is enforced with a compile-time `static_assert`, and hot-path SIMD reads against variable-length buffers carry explicit bounds assertions rather than relying on optimization flags to catch a mistake.
+- Cross-platform by construction, not by accident: unified codebase with platform-specific optimizations isolated behind the same abstractions (SIMDMath, GPU shader backends) everywhere else.
 
 ---
 

@@ -18,6 +18,7 @@
 #include "managers/ProjectileManager.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
+#include "managers/WorldResourceManager.hpp"
 #include "managers/EventManager.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Camera.hpp"
@@ -368,8 +369,9 @@ bool AIDemoState::exit() {
   EntityDataManager &edm = EntityDataManager::Instance();
   CollisionManager &collisionMgr = CollisionManager::Instance();
   PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
-  UIManager &ui = UIManager::Instance();
+  ParticleManager &particleMgr = ParticleManager::Instance();
   WorldManager &worldMgr = WorldManager::Instance();
+  auto &wrm = WorldResourceManager::Instance();
   EventManager &eventMgr = EventManager::Instance();
 
   if (m_transitioningToLoading) {
@@ -394,6 +396,17 @@ bool AIDemoState::exit() {
     bgSimMgr.prepareForStateTransition();
     worldMgr.prepareForStateTransition();
 
+    // Unload before WRM/EventManager transition cleanup (GamePlayState order).
+    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+      worldMgr.unloadWorld();
+      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
+      // infinite loop when LoadingState returns to this state
+    }
+
+    if (wrm.isInitialized()) {
+      wrm.prepareForStateTransition();
+    }
+
     eventMgr.prepareForStateTransition();
 
     if (collisionMgr.isInitialized() && !collisionMgr.isShutdown()) {
@@ -407,6 +420,10 @@ bool AIDemoState::exit() {
     edm.prepareForStateTransition();
     VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+      particleMgr.prepareForStateTransition();
+    }
+
     WorldManager::Instance().setActiveCamera(nullptr);
     if (m_player) {
       m_player->setCamera(nullptr);
@@ -415,15 +432,8 @@ bool AIDemoState::exit() {
     // Clean up camera and GPU scene renderer
     m_camera.reset();
 
-    // Clean up UI
-    ui.prepareForStateTransition();
-
-    // Unload world (LoadingState will reload it)
-    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-      worldMgr.unloadWorld();
-      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
-      // infinite loop when LoadingState returns to this state
-    }
+    // UI: full-screen replace clears via GameStateManager after exit();
+    // LoadingState::enter() rebuilds the loading screen.
 
     // Restore AI to unpaused state
     aiMgr.setGlobalPause(false);
@@ -455,6 +465,17 @@ bool AIDemoState::exit() {
   bgSimMgr.prepareForStateTransition();
   worldMgr.prepareForStateTransition();
 
+  // Unload world before WRM/EventManager transition cleanup so persistent
+  // world-unload handlers and WRM reverse lookups are still available.
+  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+    worldMgr.unloadWorld();
+    m_worldLoaded = false;
+  }
+
+  if (wrm.isInitialized()) {
+    wrm.prepareForStateTransition();
+  }
+
   eventMgr.prepareForStateTransition();
 
   // Clean collision state
@@ -469,21 +490,16 @@ bool AIDemoState::exit() {
   edm.prepareForStateTransition();
   VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
+  if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+    particleMgr.prepareForStateTransition();
+  }
+
   WorldManager::Instance().setActiveCamera(nullptr);
 
   // Clean up camera and GPU scene renderer first to stop world rendering
   m_camera.reset();
 
-  // Clean up UI components using simplified method
-  ui.prepareForStateTransition();
-
-  // Unload the world when fully exiting, but only if there's actually a world
-  // loaded This matches EventDemoState's safety pattern and prevents crashes
-  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-    worldMgr.unloadWorld();
-    // Reset m_worldLoaded when doing full exit (going to main menu, etc.)
-    m_worldLoaded = false;
-  }
+  // UI: full-screen replace clears via GameStateManager after exit().
 
   // Always restore AI to unpaused state when exiting the demo state
   // This prevents the global pause from affecting other states

@@ -9,6 +9,7 @@
 #include "managers/InputManager.hpp"
 #include "managers/FontManager.hpp"
 #include "managers/SettingsManager.hpp"
+#include "managers/SoundManager.hpp"
 #include "managers/GameStateManager.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
@@ -107,8 +108,14 @@ bool SettingsMenuState::exit() {
     inputMgr.restoreBindings(m_bindingSnapshot);
     m_pendingRefreshCommand = InputManager::Command::COUNT;
 
+    // Remove only this state's widgets. When returning to MainMenu (full-screen
+    // replace), GameStateManager also clears all UI after exit. When returning
+    // to Pause over GamePlay, the stack still has GamePlay underneath — no
+    // full UI clear — so scoped removal is required to not leave settings UI
+    // on top of gameplay.
     auto& ui = UIManager::Instance();
-    ui.prepareForStateTransition();
+    ui.clearKeyboardSelection();
+    ui.removeComponentsWithPrefix("settings_");
 
     return true;
 }
@@ -121,7 +128,7 @@ void SettingsMenuState::handleInput() {
         VoidLight::MenuNavigation::readInputs(m_navOrder, m_selectedIndex);
         handleSliderAdjust();
         if (VoidLight::MenuNavigation::cancelPressed()) {
-            mp_stateManager->changeState(GameStateId::MAIN_MENU);
+            mp_stateManager->changeState(m_returnState);
         }
     }
 }
@@ -290,6 +297,17 @@ void SettingsMenuState::applySettings() {
     settings.set("audio", "sfx_volume", m_tempSettings.sfxVolume);
     settings.set("audio", "muted", m_tempSettings.muted);
 
+    // Apply audio settings immediately so the change is audible without a restart
+    auto &soundMgr = SoundManager::Instance();
+    float const effectiveMusicVolume =
+        m_tempSettings.muted ? 0.0f
+                             : m_tempSettings.masterVolume * m_tempSettings.musicVolume;
+    float const effectiveSfxVolume =
+        m_tempSettings.muted ? 0.0f
+                             : m_tempSettings.masterVolume * m_tempSettings.sfxVolume;
+    soundMgr.setMusicVolume(effectiveMusicVolume);
+    soundMgr.setSFXVolume(effectiveSfxVolume);
+
     // Gameplay
     settings.set("gameplay", "difficulty", m_tempSettings.difficulty);
     settings.set("gameplay", "autosave_enabled", m_tempSettings.autosaveEnabled);
@@ -298,8 +316,10 @@ void SettingsMenuState::applySettings() {
     // Apply VSync (pure mode switch — writes graphics.vsync to in-memory settings).
     gameEngine.setVSyncEnabled(m_tempSettings.vsync);
 
-    // Single explicit persist for the whole settings file.
-    settings.saveToFile(VoidLight::ResourcePath::resolve("res/settings.json"));
+    // Single explicit persist for the whole settings file; log on failure but don't abort apply
+    if (!settings.saveToFile(VoidLight::ResourcePath::resolve("res/settings.json"))) {
+        GAMESTATE_WARN("Failed to save settings to disk");
+    }
 
     // Save input bindings alongside other settings; log on failure but don't abort apply
     if (!InputManager::Instance().saveBindingsToFile(
@@ -551,7 +571,7 @@ void SettingsMenuState::createActionButtons() {
         "Back");
     ui.setComponentPositioning("settings_back_btn", {UIPositionMode::BOTTOM_CENTERED, buttonWidth/2 + buttonSpacing/2, bottomOffset, buttonWidth, buttonHeight});
     ui.setOnClick("settings_back_btn", [this]() {
-        mp_stateManager->changeState(GameStateId::MAIN_MENU);
+        mp_stateManager->changeState(m_returnState);
     });
 }
 
@@ -706,10 +726,10 @@ std::string SettingsMenuState::bindingButtonId(InputManager::Command c,
         {C::MenuRight,     "menu_right"},
     };
     const char* catSuffix = (cat == DC::KeyboardMouse) ? "kbd" : "ctrl";
-    for (const auto& e : kTable) {
-        if (e.cmd == c) {
-            return std::format("settings_ctrl_{}_{}", e.key, catSuffix);
-        }
+    const auto* entry = std::find_if(std::begin(kTable), std::end(kTable),
+                                     [c](const Entry& e) { return e.cmd == c; });
+    if (entry != std::end(kTable)) {
+        return std::format("settings_ctrl_{}_{}", entry->key, catSuffix);
     }
     return std::format("settings_ctrl_unknown_{}", catSuffix);
 }
@@ -772,7 +792,7 @@ void SettingsMenuState::createControlsUI()
         ui.setComponentPositioning(labelId, {UIPositionMode::TOP_ALIGNED, leftX, y, labelW, btnH});
 
         // One binding button per category, in column order
-        struct ColumnSpec { DC cat; int x; };
+        struct ColumnSpec { DC cat{DC::KeyboardMouse}; int x{0}; };
         const ColumnSpec cols[] = {
             {DC::KeyboardMouse, colKbdX},
             {DC::Controller,    colCtrlX},

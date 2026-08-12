@@ -16,6 +16,7 @@
 #include <chrono>
 #include <span>
 
+#include "core/Logger.hpp"
 #include "entities/Entity.hpp" // EntityID
 #include "collisions/CollisionBody.hpp"
 #include "collisions/CollisionInfo.hpp"
@@ -44,7 +45,7 @@ public:
         static CollisionManager s_instance; return s_instance;
     }
 
-    bool init();
+    [[nodiscard]] bool init();
     void clean();
 
     /**
@@ -98,14 +99,14 @@ public:
      * @brief Enable or disable threading for collision processing (debug/benchmark only)
      * @param enable true to enable threading, false for single-threaded
      */
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     void enableThreading(bool enable) {
         m_useThreading.store(enable, std::memory_order_release);
     }
     bool isThreadingEnabled() const {
         return m_useThreading.load(std::memory_order_acquire);
     }
-#endif
+    )
 
     // Tick: run collision detection/resolution only (no movement integration)
     void update(float dt);
@@ -184,7 +185,7 @@ public:
     // Movables (players, NPCs) are managed entirely by EDM - no m_storage entry
     size_t addStaticBody(EntityID id, const Vector2D& position, const Vector2D& halfSize,
                          uint32_t layer, uint32_t collidesWith,
-                         bool isTrigger, uint8_t triggerTag,
+                         bool asTrigger, uint8_t triggerTag,
                          uint8_t triggerType, size_t edmIndex);
     void removeCollisionBody(EntityID id);
     bool getCollisionBody(EntityID id, size_t& outIndex) const;
@@ -204,7 +205,7 @@ public:
     float getCullingBuffer() const { return m_cullingBuffer; }
     void setBodyLayer(EntityID id, uint32_t layerMask, uint32_t collideMask);
     void setVelocity(EntityID id, const Vector2D& velocity);
-    void setBodyTrigger(EntityID id, bool isTrigger);
+    void setBodyTrigger(EntityID id, bool asTrigger);
 
     // Internal buffer management (simplified public interface)
     void prepareCollisionBuffers(size_t bodyCount);
@@ -231,10 +232,6 @@ public:
     [[nodiscard]] size_t findPoolIndex(size_t edmIdx) const;
     [[nodiscard]] bool isEventOnlyTriggerOverlap(size_t storageIdx, float px, float py,
                                                   float hw, float hh, uint16_t mask) const;
-
-    // PERFORMANCE: Vector pooling for temporary allocations
-    std::vector<size_t>& getPooledVector();
-    void returnPooledVector(std::vector<size_t>& vec);
 
     /* Body Type Distinctions:
      * - STATIC: World obstacles, buildings, triggers (never move, handled separately)
@@ -297,7 +294,7 @@ private:
     void applyPendingKinematicUpdates();
 
     // Helper: Apply a single kinematic update to EDM and cached AABB
-    void applyKinematicUpdate(const KinematicUpdate& update);
+    void applyKinematicUpdate(const KinematicUpdate& kinematicUpdate);
 
     // Spatial hash optimization methods
     void rebuildStaticSpatialHash();
@@ -313,7 +310,10 @@ private:
 
     // Spatial culling support (area-based, not camera-based)
     struct CullingArea {
-        float minX, minY, maxX, maxY;
+        float minX{0.0f};
+        float minY{0.0f};
+        float maxX{0.0f};
+        float maxY{0.0f};
         float bufferSize{COLLISION_CULLING_BUFFER}; // Buffer around specified culling area
 
         bool contains(float x, float y) const {
@@ -331,7 +331,7 @@ private:
     bool m_initialized{false};
     bool m_isShutdown{false};
     std::atomic<bool> m_globallyPaused{false}; // Global pause state for update() early exit
-    std::atomic<bool> m_useThreading{true};    // Threading control for benchmarking
+    VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)    // Threading control for benchmarking
     AABB m_worldBounds{0,0, 100000.0f, 100000.0f}; // large default box (centered at 0,0)
 
     // NEW SOA STORAGE SYSTEM: Following AIManager pattern for better cache performance
@@ -341,26 +341,30 @@ private:
         // AIManager pattern: Only collision-specific data + EDM index for position access
         struct HotData {
             // Cached AABB for performance - computed from EDM position + halfSize
-            mutable float aabbMinX, aabbMinY, aabbMaxX, aabbMaxY;  // 16 bytes
+            mutable float aabbMinX{0.0f};
+            mutable float aabbMinY{0.0f};
+            mutable float aabbMaxX{0.0f};
+            mutable float aabbMaxY{0.0f};
 
-            // EDM reference for accessing position/halfSize (moved from ColdData for cache locality)
-            size_t edmIndex;             // 8 bytes: EntityDataManager index
+            // EDM reference for accessing position/halfSize (moved from ColdData for cache locality).
+            // SIZE_MAX = not linked; 0 is a valid EDM index and must not be the empty default.
+            size_t edmIndex{SIZE_MAX};
 
-            uint16_t layers;             // 2 bytes: Layer mask (supports 16 layers, 7 currently defined)
-            uint16_t collidesWith;       // 2 bytes: Collision mask
-            uint8_t bodyType;            // 1 byte: BodyType enum (STATIC, KINEMATIC, DYNAMIC)
-            uint8_t triggerTag;          // 1 byte: TriggerTag enum for triggers
-            uint8_t triggerType;         // 1 byte: TriggerType (EventOnly, Physical)
-            uint8_t active;              // 1 byte: Whether this body participates in collision detection
-            uint8_t isTrigger;           // 1 byte: Whether this is a trigger body
+            uint16_t layers{0};          // Layer mask (supports 16 layers, 7 currently defined)
+            uint16_t collidesWith{0};    // Collision mask
+            uint8_t bodyType{0};         // BodyType enum (STATIC, KINEMATIC, DYNAMIC)
+            uint8_t triggerTag{0};       // TriggerTag enum for triggers
+            uint8_t triggerType{0};      // TriggerType (EventOnly, Physical)
+            uint8_t active{0};           // Whether this body participates in collision detection
+            uint8_t isTrigger{0};        // Whether this is a trigger body
 
             // OPTIMIZATION: Cached coarse grid coords (eliminates m_bodyCoarseCell map lookup)
-            int16_t coarseCellX;         // 2 bytes: Cached coarse grid X coordinate
-            int16_t coarseCellY;         // 2 bytes: Cached coarse grid Y coordinate
+            int16_t coarseCellX{0};      // Cached coarse grid X coordinate
+            int16_t coarseCellY{0};      // Cached coarse grid Y coordinate
 
             // Padding to 64 bytes (one cache line)
             // Layout: 16 (floats) + 8 (size_t) + 4 (uint16_t) + 5 (uint8_t) + 1 (implicit) + 4 (int16_t) = 38
-            uint8_t _reserved[26];       // 26 bytes: Future expansion (38 + 26 = 64)
+            uint8_t _reserved[26]{};     // Future expansion (38 + 26 = 64)
         };
         static_assert(sizeof(HotData) == 64, "HotData should be exactly 64 bytes for cache alignment");
 
@@ -368,10 +372,10 @@ private:
         // NOTE: Position/velocity/halfSize owned by EntityDataManager
         // All collision bodies must have valid EDM entries (statics via createStaticBody)
         struct ColdData {
-            EntityWeakPtr entityWeak;    // Back-reference to entity
-            float restitution;           // Bounce coefficient (0.0-1.0)
-            float friction;              // Surface friction (0.0-1.0)
-            float mass;                  // Mass (kg) - for future physics
+            EntityWeakPtr entityWeak{};  // Back-reference to entity
+            float restitution{0.0f};     // Bounce coefficient (0.0-1.0)
+            float friction{0.0f};        // Surface friction (0.0-1.0)
+            float mass{0.0f};            // Mass (kg) - for future physics
             // NOTE: edmIndex moved to HotData for cache locality during AABB updates
         };
 
@@ -604,10 +608,6 @@ private:
     void insertionSortByMinX(std::vector<size_t>& indices,
                              const std::vector<CollisionPool::MovableAABB>& aabbs) const;
 
-    // PERFORMANCE: Vector pool for temporary allocations in hot paths
-    mutable std::vector<std::vector<size_t>> m_vectorPool;
-    mutable std::atomic<size_t> m_nextPoolIndex{0};
-
     // PERFORMANCE: Reusable containers to avoid per-frame allocations
     // These are cleared each frame but capacity is retained to eliminate heap churn
     mutable std::unordered_set<uint64_t> m_currentTriggerPairsBuffer;   // For processTriggerEvents()
@@ -622,6 +622,9 @@ private:
         bool isTrigger;
     };
     mutable std::vector<TriggerSweepEdge> m_triggerSweepEdges;
+    // Active-set scratch for the sweep (cleared each call, capacity retained)
+    mutable std::unordered_set<size_t> m_triggerSweepActiveEntities;
+    mutable std::unordered_set<size_t> m_triggerSweepActiveTriggers;
 
     // Performance metrics
     struct PerfStats {

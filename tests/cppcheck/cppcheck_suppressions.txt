@@ -41,17 +41,11 @@ checkLibraryFunction:GAMELOOP_*
 checkLibraryFunction:THREADSYSTEM_*
 checkLibraryFunction:HAMMER_*
 
-# Suppress library function checks for singleton patterns
+# Suppress library function checks for singleton patterns.
+# NOTE: cppcheck suppressions use id:file:line — Class::method forms parse as
+# file=Class, line=method and fail startup (e.g. "converting 'Instance' to integer").
+# Keep only non-colon / single-colon patterns here; *Instance covers ::Instance().
 checkLibraryFunction:*Instance
-checkLibraryFunction:GameEngine::Instance
-checkLibraryFunction:AIManager::Instance
-checkLibraryFunction:UIManager::Instance
-checkLibraryFunction:FontManager::Instance
-checkLibraryFunction:InputManager::Instance
-checkLibraryFunction:SoundManager::Instance
-checkLibraryFunction:TextureManager::Instance
-checkLibraryFunction:EventManager::Instance
-checkLibraryFunction:ThreadSystem::Instance
 
 # Suppress library function checks for custom utility classes
 checkLibraryFunction:Vector2D*
@@ -88,9 +82,10 @@ checkLibraryFunction:getCurrentTimeNanos
 checkLibraryFunction:SDL_GetError
 checkLibraryFunction:SDL_*
 
-# Suppress standard library function checks
-checkLibraryFunction:std::filesystem::exists
-checkLibraryFunction:std::exception::what
+# Suppress standard library function checks.
+# Avoid std::ns::symbol forms (same id:file:line parse trap as Class::method).
+checkLibraryFunction:exists
+checkLibraryFunction:what
 
 # Suppress container method warnings
 checkLibraryFunction:size

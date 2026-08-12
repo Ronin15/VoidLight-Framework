@@ -39,17 +39,17 @@ public:
     {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
 
         if (!ResourceTemplateManager::Instance().isInitialized()) {
-            ResourceTemplateManager::Instance().init();
+            BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         }
 
         // Initialize EntityDataManager
         BOOST_REQUIRE(EntityDataManager::Instance().init());
 
         // Initialize WorldResourceManager
-        WorldResourceManager::Instance().init();
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
         WorldResourceManager::Instance().setActiveWorld(m_worldId);
     }
 

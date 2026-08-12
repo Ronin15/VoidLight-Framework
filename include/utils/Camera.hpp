@@ -140,7 +140,7 @@ public:
      */
     ~Camera() = default;
 
-    // Non-copyable/movable (has std::atomic, RNG state, weak_ptr targets)
+    // Non-copyable/movable (holds RNG state and a weak_ptr target)
     Camera(const Camera&) = delete;
     Camera& operator=(const Camera&) = delete;
     Camera(Camera&&) = delete;

@@ -49,10 +49,10 @@ BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 // Test fixture
 struct CollisionEDMFixture {
     CollisionEDMFixture() {
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        BackgroundSimulationManager::Instance().init();
-        CollisionManager::Instance().init();
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
 
         // Set reasonable world bounds
         CollisionManager::Instance().setWorldBounds(0, 0, 2000.0f, 2000.0f);

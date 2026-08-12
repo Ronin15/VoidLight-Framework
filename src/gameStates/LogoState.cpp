@@ -19,6 +19,20 @@
 #include "gpu/SpriteBatch.hpp"
 #include <SDL3/SDL_gpu.h>
 
+#include <string>
+
+namespace
+{
+// Constant text keys/strings for recordGPUVertices — hoisted to file scope so
+// the per-frame render path constructs no temporary std::strings.
+const std::string TITLE_KEY = "logo:title";
+const std::string TITLE_TEXT = "*.:[ VoidLight ]:.*";
+const std::string SUBTITLE_KEY = "logo:subtitle";
+const std::string SUBTITLE_TEXT = "Powered by SDL3";
+const std::string VERSION_KEY = "logo:version";
+const std::string VERSION_TEXT = "v0.9.0";
+}  // namespace
+
 
 bool LogoState::enter() {
   GAMESTATE_INFO("Entering LOGO State");
@@ -34,7 +48,7 @@ bool LogoState::enter() {
 
   // Cache SoundManager reference for better performance
   SoundManager& soundMgr = SoundManager::Instance();
-  soundMgr.playSFX("sfx_logo", 0, 0);//change right value from 0 -> 1. For dev.
+  soundMgr.playSFX("sfx_logo", 0, 1.0f);
   return true;
 }
 
@@ -153,9 +167,10 @@ void LogoState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
      // Bottom-left
      v[3] = {.x=sx,      .y=bottom, .u=0.0f, .v=1.0f, .r=255, .g=255, .b=255, .a=255};
 
-    // Record draw command
+    // Record draw command — keep the owning texture handle; the raw
+    // SDL_GPUTexture* is resolved at the submission boundary in renderGPUScene().
     GPUDrawCommand cmd;
-    cmd.texture = texData->texture->get();
+    cmd.texture = texData->texture;
     cmd.vertexOffset = vertexOffset;
     cmd.vertexCount = 4;
     m_drawCommands.push_back(cmd);
@@ -241,9 +256,9 @@ void LogoState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
     }
   };
 
-  addText("logo:title", "*.:[ VoidLight Engine ]:.*", centerX, m_titleY);
-  addText("logo:subtitle", "Powered by SDL3", centerX, m_subtitleY);
-  addText("logo:version", "v0.9.0", centerX, m_versionY);
+  addText(TITLE_KEY, TITLE_TEXT, centerX, m_titleY);
+  addText(SUBTITLE_KEY, SUBTITLE_TEXT, centerX, m_subtitleY);
+  addText(VERSION_KEY, VERSION_TEXT, centerX, m_versionY);
 
   uiPool.setWrittenVertexCount(uiVertexOffset);
 }
@@ -288,9 +303,12 @@ void LogoState::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
 
   // Draw each texture with its vertices
   for (const auto& cmd : m_drawCommands) {
-    // Bind texture
+    // Bind texture — resolve the raw GPU handle only at the C-API boundary.
+    if (!cmd.texture) {
+      continue;
+    }
     SDL_GPUTextureSamplerBinding texSampler{};
-    texSampler.texture = cmd.texture;
+    texSampler.texture = cmd.texture->get();
     texSampler.sampler = gpuRenderer.getNearestSampler();
     SDL_BindGPUFragmentSamplers(scenePass, 0, &texSampler, 1);
 

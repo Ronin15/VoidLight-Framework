@@ -806,12 +806,10 @@ BOOST_FIXTURE_TEST_CASE(TestPathfindingStatistics, PathfindingGridFixture)
                       << finalStats.timeouts << " timeouts, "
                       << "avgPathLength=" << finalStats.avgPathLength);
 
-    // Note: avgPathLength calculation may have issues in current implementation
-    // For now, just verify that the path count statistics are correct
-    // TODO: Fix avgPathLength calculation in PathfindingGrid.cpp
+    // Every successful path contributes at least one waypoint, so a non-zero
+    // success count must yield a non-zero average path length.
     if (expectedSuccesses > 0) {
-        // BOOST_CHECK_GT(finalStats.avgPathLength, 0);  // Temporarily disabled due to calculation bug
-        BOOST_TEST_MESSAGE("avgPathLength calculation needs to be fixed in PathfindingGrid.cpp");
+        BOOST_CHECK_GT(finalStats.avgPathLength, 0);
     }
 }
 

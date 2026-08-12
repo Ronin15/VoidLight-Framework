@@ -51,6 +51,11 @@ bool LoadingState::enter() {
   // Pause game time during loading (time shouldn't advance while loading)
   GameTimeManager::Instance().setGlobalPause(true);
 
+  // Full-screen owner: ensure a clean UI slate before building the loading
+  // screen. GameStateManager already clears UI on full-screen replace; this
+  // is defensive if enter() is reached without that path.
+  UIManager::Instance().prepareForStateTransition();
+
   // Initialize loading screen UI
   initializeUI();
 
@@ -270,13 +275,8 @@ void LoadingState::cleanupUI() {
     return;
   }
 
-  auto &ui = UIManager::Instance();
-
-  ui.removeOverlay();
-  ui.removeComponent("loading_title");
-  ui.removeComponent("loading_progress");
-  ui.removeComponent("loading_status");
-
+  // Full-screen replace: GameStateManager clears all UI after this exit().
+  // Mark local flag only so we do not double-manage widgets here.
   m_uiInitialized = false;
 
   GAMESTATE_INFO("Loading screen UI cleaned up");

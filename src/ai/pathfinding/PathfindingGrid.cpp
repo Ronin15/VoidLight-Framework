@@ -449,7 +449,9 @@ void PathfindingGrid::smoothPath(std::vector<Vector2D> &path) {
     smoothed.push_back(path.back());
   }
 
-  path = std::move(smoothed);
+  // Copy results into caller's path (reusing its capacity) instead of moving,
+  // so the thread_local scratch buffer retains its capacity across calls.
+  path.assign(smoothed.begin(), smoothed.end());
 }
 
 bool PathfindingGrid::hasLineOfSight(const Vector2D &start,
@@ -504,10 +506,10 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
     PATHFIND_ERROR(std::format("findPath: INVALID_START - grid coords ({},{}) "
                                "out of bounds (0,0) to ({},{})",
                                sx_raw, sy_raw, m_w - 1, m_h - 1));
-#ifndef NDEBUG
-    m_stats.totalRequests++;
-    m_stats.invalidStarts++;
-#endif
+    VOIDLIGHT_STATS_ONLY(
+      m_stats.totalRequests++;
+      m_stats.invalidStarts++;
+    )
     // Invalid start warnings removed - covered in PathfinderManager status
     // reporting
     return PathfindingResult::INVALID_START;
@@ -516,10 +518,10 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
     PATHFIND_ERROR(std::format("findPath: INVALID_GOAL - grid coords ({},{}) "
                                "out of bounds (0,0) to ({},{})",
                                gx_raw, gy_raw, m_w - 1, m_h - 1));
-#ifndef NDEBUG
-    m_stats.totalRequests++;
-    m_stats.invalidGoals++;
-#endif
+    VOIDLIGHT_STATS_ONLY(
+      m_stats.totalRequests++;
+      m_stats.invalidGoals++;
+    )
     // Invalid goal warnings removed - covered in PathfinderManager status
     // reporting
     return PathfindingResult::INVALID_GOAL;
@@ -645,9 +647,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
     if (coarseResult == PathfindingResult::NO_PATH_FOUND) {
       PATHFIND_DEBUG("Early detection: coarse grid indicates unreachable path "
                      "(disconnected regions)");
-#ifndef NDEBUG
-      m_stats.totalRequests++;
-#endif
+      VOIDLIGHT_STATS_ONLY(m_stats.totalRequests++;)
       return PathfindingResult::NO_PATH_FOUND;
     }
   }
@@ -655,11 +655,14 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
   // Early success: if start equals goal after nudging
   if (sx == gx && sy == gy) {
     outPath.push_back(gridToWorld(gx, gy));
-#ifndef NDEBUG
-    m_stats.totalRequests++;
-    m_stats.successfulPaths++;
-    m_stats.totalIterations += 1; // Minimal iteration count
-#endif
+    VOIDLIGHT_STATS_ONLY(
+      m_stats.totalRequests++;
+      m_stats.successfulPaths++;
+      m_stats.totalIterations += 1; // Minimal iteration count
+      m_stats.totalPathLength += outPath.size();
+      m_stats.avgPathLength =
+          static_cast<uint32_t>(m_stats.totalPathLength / m_stats.successfulPaths);
+    )
     return PathfindingResult::SUCCESS;
   }
 
@@ -670,11 +673,14 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
     // Direct path available - create simple 2-point path
     outPath.push_back(worldStart);
     outPath.push_back(worldGoal);
-#ifndef NDEBUG
-    m_stats.totalRequests++;
-    m_stats.successfulPaths++;
-    m_stats.totalIterations += 2; // Minimal iteration count for line-of-sight
-#endif
+    VOIDLIGHT_STATS_ONLY(
+      m_stats.totalRequests++;
+      m_stats.successfulPaths++;
+      m_stats.totalIterations += 2; // Minimal iteration count for line-of-sight
+      m_stats.totalPathLength += outPath.size();
+      m_stats.avgPathLength =
+          static_cast<uint32_t>(m_stats.totalPathLength / m_stats.successfulPaths);
+    )
     return PathfindingResult::SUCCESS;
   }
 
@@ -795,17 +801,15 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
       // Apply path smoothing to reduce unnecessary waypoints
       smoothPath(outPath);
 
-#ifndef NDEBUG
       // Update statistics instead of individual logging
-      m_stats.totalRequests++;
-      m_stats.successfulPaths++;
-      m_stats.totalIterations += iterations;
-      uint64_t totalPathLength =
-          m_stats.avgPathLength * (m_stats.successfulPaths - 1) +
-          outPath.size();
-      m_stats.avgPathLength =
-          static_cast<uint32_t>(totalPathLength / m_stats.successfulPaths);
-#endif
+      VOIDLIGHT_STATS_ONLY(
+        m_stats.totalRequests++;
+        m_stats.successfulPaths++;
+        m_stats.totalIterations += iterations;
+        m_stats.totalPathLength += outPath.size();
+        m_stats.avgPathLength =
+            static_cast<uint32_t>(m_stats.totalPathLength / m_stats.successfulPaths);
+      )
 
       return PathfindingResult::SUCCESS;
     }
@@ -859,14 +863,12 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
   bool const hitIterationCap =
       !exhaustedQueue; // loop ended due to iteration count
 
-#ifndef NDEBUG
-  m_stats.totalRequests++;
-  m_stats.totalIterations += iterations;
-#endif
+  VOIDLIGHT_STATS_ONLY(
+    m_stats.totalRequests++;
+    m_stats.totalIterations += iterations;
+  )
   if (hitIterationCap) {
-#ifndef NDEBUG
-    m_stats.timeouts++;
-#endif
+    VOIDLIGHT_STATS_ONLY(m_stats.timeouts++;)
     return PathfindingResult::TIMEOUT;
   }
   // No path found within explored region
@@ -875,6 +877,34 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D &start,
 
 void PathfindingGrid::resetWeights(float defaultWeight) {
   m_weight.assign(static_cast<size_t>(m_w * m_h), defaultWeight);
+}
+
+std::shared_ptr<PathfindingGrid>
+PathfindingGrid::cloneWithResetWeights(float defaultWeight) const {
+  auto clone = std::make_shared<PathfindingGrid>(m_w, m_h, m_cell, m_offset,
+                                                 /*createCoarseGrid=*/false);
+  clone->m_blocked = m_blocked;
+  clone->m_weight.assign(static_cast<size_t>(m_w * m_h), defaultWeight);
+  clone->m_allowDiagonal = m_allowDiagonal;
+  clone->m_maxIterations = m_maxIterations;
+  clone->m_costStraight = m_costStraight;
+  clone->m_costDiagonal = m_costDiagonal;
+
+  if (m_coarseGrid) {
+    // Coarse grid's own weights are untouched by resetWeights() today too --
+    // preserve its blocked/config state as-is, just give it a new identity.
+    clone->m_coarseGrid = std::make_unique<PathfindingGrid>(
+        m_coarseGrid->m_w, m_coarseGrid->m_h, m_coarseGrid->m_cell,
+        m_coarseGrid->m_offset, /*createCoarseGrid=*/false);
+    clone->m_coarseGrid->m_blocked = m_coarseGrid->m_blocked;
+    clone->m_coarseGrid->m_weight = m_coarseGrid->m_weight;
+    clone->m_coarseGrid->m_allowDiagonal = m_coarseGrid->m_allowDiagonal;
+    clone->m_coarseGrid->m_maxIterations = m_coarseGrid->m_maxIterations;
+    clone->m_coarseGrid->m_costStraight = m_coarseGrid->m_costStraight;
+    clone->m_coarseGrid->m_costDiagonal = m_coarseGrid->m_costDiagonal;
+  }
+
+  return clone;
 }
 
 void PathfindingGrid::addWeightCircle(const Vector2D &worldCenter,

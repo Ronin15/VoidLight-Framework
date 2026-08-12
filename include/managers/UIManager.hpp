@@ -8,9 +8,7 @@
 
 #include "utils/Vector2D.hpp"
 #include "gpu/UIRenderBatches.hpp"
-#include "utils/TextureSource.hpp"
 #include <SDL3/SDL.h>
-#include <array>
 #include <functional>
 #include <memory>
 #include <string>
@@ -23,6 +21,7 @@
 // Forward declarations
 class FontManager;
 class InputManager;
+struct TextureSource;
 struct SDL_GPURenderPass;
 
 namespace VoidLight {
@@ -288,7 +287,7 @@ public:
   }
 
   // Core system methods
-  bool init();
+  [[nodiscard]] bool init();
   void update(float deltaTime);
   void clean();
   bool isShutdown() const { return m_isShutdown; }
@@ -518,8 +517,8 @@ public:
   void calculateOptimalSize(
       const std::string &id); // Calculate and apply optimal size for component
   void calculateOptimalSize(
-      std::shared_ptr<UIComponent>
-          component); // Calculate and apply optimal size for component
+      const std::shared_ptr<UIComponent>
+          &component); // Calculate and apply optimal size for component
   bool measureComponentContent(const std::shared_ptr<UIComponent> &component,
                                int *width,
                                int *height); // Measure content dimensions
@@ -650,6 +649,10 @@ private:
   // Performance optimization: Cached sorted components to avoid per-frame allocation + sorting
   mutable std::vector<std::shared_ptr<UIComponent>> m_sortedComponentsCache{};
   mutable bool m_sortedComponentsDirty{true};
+
+  // Reusable scratch key for per-item text-cache lookups in recordGPUVertices,
+  // so per-frame list/log/checkbox keys don't heap-allocate a fresh std::string.
+  std::string m_scratchTextKey{};
 
   // Performance optimization: Value caches to avoid hash lookup when values unchanged
   std::unordered_map<std::string, float> m_valueCache{};

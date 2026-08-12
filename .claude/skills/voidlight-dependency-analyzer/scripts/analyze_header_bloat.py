@@ -42,7 +42,27 @@ def extract_includes(file_path):
     return includes
 
 def count_usages_in_file(file_path, class_name):
-    """Count how many times a class is used in a file"""
+    """Count how many times a class is used in a file.
+
+    A forward declaration is only safe when the type is NEVER needed as a
+    complete type in THIS header. That rules out more than plain "ClassName
+    varname;" — it also rules out:
+      - brace-init by-value members/locals: `ClassName x{};`, `ClassName x{1,2};`
+        (the single most common pattern in this codebase's style, and the one
+        the old regex missed entirely — see review-non-issues / dependency
+        audit 2026-07-03).
+      - copy-init by-value: `ClassName x = ...;`
+      - by-value storage inside a standard container: `std::vector<ClassName>`,
+        `std::array<ClassName, N>` (these need the complete type for most
+        real operations even though technically declarable incomplete in
+        limited cases in C++17+ — treat as unsafe, not a good opportunity).
+    `ptr_ref` counts smart-pointer members separately (`unique_ptr<ClassName>`/
+    `shared_ptr<ClassName>`) because those are forward-declare-safe ONLY if
+    the owning class's destructor (and any special member function that
+    would instantiate the deleter) is defined out-of-line in the .cpp — the
+    classic Pimpl requirement. Callers must not claim these are safe without
+    checking that separately.
+    """
     try:
         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
             content = f.read()
@@ -51,8 +71,24 @@ def count_usages_in_file(file_path, class_name):
         ptr_ref_pattern = rf'\b{class_name}\s*[*&]'
         ptr_ref_count = len(re.findall(ptr_ref_pattern, content))
 
-        # Look for direct usage: ClassName variable; or ClassName::
-        direct_pattern = rf'\b{class_name}\s+\w+[;\(]|\b{class_name}::'
+        # Smart-pointer member/local: unique_ptr<ClassName> / shared_ptr<ClassName>
+        # Forward-declarable ONLY with an out-of-line destructor (Pimpl) — flagged
+        # separately, never folded into a blanket "safe" verdict.
+        smart_ptr_pattern = rf'\b(?:unique_ptr|shared_ptr)\s*<\s*{class_name}\s*>'
+        smart_ptr_count = len(re.findall(smart_ptr_pattern, content))
+
+        # Look for direct usage requiring a complete type:
+        #   - ClassName varname; / ClassName varname( / ClassName::member
+        #   - ClassName varname{...}   <- brace-init (previously missed)
+        #   - ClassName varname = ...  <- copy-init
+        #   - vector<ClassName> / array<ClassName, ...>  <- by-value container storage
+        direct_pattern = (
+            rf'\b{class_name}\s+\w+[;\(]'
+            rf'|\b{class_name}::'
+            rf'|\b{class_name}\s+\w+\s*\{{'
+            rf'|\b{class_name}\s+\w+\s*='
+            rf'|\b(?:vector|array)\s*<\s*{class_name}\s*[,>]'
+        )
         direct_count = len(re.findall(direct_pattern, content))
 
         # Look for member variables: m_className
@@ -62,10 +98,11 @@ def count_usages_in_file(file_path, class_name):
         return {
             'ptr_ref': ptr_ref_count,
             'direct': direct_count,
-            'member': member_count
+            'member': member_count,
+            'smart_ptr': smart_ptr_count,
         }
     except Exception:
-        return {'ptr_ref': 0, 'direct': 0, 'member': 0}
+        return {'ptr_ref': 0, 'direct': 0, 'member': 0, 'smart_ptr': 0}
 
 def analyze_header_bloat(base_dir):
     """Analyze header bloat"""
@@ -160,13 +197,24 @@ def analyze_forward_declaration_opportunities(base_dir):
             # Analyze usage in the header
             usage = count_usages_in_file(header, class_name)
 
-            # If only used as pointer/reference and not directly, it's a candidate
-            if usage['ptr_ref'] > 0 and usage['direct'] == 0:
-                opportunities.append({
-                    'header': os.path.basename(header),
-                    'include': include_name,
-                    'class': class_name
-                })
+            # Never a candidate if the complete type is needed anywhere in
+            # this header (by-value member/local, brace/copy-init, or
+            # by-value container storage — see count_usages_in_file).
+            if usage['direct'] != 0 or usage['ptr_ref'] == 0:
+                continue
+
+            opportunities.append({
+                'header': os.path.basename(header),
+                'include': include_name,
+                'class': class_name,
+                # A raw pointer/reference is safe to forward-declare outright.
+                # A unique_ptr/shared_ptr member is ONLY safe if the owning
+                # class's destructor (and copy/move special members, if any)
+                # are also moved out-of-line into the .cpp — otherwise the
+                # implicit/defaulted destructor needs the complete type to
+                # destroy the pointee and this will fail to compile.
+                'needs_out_of_line_destructor': usage['smart_ptr'] > 0,
+            })
 
     # Show top opportunities
     print(f"Found {len(opportunities)} forward declaration opportunities:")
@@ -177,6 +225,11 @@ def analyze_forward_declaration_opportunities(base_dir):
         print(f"      Can forward-declare {opp['class']}")
         print(f"      Remove: #include \"{opp['include']}\"")
         print(f"      Add: class {opp['class']};  // Forward declaration")
+        if opp['needs_out_of_line_destructor']:
+            print(f"      ⚠️  Held via unique_ptr/shared_ptr — ALSO move the owning class's")
+            print(f"          destructor (and any defaulted copy/move members) out-of-line")
+            print(f"          into the .cpp, defined after {opp['class']} is complete there.")
+            print(f"          Skipping that step will not compile.")
         print()
 
     if len(opportunities) > 20:

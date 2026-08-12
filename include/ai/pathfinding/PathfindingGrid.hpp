@@ -67,6 +67,16 @@ public:
     void resetWeights(float defaultWeight = 1.0f);
     void addWeightCircle(const Vector2D& worldCenter, float worldRadius, float weightMultiplier);
 
+    // Publish a new grid with weights reset instead of mutating this one in
+    // place. Callers holding a shared_ptr snapshot of the current grid (e.g.
+    // an in-flight findPath() on a worker thread) keep reading it safely --
+    // there is nothing to synchronize against, since nobody mutates the
+    // instance they're holding. Preserves blocked/config state as-is (no
+    // world rescan); matches resetWeights()'s existing scope of the fine
+    // grid only -- the coarse grid's own weights are likewise preserved
+    // as-is, just given a new identity so it isn't shared with the original.
+    std::shared_ptr<PathfindingGrid> cloneWithResetWeights(float defaultWeight = 1.0f) const;
+
     // Hierarchical grid access
     float getCellSize() const { return m_cell; }
     int getWidth() const { return m_w; }
@@ -89,6 +99,7 @@ public:
         uint64_t invalidStarts{0};
         uint64_t invalidGoals{0};
         uint64_t totalIterations{0};
+        uint64_t totalPathLength{0};
         uint32_t avgPathLength{0};
         uint32_t framesSinceReset{0};
     };

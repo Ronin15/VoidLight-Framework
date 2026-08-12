@@ -7,8 +7,40 @@
 #include "core/Logger.hpp"
 #include "utils/JsonReader.hpp"
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <fstream>
+#include <limits>
+#include <ostream>
+#include <string_view>
+
+namespace {
+// Writes a JSON string literal (surrounding quotes included) with the standard
+// escapes, mirroring JsonReader's writeEscapedString so serialized settings
+// round-trip through JsonReader on load.
+void writeEscapedJsonString(std::ostream &stream, std::string_view s) {
+  stream << '"';
+  for (unsigned char c : s) {
+    switch (c) {
+    case '"':  stream << "\\\""; break;
+    case '\\': stream << "\\\\"; break;
+    case '\b': stream << "\\b";  break;
+    case '\f': stream << "\\f";  break;
+    case '\n': stream << "\\n";  break;
+    case '\r': stream << "\\r";  break;
+    case '\t': stream << "\\t";  break;
+    default:
+      if (c < 0x20) {
+        stream << std::format("\\u{:04x}", static_cast<unsigned int>(c));
+      } else {
+        stream << static_cast<char>(c);
+      }
+      break;
+    }
+  }
+  stream << '"';
+}
+} // namespace
 
 namespace VoidLight {
 
@@ -47,8 +79,14 @@ bool SettingsManager::loadFromFile(const std::string &filepath) {
         settingValue = value.asBool();
       } else if (value.isNumber()) {
         double numValue = value.asNumber();
-        // Check if it's an integer value
-        if (numValue == static_cast<int>(numValue)) {
+        // Preserve the authored token type: an integer literal (`1920`) becomes
+        // an int variant, a real literal (`0.8`, `1.0`) becomes a float. This
+        // keeps typed get<int>/get<float> round-tripping. Still range-check the
+        // int cast — an integer literal outside int range would be UB to
+        // truncate, so fall back to float there.
+        if (value.isIntegerNumber() && std::isfinite(numValue) &&
+            numValue >= static_cast<double>(std::numeric_limits<int>::min()) &&
+            numValue <= static_cast<double>(std::numeric_limits<int>::max())) {
           settingValue = static_cast<int>(numValue);
         } else {
           settingValue = static_cast<float>(numValue);
@@ -85,11 +123,15 @@ bool SettingsManager::saveToFile(const std::string &filepath) {
 
   size_t categoryIndex = 0;
   for (const auto &[categoryName, categorySettings] : m_settings) {
-    file << "  \"" << categoryName << "\": {\n";
+    file << "  ";
+    writeEscapedJsonString(file, categoryName);
+    file << ": {\n";
 
     size_t keyIndex = 0;
     for (const auto &[key, value] : categorySettings) {
-      file << "    \"" << key << "\": ";
+      file << "    ";
+      writeEscapedJsonString(file, key);
+      file << ": ";
 
       // Write value based on type
       std::visit(
@@ -100,9 +142,16 @@ bool SettingsManager::saveToFile(const std::string &filepath) {
             } else if constexpr (std::is_same_v<T, int>) {
               file << arg;
             } else if constexpr (std::is_same_v<T, float>) {
-              file << arg;
+              // Emit a guaranteed decimal marker so the value re-parses as a
+              // real (not an integer literal) and reloads back into a float
+              // variant instead of collapsing to int.
+              std::string s = std::format("{}", arg);
+              file << s;
+              if (s.find_first_of(".eEnN") == std::string::npos) {
+                file << ".0";
+              }
             } else if constexpr (std::is_same_v<T, std::string>) {
-              file << "\"" << arg << "\"";
+              writeEscapedJsonString(file, arg);
             }
           },
           value);

@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "utils/Vector2D.hpp"
 #include <ctime>
 
 // Forward declarations

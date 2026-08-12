@@ -109,9 +109,7 @@ struct EventManagerFixture {
 
   ~EventManagerFixture() {
     // Disable threading before cleanup
-    #ifndef NDEBUG
-    EventManager::Instance().enableThreading(false);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(false);)
     std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
     // Clean up the EventManager
@@ -355,31 +353,6 @@ BOOST_FIXTURE_TEST_CASE(DeferredDispatch_MultipleTriggers_ProcessedInUpdate, Eve
   BOOST_CHECK_GE(handlerCallCount.load(), 2);
 }
 
-// ==================== Performance Stats Tests ====================
-
-BOOST_FIXTURE_TEST_CASE(PerformanceStats_TrackDispatchMetrics, EventManagerFixture) {
-  // Reset performance stats
-  EventManager::Instance().resetPerformanceStats();
-
-  // Register a handler
-  bool handlerCalled = false;
-  EventManager::Instance().registerHandler(
-      EventTypeId::Weather,
-      [&handlerCalled](const EventData &) { handlerCalled = true; });
-
-  // Trigger an event with immediate dispatch
-  BOOST_CHECK(EventManager::Instance().changeWeather("Sunny", 1.0f,
-                                                      EventManager::DispatchMode::Immediate));
-  BOOST_CHECK(handlerCalled);
-
-  // Get performance stats
-  auto stats = EventManager::Instance().getPerformanceStats(EventTypeId::Weather);
-
-  // Verify basic stats structure exists
-  BOOST_CHECK_GE(stats.callCount, 0);
-  BOOST_CHECK_GE(stats.totalTime, 0.0);
-  BOOST_CHECK_GE(stats.avgTime, 0.0);
-}
 
 BOOST_FIXTURE_TEST_CASE(GetPendingEventCount_TracksQueuedEvents, EventManagerFixture) {
   // Initially should have no pending events
@@ -513,7 +486,7 @@ BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManage
 
 // ==================== Threading Control Tests (Debug Only) ====================
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 BOOST_FIXTURE_TEST_CASE(DynamicThreadingControl, EventManagerFixture) {
   EventManager::Instance().clean();
   BOOST_REQUIRE(EventManager::Instance().init());
@@ -547,7 +520,7 @@ BOOST_FIXTURE_TEST_CASE(DynamicThreadingControl, EventManagerFixture) {
 
   EventManager::Instance().enableThreading(false);
 }
-#endif // NDEBUG
+)
 
 // ==================== Additional Trigger Method Tests ====================
 

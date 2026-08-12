@@ -161,9 +161,9 @@ void GPUVertexPool::endFrame(size_t vertexCount) {
     m_mappedPtr = nullptr;
 }
 
-bool GPUVertexPool::upload(SDL_GPUCopyPass* copyPass) {
+void GPUVertexPool::upload(SDL_GPUCopyPass* copyPass) {
     if (!copyPass || m_currentVertexCount == 0) {
-        return true;
+        return;
     }
 
     SDL_GPUTransferBufferLocation src = m_transferBuffers[m_frameIndex].asLocation(0);
@@ -174,7 +174,6 @@ bool GPUVertexPool::upload(SDL_GPUCopyPass* copyPass) {
     dst.size = static_cast<uint32_t>(m_currentVertexCount * m_vertexSize);
 
     SDL_UploadToGPUBuffer(copyPass, &src, &dst, false);
-    return true;
 }
 
 } // namespace VoidLight

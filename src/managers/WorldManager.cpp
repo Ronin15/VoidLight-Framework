@@ -6,25 +6,22 @@
 #include "managers/WorldManager.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
-#include "utils/Camera.hpp"
 #include "utils/ResourcePath.hpp"
 #include "core/ThreadSystem.hpp"
-#include "events/ResourceChangeEvent.hpp"
 #include "events/TimeEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/GameTimeManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
 #include "managers/TextureManager.hpp"
 #include "managers/WorldResourceManager.hpp"
 #include "utils/JsonReader.hpp"
+#include "utils/Vector2D.hpp"
 #include "world/HarvestConfig.hpp"
 
-#include "events/HarvestResourceEvent.hpp"
 #include <algorithm>
-#include <cmath>
 #include <format>
 
-#include "gpu/GPURenderer.hpp"
 #include "gpu/SpriteBatch.hpp"
 
 bool WorldManager::init() {
@@ -157,7 +154,12 @@ bool WorldManager::loadNewWorld(
       // Register world with WorldResourceManager and set as active immediately
       // (Must set active BEFORE initializing resources so spatial queries work)
       auto& wrm = WorldResourceManager::Instance();
-      wrm.createWorld(m_currentWorld->worldId);
+      if (!wrm.createWorld(m_currentWorld->worldId)) {
+        WORLD_MANAGER_WARN(std::format(
+            "WorldResourceManager::createWorld did not register a new world for "
+            "{} (may already exist); continuing with existing registry",
+            m_currentWorld->worldId));
+      }
       wrm.setActiveWorld(m_currentWorld->worldId);
 
       // Initialize world resources based on world data
@@ -515,7 +517,16 @@ void WorldManager::fireWorldLoadedEvent(const std::string &worldId) {
 
 void WorldManager::fireWorldUnloadedEvent(const std::string &worldId) {
   try {
-    // Trigger world unloaded via EventManager (no registration)
+    // Trigger world unloaded via EventManager (no registration).
+    // MUST be Immediate: world replacement (loadNewWorld over an existing world)
+    // relies on WorldUnloaded handlers firing synchronously BEFORE the new world
+    // is activated, so old-world state is torn down before new-world state is
+    // built. This is the documented invariant ("do not rely only on deferred
+    // WorldUnloaded after transition cleanup has begun") and is asserted by
+    // WorldManagerTests (TestWorldReplacementUnloadsBeforeActivatingNewWorld).
+    // The current World handlers are confirmation-only and safe to run inline;
+    // if heavier handlers are ever added, sequence the unload on the main thread
+    // ahead of the worker load rather than switching to Deferred.
     const EventManager &eventMgr = EventManager::Instance();
     eventMgr.triggerWorldUnloaded(worldId,
                                         EventManager::DispatchMode::Immediate);
@@ -647,6 +658,9 @@ void WorldManager::initializeWorldResources() {
       if (gridHeight == 0) return;
       const size_t gridWidth = m_currentWorld->grid[0].size();
 
+      // resourceId is loop-invariant, so resolve its harvest type once.
+      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
+
       // Spawn harvestables at ALL tiles that have the matching obstacle
       for (size_t y = 0; y < gridHeight; ++y) {
         for (size_t x = 0; x < gridWidth; ++x) {
@@ -656,7 +670,6 @@ void WorldManager::initializeWorldResources() {
           Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
                        static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
 
-          auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
           EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
           if (h.isValid()) {
             ++spawned;
@@ -686,6 +699,9 @@ void WorldManager::initializeWorldResources() {
       if (gridHeight == 0) return;
       const size_t gridWidth = m_currentWorld->grid[0].size();
 
+      // resourceId is loop-invariant, so resolve its harvest type once.
+      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
+
       // Distribute harvestables across the world
       for (size_t y = 0; y < gridHeight && spawned < count; ++y) {
         for (size_t x = 0; x < gridWidth && spawned < count; ++x) {
@@ -701,14 +717,12 @@ void WorldManager::initializeWorldResources() {
           Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
                        static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
 
-          auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
           EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
           if (h.isValid()) {
             ++spawned;
           }
         }
       }
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
       WORLD_MANAGER_INFO(std::format("Spawned {} harvestables of type {} ({}) in {} biome",
                                      spawned, handle.toString(),
                                      VoidLight::harvestTypeToString(harvestType),
@@ -733,6 +747,10 @@ void WorldManager::initializeWorldResources() {
       if (gridHeight == 0) return;
       const size_t gridWidth = m_currentWorld->grid[0].size();
 
+      // createHarvestable auto-registers with WRM using worldId.
+      // resourceId is loop-invariant, so derive its HarvestType once via HarvestConfig.
+      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
+
       for (size_t y = 0; y < gridHeight && spawned < count; ++y) {
         for (size_t x = 0; x < gridWidth && spawned < count; ++x) {
           const auto& tile = m_currentWorld->grid[y][x];
@@ -746,16 +764,12 @@ void WorldManager::initializeWorldResources() {
           Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
                        static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
 
-          // createHarvestable auto-registers with WRM using worldId
-          // Use HarvestConfig to derive the correct HarvestType from resource
-          auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
           EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
           if (h.isValid()) {
             ++spawned;
           }
         }
       }
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
       WORLD_MANAGER_INFO(std::format("Spawned {} high-elevation harvestables of type {} ({})",
                                      spawned, handle.toString(),
                                      VoidLight::harvestTypeToString(harvestType)));

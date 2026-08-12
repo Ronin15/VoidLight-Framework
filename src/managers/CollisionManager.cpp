@@ -82,17 +82,6 @@ bool CollisionManager::init() {
 
    m_statisticsDirty = true; // Statistics need recalculation after init
 
-   // PERFORMANCE: Pre-allocate vector pool to prevent FPS dips from
-  // reallocations Initialize vector pool (moved from lazy initialization in
-  // getPooledVector)
-  m_vectorPool.clear();
-  m_vectorPool.reserve(32);
-  for (size_t i = 0; i < 16; ++i) {
-    m_vectorPool.emplace_back();
-    m_vectorPool.back().reserve(64); // Pre-allocate reasonable capacity
-  }
-  m_nextPoolIndex.store(0, std::memory_order_relaxed);
-
   // Pre-reserve reusable containers to avoid per-frame allocations
   m_currentTriggerPairsBuffer.reserve(1000); // Typical trigger count
   // Note: pools.staticIndices is reserved by CollisionPool::ensureCapacity()
@@ -164,16 +153,6 @@ void CollisionManager::prepareForStateTransition() {
 
   // Clear collision buffers to prevent dangling references to deleted bodies
   m_collisionPool.resetFrame();
-
-  // Re-initialize vector pool (must not leave it empty to prevent
-  // divide-by-zero in getPooledVector)
-  m_vectorPool.clear();
-  m_vectorPool.reserve(32);
-  for (size_t i = 0; i < 16; ++i) {
-    m_vectorPool.emplace_back();
-    m_vectorPool.back().reserve(64);
-  }
-  m_nextPoolIndex.store(0, std::memory_order_relaxed);
 
   // Clear trigger tracking state completely
   m_activeTriggerPairs.clear();
@@ -675,7 +654,7 @@ bool CollisionManager::isGloballyPaused() const {
 }
 
 void CollisionManager::logCollisionStatistics() const {
-#ifndef NDEBUG
+   VOIDLIGHT_STATS_ONLY(
    // Only recalculate expensive statistics when dirty
    if (m_statisticsDirty) {
      m_cachedStaticBodies = getStaticBodyCount();
@@ -757,7 +736,7 @@ void CollisionManager::logCollisionStatistics() const {
      }
      COLLISION_INFO(std::format("    {}: {}", layerName, layerCount.second));
    }
-#endif
+   )
 }
 
 size_t CollisionManager::getStaticBodyCount() const {
@@ -815,7 +794,7 @@ void CollisionManager::rebuildStaticFromWorld() {
         std::format("World colliders built: solid={}, water triggers={}",
                     solidBodies, waterTriggers));
 
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     int buildingBodyCount = 0;
     for (size_t i = 0; i < m_storage.entityIds.size(); ++i) {
       EntityID id = m_storage.entityIds[i];
@@ -830,8 +809,8 @@ void CollisionManager::rebuildStaticFromWorld() {
     }
     COLLISION_INFO(std::format(
         "Total building collision bodies in storage: {}", buildingBodyCount));
-    logCollisionStatistics();
-#endif
+    )
+    VOIDLIGHT_STATS_ONLY(logCollisionStatistics();)
 
     rebuildStaticSpatialHashUnlocked();
   }
@@ -1041,6 +1020,17 @@ void CollisionManager::onTileChanged(int x, int y) {
 
 void CollisionManager::subscribeWorldEvents() {
   auto &em = EventManager::Instance();
+  // GameEngine::init() runs EventManager::init() and CollisionManager::init()
+  // on concurrent ThreadSystem workers. EventManager::init() resets its handler
+  // containers, and registering here before that completes is a data race on
+  // those containers. Gate on isInitialized() (acquire) so registration only
+  // touches the containers after EventManager::init() has published them —
+  // matching PathfinderManager::subscribeToEvents().
+  if (!em.isInitialized()) {
+    COLLISION_WARN("EventManager not initialized, skipping world event "
+                   "subscription");
+    return;
+  }
   auto token = em.registerPersistentHandlerWithToken(
       EventTypeId::World, [this](const EventData &data) {
         auto base = data.event;
@@ -1090,7 +1080,7 @@ void CollisionManager::subscribeWorldEvents() {
 
 size_t CollisionManager::addStaticBody(EntityID id, const Vector2D &position,
                                        const Vector2D &halfSize, uint32_t layer,
-                                       uint32_t collidesWith, bool isTrigger,
+                                       uint32_t collidesWith, bool asTrigger,
                                        uint8_t triggerTag, uint8_t triggerType,
                                        size_t edmIndex) {
   // Check if entity already exists
@@ -1111,9 +1101,27 @@ size_t CollisionManager::addStaticBody(EntityID id, const Vector2D &position,
       hot.aabbMaxY = py + hh;
       hot.layers = layer;
       hot.collidesWith = collidesWith;
+      hot.bodyType = static_cast<uint8_t>(BodyType::STATIC);
       hot.active = true;
+      hot.isTrigger = asTrigger ? 1 : 0;
+      hot.triggerTag = triggerTag;
       hot.triggerType = triggerType;
       hot.edmIndex = edmIndex;
+
+      // Keep coarse-cell cache and static hash in sync with the updated AABB.
+      AABB updatedAABB(px, py, hw, hh);
+      auto coarseCell = m_staticSpatialHash.getCoarseCoord(updatedAABB);
+      hot.coarseCellX = static_cast<int16_t>(coarseCell.x);
+      hot.coarseCellY = static_cast<int16_t>(coarseCell.y);
+
+      float radius = std::max(hw, hh) + 16.0f;
+      std::string description =
+          std::format("Static obstacle updated at ({}, {})", px, py);
+      EventManager::Instance().triggerCollisionObstacleChanged(
+          position, radius, description, EventManager::DispatchMode::Deferred);
+      m_staticHashDirty = true;
+      m_staticQueryCacheDirty = true;
+      m_statisticsDirty = true;
     }
     return it->second;
   }
@@ -1136,7 +1144,7 @@ size_t CollisionManager::addStaticBody(EntityID id, const Vector2D &position,
   hotData.triggerTag = triggerTag;
   hotData.triggerType = triggerType;
   hotData.active = true;
-  hotData.isTrigger = isTrigger;
+  hotData.isTrigger = asTrigger ? 1 : 0;
   hotData.edmIndex = edmIndex;
 
   // Initialize coarse cell coords for cache optimization
@@ -2224,7 +2232,7 @@ void CollisionManager::update(float) {
     return;
 
   using clock = std::chrono::steady_clock; // Needed for WorkerBudget timing
-  VOIDLIGHT_DEBUG_ONLY(auto t0 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t0 = clock::now();)
 
   // Check storage state at start of update (statics only now)
   size_t staticBodyCount = m_storage.size();
@@ -2299,15 +2307,15 @@ void CollisionManager::update(float) {
 
   // BROADPHASE: Generate collision pairs using spatial hash
   // Pairs stored in pools.movableMovablePairs and pools.movableStaticPairs
-  VOIDLIGHT_DEBUG_ONLY(auto t1 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t1 = clock::now();)
   broadphase();
-  VOIDLIGHT_DEBUG_ONLY(auto t2 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t2 = clock::now();)
 
   // NARROWPHASE: Detailed collision detection and response calculation
   const size_t pairCount = m_collisionPool.movableMovablePairs.size() +
                            m_collisionPool.movableStaticPairs.size();
   narrowphase(m_collisionPool.collisionBuffer);
-  VOIDLIGHT_DEBUG_ONLY(auto t3 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t3 = clock::now();)
 
   // RESOLUTION: Apply collision responses and update positions.
   // Skip resolve() for triggers (no position correction) and for
@@ -2324,15 +2332,15 @@ void CollisionManager::update(float) {
       }
     }
   }
-  VOIDLIGHT_DEBUG_ONLY(auto t4 = clock::now();)
-  VOIDLIGHT_DEBUG_ONLY(auto t5 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t4 = clock::now();)
+  VOIDLIGHT_STATS_ONLY(auto t5 = clock::now();)
 
   // TRIGGER PROCESSING: Handle trigger enter/exit events
   // PHASE 3.2: Detect EventOnly triggers (bypassed broadphase)
   detectEventOnlyTriggers();
   processTriggerEvents();
 
-  VOIDLIGHT_DEBUG_ONLY(
+  VOIDLIGHT_STATS_ONLY(
   auto t6 = clock::now();
   updatePerformanceMetrics(
       t0, t1, t2, t3, t4, t5, t6, bodyCount, activeMovableBodies, pairCount,
@@ -2600,9 +2608,11 @@ void CollisionManager::detectEventOnlyTriggersSweep(
               return a.x < b.x || (a.x == b.x && a.isStart > b.isStart);
             });
 
-  // Sweep: track active entities and triggers
-  std::unordered_set<size_t> activeEntities;
-  std::unordered_set<size_t> activeTriggers;
+  // Sweep: track active entities and triggers (reuse buffers, retain capacity)
+  auto &activeEntities = m_triggerSweepActiveEntities;
+  auto &activeTriggers = m_triggerSweepActiveTriggers;
+  activeEntities.clear();
+  activeTriggers.clear();
 
   for (const auto &edge : m_triggerSweepEdges) {
     if (edge.isStart) {
@@ -2901,8 +2911,8 @@ void CollisionManager::updatePerformanceMetrics(
   m_perf.bodyCount = bodyCount;
   m_perf.frames += 1;
 
-  VOIDLIGHT_DEBUG_ONLY(
-  // TRIGGER DETECTION METRICS: Debug/benchmark only
+  VOIDLIGHT_STATS_ONLY(
+  // TRIGGER DETECTION METRICS: stats/telemetry (Debug + ReleaseSafe)
   m_perf.lastTriggerDetectors =
       EntityDataManager::Instance().getTriggerDetectionIndices().size();
   m_perf.lastTriggerOverlaps = m_collisionPool.eventOnlyOverlaps.size();
@@ -2967,12 +2977,12 @@ void CollisionManager::updatePerformanceMetrics(
         "resolve:{:.2f}ms | triggerDetect:{} overlaps:{}",
         d01, d12, d23, d34, triggerDetectionEntities, eventOnlyOverlaps));
   }
-  ) // VOIDLIGHT_DEBUG_ONLY
+  ) // VOIDLIGHT_STATS_ONLY
 }
 
 // Helper: Apply a single kinematic update to EDM and cached AABB
-void CollisionManager::applyKinematicUpdate(const KinematicUpdate& update) {
-  auto it = m_storage.entityToIndex.find(update.id);
+void CollisionManager::applyKinematicUpdate(const KinematicUpdate& kinematicUpdate) {
+  auto it = m_storage.entityToIndex.find(kinematicUpdate.id);
   if (it == m_storage.entityToIndex.end() || it->second >= m_storage.size()) {
     return;
   }
@@ -2988,13 +2998,13 @@ void CollisionManager::applyKinematicUpdate(const KinematicUpdate& update) {
   // Update EDM - it owns position/velocity
   auto& edm = EntityDataManager::Instance();
   auto& transform = edm.getTransformByIndex(hot.edmIndex);
-  transform.position = update.position;
-  transform.velocity = update.velocity;
+  transform.position = kinematicUpdate.position;
+  transform.velocity = kinematicUpdate.velocity;
 
   // Update cached AABB immediately for spatial queries
   const auto& edmHot = edm.getHotDataByIndex(hot.edmIndex);
-  float px = update.position.getX();
-  float py = update.position.getY();
+  float px = kinematicUpdate.position.getX();
+  float py = kinematicUpdate.position.getY();
   float hw = edmHot.halfWidth;
   float hh = edmHot.halfHeight;
 
@@ -3067,10 +3077,10 @@ void CollisionManager::setVelocity(EntityID id, const Vector2D &velocity) {
   }
 }
 
-void CollisionManager::setBodyTrigger(EntityID id, bool isTrigger) {
+void CollisionManager::setBodyTrigger(EntityID id, bool asTrigger) {
   size_t index;
   if (getCollisionBody(id, index)) {
-    m_storage.hotData[index].isTrigger = isTrigger ? 1 : 0;
+    m_storage.hotData[index].isTrigger = asTrigger ? 1 : 0;
   }
 }
 
@@ -3088,37 +3098,4 @@ CollisionManager::createDefaultCullingArea() const {
   area.maxX = refPoint.getX() + radius;
   area.maxY = refPoint.getY() + radius;
   return area;
-}
-
-// ========== PERFORMANCE: VECTOR POOLING METHODS ==========
-
-std::vector<size_t> &CollisionManager::getPooledVector() {
-  /* THREAD SAFETY: Lock-free vector pool with atomic index
-   *
-   * THREAD SAFE because:
-   * - m_nextPoolIndex is std::atomic<size_t> with relaxed memory order
-   * - Pool initialized once in init(), never reallocated
-   * - fetch_add() provides lock-free thread-safe index allocation
-   * - Each thread gets a unique vector from the pool (no contention)
-   *
-   * PERFORMANCE:
-   * - No mutex overhead (lock-free atomic operations)
-   * - Round-robin allocation distributes load across pool
-   * - Vectors retain capacity across frames (no allocations)
-   */
-
-  // Pool is initialized in init(), not here (removed lazy initialization)
-  // Use atomic round-robin allocation for thread-safe access
-  size_t idx = m_nextPoolIndex.fetch_add(1, std::memory_order_relaxed) %
-               m_vectorPool.size();
-
-  auto &vec = m_vectorPool[idx];
-  vec.clear(); // Clear but retain capacity
-  return vec;
-}
-
-void CollisionManager::returnPooledVector(std::vector<size_t> &vec) {
-  // Vector is automatically returned to pool via reference
-  // Just clear it to avoid holding onto data
-  vec.clear();
 }

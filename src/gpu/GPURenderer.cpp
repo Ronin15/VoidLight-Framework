@@ -2,6 +2,9 @@
  * Licensed under the MIT License */
 
 #include "gpu/GPURenderer.hpp"
+#include "gpu/GPUDevice.hpp"
+#include "gpu/GPUTexture.hpp"
+#include "gpu/GPUTypes.hpp"
 #include "gpu/GPUShaderManager.hpp"
 #include "managers/TextureManager.hpp"
 #include "core/Logger.hpp"
@@ -15,6 +18,8 @@ GPURenderer& GPURenderer::Instance() {
     static GPURenderer instance;
     return instance;
 }
+
+GPURenderer::~GPURenderer() = default;
 
 bool GPURenderer::init() {
     if (m_initialized) {
@@ -147,6 +152,7 @@ void GPURenderer::shutdown() {
     m_spriteOpaquePipeline.release();
     m_spriteAlphaPipeline.release();
     m_particlePipeline.release();
+    m_particlePipelineAdditive.release();
     m_primitivePipeline.release();
     m_compositePipeline.release();
     m_uiSpritePipeline.release();
@@ -186,6 +192,7 @@ void GPURenderer::cleanupPartialInit() {
     m_spriteOpaquePipeline.release();
     m_spriteAlphaPipeline.release();
     m_particlePipeline.release();
+    m_particlePipelineAdditive.release();
     m_primitivePipeline.release();
     m_compositePipeline.release();
     m_uiSpritePipeline.release();
@@ -221,6 +228,13 @@ bool GPURenderer::beginFrame() {
         GAMEENGINE_ERROR(std::format("Failed to acquire GPU command buffer: {}", SDL_GetError()));
         return false;
     }
+
+    // Clear stale batch counts at frame start. Recording states call begin()
+    // later in recordGPUVertices (re-setting these), but non-recording states
+    // never call begin() and would otherwise leave last frame's counts, causing
+    // beginScenePass to upload garbage vertex data every frame.
+    m_spriteBatch.reset();
+    m_entityBatch.reset();
 
     // Begin vertex pool frames (maps transfer buffers)
     profiler.beginRender(RenderPhase::GPUVertexMap);
@@ -287,8 +301,13 @@ bool GPURenderer::acquireSwapchainTexture() {
         return false;
     }
 
-    // Sync viewport before scene recording so the scene texture matches the
-    // swapchain dimensions for this frame.
+    // Sync the viewport/scene-texture to the swapchain dimensions. NOTE: this
+    // runs from beginScenePass(), which is AFTER GameStateManager::recordGPUVertices()
+    // in GameEngine::render(). On a resize frame the scene was therefore recorded
+    // against the previous viewport size while renderRecordedScene builds its ortho
+    // from the new scene-texture size, producing a one-frame shift. This is accepted:
+    // moving the swapchain acquisition before recording would restructure the frame
+    // lifecycle (acquisition must run on the active command buffer).
     if (m_swapchainWidth != m_viewportWidth || m_swapchainHeight != m_viewportHeight) {
         GAMEENGINE_INFO(std::format("Swapchain size changed: {}x{} -> {}x{}",
                                     m_viewportWidth, m_viewportHeight,
@@ -340,16 +359,11 @@ SDL_GPURenderPass* GPURenderer::beginScenePass() {
         m_uiVertexPool.endFrame(uiVertexCount);
 
         // Upload vertex data
-        if (!m_spriteVertexPool.upload(m_copyPass) ||
-            !m_entityVertexPool.upload(m_copyPass) ||
-            !m_particleVertexPool.upload(m_copyPass) ||
-            !m_primitiveVertexPool.upload(m_copyPass) ||
-            !m_uiVertexPool.upload(m_copyPass)) {
-            SDL_EndGPUCopyPass(m_copyPass);
-            m_copyPass = nullptr;
-            profiler.endRender(RenderPhase::GPUUpload);
-            return nullptr;
-        }
+        m_spriteVertexPool.upload(m_copyPass);
+        m_entityVertexPool.upload(m_copyPass);
+        m_particleVertexPool.upload(m_copyPass);
+        m_primitiveVertexPool.upload(m_copyPass);
+        m_uiVertexPool.upload(m_copyPass);
 
         SDL_EndGPUCopyPass(m_copyPass);
         m_copyPass = nullptr;
@@ -440,7 +454,6 @@ SDL_GPURenderPass* GPURenderer::beginSwapchainPass() {
     viewport.max_depth = 1.0f;
     SDL_SetGPUViewport(m_currentPass, &viewport);
 
-    m_frameReadyForPresentation = true;
     return m_currentPass;
 }
 
@@ -482,6 +495,10 @@ SDL_GPUGraphicsPipeline* GPURenderer::getSpriteAlphaPipeline() const {
 
 SDL_GPUGraphicsPipeline* GPURenderer::getParticlePipeline() const {
     return m_particlePipeline.get();
+}
+
+SDL_GPUGraphicsPipeline* GPURenderer::getParticlePipelineAdditive() const {
+    return m_particlePipelineAdditive.get();
 }
 
 SDL_GPUGraphicsPipeline* GPURenderer::getPrimitivePipeline() const {
@@ -821,9 +838,23 @@ bool GPURenderer::createPipelines() {
         auto config = GPUPipeline::createParticleConfig(
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
-            sceneFormat
+            sceneFormat,
+            false  // alpha
         );
         if (!m_particlePipeline.create(m_device, config)) {
+            return false;
+        }
+    }
+
+    // Additive particle pipeline (glow effects: fireflies, fire, sparks)
+    {
+        auto config = GPUPipeline::createParticleConfig(
+            shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
+            shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
+            sceneFormat,
+            true  // additive
+        );
+        if (!m_particlePipelineAdditive.create(m_device, config)) {
             return false;
         }
     }
@@ -942,7 +973,6 @@ void GPURenderer::resetFrameState() {
     m_swapchainWidth = 0;
     m_swapchainHeight = 0;
     m_frameActive = false;
-    m_frameReadyForPresentation = false;
 }
 
 } // namespace VoidLight

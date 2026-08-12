@@ -28,11 +28,24 @@ class PauseState : public GameState {
   bool supportsGPURendering() const override { return true; }
 
  private:
-  static constexpr std::array<std::string_view, 2> kNavOrder{
+  static constexpr std::array<std::string_view, 3> kNavOrder{
       "pause_resume_btn",
+      "pause_settings_btn",
       "pause_mainmenu_btn",
   };
+
+  // Return-to-main-menu confirm dialog navigation — Cancel first so it is
+  // the default focus (mirrors MainMenuState's quit-confirm dialog).
+  static constexpr std::array<std::string_view, 2> kConfirmNavOrder{
+      "pause_confirm_cancel_btn",
+      "pause_confirm_yes_btn",
+  };
+
   size_t m_selectedIndex{0};
+  bool m_confirmDialogOpen{false};
+
+  void openMainMenuConfirm();
+  void closeMainMenuConfirm();
 };
 
 #endif  // PAUSE_STATE_HPP

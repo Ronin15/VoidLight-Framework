@@ -155,6 +155,31 @@ BOOST_AUTO_TEST_CASE(TestPushStateFailureResumesPreviousState) {
     BOOST_CHECK(currentStatePtr->wasUpdateCalled());
 }
 
+BOOST_AUTO_TEST_CASE(TestChangeStateFailureDoesNotEmptyStack) {
+    auto currentState = std::make_unique<MockGameState>(GameStateId::MAIN_MENU);
+    auto failingState = std::make_unique<MockGameState>(GameStateId::GAME_PLAY, false);
+    MockGameState* currentStatePtr = currentState.get();
+    MockGameState* failingStatePtr = failingState.get();
+
+    manager.addState(std::move(currentState));
+    manager.addState(std::move(failingState));
+
+    manager.pushState(GameStateId::MAIN_MENU);
+    currentStatePtr->resetFlags();
+
+    manager.changeState(GameStateId::GAME_PLAY);
+
+    // Standard exit-then-enter: old exits first; failed enter restores old via re-enter.
+    BOOST_CHECK(failingStatePtr->wasEnterCalled());
+    BOOST_CHECK(currentStatePtr->wasExitCalled());
+    BOOST_CHECK(currentStatePtr->wasEnterCalled());
+
+    // The stack must still be usable -- this is the actual freeze this test guards against
+    currentStatePtr->resetFlags();
+    manager.update(0.016f);
+    BOOST_CHECK(currentStatePtr->wasUpdateCalled());
+}
+
 BOOST_AUTO_TEST_CASE(TestPopState) {
     auto mockState = std::make_unique<MockGameState>(GameStateId::LOGO);
     MockGameState* statePtr = mockState.get();

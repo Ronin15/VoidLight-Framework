@@ -54,14 +54,28 @@ public:
 
 private:
   ValueType m_value;
+  // Numbers are stored as double, but the authored token type (integer literal
+  // like `1` vs real literal like `1.0`) is preserved here so consumers that
+  // care about type identity (e.g. SettingsManager's typed variant) can
+  // round-trip it. Meaningful only when isNumber(); ignored otherwise.
+  bool m_numberIsInteger{false};
 
 public:
   // Constructors
   JsonValue() : m_value(nullptr) {}
   explicit JsonValue(std::nullptr_t) : m_value(nullptr) {}
   explicit JsonValue(bool value) : m_value(value) {}
-  explicit JsonValue(int value) : m_value(static_cast<double>(value)) {}
+  explicit JsonValue(int value)
+      : m_value(static_cast<double>(value)), m_numberIsInteger(true) {}
   explicit JsonValue(double value) : m_value(value) {}
+
+  // Construct a number with an explicit integer/real classification. Used by
+  // the parser to carry the authored token type through the value tree.
+  static JsonValue makeNumber(double value, bool isInteger) {
+    JsonValue v(value);
+    v.m_numberIsInteger = isInteger;
+    return v;
+  }
   explicit JsonValue(const std::string &value) : m_value(value) {}
   explicit JsonValue(std::string &&value) : m_value(std::move(value)) {}
   explicit JsonValue(const char *value) : m_value(std::string(value)) {}
@@ -77,6 +91,11 @@ public:
   }
   bool isBool() const { return std::holds_alternative<bool>(m_value); }
   bool isNumber() const { return std::holds_alternative<double>(m_value); }
+  // True only for numbers authored as an integer literal (no '.', 'e', or 'E').
+  // Lets consumers distinguish `1` from `1.0`, which asNumber()/asInt() cannot.
+  [[nodiscard]] bool isIntegerNumber() const {
+    return isNumber() && m_numberIsInteger;
+  }
   bool isString() const { return std::holds_alternative<std::string>(m_value); }
   bool isArray() const { return std::holds_alternative<JsonArray>(m_value); }
   bool isObject() const { return std::holds_alternative<JsonObject>(m_value); }
@@ -196,8 +215,8 @@ private:
 public:
   JsonReader();
 
-  bool loadFromFile(const std::string &path);
-  bool parse(const std::string &jsonString);
+  [[nodiscard]] bool loadFromFile(const std::string &path);
+  [[nodiscard]] bool parse(const std::string &jsonString);
   const JsonValue &getRoot() const { return m_root; }
   const std::string &getLastError() const { return m_lastError; }
   void clearError() { m_lastError.clear(); }

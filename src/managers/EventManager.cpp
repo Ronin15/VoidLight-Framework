@@ -127,10 +127,6 @@ bool EventManager::init() {
     return std::make_shared<DamageEvent>();
   });
 
-  // Reset performance stats
-  resetPerformanceStats();
-
-  m_lastUpdateTime.store(getCurrentTimeNanos());
   m_initialized.store(true);
 
   registerBuiltInHandlers(*this);
@@ -148,20 +144,9 @@ void EventManager::clean() {
   m_isShutdown = true;
   m_initialized.store(false, std::memory_order_release);
 
-  // Wait for any pending async batches to complete before cleanup
-  {
-    std::vector<std::future<void>> localFutures;
-    {
-      std::lock_guard<std::mutex> lock(m_batchFuturesMutex);
-      localFutures = std::move(m_batchFutures);
-    }
-
-    for (auto &future : localFutures) {
-      if (future.valid()) {
-        future.wait();
-      }
-    }
-  }
+  // Combat-prep worker batches are the only async EventManager work, and they
+  // are joined synchronously inside drainDispatchQueueWithBudget() before it
+  // returns on the main thread, so no outstanding batch can exist here.
 
   EVENT_INFO_IF(!m_isShutdown, "Cleaning up EventManager");
 
@@ -174,28 +159,14 @@ void EventManager::clean() {
   // Clear event pools after draining queued events to avoid carrying stale
   // combat state across shutdown and subsequent init().
   clearEventPools();
-
-  // Reset performance stats
-  resetPerformanceStats();
 }
 
 void EventManager::prepareForStateTransition() {
   EVENT_INFO("Preparing EventManager for state transition...");
 
-  // Wait for any pending async batches
-  {
-    std::vector<std::future<void>> localFutures;
-    {
-      std::lock_guard<std::mutex> lock(m_batchFuturesMutex);
-      localFutures = std::move(m_batchFutures);
-    }
-
-    for (auto &future : localFutures) {
-      if (future.valid()) {
-        future.wait();
-      }
-    }
-  }
+  // Combat-prep worker batches are joined synchronously in
+  // drainDispatchQueueWithBudget() on the main thread, so no async batch is
+  // outstanding at transition time.
 
   // Clear transient handlers (state-level). Persistent handlers (manager-level,
   // registered via registerPersistentHandler) survive across transitions.
@@ -206,9 +177,6 @@ void EventManager::prepareForStateTransition() {
 
   // Clear event pools after queued events have been released and discarded.
   clearEventPools();
-
-  // Reset performance stats
-  resetPerformanceStats();
 
   EVENT_INFO("EventManager prepared for state transition");
 }
@@ -253,7 +221,7 @@ void EventManager::drainAllDeferredEvents() {
 
 // ==================== Threading & Pause Controls ====================
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 void EventManager::enableThreading(bool enable) {
   m_threadingEnabled.store(enable);
 }
@@ -261,7 +229,7 @@ void EventManager::enableThreading(bool enable) {
 bool EventManager::isThreadingEnabled() const {
   return m_threadingEnabled.load();
 }
-#endif
+)
 
 void EventManager::setGlobalPause(bool paused) {
   m_globallyPaused.store(paused, std::memory_order_release);
@@ -797,9 +765,18 @@ void EventManager::enqueueBatch(std::vector<DeferredEvent>&& events) const {
 
 void EventManager::dispatchPendingEvent(const PendingDispatch& pendingDispatch,
                                         std::string_view errorContext) const {
-  std::shared_lock<std::shared_mutex> lock(m_handlersMutex);
-  const auto& typeHandlers =
-      m_handlersByType[static_cast<size_t>(pendingDispatch.typeId)];
+  // Copy the handler list under the lock, then invoke outside it. A handler
+  // can itself trigger another Immediate-mode dispatch (e.g. CollisionManager
+  // rebuilding static colliders on WorldLoaded), which would otherwise
+  // re-enter this non-recursive shared_mutex on the same thread -- UB per
+  // shared_mutex::lock_shared()'s precondition. Local (not a reused member):
+  // this is the function in the reentrant chain, so a shared buffer would be
+  // clobbered mid-use by the very reentrant call this avoids.
+  std::vector<HandlerEntry> typeHandlers;
+  {
+    std::shared_lock<std::shared_mutex> lock(m_handlersMutex);
+    typeHandlers = m_handlersByType[static_cast<size_t>(pendingDispatch.typeId)];
+  }
 
   dispatchPendingEventWithHandlers(pendingDispatch, typeHandlers, errorContext);
 }
@@ -843,6 +820,11 @@ EventManager::prepareCombatEvent(const PendingDispatch& pendingDispatch) const {
   const EntityHandle attackerHandle = damageEvent->getSource();
   preparedCombat.targetHandle = targetHandle;
   preparedCombat.attackerHandle = attackerHandle;
+  // Caches the EDM SoA index in a worker (prepareCombatBatch) for reuse on the
+  // main thread in commitPreparedCombatEvent. SAFE ONLY because EDM destruction
+  // is deferred and the SoA free-list bumps generation in place rather than
+  // compacting, so an index stays stable between prepare and commit. If EDM ever
+  // switches to synchronous/compacting destruction this cache must be revisited.
   const size_t targetIdx = edm.getIndex(targetHandle);
   preparedCombat.targetIdx = targetIdx;
   preparedCombat.damage = damageEvent->getDamage();
@@ -896,6 +878,10 @@ void EventManager::commitPreparedCombatEvent(const PendingDispatch& pendingDispa
   const bool destroyOnLethal = preparedCombat.valid
       ? preparedCombat.destroyOnLethal
       : !targetHandle.isPlayer();
+  // Reuses the index cached by prepareCombatEvent on a worker. Valid here only
+  // because EDM defers destruction and bumps generation in place without
+  // compacting (see prepareCombatEvent) — the index cannot have shifted between
+  // the worker prepare pass and this main-thread commit.
   const size_t targetIdx = preparedCombat.valid
       ? preparedCombat.targetIdx
       : edm.getIndex(targetHandle);
@@ -987,10 +973,13 @@ void EventManager::drainDispatchQueueWithBudget() {
       size_t combatIndex = 0;
       while (nonCombatIndex < m_localNonCombatBuffer.size() &&
              combatIndex < m_localCombatDispatchBuffer.size()) {
+        // Non-combat entries are not read again after the merge, so move them.
+        // Combat entries are still consumed by prepareCombatBatch() (and the
+        // all-combat path) from m_localCombatDispatchBuffer, so they are copied.
         if (m_localNonCombatBuffer[nonCombatIndex].sequence <
             m_localCombatDispatchBuffer[combatIndex].sequence) {
           m_localDispatchBuffer.emplace_back(
-              m_localNonCombatBuffer[nonCombatIndex++]);
+              std::move(m_localNonCombatBuffer[nonCombatIndex++]));
         } else {
           m_localDispatchBuffer.emplace_back(
               m_localCombatDispatchBuffer[combatIndex++]);
@@ -999,7 +988,7 @@ void EventManager::drainDispatchQueueWithBudget() {
 
       while (nonCombatIndex < m_localNonCombatBuffer.size()) {
         m_localDispatchBuffer.emplace_back(
-            m_localNonCombatBuffer[nonCombatIndex++]);
+            std::move(m_localNonCombatBuffer[nonCombatIndex++]));
       }
       while (combatIndex < m_localCombatDispatchBuffer.size()) {
         m_localDispatchBuffer.emplace_back(
@@ -1007,9 +996,10 @@ void EventManager::drainDispatchQueueWithBudget() {
       }
     } else if (!m_localNonCombatBuffer.empty()) {
       m_localDispatchBuffer.reserve(nonCombatCount);
-      m_localDispatchBuffer.insert(m_localDispatchBuffer.end(),
-                                   m_localNonCombatBuffer.begin(),
-                                   m_localNonCombatBuffer.end());
+      m_localDispatchBuffer.insert(
+          m_localDispatchBuffer.end(),
+          std::make_move_iterator(m_localNonCombatBuffer.begin()),
+          std::make_move_iterator(m_localNonCombatBuffer.end()));
     }
   }
   // Lock released - process events without holding lock
@@ -1103,10 +1093,21 @@ void EventManager::drainDispatchQueueWithBudget() {
   }
 
   {
-    std::shared_lock<std::shared_mutex> handlerLock(m_handlersMutex);
+    // Snapshot handler lists under the lock, then dispatch without holding
+    // it. A handler can trigger further Immediate-mode dispatch (e.g.
+    // CollisionManager rebuilding static colliders on WorldLoaded), which
+    // would otherwise re-enter this non-recursive shared_mutex on this
+    // thread mid-loop. Reused member buffer is safe here: this function has
+    // exactly one caller (update(), main-thread, once per frame) and is not
+    // itself reentrant.
+    {
+      std::shared_lock<std::shared_mutex> handlerLock(m_handlersMutex);
+      m_handlersSnapshotBuffer = m_handlersByType;
+    }
+
     if (allCombatEvents) {
       const auto& combatHandlers =
-          m_handlersByType[static_cast<size_t>(EventTypeId::Combat)];
+          m_handlersSnapshotBuffer[static_cast<size_t>(EventTypeId::Combat)];
       const bool hasCombatHandlers = !combatHandlers.empty();
 
       for (size_t combatIndex = 0; combatIndex < combatEventCount; ++combatIndex) {
@@ -1140,7 +1141,7 @@ void EventManager::drainDispatchQueueWithBudget() {
         }
 
         const auto& typeHandlers =
-            m_handlersByType[static_cast<size_t>(pendingDispatch.typeId)];
+            m_handlersSnapshotBuffer[static_cast<size_t>(pendingDispatch.typeId)];
         if (!typeHandlers.empty()) {
           dispatchPendingEventWithHandlers(pendingDispatch, typeHandlers,
                                            "deferred dispatch");
@@ -1205,16 +1206,6 @@ void EventManager::releaseEventToPool(EventTypeId typeId, const EventPtr& event)
         m_resourceChangePool.release(rce);
       }
       break;
-    case EventTypeId::World:
-      if (auto we = std::dynamic_pointer_cast<WorldEvent>(event)) {
-        m_worldPool.release(we);
-      }
-      break;
-    case EventTypeId::Camera:
-      if (auto ce = std::dynamic_pointer_cast<CameraEvent>(event)) {
-        m_cameraPool.release(ce);
-      }
-      break;
     case EventTypeId::ParticleEffect:
       if (auto pe = std::dynamic_pointer_cast<ParticleEffectEvent>(event)) {
         m_particleEffectPool.release(pe);
@@ -1238,18 +1229,6 @@ void EventManager::releaseEventToPool(EventTypeId typeId, const EventPtr& event)
 
 // ==================== Performance & Diagnostics ====================
 
-PerformanceStats EventManager::getPerformanceStats(EventTypeId typeId) const {
-  std::lock_guard<std::mutex> lock(m_perfMutex);
-  return m_performanceStats[static_cast<size_t>(typeId)];
-}
-
-void EventManager::resetPerformanceStats() const {
-  std::lock_guard<std::mutex> lock(m_perfMutex);
-  for (auto &stats : m_performanceStats) {
-    stats.reset();
-  }
-}
-
 size_t EventManager::getPendingEventCount() const {
   std::lock_guard<std::mutex> lock(m_dispatchMutex);
   return getPendingQueueSizeUnsafe();
@@ -1260,8 +1239,6 @@ void EventManager::clearEventPools() {
   m_npcSpawnPool.clear();
   m_merchantSpawnPool.clear();
   m_resourceChangePool.clear();
-  m_worldPool.clear();
-  m_cameraPool.clear();
   m_particleEffectPool.clear();
   m_collisionObstacleChangedPool.clear();
   m_damagePool.clear();
@@ -1285,8 +1262,3 @@ void EventManager::clearPendingDispatchQueues() const {
   }
 }
 
-uint64_t EventManager::getCurrentTimeNanos() const {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(
-             std::chrono::high_resolution_clock::now().time_since_epoch())
-      .count();
-}

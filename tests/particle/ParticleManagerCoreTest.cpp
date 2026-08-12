@@ -30,7 +30,7 @@ struct ParticleManagerCoreFixture {
     if (EventManager::Instance().isInitialized()) {
       EventManager::Instance().clean();
     }
-    EventManager::Instance().init();
+    BOOST_REQUIRE(EventManager::Instance().init());
 
     // Ensure clean state for each test
     if (manager->isInitialized()) {
@@ -84,7 +84,7 @@ BOOST_FIXTURE_TEST_CASE(TestDoubleInitialization, ParticleManagerCoreFixture) {
 // Test cleanup functionality
 BOOST_FIXTURE_TEST_CASE(TestCleanup, ParticleManagerCoreFixture) {
   // Initialize first
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   BOOST_CHECK(manager->isInitialized());
 
   // Clean should mark as shutdown
@@ -99,7 +99,7 @@ BOOST_FIXTURE_TEST_CASE(TestCleanup, ParticleManagerCoreFixture) {
 // Test state transition preparation
 BOOST_FIXTURE_TEST_CASE(TestPrepareForStateTransition,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
 
   // Should not be paused initially
   BOOST_CHECK(!manager->isGloballyPaused());
@@ -116,7 +116,7 @@ BOOST_FIXTURE_TEST_CASE(TestPrepareForStateTransition,
 // Test built-in effect registration
 BOOST_FIXTURE_TEST_CASE(TestBuiltInEffectsRegistration,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
 
   // Register built-in effects
   manager->registerBuiltInEffects();
@@ -139,7 +139,7 @@ BOOST_FIXTURE_TEST_CASE(TestBuiltInEffectsRegistration,
 
 // Test effect ID generation
 BOOST_FIXTURE_TEST_CASE(TestEffectIdGeneration, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D testPosition(100, 100);
@@ -163,7 +163,7 @@ BOOST_FIXTURE_TEST_CASE(TestEffectIdGeneration, ParticleManagerCoreFixture) {
 
 // Test effect start and stop
 BOOST_FIXTURE_TEST_CASE(TestEffectStartStop, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D testPosition(100, 100);
@@ -215,7 +215,7 @@ BOOST_FIXTURE_TEST_CASE(TestGlobalPauseResume, ParticleManagerCoreFixture) {
 
 // Test global visibility
 BOOST_FIXTURE_TEST_CASE(TestGlobalVisibility, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
 
   // Should be visible initially
   BOOST_CHECK(manager->isGloballyVisible());
@@ -227,7 +227,7 @@ BOOST_FIXTURE_TEST_CASE(TestGlobalVisibility, ParticleManagerCoreFixture) {
 // Test ParticleEffectEvent properties (data carrier validation)
 BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventProperties,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
 
   // Test event construction and property access
   Vector2D testPosition(150.0f, 250.0f);
@@ -269,7 +269,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventProperties,
 // Test EventManager::triggerParticleEffect creates effects in ParticleManager
 BOOST_FIXTURE_TEST_CASE(TestTriggerParticleEffectIntegration,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   registerParticleEffectForwarder();
 
@@ -290,7 +290,7 @@ BOOST_FIXTURE_TEST_CASE(TestTriggerParticleEffectIntegration,
 // Test triggering different effect types via EventManager (production pattern)
 BOOST_FIXTURE_TEST_CASE(TestTriggerDifferentEffectTypes,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   registerParticleEffectForwarder();
 
@@ -331,7 +331,7 @@ BOOST_FIXTURE_TEST_CASE(TestEffectTypeConversion, ParticleManagerCoreFixture) {
 // Test ParticleEffectEvent checkConditions behavior
 BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventConditions,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   ParticleEffectEvent event("ConditionTest", ParticleEffectType::Smoke,
@@ -355,7 +355,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventConditions,
 // Test ParticleEffectEvent reset and clean methods
 BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventResetClean,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
 
   ParticleEffectEvent event("ResetTest", ParticleEffectType::Fire,
                             100.0f, 100.0f, 1.0f, 2.0f, "group1", "sound1");
@@ -380,7 +380,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventResetClean,
 // Test triggering effects with extreme values via production API
 BOOST_FIXTURE_TEST_CASE(TestTriggerEffectExtremeValues,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   registerParticleEffectForwarder();
 
@@ -412,7 +412,7 @@ BOOST_FIXTURE_TEST_CASE(TestTriggerEffectExtremeValues,
 // Test multiple simultaneous ParticleEffectEvents via EventManager
 BOOST_FIXTURE_TEST_CASE(TestMultipleParticleEffectEvents,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   registerParticleEffectForwarder();
 
@@ -436,7 +436,7 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleParticleEffectEvents,
 
 // Test basic particle creation through effects
 BOOST_FIXTURE_TEST_CASE(TestBasicParticleCreation, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D testPosition(100, 100);
@@ -473,7 +473,7 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateWithoutInitialization,
 
 // Test operations when globally paused
 BOOST_FIXTURE_TEST_CASE(TestOperationsWhenPaused, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D testPosition(100, 100);
@@ -493,7 +493,7 @@ BOOST_FIXTURE_TEST_CASE(TestOperationsWhenPaused, ParticleManagerCoreFixture) {
 
 // Test maximum particle capacity
 BOOST_FIXTURE_TEST_CASE(TestMaxParticleCapacity, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
 
   // Should have some reasonable default capacity
   size_t maxCapacity = manager->getMaxParticleCapacity();
@@ -512,7 +512,7 @@ BOOST_FIXTURE_TEST_CASE(TestMaxParticleCapacity, ParticleManagerCoreFixture) {
 
 // Test performance statistics
 BOOST_FIXTURE_TEST_CASE(TestPerformanceStats, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Ensure manager is not paused from previous tests
@@ -561,7 +561,7 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceStats, ParticleManagerCoreFixture) {
 
 // Test that particles maintain previous position for interpolation
 BOOST_FIXTURE_TEST_CASE(TestParticlePositionTracking, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -589,7 +589,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticlePositionTracking, ParticleManagerCoreFixture
 
 // Test particle update with varying delta times
 BOOST_FIXTURE_TEST_CASE(TestParticleUpdateWithVaryingDeltaTime, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -617,7 +617,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleUpdateWithVaryingDeltaTime, ParticleManagerC
 
 // Test that particle interpolation state survives pause/resume
 BOOST_FIXTURE_TEST_CASE(TestInterpolationStateAcrossPauseResume, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -657,7 +657,7 @@ BOOST_FIXTURE_TEST_CASE(TestInterpolationStateAcrossPauseResume, ParticleManager
 
 // Test particle alpha interpolation (fading)
 BOOST_FIXTURE_TEST_CASE(TestParticleAlphaFading, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -678,7 +678,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleAlphaFading, ParticleManagerCoreFixture) {
 
 // Test multiple effects interpolating simultaneously
 BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsInterpolation, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -712,7 +712,7 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsInterpolation, ParticleManagerCoreFix
 
 // Test particle scale interpolation
 BOOST_FIXTURE_TEST_CASE(TestParticleScaleInterpolation, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -733,7 +733,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleScaleInterpolation, ParticleManagerCoreFixtu
 
 // Test rapid effect creation/destruction doesn't break interpolation
 BOOST_FIXTURE_TEST_CASE(TestRapidEffectLifecycle, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
   manager->setGlobalPause(false);
 
@@ -769,7 +769,7 @@ BOOST_FIXTURE_TEST_CASE(TestRapidEffectLifecycle, ParticleManagerCoreFixture) {
 
 // Test basic independent effect creation
 BOOST_FIXTURE_TEST_CASE(TestPlayIndependentEffect, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D position(100.0f, 100.0f);
@@ -795,7 +795,7 @@ BOOST_FIXTURE_TEST_CASE(TestPlayIndependentEffect, ParticleManagerCoreFixture) {
 
 // Test stopping individual independent effect
 BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffect, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D position(200.0f, 200.0f);
@@ -820,7 +820,7 @@ BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffect, ParticleManagerCoreFixture) {
 
 BOOST_FIXTURE_TEST_CASE(TestStoppedIndependentEffectsAreCompactedOnUpdate,
                         ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   constexpr int EFFECT_CYCLES = 32;
@@ -843,7 +843,7 @@ BOOST_FIXTURE_TEST_CASE(TestStoppedIndependentEffectsAreCompactedOnUpdate,
 
 // Test stopping all independent effects
 BOOST_FIXTURE_TEST_CASE(TestStopAllIndependentEffects, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create multiple independent effects with different groups
@@ -878,7 +878,7 @@ BOOST_FIXTURE_TEST_CASE(TestStopAllIndependentEffects, ParticleManagerCoreFixtur
 
 // Test stopping independent effects by group tag
 BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffectsByGroup, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create effects in two groups
@@ -909,7 +909,7 @@ BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffectsByGroup, ParticleManagerCoreFi
 
 // Test pausing individual independent effect
 BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   Vector2D position(100.0f, 100.0f);
@@ -952,7 +952,7 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) 
 
 // Test pausing all independent effects
 BOOST_FIXTURE_TEST_CASE(TestPauseAllIndependentEffects, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create multiple effects
@@ -987,7 +987,7 @@ BOOST_FIXTURE_TEST_CASE(TestPauseAllIndependentEffects, ParticleManagerCoreFixtu
 
 // Test pausing independent effects by group
 BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffectsByGroup, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create effects in two groups
@@ -1017,7 +1017,7 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffectsByGroup, ParticleManagerCoreF
 
 // Test isIndependentEffect distinguishes from regular effects
 BOOST_FIXTURE_TEST_CASE(TestIsIndependentEffectDistinction, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create a regular effect
@@ -1045,7 +1045,7 @@ BOOST_FIXTURE_TEST_CASE(TestIsIndependentEffectDistinction, ParticleManagerCoreF
 
 // Test getActiveIndependentEffects returns correct list
 BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffects, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Initially no independent effects
@@ -1087,7 +1087,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffects, ParticleManagerCoreFixt
 
 // Test getActiveIndependentEffectsByGroup
 BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffectsByGroup, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create effects in different groups
@@ -1123,7 +1123,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffectsByGroup, ParticleManagerC
 
 // Test independent effect with duration expiration
 BOOST_FIXTURE_TEST_CASE(TestIndependentEffectDuration, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create effect with short duration
@@ -1144,7 +1144,7 @@ BOOST_FIXTURE_TEST_CASE(TestIndependentEffectDuration, ParticleManagerCoreFixtur
 
 // Test multiple independent effects with same group tag
 BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsSameGroup, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   const std::string groupName = "explosion_cluster";
@@ -1179,7 +1179,7 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsSameGroup, ParticleManagerCoreFixture
 
 // Test independent effect with infinite duration (-1)
 BOOST_FIXTURE_TEST_CASE(TestIndependentEffectInfiniteDuration, ParticleManagerCoreFixture) {
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Create effect with infinite duration

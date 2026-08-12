@@ -106,6 +106,25 @@ def analyze_manager_coupling(graph, base_dir):
         # Container) with WRM's spatial index on create/destroy. Intentional design
         # — callers rely on this to avoid having to register separately. .cpp-only.
         ('EntityDataManager.hpp', 'WorldResourceManager.hpp'),
+        # EntityDataManager is the engine's central SoA data hub (CLAUDE.md Key
+        # Systems) — wide fan-in from managers that read/write entity state
+        # directly is the documented design, not incidental coupling.
+        ('AIManager.hpp', 'EntityDataManager.hpp'),
+        ('CollisionManager.hpp', 'EntityDataManager.hpp'),
+        ('BackgroundSimulationManager.hpp', 'EntityDataManager.hpp'),
+        # EDM resolves resource templates when spawning resource entities.
+        ('EntityDataManager.hpp', 'ResourceTemplateManager.hpp'),
+        # Ordinary event-driven time/weather notification, same pattern already
+        # accepted for WorldManager -> EventManager above.
+        ('GameTimeManager.hpp', 'EventManager.hpp'),
+        # Season/ParticleEffectType are single-enum type headers (see
+        # LIGHTWEIGHT_CROSS_CUTTING_HEADERS in detect_layer_violations.py), not
+        # peer managers — they only happen to live in include/managers/. High
+        # reference counts here are just per-value enum usage, not real
+        # manager-to-manager coupling.
+        ('GameTimeManager.hpp', 'Season.hpp'),
+        ('WorldManager.hpp', 'Season.hpp'),
+        ('ParticleManager.hpp', 'ParticleEffectType.hpp'),
     }
 
     # Find all manager headers

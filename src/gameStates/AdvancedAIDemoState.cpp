@@ -19,8 +19,11 @@
 #include "managers/InputManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/ProjectileManager.hpp"
+#include "managers/ParticleManager.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
+#include "managers/WorldResourceManager.hpp"
+#include "gameStates/GameOverState.hpp"
 #include "core/WorkerBudget.hpp"
 #include "gpu/GPURenderer.hpp"
 #include "utils/GPUSceneRecorder.hpp"
@@ -210,7 +213,11 @@ bool AdvancedAIDemoState::enter() {
     // Initialize PathfinderManager for Follow behavior pathfinding
     PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
     if (!pathfinderMgr.isInitialized()) {
-      pathfinderMgr.init();
+      if (!pathfinderMgr.init()) {
+        GAMESTATE_ERROR(
+            "Failed to initialize PathfinderManager for Follow behavior");
+        return false;
+      }
       GAMESTATE_INFO("PathfinderManager initialized for Follow behavior");
     }
 
@@ -224,15 +231,12 @@ bool AdvancedAIDemoState::enter() {
 
     // Set player reference in AIManager BEFORE registering behaviors
     // This ensures Follow/Flee/Attack behaviors can access the player target
-    // Explicitly cast PlayerPtr to EntityPtr to ensure proper conversion
-    EntityPtr playerAsEntity = std::static_pointer_cast<Entity>(m_player);
-    aiMgr.setPlayerHandle(playerAsEntity->getHandle());
+    aiMgr.setPlayerHandle(m_player->getHandle());
 
     // Register CombatController (follows GamePlayState pattern)
     m_controllers.add<CombatController>(m_player);
     m_controllers.add<HudController>(m_player);
     m_controllers.subscribeAll();
-    registerEventHandlers();
 
     // Spawn test village with merchants, guards, and villagers
     setupTestVillage();
@@ -321,8 +325,9 @@ bool AdvancedAIDemoState::exit() {
   EntityDataManager &edm = EntityDataManager::Instance();
   CollisionManager &collisionMgr = CollisionManager::Instance();
   PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
-  UIManager &ui = UIManager::Instance();
+  ParticleManager &particleMgr = ParticleManager::Instance();
   WorldManager &worldMgr = WorldManager::Instance();
+  auto &wrm = WorldResourceManager::Instance();
   EventManager &eventMgr = EventManager::Instance();
 
   if (m_transitioningToLoading) {
@@ -337,14 +342,26 @@ bool AdvancedAIDemoState::exit() {
     // NPCs hold EDM indices - must be destroyed while EDM data is still valid
     aiMgr.destroyAllNPCsForStateTransition();
     if (m_player) {
+      // Clear the camera pointer before camera teardown below
+      m_player->setCamera(nullptr);
       m_player.reset();
     }
 
-    unregisterEventHandlers();
     aiMgr.prepareForStateTransition();
     ProjectileManager::Instance().prepareForStateTransition();
     bgSimMgr.prepareForStateTransition();
     worldMgr.prepareForStateTransition();
+
+    // Unload before WRM/EventManager transition cleanup (GamePlayState order).
+    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+      worldMgr.unloadWorld();
+      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
+      // infinite loop when LoadingState returns to this state
+    }
+
+    if (wrm.isInitialized()) {
+      wrm.prepareForStateTransition();
+    }
 
     eventMgr.prepareForStateTransition();
 
@@ -359,26 +376,20 @@ bool AdvancedAIDemoState::exit() {
     edm.prepareForStateTransition();
     VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
-    WorldManager::Instance().setActiveCamera(nullptr);
-    if (m_player) {
-      m_player->setCamera(nullptr);
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+      particleMgr.prepareForStateTransition();
     }
+
+    WorldManager::Instance().setActiveCamera(nullptr);
 
     // Clean up camera and GPU scene renderer
     m_camera.reset();
 
-    // Clean up UI
-    ui.prepareForStateTransition();
+    // UI: full-screen replace clears via GameStateManager after exit();
+    // LoadingState::enter() rebuilds the loading screen.
 
     // Destroy all controllers so re-entry creates fresh instances with valid refs
     m_controllers.clear();
-
-    // Unload world (LoadingState will reload it)
-    if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-      worldMgr.unloadWorld();
-      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
-      // infinite loop when LoadingState returns to this state
-    }
 
     // Restore AI to unpaused state
     aiMgr.setGlobalPause(false);
@@ -404,11 +415,21 @@ bool AdvancedAIDemoState::exit() {
     m_player.reset();
   }
 
-  unregisterEventHandlers();
   aiMgr.prepareForStateTransition();
   ProjectileManager::Instance().prepareForStateTransition();
   bgSimMgr.prepareForStateTransition();
   worldMgr.prepareForStateTransition();
+
+  // Unload world before WRM/EventManager transition cleanup so persistent
+  // world-unload handlers and WRM reverse lookups are still available.
+  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+    worldMgr.unloadWorld();
+    m_worldLoaded = false;
+  }
+
+  if (wrm.isInitialized()) {
+    wrm.prepareForStateTransition();
+  }
 
   eventMgr.prepareForStateTransition();
 
@@ -424,24 +445,19 @@ bool AdvancedAIDemoState::exit() {
   edm.prepareForStateTransition();
   VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
+  if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+    particleMgr.prepareForStateTransition();
+  }
+
   WorldManager::Instance().setActiveCamera(nullptr);
 
   // Clean up camera and GPU scene renderer first to stop world rendering
   m_camera.reset();
 
-  // Clean up UI components using simplified method
-  ui.prepareForStateTransition();
+  // UI: full-screen replace clears via GameStateManager after exit().
 
   // Destroy all controllers so re-entry creates fresh instances with valid refs
   m_controllers.clear();
-
-  // Unload the world when fully exiting, but only if there's actually a world
-  // loaded This matches EventDemoState's safety pattern and prevents crashes
-  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-    worldMgr.unloadWorld();
-    // Reset m_worldLoaded when doing full exit (going to main menu, etc.)
-    m_worldLoaded = false;
-  }
 
   // Always restore AI to unpaused state when exiting the demo state
   aiMgr.setGlobalPause(false);
@@ -452,12 +468,6 @@ bool AdvancedAIDemoState::exit() {
 
   GAMESTATE_INFO("AdvancedAIDemoState exit complete");
   return true;
-}
-
-void AdvancedAIDemoState::registerEventHandlers() {
-}
-
-void AdvancedAIDemoState::unregisterEventHandlers() {
 }
 
 void AdvancedAIDemoState::update(float deltaTime) {
@@ -501,6 +511,12 @@ void AdvancedAIDemoState::update(float deltaTime) {
 
       if (!m_player->isAlive() && !m_transitioningToGameOver) {
         m_transitioningToGameOver = true;
+
+        if (auto* gameOverState = dynamic_cast<GameOverState*>(
+                mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
+          // Retry must return to this state, not GamePlayState.
+          gameOverState->setReturnState(GameStateId::ADVANCED_AI_DEMO);
+        }
         mp_stateManager->changeState(GameStateId::GAME_OVER);
         return;
       }
@@ -570,8 +586,8 @@ void AdvancedAIDemoState::setupTestVillage() {
   // MERCHANTS - Arranged in a semi-circle for easy access
   // ========================================================================
   struct MerchantSpawn {
-    const char* npcClass;
-    Vector2D offset;
+    const char* npcClass{nullptr};
+    Vector2D offset{};
   };
 
   std::vector<MerchantSpawn> merchants = {
@@ -626,9 +642,9 @@ void AdvancedAIDemoState::setupTestVillage() {
   // WANDERING VILLAGERS - Farmer, Miner, Woodcutter around the edges
   // ========================================================================
   struct VillagerSpawn {
-    const char* npcClass;
-    Vector2D offset;
-    const char* behavior;
+    const char* npcClass{nullptr};
+    Vector2D offset{};
+    const char* behavior{nullptr};
   };
 
   std::vector<VillagerSpawn> villagers = {

@@ -27,7 +27,7 @@ struct WeatherEventFixture {
     WeatherEventFixture() {
         // Initialize managers used by region tests if not already
         EventManagerTestAccess::reset();
-        WorldManager::Instance().init();
+        BOOST_REQUIRE(WorldManager::Instance().init());
     }
 
     ~WeatherEventFixture() {
@@ -115,7 +115,7 @@ BOOST_FIXTURE_TEST_CASE(ConditionHandling, WeatherEventFixture) {
 BOOST_FIXTURE_TEST_CASE(TimeBasedConditions, WeatherEventFixture) {
     auto event = std::make_shared<WeatherEvent>("TimeTest", WeatherType::Clear);
     auto& gameTime = GameTimeManager::Instance();
-    gameTime.init(10.0f, 1.0f);
+    BOOST_REQUIRE(gameTime.init(10.0f, 1.0f));
 
     event->setTimeOfDay(8.0f, 16.0f); // Day time only
     BOOST_CHECK(event->checkConditions());
@@ -234,14 +234,14 @@ BOOST_FIXTURE_TEST_CASE(NoRegion_BoundsOnly, WeatherEventFixture) {
 struct GameTimeWeatherFixture {
     GameTimeWeatherFixture() {
         gameTime = &GameTimeManager::Instance();
-        EventManager::Instance().init();
-        gameTime->init(12.0f, 1.0f);
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     }
 
     ~GameTimeWeatherFixture() {
         gameTime->enableAutoWeather(false);
         gameTime->setGlobalPause(false);
-        gameTime->init(12.0f, 1.0f);
+        BOOST_CHECK(gameTime->init(12.0f, 1.0f));
         EventManager::Instance().clean();
     }
 

@@ -49,16 +49,16 @@ if "%VERBOSE%"=="true" (set TEST_OPTS=!TEST_OPTS! --report_level=detailed)
 "!TEST_EXECUTABLE!" !TEST_OPTS! > "!OUTPUT_FILE!" 2>&1
 set TEST_RESULT=%ERRORLEVEL%
 
-findstr /c:"failure" /c:"test cases failed" /c:"fatal error" "!OUTPUT_FILE!" >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    echo !RED!❌ Some tests failed! See !OUTPUT_FILE! for details.!NC!
+findstr /r /c:"\*\*\* [0-9][0-9]* failures detected" /c:"[0-9][0-9]* test cases out of [0-9][0-9]* failed" /c:"fatal error" "!OUTPUT_FILE!" >nul 2>&1
+if !ERRORLEVEL! equ 0 (
+    echo !RED!Some tests failed. See !OUTPUT_FILE! for details.!NC!
     exit /b 1
 ) else (
     if !TEST_RESULT! neq 0 (
-        echo !RED!❌ Some tests failed! See !OUTPUT_FILE! for details.!NC!
+        echo !RED!Some tests failed. See !OUTPUT_FILE! for details.!NC!
         exit /b 1
     ) else (
-        echo !GREEN!✅ All Rendering Pipeline tests passed!!NC!
+        echo !GREEN!All Rendering Pipeline tests passed!!NC!
         exit /b 0
     )
 )

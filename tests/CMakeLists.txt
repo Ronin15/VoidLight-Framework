@@ -98,6 +98,9 @@ set(ALL_TESTS
     resource_architecture_tests
     sparse_sidecar_tests
     knockback_sidecar_tests
+    timestep_manager_tests
+    worker_budget_tests
+    projectile_render_controller_tests
 )
 
 # Create all test executables
@@ -274,6 +277,12 @@ foreach(test_name ${ALL_TESTS})
         set(test_source "managers/SparseSidecarTest.cpp")
     elseif(${test_name} STREQUAL "knockback_sidecar_tests")
         set(test_source "integration/KnockbackSidecarTest.cpp")
+    elseif(${test_name} STREQUAL "timestep_manager_tests")
+        set(test_source "core/TimestepManagerTests.cpp")
+    elseif(${test_name} STREQUAL "worker_budget_tests")
+        set(test_source "core/WorkerBudgetTests.cpp")
+    elseif(${test_name} STREQUAL "projectile_render_controller_tests")
+        set(test_source "controllers/ProjectileRenderControllerTests.cpp")
     endif()
 
     if("${test_source}" STREQUAL "")

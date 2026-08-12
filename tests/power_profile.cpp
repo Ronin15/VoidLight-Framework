@@ -125,7 +125,10 @@ int main(int argc, char* argv[]) {
         if (config.verbose) {
             std::cout << "[INIT] Initializing PathfinderManager...\n";
         }
-        PathfinderManager::Instance().init();
+        if (!PathfinderManager::Instance().init()) {
+            std::cerr << "[ERROR] PathfinderManager init failed\n";
+            return 1;
+        }
         PathfinderManager::Instance().rebuildGrid();
 
         if (config.verbose) {
@@ -139,25 +142,27 @@ int main(int argc, char* argv[]) {
         if (config.verbose) {
             std::cout << "[INIT] Initializing CollisionManager...\n";
         }
-        CollisionManager::Instance().init();
+        if (!CollisionManager::Instance().init()) {
+            std::cerr << "[ERROR] CollisionManager init failed\n";
+            return 1;
+        }
 
         if (config.verbose) {
             std::cout << "[INIT] Initializing AIManager...\n";
         }
-        AIManager::Instance().init();
+        if (!AIManager::Instance().init()) {
+            std::cerr << "[ERROR] AIManager init failed\n";
+            return 1;
+        }
 
         // Configure threading mode
         if (config.threadingMode == "single") {
-            #ifndef NDEBUG
-            AIManager::Instance().enableThreading(false);
-            #endif
+            VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(false);)
             if (config.verbose) {
                 std::cout << "[CONFIG] Threading DISABLED (single-threaded mode)\n";
             }
         } else if (config.threadingMode == "multi") {
-            #ifndef NDEBUG
-            AIManager::Instance().enableThreading(true);
-            #endif
+            VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
             if (config.verbose) {
                 std::cout << "[CONFIG] Threading ENABLED (multi-threaded mode)\n";
             }

@@ -5,6 +5,7 @@
 
 #include "managers/UIManager.hpp"
 #include "managers/UIConstants.hpp"
+#include "utils/TextureSource.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
 #include "managers/FontManager.hpp"
@@ -13,6 +14,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <limits>
 #include "gpu/GPURenderer.hpp"
 #include "gpu/GPUVertexPool.hpp"
@@ -101,8 +103,9 @@ void UIManager::update(float deltaTime) {
                 if (component->m_listItems.size() != component->m_listBindingBuffer.size() ||
                     !std::equal(component->m_listItems.begin(), component->m_listItems.end(),
                                 component->m_listBindingBuffer.begin())) {
-                    component->m_listItems = std::move(component->m_listBindingBuffer);
-                    component->m_listBindingBuffer.clear();  // Reset for next use
+                    // Copy (not move): reuses m_listItems' existing capacity and
+                    // preserves m_listBindingBuffer's storage for reuse next frame.
+                    component->m_listItems = component->m_listBindingBuffer;
                     component->m_listItemsDirty = true;
                 }
             }
@@ -139,14 +142,19 @@ void UIManager::update(float deltaTime) {
 }
 
 void UIManager::executeDeferredCallbacks() {
-    // Safely execute all queued callbacks
-    for (const auto& callback : m_deferredCallbacks) {
+    // Swap out before invoking anything: a callback can synchronously trigger
+    // a state transition (prepareForStateTransition() clears
+    // m_deferredCallbacks), which would otherwise invalidate this loop
+    // mid-iteration. A local vector is safe against that same reentrant
+    // clear happening again while this drain is still running.
+    std::vector<std::function<void()>> callbacksToRun;
+    callbacksToRun.swap(m_deferredCallbacks);
+
+    for (const auto& callback : callbacksToRun) {
         if (callback) {
             callback();
         }
     }
-    // Clear the queue for the next frame
-    m_deferredCallbacks.clear();
 }
 
 void UIManager::clean() {
@@ -2367,7 +2375,7 @@ void UIManager::calculateOptimalSize(const std::string &id) {
   }
 }
 
-void UIManager::calculateOptimalSize(std::shared_ptr<UIComponent> component) {
+void UIManager::calculateOptimalSize(const std::shared_ptr<UIComponent> &component) {
   if (!component || !component->m_autoSize) {
     return;
   }
@@ -3368,8 +3376,10 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
         }
         // Draw fill
         {
-          float progress = (component->m_value - component->m_minValue) /
-                           (component->m_maxValue - component->m_minValue);
+          float range = component->m_maxValue - component->m_minValue;
+          float progress = (range != 0.0f)
+                               ? (component->m_value - component->m_minValue) / range
+                               : 0.0f;
           progress = std::clamp(progress, 0.0f, 1.0f);
           int fillWidth = static_cast<int>(component->m_bounds.width * progress);
           if (fillWidth > 0) {
@@ -3407,7 +3417,10 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
           if (component->m_checked) {
             int checkX = boxBounds.x + boxBounds.width / 2;
             int checkY = boxBounds.y + boxBounds.height / 2;
-            addText(std::format("{}#check", component->m_id), "X",
+            m_scratchTextKey.clear();
+            std::format_to(std::back_inserter(m_scratchTextKey), "{}#check",
+                           component->m_id);
+            addText(m_scratchTextKey, "X",
                     component->m_style.fontID, checkX, checkY,
                     component->m_style.textColor, 0);  // Center
           }
@@ -3443,8 +3456,10 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
           addBorder(trackRect, component->m_style.borderColor, UIConstants::BORDER_WIDTH_NORMAL);
 
           // Calculate handle position
-          float progress = (component->m_value - component->m_minValue) /
-                           (component->m_maxValue - component->m_minValue);
+          float range = component->m_maxValue - component->m_minValue;
+          float progress = (range != 0.0f)
+                               ? (component->m_value - component->m_minValue) / range
+                               : 0.0f;
           progress = std::clamp(progress, 0.0f, 1.0f);
 
           int handleX = component->m_bounds.x +
@@ -3537,9 +3552,12 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
             // Draw item text
             int textX = component->m_bounds.x + scaledPadding * 2;
             int textY = itemY + itemHeight / 2;
-              addText(std::format("{}#item{}", component->m_id, i),
-                      component->m_listItems[i], component->m_style.fontID,
-                      textX, textY, component->m_style.textColor, 1);  // Left aligned
+            m_scratchTextKey.clear();
+            std::format_to(std::back_inserter(m_scratchTextKey), "{}#item{}",
+                           component->m_id, i);
+            addText(m_scratchTextKey,
+                    component->m_listItems[i], component->m_style.fontID,
+                    textX, textY, component->m_style.textColor, 1);  // Left aligned
 
             itemY += itemHeight;
 
@@ -3582,9 +3600,12 @@ void UIManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer) {
           for (size_t i = static_cast<size_t>(startIndex); i < component->m_listItems.size(); ++i) {
             int textX = component->m_bounds.x + scaledPadding * 2;
             int textY = itemY + itemHeight / 2;
-              addText(std::format("{}#log{}", component->m_id, i),
-                      component->m_listItems[i], component->m_style.fontID,
-                      textX, textY, component->m_style.textColor, 1);  // Left aligned
+            m_scratchTextKey.clear();
+            std::format_to(std::back_inserter(m_scratchTextKey), "{}#log{}",
+                           component->m_id, i);
+            addText(m_scratchTextKey,
+                    component->m_listItems[i], component->m_style.fontID,
+                    textX, textY, component->m_style.textColor, 1);  // Left aligned
 
             itemY += itemHeight;
 

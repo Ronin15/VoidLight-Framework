@@ -53,13 +53,13 @@ BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 class EntityDataManagerTestFixture {
 public:
     EntityDataManagerTestFixture() {
-        ResourceTemplateManager::Instance().init();
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         edm = &EntityDataManager::Instance();
         BOOST_REQUIRE(edm->init());
-        EventManager::Instance().init();
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
     }
 
     ~EntityDataManagerTestFixture() {

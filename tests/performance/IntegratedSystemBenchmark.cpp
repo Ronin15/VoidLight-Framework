@@ -298,19 +298,17 @@ namespace {
             // ThreadSystem handled by global fixture
             BOOST_REQUIRE(EntityDataManager::Instance().init());
 
-            EventManager::Instance().init();
-            PathfinderManager::Instance().init();
+            BOOST_REQUIRE(EventManager::Instance().init());
+            BOOST_REQUIRE(PathfinderManager::Instance().init());
             PathfinderManager::Instance().rebuildGrid();
-            CollisionManager::Instance().init();
-            AIManager::Instance().init();
-            #ifndef NDEBUG
-            AIManager::Instance().enableThreading(true);
-            #endif
-            ParticleManager::Instance().init();  // Initialize without texture manager
+            BOOST_REQUIRE(CollisionManager::Instance().init());
+            BOOST_REQUIRE(AIManager::Instance().init());
+            VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
+            BOOST_REQUIRE(ParticleManager::Instance().init());  // Initialize without texture manager
             ParticleManager::Instance().registerBuiltInEffects();
 
             // Initialize tier system for culling
-            BackgroundSimulationManager::Instance().init();
+            BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
             // Headless test: simulate 1920x1080 radii (half-diagonal ~1100px)
             // Active: 1.5x = 1650, Background: 2.0x = 2200
             BackgroundSimulationManager::Instance().setActiveRadius(1650.0f);

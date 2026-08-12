@@ -7,11 +7,23 @@
 #include "managers/CollisionManager.hpp"
 #include <algorithm>
 #include <array>
-#ifndef NDEBUG
 #include <atomic>
-#endif
 
 namespace AIInternal {
+
+// AUTHORITATIVE FRAME COUNTER (shared, lock-free)
+// The spatial query cache below is `thread_local` — one instance per worker
+// thread in the persistent ThreadSystem pool. The per-frame freshness stamp must
+// therefore be visible to every worker, not just the main thread. We keep a
+// single file-scope atomic that the main thread writes once per frame (via
+// InvalidateSpatialCache) and every worker reads at lookup/store time. Each
+// worker's thread_local cache stamps and validates its entries against this
+// value, so entries from a previous frame auto-invalidate the moment the frame
+// advances — without any per-thread invalidation call that would never reach
+// the workers. relaxed ordering is sufficient: the frame is published before the
+// task queue dispatches batches (which establishes happens-before) and stays
+// constant while workers run.
+static std::atomic<uint64_t> g_authoritativeFrame{0};
 
 // PERFORMANCE OPTIMIZATION: Spatial query cache to reduce CollisionManager load
 // Caches queryArea results within the same frame to eliminate redundant spatial
@@ -24,12 +36,11 @@ namespace AIInternal {
 // - Reuses vector capacity across frames (CLAUDE.md requirement)
 struct SpatialQueryCache {
   struct CacheEntry {
-    uint64_t frameNumber;
-    uint64_t queryKey; // Store hash for fast validation (cheap integer compare)
-    std::vector<EntityID> results;
+    uint64_t frameNumber{0};
+    uint64_t queryKey{0}; // Store hash for fast validation (cheap integer compare)
+    std::vector<EntityID> results{};
   };
 
-  uint64_t currentFrame = 0;
   static constexpr size_t CACHE_SIZE = 64;
   std::array<CacheEntry, CACHE_SIZE> entries; // Fixed-size, no heap allocations
 
@@ -55,14 +66,14 @@ struct SpatialQueryCache {
     return hash;
   }
 
-  bool lookup(const Vector2D &center, float radius,
+  bool lookup(const Vector2D &center, float radius, uint64_t currentFrame,
               std::vector<EntityID> &outResults) {
     uint64_t key = hashQuery(center, radius);
     size_t index = key % CACHE_SIZE;
 
     const CacheEntry &entry = entries[index];
-    // Frame-based validation: entry is valid only if frame matches
-    // No need to check 'valid' flag - frame comparison is sufficient
+    // Frame-based validation: entry is valid only if it was stamped during the
+    // authoritative current frame. Stamps from prior frames auto-invalidate.
     if (entry.frameNumber == currentFrame && entry.queryKey == key) {
       outResults = entry.results;
       return true;
@@ -70,7 +81,7 @@ struct SpatialQueryCache {
     return false;
   }
 
-  void store(const Vector2D &center, float radius,
+  void store(const Vector2D &center, float radius, uint64_t currentFrame,
              const std::vector<EntityID> &results) {
     uint64_t key = hashQuery(center, radius);
     size_t index = key % CACHE_SIZE;
@@ -79,14 +90,6 @@ struct SpatialQueryCache {
     entry.frameNumber = currentFrame;
     entry.queryKey = key;
     entry.results = results; // Reuses existing capacity when possible
-    // No need to set 'valid' flag - frameNumber is sufficient
-  }
-
-  void newFrame(uint64_t frameNumber) {
-    // ZERO-COST INVALIDATION: Just update frame counter
-    // Old entries auto-invalidate when frameNumber doesn't match
-    // No loop, no writes, no cache thrashing across threads
-    currentFrame = frameNumber;
   }
 };
 
@@ -97,7 +100,7 @@ static thread_local SpatialQueryCache g_spatialCache;
 // Avoids per-call allocations when callers use GetNearbyPositionBuffer()
 static thread_local std::vector<Vector2D> g_nearbyPositionBuffer;
 
-#ifndef NDEBUG
+VOIDLIGHT_STATS_ONLY(
 static std::atomic<uint64_t> g_queryCount{0};
 static std::atomic<uint64_t> g_cacheHits{0};
 static std::atomic<uint64_t> g_cacheMisses{0};
@@ -119,25 +122,25 @@ inline void recordCrowdResults(int count) {
   g_resultsCount.fetch_add(static_cast<uint64_t>(count),
                            std::memory_order_relaxed);
 }
-#endif
+)
 
 int CountNearbyEntities(EntityID excludeId, const Vector2D &center,
                         float radius) {
   const auto &cm = CollisionManager::Instance();
 
-#ifndef NDEBUG
-  recordCrowdQuery();
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
   // Use thread-local vector to avoid repeated allocations
   static thread_local std::vector<EntityID> queryResults;
   queryResults.clear();
 
+  // Read the authoritative frame once; the thread-local cache self-invalidates
+  // against it so stale cross-frame data is never returned on worker threads.
+  uint64_t currentFrame = g_authoritativeFrame.load(std::memory_order_relaxed);
+
   // PERFORMANCE: Check spatial cache before expensive queryArea call
-  bool cacheHit = g_spatialCache.lookup(center, radius, queryResults);
-#ifndef NDEBUG
-  recordCrowdCache(cacheHit);
-#endif
+  bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
+VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
   if (!cacheHit) {
     // Cache miss - perform actual collision query
     VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
@@ -145,7 +148,7 @@ int CountNearbyEntities(EntityID excludeId, const Vector2D &center,
     cm.queryArea(area, queryResults);
 
     // Store result in cache for subsequent queries in same frame
-    g_spatialCache.store(center, radius, queryResults);
+    g_spatialCache.store(center, radius, currentFrame, queryResults);
   }
 
   // Count only actual entities (dynamic/kinematic, non-trigger, excluding self)
@@ -154,9 +157,7 @@ int CountNearbyEntities(EntityID excludeId, const Vector2D &center,
         return id != excludeId && (cm.isDynamic(id) || cm.isKinematic(id)) &&
                !cm.isTrigger(id);
       }));
-#ifndef NDEBUG
-  recordCrowdResults(count);
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdResults(count);)
   return count;
 }
 
@@ -167,19 +168,19 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center,
 
   const auto &cm = CollisionManager::Instance();
 
-#ifndef NDEBUG
-  recordCrowdQuery();
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
   // Use thread-local vector to avoid repeated allocations
   static thread_local std::vector<EntityID> queryResults;
   queryResults.clear();
 
+  // Read the authoritative frame once; the thread-local cache self-invalidates
+  // against it so stale cross-frame data is never returned on worker threads.
+  uint64_t currentFrame = g_authoritativeFrame.load(std::memory_order_relaxed);
+
   // PERFORMANCE: Check spatial cache before expensive queryArea call
-  bool cacheHit = g_spatialCache.lookup(center, radius, queryResults);
-#ifndef NDEBUG
-  recordCrowdCache(cacheHit);
-#endif
+  bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
+VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
   if (!cacheHit) {
     // Cache miss - perform actual collision query
     VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
@@ -187,7 +188,7 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center,
     cm.queryArea(area, queryResults);
 
     // Store result in cache for subsequent queries in same frame
-    g_spatialCache.store(center, radius, queryResults);
+    g_spatialCache.store(center, radius, currentFrame, queryResults);
   }
 
   // Collect positions of actual entities (dynamic/kinematic, non-trigger,
@@ -203,17 +204,19 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center,
   }
 
   int count = static_cast<int>(outPositions.size());
-#ifndef NDEBUG
-  recordCrowdResults(count);
-#endif
+VOIDLIGHT_STATS_ONLY(recordCrowdResults(count);)
   return count;
 }
 
 void InvalidateSpatialCache(uint64_t frameNumber) {
-  g_spatialCache.newFrame(frameNumber);
+  // Publish the new authoritative frame for all worker threads. Each worker's
+  // thread_local cache validates entries against this value, so prior-frame
+  // stamps auto-invalidate without any per-thread call. Released before the AI
+  // batch dispatch, which establishes happens-before for the workers' reads.
+  g_authoritativeFrame.store(frameNumber, std::memory_order_relaxed);
 }
 
-#ifndef NDEBUG
+VOIDLIGHT_STATS_ONLY(
 CrowdStats GetCrowdStats() {
   CrowdStats stats{};
   stats.queryCount = g_queryCount.load(std::memory_order_relaxed);
@@ -229,7 +232,7 @@ void ResetCrowdStats() {
   g_cacheMisses.store(0, std::memory_order_relaxed);
   g_resultsCount.store(0, std::memory_order_relaxed);
 }
-#endif
+)
 
 std::vector<Vector2D> &GetNearbyPositionBuffer() { return g_nearbyPositionBuffer; }
 

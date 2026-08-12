@@ -22,7 +22,8 @@
  * - Thread-safe design with minimal lock contention
  */
 
-#include "managers/EventManager.hpp"
+#include "core/Logger.hpp"
+#include "managers/ParticleEffectType.hpp"
 #include "utils/Vector2D.hpp"
 #include <SDL3/SDL.h>
 #include <array>
@@ -30,7 +31,6 @@
 #include <future>
 #include <mutex>
 #include <new>
-#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -80,6 +80,7 @@ constexpr bool operator!=(const AlignedAllocator<T1, A1> &,
 
 // Forward declarations
 class TextureManager;
+struct EventData;
 
 namespace VoidLight {
 struct WorkerBudget;
@@ -88,29 +89,6 @@ struct WorkerBudget;
 // Use the proper logging system for thread-safe logging
 // Note: This header only contains the LOG macro declaration, the actual include
 // is in the .cpp file
-
-/**
- * @brief Particle effect type enumeration for fast dispatch
- */
-enum class ParticleEffectType : uint8_t {
-  Rain = 0,
-  HeavyRain = 1,
-  Snow = 2,
-  HeavySnow = 3,
-  Fog = 4,
-  Cloudy = 5,
-  Fire = 6,
-  Smoke = 7,
-  Sparks = 8,
-  Magic = 9,
-  Custom = 10,
-  Windy = 11,
-  WindyDust = 12,
-  WindyStorm = 13,
-  AmbientDust = 14,
-  AmbientFirefly = 15,
-  COUNT = 16
-};
 
 /**
  * @brief Particle blend modes for rendering
@@ -204,6 +182,8 @@ struct UnifiedParticle {
   static constexpr uint8_t FLAG_FADE_OUT = 1 << 5;
   static constexpr uint8_t FLAG_RECENTLY_DEACTIVATED =
       1 << 6; // Marks particle for pool collection (single-thread)
+  static constexpr uint8_t FLAG_ADDITIVE =
+      1 << 7; // Render with additive GPU blending instead of alpha
 
   UnifiedParticle()
       : position(0, 0), velocity(0, 0), acceleration(0, 0), life(0.0f),
@@ -285,7 +265,7 @@ public:
    * @brief Initializes the ParticleManager and its internal systems
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Checks if the Particle Manager has been initialized
@@ -549,10 +529,10 @@ public:
    */
   void setCameraViewport(float x, float y, float width, float height);
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Threading configuration (benchmarking only - compiles out in release)
   void enableThreading(bool enable);
-#endif
+  )
 
   /**
    * @brief Enables WorkerBudget-aware threading with intelligent resource
@@ -679,15 +659,15 @@ private:
 
   // New particle request structure for lock-free creation
   struct NewParticleRequest {
-    Vector2D position;
-    Vector2D velocity;
-    Vector2D acceleration;
-    float life;
-    float size;
-    uint32_t color;
-    ParticleBlendMode blendMode;
-    ParticleEffectType effectType;
-    uint8_t flags;
+    Vector2D position{};
+    Vector2D velocity{};
+    Vector2D acceleration{};
+    float life{0.0f};
+    float size{0.0f};
+    uint32_t color{0};
+    ParticleBlendMode blendMode{ParticleBlendMode::Alpha};
+    ParticleEffectType effectType{ParticleEffectType::Custom};
+    uint8_t flags{0};
   };
 
   // Lock-free high-performance storage with double buffering
@@ -754,8 +734,8 @@ private:
     // Indices are held in pending for 2 frames before becoming available,
     // ensuring background threads from previous frames have completed.
     struct ReleasedIndex {
-      size_t index;
-      uint64_t releaseEpoch;
+      size_t index{0};
+      uint64_t releaseEpoch{0};
     };
     std::vector<ReleasedIndex> pendingIndices;  // Recently freed, not yet safe
     std::vector<size_t> readyIndices;           // Safe to reuse (2+ frames old)
@@ -764,15 +744,15 @@ private:
 
     // Lock-free ring buffer for new particle requests
     struct alignas(16) ParticleCreationRequest {
-      Vector2D position;
-      Vector2D velocity;
-      Vector2D acceleration;
-      uint32_t color;
-      float life;
-      float size;
-      uint8_t flags;
-      uint8_t generationId;
-      ParticleEffectType effectType;
+      Vector2D position{};
+      Vector2D velocity{};
+      Vector2D acceleration{};
+      uint32_t color{0};
+      float life{0.0f};
+      float size{0.0f};
+      uint8_t flags{0};
+      uint8_t generationId{0};
+      ParticleEffectType effectType{ParticleEffectType::Custom};
       std::atomic<bool> ready{false};
     };
 
@@ -857,11 +837,15 @@ private:
   std::atomic<bool> m_isShutdown{false};
   std::atomic<bool> m_globallyPaused{false};
   std::atomic<bool> m_globallyVisible{true};
-  std::atomic<bool> m_useThreading{true};
+  VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
   std::atomic<bool> m_useWorkerBudget{true};
   // Threading threshold now managed by WorkerBudget adaptive system
 
-  std::atomic<size_t> m_activeCount{0};
+  // Active particle count — fetch_add/fetch_sub'd from concurrent updateParticleRange()
+  // worker batches (ThreadSystem). Cache-line isolated to avoid false sharing with the
+  // read-mostly flags above (m_globallyPaused/m_globallyVisible/m_useThreading), which
+  // are read every frame in update().
+  alignas(64) std::atomic<size_t> m_activeCount{0};
 
   // Camera and culling
   struct CameraViewport {
@@ -869,9 +853,18 @@ private:
     float margin{100}; // Extra margin for smooth culling
   } m_viewport;
 
+  // Split point in the GPU vertex pool between alpha-blended particle quads
+  // (written first, [0, m_alphaVertexCount)) and additive-blended ones
+  // (written second, [m_alphaVertexCount, total)). Set by recordGPUVertices(),
+  // consumed by renderGPU() to issue two draw calls with two pipelines.
+  size_t m_alphaVertexCount{0};
+
   // Lock-free synchronization - no mutexes needed for particles
-  mutable std::shared_mutex
-      m_effectsMutex;              // For effect instances and definitions
+  // m_effectsMutex guards effect instances/definitions; access is exclusive
+  // at every call site but one, so a plain mutex is used rather than
+  // std::shared_mutex (avoids the winpthreads rwlock implementation, which
+  // asserts under write-lock contention on MinGW/UCRT64).
+  mutable std::mutex m_effectsMutex;
   mutable std::mutex m_statsMutex; // Only for performance stats
 
   // Async batch tracking for safe shutdown using futures

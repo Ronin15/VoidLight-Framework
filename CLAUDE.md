@@ -10,9 +10,14 @@ Guidance for Claude Code working in this repository.
 ## Build
 
 ```bash
-# Debug / Release
+# Debug / Release / ReleaseSafe
 cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build
 cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Release && ninja -C build
+cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=ReleaseSafe && ninja -C build
+
+# Fast dev loop
+ninja -C build app   # main binary only
+ninja -C build       # main binary + all tests (default)
 
 # Reconfigure (required when switching sanitizers or build options)
 rm build/CMakeCache.txt && cmake -B build/ ...
@@ -20,6 +25,10 @@ rm build/CMakeCache.txt && cmake -B build/ ...
 # Run
 ./bin/debug/VoidLight_Template
 ```
+
+Output binaries land in `bin/<build-type-lowercased>/` (`bin/debug`, `bin/release`, `bin/releasesafe`, `bin/profile`).
+
+**`ReleaseSafe`**: `-O2` (not `-O3`/LTO), no `-ffast-math`/aggressive vectorization, and STL bounds/precondition-check hardening applied only to project code (`_GLIBCXX_ASSERTIONS` on libstdc++, `-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE` on libc++/Apple) — scoped like `VOIDLIGHT_AGGRESSIVE_FLAGS`, not applied to FetchContent deps. Use for soak testing / extended playtesting at near-Release speed while still catching out-of-bounds container access as a loud failure instead of silent corruption.
 
 **Sanitizers** (mutually exclusive; remove `CMakeCache.txt` to switch):
 ```bash
@@ -59,13 +68,13 @@ Test names use the `BOOST_AUTO_TEST_CASE` name directly (`ThreadingModeCompariso
 
 C++20 SDL3 engine, CMake/Ninja, data-oriented, 10K+ entities at 60+ FPS.
 
-**Dependency direction**: `Core → Managers → GameStates → Entities/Controllers`
+**Dependency direction**: `Core → Managers → GameStates → Entities/Controllers`. Three known, accepted boundary bends exist: `GameEngine.hpp` (Core) includes `GameStateManager.hpp` since the engine owns/drives the state machine; `GameStateManager.hpp` includes the `GameState` interface header since it owns game states; `BinarySerializer.hpp` (Utils) includes `core/Logger.hpp` for direct logging. See `docs/architecture/dependency_analysis_2026-03-31.md`. No other Core/Manager/GameState boundary is crossed.
 
 **Layout**: `src/` and `include/` mirror each other: `{core, managers, controllers, gameStates, entities, events, ai, collisions, utils, world, gpu}`. Tests in `tests/`, assets in `res/`, docs in `docs/`.
 
 ### Key Systems
-- **Core**: GameEngine (fixed timestep) | ThreadSystem (WorkerBudget) | Logger | TimestepManager
-- **Managers**: EntityDataManager (SoA) | AIManager (SIMD, 10K+) | EventManager (16 types) | CollisionManager (HierarchicalSpatialHash) | ParticleManager (SoA, pooled) | PathfinderManager | WorldManager (chunk-based procedural) | WorldResourceManager (spatial registry) | BackgroundSimulationManager (tiered) | UIManager | GameTimeManager | InputManager | TextureManager | FontManager | SoundManager
+- **Core**: GameEngine (fixed timestep) | ThreadSystem (WorkerBudget) | Logger | TimestepManager | GameStateManager (state push/pop/change, owned by GameEngine; lives in `managers/` but is core state-machine infrastructure)
+- **Managers**: EntityDataManager (SoA) | AIManager (SIMD, 10K+) | ProjectileManager (SIMD, WorkerBudget-driven) | EventManager (16 types) | CollisionManager (HierarchicalSpatialHash) | ParticleManager (SoA, pooled) | PathfinderManager | WorldManager (chunk-based procedural) | WorldResourceManager (spatial registry) | BackgroundSimulationManager (tiered) | UIManager | GameTimeManager | InputManager | TextureManager | FontManager | SoundManager | SaveGameManager (binary serialization) | SettingsManager (JSON-persisted, thread-safe) | ResourceTemplateManager (resource template registry, paired with ResourceFactory)
 - **Entities**: EntityKind (10 types) | SimulationTier (Active/Background/Hibernated) | EntityHandle (generation-safe)
 - **AI**: AIBehavior base → 9 behaviors (Idle, Wander, Patrol, Chase, Flee, Follow, Guard, Attack, Custom). Lock-free EDM access via `BehaviorContext`.
 - **Controllers**: State-scoped via ControllerRegistry. `controllers/{combat,render,social,ui,world}/`
@@ -99,7 +108,7 @@ AI-heavy cleanup order:
 
 EventManager has **persistent** and **transient** handlers. `prepareForStateTransition()` calls `clearTransientHandlers()` — persistents survive. `clearAllHandlers()` is shutdown-only.
 
-- **`init()` → `registerPersistentHandler[WithToken]()`**: manager infrastructure (CollisionManager world events, ProjectileManager collision handler, PathfinderManager world/obstacle events, WorldManager season events). Registered once.
+- **`init()` → `registerPersistentHandler[WithToken]()`**: manager infrastructure (CollisionManager world events, PathfinderManager world/obstacle events, WorldManager season events). Registered once. Note: `ProjectileManager` does NOT use this path for collisions — it receives hits via a direct callback sink (`CollisionManager::setProjectileHitSink()`, set in `ProjectileManager::init()`, cleared to `nullptr` in `clean()`), bypassing EventManager entirely.
 - **`enter()` → `registerHandler[WithToken]()`**: state-level handlers (GamePlayState time/weather/harvest, ControllerRegistry subscriptions). Auto-cleared on transition.
 
 Never manually unsubscribe/resubscribe manager handlers across transitions.
@@ -137,14 +146,19 @@ Sequential execution with parallel batching. Managers update one after another o
 **Manager pattern** (AIManager, ParticleManager):
 ```cpp
 auto decision = budgetMgr.shouldUseThreading(SystemType::AI, count);
+size_t batchCount = 1;
 if (decision.shouldThread) {
-    for (size_t i = 0; i < decision.batchCount; ++i) {
+    size_t optimalWorkers = budgetMgr.getOptimalWorkers(SystemType::AI, count);
+    size_t batchSize;
+    std::tie(batchCount, batchSize) = budgetMgr.getBatchStrategy(SystemType::AI, count, optimalWorkers);
+    for (size_t i = 0; i < batchCount; ++i) {
         m_futures.push_back(threadSystem.enqueueTaskWithResult([...] { processBatch(...); }));
     }
     for (auto& f : m_futures) { f.get(); }  // wait before frame ends
 }
-budgetMgr.reportExecution(SystemType::AI, count, decision.shouldThread, decision.batchCount, elapsedMs);
+budgetMgr.reportExecution(SystemType::AI, count, decision.shouldThread, batchCount, elapsedMs);
 ```
+(`ThreadingDecision` only carries `shouldThread`/`probePhase` — batch count comes from `getOptimalWorkers()` + `getBatchStrategy()`, not from the decision struct.)
 
 ## Memory
 
@@ -192,6 +206,9 @@ m_controllers.get<WeatherController>()->getCurrentWeather();    // single use �
 - Reference menu patterns: `SettingsMenuState`, `MainMenuState`.
 - `WorldResourceManager` is a spatial index over EDM, not a quantity store.
 - `CollisionManager::subscribeWorldEvents()` is persistent manager infrastructure registered from `init()`; do not rewire it during state transitions.
+- **Before raising review findings, read `docs/review-non-issues.md`** — it lists findings already investigated and deliberately not changed (with rationale), plus intentional includes that must not be stripped on a clangd "unused" warning. Don't re-flag those unless you re-verify the code path changed; if so, update that file in the same change.
+- **`Release` does not define `-DNDEBUG`.** `CMakeLists.txt` overrides `CMAKE_CXX_FLAGS_RELEASE` outright (not appended), so CMake's normal `-DNDEBUG` default is dropped. `assert()` calls stay live in `Release`, same as `ReleaseSafe` and `Debug` — only `Profile` defines `NDEBUG`. Don't assume asserts are compiled out in Release.
+- **`Release`'s AVX2 requirement is a hard minimum-spec, not a soft optimization.** Non-Apple `Release` compiles with `-march=x86-64-v3 -mavx2 -mfma` globally, and `SIMDMath.hpp` selects AVX2 code paths via compile-time `#if defined(__AVX2__)` — there is no runtime CPU-feature dispatch (no `cpuid`/`target_clones`/`ifunc`). A shipped `Release` binary will crash with `SIGILL` on any CPU predating Haswell (Intel, 2013) / Excavator-Zen (AMD, 2015), or on feature-restricted VMs. `Profile` already demonstrates the safer fallback (`-march=x86-64-v2 -msse4.2`, no AVX) if wider hardware compatibility is ever needed for a shipped build.
 
 ## Working Principles
 

@@ -125,7 +125,7 @@ std::string ResourcePath::resolve(const std::string& relativePath) {
     for (const auto& searchPath : s_searchPaths) {
         fs::path fullPath = fs::path(searchPath.path) / relativePath;
         if (fs::exists(fullPath)) {
-            return fullPath.string();
+            return fullPath.make_preferred().string();
         }
     }
 

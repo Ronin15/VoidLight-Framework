@@ -25,7 +25,7 @@
  */
 
 #include "events/Event.hpp"
-#include "managers/ParticleManager.hpp"
+#include "managers/ParticleEffectType.hpp"
 #include "utils/Vector2D.hpp"
 #include <string>
 

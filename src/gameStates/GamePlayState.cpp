@@ -36,6 +36,7 @@
 #include "managers/WorldResourceManager.hpp"
 #include "managers/ProjectileManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include "managers/SoundManager.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Camera.hpp"
 #include "world/WorldData.hpp"
@@ -115,18 +116,22 @@ bool GamePlayState::enter() {
 
     // Enable automatic weather changes
     gameTimeMgr.enableAutoWeather(true);
-#ifdef NDEBUG
-    // Release: normal pacing
+    // Normal pacing (Release/ReleaseSafe/Profile)
     gameTimeMgr.setWeatherCheckInterval(4.0f);
     gameTimeMgr.setTimeScale(60.0f);
-#else
     // Debug: faster changes for testing seasons/weather
-    gameTimeMgr.setWeatherCheckInterval(1.0f);
-    gameTimeMgr.setTimeScale(3600.0f);
-#endif
+    VOIDLIGHT_DEBUG_ONLY(
+        gameTimeMgr.setWeatherCheckInterval(1.0f);
+        gameTimeMgr.setTimeScale(3600.0f);
+    );
 
     // Cache UI manager reference for better performance
     auto &ui = UIManager::Instance();
+
+    // Full-screen owner: ensure a clean UI slate before building gameplay UI.
+    // GameStateManager already clears UI on full-screen replace; this is
+    // defensive if enter() is reached without that path.
+    ui.prepareForStateTransition();
 
     // Create event log for time/weather messages
     ui.createEventLog("event_log",
@@ -207,6 +212,16 @@ bool GamePlayState::enter() {
 
     registerEventHandlers();
 
+    // Start open-world background music loop. Use the default per-track
+    // volume (1.0) so the audible level always equals SoundManager's music
+    // volume alone — SoundManager::setMusicVolume() overwrites an active
+    // track's gain with the raw music volume (not volume * musicVolume), so
+    // baking any other multiplier in here would drift out of sync with live
+    // Settings-menu adjustments made while this track is already playing.
+    // SoundManager itself delays the actual start (see
+    // SoundManager::MUSIC_START_DELAY_SEC) so this call is not immediate.
+    SoundManager::Instance().playMusic("music_adventure_loop");
+
     // Mark as initialized for future pause/resume cycles
     m_initialized = true;
 
@@ -284,6 +299,12 @@ void GamePlayState::update(float deltaTime) {
       if (!mp_stateManager->hasState(GameStateId::GAME_OVER)) {
         mp_stateManager->addState(std::make_unique<GameOverState>());
       }
+      if (auto* gameOverState = dynamic_cast<GameOverState*>(
+              mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
+        // Sticky return target: always re-pin before transition so a prior
+        // Advanced AI death cannot leave Retry pointed at the wrong state.
+        gameOverState->setReturnState(GameStateId::GAME_PLAY);
+      }
 
       mp_stateManager->changeState(GameStateId::GAME_OVER);
       return;
@@ -334,12 +355,14 @@ bool GamePlayState::exit() {
   CollisionManager &collisionMgr = CollisionManager::Instance();
   PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
   ParticleManager &particleMgr = ParticleManager::Instance();
-  auto &ui = UIManager::Instance();
   WorldManager &worldMgr = WorldManager::Instance();
   GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
   auto &wrm = WorldResourceManager::Instance();
   auto &eventMgr = EventManager::Instance();
 
+  // Music: leave playing for destinations that replace the track in enter()
+  // (MainMenuState, re-entry after Loading). Destinations that want silence
+  // (GameOverState) call stopMusic() in their own enter().
   if (auto* socialCtrl = m_controllers.get<SocialController>();
       socialCtrl && socialCtrl->isTrading()) {
     socialCtrl->closeTrade();
@@ -403,8 +426,8 @@ bool GamePlayState::exit() {
     // Clean up camera and GPU scene recorder
     m_camera.reset();
 
-    // Clean up UI
-    ui.prepareForStateTransition();
+    // UI: full-screen replace clears via GameStateManager after this exit();
+    // LoadingState::enter() rebuilds the loading screen.
 
     // Destroy all controllers so re-entry creates fresh instances with valid refs
     m_controllers.clear();
@@ -478,8 +501,8 @@ bool GamePlayState::exit() {
   // Clean up camera and GPU scene recorder first to stop world rendering
   m_camera.reset();
 
-  // Full UI cleanup using standard pattern
-  ui.prepareForStateTransition();
+  // UI: full-screen replace clears via GameStateManager after this exit();
+  // destination enter() rebuilds its own UI.
 
   // Reset player
   mp_Player = nullptr;
@@ -598,6 +621,11 @@ void GamePlayState::pause() {
 void GamePlayState::resume() {
   // Show gameplay UI when resuming from pause
   auto &ui = UIManager::Instance();
+
+  // Popping Pause leaves its dim overlay unless we remove it here. Full-stack
+  // leave to MainMenu clears UI in GameStateManager after exits.
+  ui.removeOverlay();
+
   ui.setComponentVisible("event_log", true);
   ui.setComponentVisible("time_label", true);
 
@@ -633,7 +661,6 @@ void GamePlayState::handleInput() {
   // Cache manager references for better performance
   const InputManager &inputMgr = InputManager::Instance();
   auto &ui = UIManager::Instance();
-  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
 
   // Trade dialog is modal — it consumes all input so Pause cannot fire behind it.
   auto* socialCtrl = m_controllers.get<SocialController>();
@@ -679,7 +706,7 @@ void GamePlayState::handleInput() {
     m_controllers.get<CombatController>()->tryAttack();
   }
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Debug: R to spawn a hostile Warrior NPC near player (test hook)
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
     auto& edm = EntityDataManager::Instance();
@@ -709,7 +736,7 @@ void GamePlayState::handleInput() {
 
     edm.createProjectile(spawnPos, velocity, playerHandle, 15.0f, 3.0f);
   }
-#endif
+  )
 
   // Interaction — trade/pickup/harvest command (default: E, rebindable)
   if (inputMgr.isCommandPressed(InputManager::Command::Interact) && mp_Player) {
@@ -733,8 +760,9 @@ void GamePlayState::handleInput() {
     m_camera->zoomOut();
   }
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Debug time speed controls: < (comma) = normal speed, > (period) = max speed
+  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_COMMA)) {
     gameTimeMgr.setTimeScale(60.0f);
     GAMEPLAY_INFO("Time scale set to NORMAL (60x)");
@@ -745,7 +773,7 @@ void GamePlayState::handleInput() {
     GAMEPLAY_INFO("Time scale set to MAX (3600x)");
     ui.addEventLogEntry("event_log", "Time: MAX speed (3600x)");
   }
-#endif
+  )
 
   // Mouse input for world interaction
   if (inputMgr.getMouseButtonState(LEFT) && m_camera) {

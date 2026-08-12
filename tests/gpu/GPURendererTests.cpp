@@ -11,6 +11,7 @@
 #include "GPUTestFixture.hpp"
 #include "gpu/GPUDevice.hpp"
 #include "gpu/GPURenderer.hpp"
+#include "gpu/GPUTexture.hpp"
 #include "gpu/GPUShaderManager.hpp"
 
 using namespace VoidLight;

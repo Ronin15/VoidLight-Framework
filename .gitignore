@@ -20,3 +20,4 @@ docs/doxygen/
 bin/
 *.txt
 *.log
+res/*.json

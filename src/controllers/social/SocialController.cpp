@@ -235,12 +235,14 @@ TradeResult SocialController::executeBuy() {
     const auto& item = m_merchantItems[m_selectedMerchantIndex];
     const auto itemHandle = item.handle;
     const std::string itemName = item.name;
+    // Capture the price BEFORE the trade: tryBuy charges using the pre-trade
+    // relationship, and recordTrade mutates it. Recomputing after would log a
+    // different amount than was actually charged.
+    const float price = calculateBuyPrice(m_merchantHandle, itemHandle, m_quantity);
+    const int savedQty = m_quantity;
     TradeResult result = tryBuy(m_merchantHandle, itemHandle, m_quantity);
 
     if (result == TradeResult::Success) {
-        float price = calculateBuyPrice(m_merchantHandle, itemHandle, m_quantity);
-        int savedQty = m_quantity;
-
         refreshMerchantItems();
         refreshPlayerItems();
         normalizeTradeSelections();
@@ -271,12 +273,14 @@ TradeResult SocialController::executeSell() {
     const auto& item = m_playerItems[m_selectedPlayerIndex];
     const auto itemHandle = item.handle;
     const std::string itemName = item.name;
+    // Capture the price BEFORE the trade: trySell pays out using the pre-trade
+    // relationship, and recordTrade mutates it. Recomputing after would log a
+    // different amount than was actually paid.
+    const float price = calculateSellPrice(m_merchantHandle, itemHandle, m_quantity);
+    const int savedQty = m_quantity;
     TradeResult result = trySell(m_merchantHandle, itemHandle, m_quantity);
 
     if (result == TradeResult::Success) {
-        float price = calculateSellPrice(m_merchantHandle, itemHandle, m_quantity);
-        int savedQty = m_quantity;
-
         refreshMerchantItems();
         refreshPlayerItems();
         normalizeTradeSelections();

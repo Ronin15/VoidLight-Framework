@@ -52,7 +52,7 @@ struct ParticleManagerThreadingFixture {
     }
 
     // Initialize and register effects
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
   }
 

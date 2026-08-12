@@ -455,7 +455,9 @@ void EntityDataManager::freeSlot(size_t index) {
     m_hotData[index] = EntityHotData{};
     m_entityIds[index] = 0;
 
-    // Increment generation for stale handle detection
+    // Increment generation for stale handle detection. The slot is NOT compacted
+    // away — its index stays valid (with a bumped generation) so raw SoA indices
+    // cached across frames/threads by AIManager and EventManager stay stable.
     m_generations[index]++;
 
     // Add to free list
@@ -692,8 +694,10 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
     auto& charData = m_characterData[typeIndex];
     charData.category = CreatureCategory::NPC;
     charData.sex = sex;
-    charData.typeId = m_raceNameToId.count(race) ? m_raceNameToId[race] : 0;
-    charData.subtypeId = m_classNameToId.count(charClass) ? m_classNameToId[charClass] : 0;
+    auto raceIdIt = m_raceNameToId.find(race);
+    charData.typeId = (raceIdIt != m_raceNameToId.end()) ? raceIdIt->second : 0;
+    auto classIdIt = m_classNameToId.find(charClass);
+    charData.subtypeId = (classIdIt != m_classNameToId.end()) ? classIdIt->second : 0;
     charData.maxHealth = raceInfo.baseHealth * classInfo.healthMult;
     charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
@@ -829,8 +833,10 @@ EntityHandle EntityDataManager::createMonster(const Vector2D& position,
     auto& charData = m_characterData[typeIndex];
     charData.category = CreatureCategory::Monster;
     charData.sex = sex;
-    charData.typeId = m_monsterTypeNameToId.count(monsterType) ? m_monsterTypeNameToId[monsterType] : 0;
-    charData.subtypeId = m_monsterVariantNameToId.count(variant) ? m_monsterVariantNameToId[variant] : 0;
+    auto monsterTypeIdIt = m_monsterTypeNameToId.find(monsterType);
+    charData.typeId = (monsterTypeIdIt != m_monsterTypeNameToId.end()) ? monsterTypeIdIt->second : 0;
+    auto monsterVariantIdIt = m_monsterVariantNameToId.find(variant);
+    charData.subtypeId = (monsterVariantIdIt != m_monsterVariantNameToId.end()) ? monsterVariantIdIt->second : 0;
     charData.maxHealth = typeInfo.baseHealth * variantInfo.healthMult;
     charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
@@ -929,8 +935,10 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     auto& charData = m_characterData[typeIndex];
     charData.category = CreatureCategory::Animal;
     charData.sex = sex;
-    charData.typeId = m_speciesNameToId.count(species) ? m_speciesNameToId[species] : 0;
-    charData.subtypeId = m_animalRoleNameToId.count(role) ? m_animalRoleNameToId[role] : 0;
+    auto speciesIdIt = m_speciesNameToId.find(species);
+    charData.typeId = (speciesIdIt != m_speciesNameToId.end()) ? speciesIdIt->second : 0;
+    auto animalRoleIdIt = m_animalRoleNameToId.find(role);
+    charData.subtypeId = (animalRoleIdIt != m_animalRoleNameToId.end()) ? animalRoleIdIt->second : 0;
     charData.maxHealth = speciesInfo.baseHealth * roleInfo.healthMult;
     charData.baseMaxHealth = charData.maxHealth;
     charData.health = charData.maxHealth;
@@ -1962,7 +1970,12 @@ void EntityDataManager::destroyEntity(EntityHandle handle) {
         return;
     }
 
-    // Dynamic pool destruction (deferred queue)
+    // Dynamic pool destruction (deferred queue).
+    // CONTRACT: destruction is deferred (queued here, applied later via freeSlot)
+    // and freeSlot bumps the slot generation in place rather than compacting the
+    // SoA. AIManager and EventManager cache raw SoA indices across the
+    // worker/main-thread boundary relying on this — switching to synchronous or
+    // compacting destruction would invalidate those caches and must audit them.
     std::lock_guard<std::mutex> lock(m_destructionMutex);
     m_destructionQueue.push_back(handle);
 }
@@ -4073,12 +4086,12 @@ void EntityDataManager::recordCombatEvent(size_t index, EntityHandle attacker,
     memData.lastCombatTime = 0.0f;  // Delta semantics: starts at 0, incremented by updateEmotionalDecay
     memData.combatEncounters++;
 
-    // Create memory entry
+    // Create memory entry (MemoryEntry defaults keep unset fields determinate)
     MemoryEntry mem;
     mem.subject = wasAttacked ? attacker : target;
-    if (index < m_hotData.size()) {
-        mem.location = m_hotData[index].transform.position;
-    }
+    mem.location = (index < m_hotData.size())
+                       ? m_hotData[index].transform.position
+                       : Vector2D{};
     mem.timestamp = gameTime;
     mem.value = damage;
     mem.type = wasAttacked ? MemoryType::DamageReceived : MemoryType::DamageDealt;
@@ -4179,7 +4192,7 @@ void EntityDataManager::updateSimulationTiers(const Vector2D& referencePoint,
     if (m_tierIndicesDirty) {
         rebuildTierIndicesFromHotData();
 
-#ifndef NDEBUG
+        VOIDLIGHT_STATS_ONLY(
         // Rolling log every 60 seconds using time-based check
         thread_local auto lastLogTime = std::chrono::steady_clock::now();
         auto now = std::chrono::steady_clock::now();
@@ -4207,7 +4220,7 @@ void EntityDataManager::updateSimulationTiers(const Vector2D& referencePoint,
                 tierTotal, dynamicCount, m_staticHotData.size(),
                 resourceCount, itemCount, containerCount, obstacleCount));
         }
-#endif
+        )
     }
 }
 

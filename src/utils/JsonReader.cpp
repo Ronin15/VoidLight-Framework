@@ -161,10 +161,16 @@ void JsonValue::writeToStream(std::ostream &stream, int depth) const {
     break;
   case JsonType::Number: {
     double num = asNumber();
-    if (std::floor(num) == num && std::abs(num) < 1e15) {
+    if (isIntegerNumber() && std::floor(num) == num && std::abs(num) < 1e15) {
       stream << static_cast<long long>(num);
     } else {
-      stream << num;
+      // Real number: emit the shortest round-trip form, but guarantee a
+      // fractional/exponent marker so it re-parses as a real, not an integer.
+      std::string s = std::format("{}", num);
+      stream << s;
+      if (s.find_first_of(".eEnN") == std::string::npos) {
+        stream << ".0";
+      }
     }
     break;
   }
@@ -232,7 +238,7 @@ JsonReader::JsonReader() : m_position(0), m_line(1), m_column(1) {}
 bool JsonReader::loadFromFile(const std::string &path) {
   std::ifstream file(path);
   if (!file.is_open()) {
-    setError("Could not open file: " + path);
+    setError(std::format("Could not open file: {}", path));
     return false;
   }
 
@@ -258,7 +264,7 @@ bool JsonReader::parse(const std::string &jsonString) {
     m_root = parser.parse();
     return m_lastError.empty();
   } catch (const std::exception &e) {
-    setError("Parse error: " + std::string(e.what()));
+    setError(std::format("Parse error: {}", e.what()));
     return false;
   }
 }
@@ -379,7 +385,7 @@ std::vector<JsonToken> JsonReader::tokenize() {
         tokens.emplace_back(JsonTokenType::Number, std::move(num), tokenLine,
                             tokenColumn);
       } else {
-        setError("Unexpected character: " + std::string(1, c));
+        setError(std::format("Unexpected character: {}", c));
         return tokens;
       }
       break;
@@ -477,6 +483,24 @@ std::string JsonReader::parseString() {
         if (!m_lastError.empty())
           return "";
 
+        // Combine UTF-16 surrogate pairs into a single supplementary code point
+        if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
+          if (peek() != '\\' || peek(1) != 'u') {
+            setError("Invalid surrogate pair: expected low surrogate");
+            return "";
+          }
+          advance(); // Skip backslash
+          advance(); // Skip 'u'
+          uint32_t low = parseUnicodeEscape();
+          if (!m_lastError.empty())
+            return "";
+          if (low < 0xDC00 || low > 0xDFFF) {
+            setError("Invalid surrogate pair: invalid low surrogate");
+            return "";
+          }
+          codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
+        }
+
         // Convert Unicode codepoint to UTF-8
         if (codepoint <= 0x7F) {
           result += static_cast<char>(codepoint);
@@ -496,7 +520,7 @@ std::string JsonReader::parseString() {
         break;
       }
       default:
-        setError("Invalid escape sequence: \\" + std::string(1, escaped));
+        setError(std::format("Invalid escape sequence: \\{}", escaped));
         return "";
       }
     } else if (c < 0x20) {
@@ -629,9 +653,13 @@ JsonValue JsonReader::Parser::parseValue() {
     std::string numStr = advance().value;
     try {
       double num = std::stod(numStr);
-      return JsonValue(num);
+      // An integer literal has no fractional or exponent part; preserve that
+      // distinction so consumers can tell `1` from `1.0`.
+      const bool isInteger =
+          numStr.find_first_of(".eE") == std::string::npos;
+      return JsonValue::makeNumber(num, isInteger);
     } catch (const std::exception &) {
-      setError("Invalid number format: " + numStr);
+      setError(std::format("Invalid number format: {}", numStr));
       return JsonValue();
     }
   }
@@ -642,7 +670,7 @@ JsonValue JsonReader::Parser::parseValue() {
   case JsonTokenType::LeftBracket:
     return JsonValue(parseArray());
   default:
-    setError("Expected value, got " + token.value);
+    setError(std::format("Expected value, got {}", token.value));
     return JsonValue();
   }
 }

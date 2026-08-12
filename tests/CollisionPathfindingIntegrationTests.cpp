@@ -32,11 +32,11 @@ struct CollisionPathfindingFixture {
         BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init()); // Auto-detect system threads
 
         // Initialize managers in proper order
-        EventManager::Instance().init();
-        WorldManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(WorldManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
 
         // Load a test world - larger size with reduced blocking for navigable paths
         VoidLight::WorldGenerationConfig cfg{};

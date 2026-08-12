@@ -7,6 +7,7 @@
 #include "core/Logger.hpp"
 #include "gameStates/GameState.hpp"
 #include "gpu/GPURenderer.hpp"
+#include "managers/UIManager.hpp"
 #include "utils/FrameProfiler.hpp"
 #include <algorithm>
 #include <format>
@@ -18,6 +19,16 @@ GameStateManager::GameStateManager() {
   // optimization)
   m_registeredStates.reserve(8);
   m_activeStates.reserve(3); // For the active stack
+}
+
+void GameStateManager::clearUIForFullScreenReplace() {
+  // Shared UI is global. Full-screen replaces (no underlying state left)
+  // clear it once here so enter() only builds widgets. Overlay push/pop and
+  // replace-top-while-stack-remains must NOT call this — underlying UI stays.
+  auto &ui = UIManager::Instance();
+  if (!ui.isShutdown()) {
+    ui.prepareForStateTransition();
+  }
 }
 
 void GameStateManager::addState(std::unique_ptr<GameState> state) {
@@ -38,14 +49,15 @@ void GameStateManager::pushState(GameStateId stateId) {
     // Suppress profiler hitch detection during state transition
     VoidLight::FrameProfiler::Instance().suppressFrames(5);
 
-    // Pause the current top state if it exists
+    // Pause the current top state if it exists (underlying UI stays registered)
     std::shared_ptr<GameState> previousState;
     if (!m_activeStates.empty()) {
       previousState = m_activeStates.back();
       previousState->pause();
     }
 
-    // CRITICAL: Enter the state BEFORE adding to active stack to prevent rendering before initialization
+    // Enter before stacking so we never render an uninitialized top state.
+    // No full UI clear — this is an overlay / stacked transition.
     auto newState = it->second;
     if (!newState->enter()) {
       if (previousState) {
@@ -55,7 +67,6 @@ void GameStateManager::pushState(GameStateId stateId) {
       return;
     }
 
-    // Now push the fully initialized state onto the stack
     m_activeStates.push_back(newState);
     GAMESTATE_INFO(std::format("Pushed state: {}", static_cast<int>(stateId)));
   } else {
@@ -68,15 +79,12 @@ void GameStateManager::popState() {
     // Suppress profiler hitch detection during state transition
     VoidLight::FrameProfiler::Instance().suppressFrames(5);
 
-    // CRITICAL: Wait for exit to complete BEFORE removing from stack
+    // Overlay exit removes its own widgets; no full UI clear.
     auto currentState = m_activeStates.back();
-    currentState->exit(); // Wait for exit to complete fully
-
-    // Only remove after exit is complete
+    currentState->exit();
     m_activeStates.pop_back();
     GAMESTATE_INFO("Popped state");
 
-    // Resume the new top state if it exists
     if (!m_activeStates.empty()) {
       m_activeStates.back()->resume();
     }
@@ -84,19 +92,67 @@ void GameStateManager::popState() {
 }
 
 void GameStateManager::changeState(GameStateId stateId) {
-  // Pop the current state if one exists (waits for exit to complete)
-  if (!m_activeStates.empty()) {
-    popState();
+  auto it = m_registeredStates.find(stateId);
+  if (it == m_registeredStates.end()) {
+    GAMESTATE_ERROR(std::format("State not found: {}", static_cast<int>(stateId)));
+    return;
   }
-  // Push the new state (waits for enter to complete)
-  pushState(stateId);
+
+  // Suppress profiler hitch detection during state transition
+  VoidLight::FrameProfiler::Instance().suppressFrames(5);
+
+  // Standard order: exit old → (clear UI if full-screen) → enter new.
+  // If enter fails, re-enter the previous top so the stack stays recoverable.
+  auto newState = it->second;
+  std::shared_ptr<GameState> previousState;
+  if (!m_activeStates.empty()) {
+    previousState = m_activeStates.back();
+    previousState->exit();
+    m_activeStates.pop_back();
+  }
+
+  // Full-screen replace when nothing remains underneath; stacked replace
+  // (e.g. Pause → Settings over GamePlay) keeps underlying UI.
+  const bool fullScreenReplace = m_activeStates.empty();
+  if (fullScreenReplace) {
+    clearUIForFullScreenReplace();
+  }
+
+  if (!newState->enter()) {
+    GAMESTATE_ERROR(std::format("Failed to enter state: {}", static_cast<int>(stateId)));
+    if (previousState) {
+      if (fullScreenReplace) {
+        clearUIForFullScreenReplace();
+      }
+      if (!previousState->enter()) {
+        GAMESTATE_ERROR(std::format(
+            "Failed to restore previous state {} after failed changeState to {}",
+            static_cast<int>(previousState->getStateId()),
+            static_cast<int>(stateId)));
+        return;
+      }
+      m_activeStates.push_back(previousState);
+    }
+    return;
+  }
+
+  m_activeStates.push_back(newState);
+  GAMESTATE_INFO(std::format("Changed state to: {}", static_cast<int>(stateId)));
 }
 
 void GameStateManager::changeStateClearingStack(GameStateId stateId) {
-  if (!m_activeStates.empty()) {
-    // Suppress profiler hitch detection during state transition
-    VoidLight::FrameProfiler::Instance().suppressFrames(5);
+  auto it = m_registeredStates.find(stateId);
+  if (it == m_registeredStates.end()) {
+    GAMESTATE_ERROR(std::format("State not found: {}", static_cast<int>(stateId)));
+    return;
   }
+
+  // Suppress profiler hitch detection during state transition
+  VoidLight::FrameProfiler::Instance().suppressFrames(5);
+
+  auto newState = it->second;
+  // Snapshot for failed-enter recovery (bottom → top re-entry).
+  const std::vector<std::shared_ptr<GameState>> previousStack = m_activeStates;
 
   while (!m_activeStates.empty()) {
     auto currentState = m_activeStates.back();
@@ -104,7 +160,33 @@ void GameStateManager::changeStateClearingStack(GameStateId stateId) {
     m_activeStates.pop_back();
   }
 
-  pushState(stateId);
+  // Entire stack is gone — always a full-screen UI replace.
+  clearUIForFullScreenReplace();
+
+  if (!newState->enter()) {
+    GAMESTATE_ERROR(std::format("Failed to enter state: {}", static_cast<int>(stateId)));
+    // Best-effort restore: re-enter previous stack bottom → top. Each state
+    // under the eventual top is pause()'d, matching pushState layering.
+    clearUIForFullScreenReplace();
+    for (size_t i = 0; i < previousStack.size(); ++i) {
+      if (i > 0) {
+        previousStack[i - 1]->pause();
+      }
+      if (!previousStack[i]->enter()) {
+        GAMESTATE_ERROR(std::format(
+            "Failed to restore state {} while recovering from failed "
+            "changeStateClearingStack to {}",
+            static_cast<int>(previousStack[i]->getStateId()),
+            static_cast<int>(stateId)));
+        break;
+      }
+      m_activeStates.push_back(previousStack[i]);
+    }
+    return;
+  }
+
+  m_activeStates.push_back(newState);
+  GAMESTATE_INFO(std::format("Changed state (clearing stack) to: {}", static_cast<int>(stateId)));
 }
 
 void GameStateManager::update(float deltaTime) {

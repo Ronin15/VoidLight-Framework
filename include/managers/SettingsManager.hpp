@@ -62,14 +62,14 @@ public:
      * @param filepath Path to the JSON settings file
      * @return true if loading successful, false otherwise
      */
-    bool loadFromFile(const std::string& filepath);
+    [[nodiscard]] bool loadFromFile(const std::string& filepath);
 
     /**
      * @brief Saves current settings to a JSON file
      * @param filepath Path to save the JSON settings file
      * @return true if saving successful, false otherwise
      */
-    bool saveToFile(const std::string& filepath);
+    [[nodiscard]] bool saveToFile(const std::string& filepath);
 
     /**
      * @brief Gets a typed setting value with optional default
@@ -173,9 +173,9 @@ private:
      * @brief Change listener storage
      */
     struct ListenerInfo {
-        size_t id;
-        std::string category;
-        ChangeCallback callback;
+        size_t id{0};
+        std::string category{};
+        ChangeCallback callback{};
     };
     std::vector<ListenerInfo> m_listeners;
     mutable std::mutex m_listenersMutex;

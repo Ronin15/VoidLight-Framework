@@ -10,9 +10,12 @@
 #include <vector>
 #include <random>
 #include <functional>
-#include "world/WorldData.hpp"
+#include <string>
 
 namespace VoidLight {
+
+struct WorldData;
+struct WorldGenerationConfig;
 
 // Progress callback type: void callback(float percentComplete, const std::string& statusMessage)
 using WorldGenerationProgressCallback = std::function<void(float, const std::string&)>;

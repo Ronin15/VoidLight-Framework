@@ -45,8 +45,8 @@ public:
         if (!s_initialized) {
             BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
             BOOST_REQUIRE(EntityDataManager::Instance().init());
-            CollisionManager::Instance().init();
-            BackgroundSimulationManager::Instance().init();
+            BOOST_REQUIRE(CollisionManager::Instance().init());
+            BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
             // Enable benchmark mode to suppress verbose logging during benchmarks
             VOIDLIGHT_ENABLE_BENCHMARK_MODE();
             s_initialized = true;

@@ -92,7 +92,7 @@ bool SoundManager::loadAudio(const std::string &filePath, const std::string &idP
     if (fs::is_directory(filePath)) {
       // Load all supported audio files from directory
       bool loadedAny = false;
-      int fileCount = 0;
+      VOIDLIGHT_DEBUG_ONLY(int fileCount = 0;)
       const auto supportedExts = getSupportedExtensions();
 
       for (const auto &entry : fs::directory_iterator(filePath)) {
@@ -120,7 +120,7 @@ bool SoundManager::loadAudio(const std::string &filePath, const std::string &idP
           }
 
           m_audioMap[fullSoundID] = audio;
-          fileCount++;
+          VOIDLIGHT_DEBUG_ONLY(fileCount++;)
           loadedAny = true;
         }
       }
@@ -161,36 +161,14 @@ bool SoundManager::loadAudio(const std::string &filePath, const std::string &idP
 
 bool SoundManager::loadSFX(const std::string &filePath,
                            const std::string &soundID) {
-  if (m_sfxLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
   std::lock_guard<std::mutex> lock(m_loadMutex);
-  if (m_sfxLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
-
-  bool result = loadAudio(filePath, soundID);
-  if(result) {
-      m_sfxLoaded.store(true, std::memory_order_release);
-  }
-  return result;
+  return loadAudio(filePath, soundID);
 }
 
 bool SoundManager::loadMusic(const std::string &filePath,
                              const std::string &musicID) {
-  if (m_musicLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
   std::lock_guard<std::mutex> lock(m_loadMutex);
-  if (m_musicLoaded.load(std::memory_order_acquire)) {
-    return true;
-  }
-
-  bool result = loadAudio(filePath, std::format("music_{}", musicID));
-  if(result) {
-    m_musicLoaded.store(true, std::memory_order_release);
-  }
-  return result;
+  return loadAudio(filePath, std::format("music_{}", musicID));
 }
 
 MIX_Track *SoundManager::createAndConfigureTrack(MIX_Group *group,
@@ -215,7 +193,7 @@ MIX_Track *SoundManager::createAndConfigureTrack(MIX_Group *group,
   return track;
 }
 
-void SoundManager::cleanupStoppedTracks() {
+void SoundManager::cleanupStoppedTracks() const {
   // Clean up stopped SFX tracks
   for (auto it = m_activeSfxTracks.begin(); it != m_activeSfxTracks.end();) {
     auto &tracks = it->second;
@@ -318,6 +296,36 @@ void SoundManager::playMusic(const std::string &musicID, int loops,
     return;
   }
 
+  // Silence whatever's currently playing immediately — the requested track
+  // itself starts after MUSIC_START_DELAY_SEC, via update() below.
+  stopActiveMusicTracks();
+
+  m_pendingMusic.musicID = musicID;
+  m_pendingMusic.loops = loops;
+  m_pendingMusic.volume = volume;
+  m_pendingMusic.delayRemaining = MUSIC_START_DELAY_SEC;
+  m_pendingMusic.active = true;
+}
+
+void SoundManager::update(float deltaTime) {
+  if (!m_pendingMusic.active) {
+    return;
+  }
+
+  m_pendingMusic.delayRemaining -= deltaTime;
+  if (m_pendingMusic.delayRemaining <= 0.0f) {
+    // Copy out before clearing — playMusicImmediate() below does not touch
+    // m_pendingMusic, but this keeps the pending state consistent either way.
+    const std::string musicID = m_pendingMusic.musicID;
+    const int loops = m_pendingMusic.loops;
+    const float volume = m_pendingMusic.volume;
+    m_pendingMusic.active = false;
+    playMusicImmediate(musicID, loops, volume);
+  }
+}
+
+void SoundManager::playMusicImmediate(const std::string &musicID, int loops,
+                                      float volume) {
   cleanupStoppedTracks();
 
   const std::string fullMusicID = std::format("music_{}", musicID);
@@ -410,6 +418,13 @@ void SoundManager::stopMusic() {
     return;
   }
 
+  // Cancel any not-yet-started delayed playMusic() request too.
+  m_pendingMusic.active = false;
+
+  stopActiveMusicTracks();
+}
+
+void SoundManager::stopActiveMusicTracks() {
   cleanupStoppedTracks();
 
   // Stop all music tracks
@@ -428,8 +443,8 @@ bool SoundManager::isMusicPlaying() const {
     return false;
   }
 
-  // Cast away const for this method
-  const_cast<SoundManager*>(this)->cleanupStoppedTracks();
+  // Reap any tracks that finished playing (const via mutable containers).
+  cleanupStoppedTracks();
 
   // Check if any music track is currently playing
   return std::any_of(m_activeMusicTracks.begin(), m_activeMusicTracks.end(),

@@ -8,6 +8,7 @@
 
 #include "core/Logger.hpp"
 #include "utils/Vector2D.hpp"
+#include <bit>
 #include <cstring>
 #include <fstream>
 #include <format>
@@ -24,6 +25,18 @@
  * Designed for high performance game save/load operations
  */
 namespace BinarySerial {
+
+// Save-file format assumption: trivially-copyable types are written/read via
+// raw byte copies (no endianness normalization). Files are therefore only
+// portable between hosts of the same byte order. All current targets are
+// little-endian; this static_assert documents and enforces that assumption so
+// a big-endian port fails to compile rather than silently producing
+// incompatible save files. If big-endian support is ever required, add
+// explicit byte-swapping in write()/read()/writeVector()/readVector().
+static_assert(std::endian::native == std::endian::little,
+              "BinarySerial assumes a little-endian host; save files are not "
+              "byte-order portable. Add byte-swapping before porting to "
+              "big-endian.");
 
 /**
  * Main binary writer class using borrowed stream access by default.
@@ -216,7 +229,7 @@ public:
  * Convenience functions for simple save/load operations
  */
 template <typename T>
-bool saveToFile(const std::string &filename, const T &object) {
+[[nodiscard]] bool saveToFile(const std::string &filename, const T &object) {
   SAVEGAME_DEBUG(std::format("Saving object to file: {}", filename));
   auto writer = Writer::createFileWriter(filename);
   if (!writer) {

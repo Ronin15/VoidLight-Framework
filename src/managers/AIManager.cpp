@@ -351,22 +351,22 @@ void AIManager::update(float deltaTime) {
       cachedPlayerHandle = m_playerHandle;
       cachedPlayerValid = m_playerHandle.isValid();
       if (cachedPlayerValid) {
+        // Cache player edmIndex once per frame (avoids hash lookup per query),
+        // reusing this single lookup under the lock.
         size_t playerIdx = edm.getIndex(m_playerHandle);
+        m_cachedPlayerEdmIdx = playerIdx;
         if (playerIdx != SIZE_MAX) {
           const auto &playerTransform = edm.getTransformByIndex(playerIdx);
           cachedPlayerPosition = playerTransform.position;
           cachedPlayerVelocity = playerTransform.velocity;
         }
+      } else {
+        m_cachedPlayerEdmIdx = SIZE_MAX;
       }
     }
 
     // Cache game time ONCE per frame for combat timing comparisons
     float cachedGameTime = GameTimeManager::Instance().getTotalGameTimeSeconds();
-
-    // Cache player edmIndex once per frame (avoids hash lookup per query)
-    m_cachedPlayerEdmIdx = m_playerHandle.isValid()
-        ? edm.getIndex(m_playerHandle)
-        : SIZE_MAX;
 
     // WorkerBudget manager — used per-type bucket below.
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
@@ -488,6 +488,10 @@ void AIManager::update(float deltaTime) {
             for (uint32_t edmIdx : m_batchKnockbackClears[i]) {
                 edmDrain.clearKnockback(edmIdx);
             }
+            // Clear after draining so a later single-threaded frame (which fills
+            // only m_singleBatchKnockbackClears) does not re-drain stale indices
+            // left here by a prior threaded frame.
+            m_batchKnockbackClears[i].clear();
         }
     }
 
@@ -1445,12 +1449,12 @@ void AIManager::resetBehaviors() {
   m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
 }
 
-#ifndef NDEBUG
+VOIDLIGHT_DEBUG_ONLY(
 void AIManager::enableThreading(bool enable) {
   m_useThreading.store(enable, std::memory_order_release);
   AI_INFO(std::format("Threading {}", enable ? "enabled" : "disabled"));
 }
-#endif
+)
 
 size_t AIManager::getBehaviorCount() const {
   // m_behaviorTypeMap is immutable after init() — no lock needed

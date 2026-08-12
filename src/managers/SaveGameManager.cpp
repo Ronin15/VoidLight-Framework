@@ -91,31 +91,31 @@ bool SaveGameManager::save(const std::string &saveFileName,
     std::streampos dataStart = file.tellp();
 
     // Write player data using BinarySerializer
-    auto writer = std::make_unique<BinarySerial::Writer>(file);
+    BinarySerial::Writer writer(file);
 
     // Write position
-    if (!writer->writeSerializable(player.getPosition())) {
+    if (!writer.writeSerializable(player.getPosition())) {
       SAVEGAME_ERROR("Failed to write player position");
       file.close();
       return false;
     }
 
     // Write textureID
-    if (!writer->writeString(player.getTextureID())) {
+    if (!writer.writeString(player.getTextureID())) {
       SAVEGAME_ERROR("Failed to write player textureID");
       file.close();
       return false;
     }
 
     // Write current state
-    if (!writer->writeString(player.getCurrentStateName())) {
+    if (!writer.writeString(player.getCurrentStateName())) {
       SAVEGAME_ERROR("Failed to write player state");
       file.close();
       return false;
     }
 
     // Write current level (this would come from your game state)
-    if (!writer->writeString(
+    if (!writer.writeString(
             "current_level_id")) { // Replace with actual level ID
       SAVEGAME_ERROR("Failed to write level ID");
       file.close();
@@ -178,11 +178,11 @@ bool SaveGameManager::load(const std::string &saveFileName,
     }
 
     // Read player data using BinarySerializer
-    auto reader = std::make_unique<BinarySerial::Reader>(file);
+    BinarySerial::Reader reader(file);
 
     // Read position
     Vector2D position(0.0f, 0.0f);
-    if (!reader->readSerializable(position)) {
+    if (!reader.readSerializable(position)) {
       SAVEGAME_ERROR("Error reading player position");
       file.close();
       return false;
@@ -194,7 +194,7 @@ bool SaveGameManager::load(const std::string &saveFileName,
 
     // Read textureID
     std::string textureID;
-    if (!reader->readString(textureID)) {
+    if (!reader.readString(textureID)) {
       SAVEGAME_ERROR("Error reading player textureID!");
       file.close();
       return false;
@@ -202,7 +202,7 @@ bool SaveGameManager::load(const std::string &saveFileName,
 
     // Read state
     std::string state;
-    if (!reader->readString(state)) {
+    if (!reader.readString(state)) {
       SAVEGAME_ERROR("Error reading player state!");
       file.close();
       return false;
@@ -213,7 +213,7 @@ bool SaveGameManager::load(const std::string &saveFileName,
 
     // Read level ID (not using it yet, but reading for future use)
     std::string levelID;
-    if (!reader->readString(levelID)) {
+    if (!reader.readString(levelID)) {
       SAVEGAME_ERROR("Error reading level ID!");
       file.close();
       return false;
@@ -244,7 +244,7 @@ bool SaveGameManager::deleteSave(const std::string &saveFileName) const {
     std::string fullPath = getFullSavePath(saveFileName);
     if (std::filesystem::exists(fullPath)) {
       std::filesystem::remove(fullPath);
-      SAVEGAME_INFO(std::format("Save successful: {}", saveFileName));
+      SAVEGAME_INFO(std::format("Save file deleted: {}", saveFileName));
       return true;
     } else {
       SAVEGAME_ERROR(std::format("Save file does not exist: {}", fullPath));
@@ -553,16 +553,16 @@ bool SaveGameManager::readHeader(std::ifstream &file,
 // if needed elsewhere
 bool SaveGameManager::writeString(std::ofstream &file,
                                   const std::string &str) const {
-  auto writer = std::make_unique<BinarySerial::Writer>(file);
-  return writer->writeString(str);
+  BinarySerial::Writer writer(file);
+  return writer.writeString(str);
 }
 
 bool SaveGameManager::readString(std::ifstream &file, std::string &str) const {
-  auto reader = std::make_unique<BinarySerial::Reader>(file);
-  return reader->readString(str);
+  BinarySerial::Reader reader(file);
+  return reader.readString(str);
 }
 
 bool SaveGameManager::readVector2D(std::ifstream &file, Vector2D &vec) const {
-  auto reader = std::make_unique<BinarySerial::Reader>(file);
-  return reader->readSerializable(vec);
+  BinarySerial::Reader reader(file);
+  return reader.readSerializable(vec);
 }

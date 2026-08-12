@@ -42,7 +42,7 @@ class TextureManager {
     return instance;
   }
 
-  bool loadGPU(const std::string& fileName, const std::string& textureID);
+  [[nodiscard]] bool loadGPU(const std::string& fileName, const std::string& textureID);
   void processPendingUploads(SDL_GPUCopyPass* copyPass);
   std::optional<GPUTextureData> getGPUTextureData(const std::string& textureID) const;
   bool hasGPUTextures() const { return !m_gpuTextureMap.empty(); }
@@ -52,7 +52,7 @@ class TextureManager {
   bool isShutdown() const { return m_isShutdown; }
 
  private:
-  bool loadSingleGPUTexture(const std::string& fileName, const std::string& textureID);
+  [[nodiscard]] bool loadSingleGPUTexture(const std::string& fileName, const std::string& textureID);
 
   bool m_isShutdown{false};
   std::unordered_map<std::string, GPUTextureData> m_gpuTextureMap{};

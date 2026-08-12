@@ -326,6 +326,13 @@ size_t SpriteBatch::end() {
     return result;
 }
 
+void SpriteBatch::reset() {
+    m_writePtr = nullptr;
+    m_recording = false;
+    m_vertexCount = 0;
+    m_spriteCount = 0;
+}
+
 void SpriteBatch::render(SDL_GPURenderPass* pass,
                          SDL_GPUGraphicsPipeline* pipeline,
                          SDL_GPUBuffer* vertexBuffer) {

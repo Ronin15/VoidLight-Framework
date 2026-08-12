@@ -107,15 +107,15 @@ struct BehaviorTestFixture {
         BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
 
         // Initialize managers in proper order (matches CollisionPathfindingIntegrationTests)
-        GameTimeManager::Instance().init();  // Required for combat timing in behaviors
-        EventManager::Instance().init();
+        BOOST_REQUIRE(GameTimeManager::Instance().init());  // Required for combat timing in behaviors
+        BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
-        WorldManager::Instance().init();
+        BOOST_REQUIRE(WorldManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
-        BackgroundSimulationManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
+        BOOST_REQUIRE(AIManager::Instance().init());
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
 
         // Load a simple test world for pathfinding
         // Note: World must be >= 26x26 to satisfy VILLAGE_RADIUS constraints in WorldGenerator

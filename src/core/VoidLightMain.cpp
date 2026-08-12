@@ -7,17 +7,47 @@
 #include "core/ThreadSystem.hpp"
 #include "core/TimestepManager.hpp"
 #include "core/Logger.hpp"
+#include "managers/GameStateManager.hpp"
 #include "utils/FrameProfiler.hpp"
+#include "gameStates/AIDemoState.hpp"
+#include "gameStates/AdvancedAIDemoState.hpp"
+#include "gameStates/EventDemoState.hpp"
+#include "gameStates/GamePlayState.hpp"
+#include "gameStates/GameOverState.hpp"
+#include "gameStates/LoadingState.hpp"
+#include "gameStates/LogoState.hpp"
+#include "gameStates/MainMenuState.hpp"
+#include "gameStates/OverlayDemoState.hpp"
+#include "gameStates/SettingsMenuState.hpp"
+#include "gameStates/UIDemoState.hpp"
 #include <array>
 #include <chrono>
 #include <format>
+#include <memory>
 #include <numeric>
 #include <string_view>
 
 constexpr std::string_view GAME_NAME{"Game Template"};
 
-// maybe_unused is just a hint to the compiler that the variable is not used.
-// with -Wall -Wextra flags
+// Application composition root: registers all concrete game states with the
+// GameStateManager. Lives here (not in Core/GameEngine) so the engine depends
+// only on the GameState interface and GameStateManager, preserving the
+// Core -> Managers -> GameStates dependency direction.
+static void registerInitialStates(GameStateManager& stateManager) {
+  stateManager.addState(std::make_unique<LogoState>());
+  stateManager.addState(
+      std::make_unique<LoadingState>()); // Shared loading screen state
+  stateManager.addState(std::make_unique<MainMenuState>());
+  stateManager.addState(std::make_unique<SettingsMenuState>());
+  stateManager.addState(std::make_unique<GamePlayState>());
+  stateManager.addState(std::make_unique<GameOverState>());
+  stateManager.addState(std::make_unique<AIDemoState>());
+  stateManager.addState(std::make_unique<AdvancedAIDemoState>());
+  stateManager.addState(std::make_unique<EventDemoState>());
+  stateManager.addState(std::make_unique<UIDemoState>());
+  stateManager.addState(std::make_unique<OverlayDemoState>());
+}
+
 int main(int, char*[]) {
   GAMEENGINE_INFO(std::format("Initializing {}", GAME_NAME));
   THREADSYSTEM_INFO("Initializing Thread System");
@@ -60,7 +90,9 @@ int main(int, char*[]) {
                               ? "software frame limiting"
                               : "hardware VSync"));
 
-  // Push initial state before starting main loop
+  // Register all concrete game states now that the engine and its managers are
+  // fully initialized, then push the initial state before starting main loop.
+  registerInitialStates(*gameEngine.getGameStateManager());
   gameEngine.getGameStateManager()->pushState(GameStateId::LOGO);
 
   // Suppress hitch detection for first few frames while engine stabilizes
@@ -71,14 +103,14 @@ int main(int, char*[]) {
   // Get TimestepManager reference for main loop
   TimestepManager& ts = gameEngine.getTimestepManager();
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Update performance tracking (DEBUG only)
   static constexpr size_t PERF_SAMPLE_COUNT = 10;
   std::array<double, PERF_SAMPLE_COUNT> updateSamples{};
   size_t sampleIndex = 0;
   size_t intervalUpdateIterations = 0;
   auto lastPerfLogTime = std::chrono::high_resolution_clock::now();
-#endif
+  )
 
   // Main game loop - classic fixed timestep pattern
   // Updates drain accumulator, THEN render reads alpha - no race conditions
@@ -98,25 +130,23 @@ int main(int, char*[]) {
     }
 
     // Fixed timestep updates - run until accumulator is drained
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     auto updateStart = std::chrono::high_resolution_clock::now();
     size_t updateIterations = 0;
-#endif
+    )
 
     {
       PROFILE_PHASE(VoidLight::FramePhase::Update);
       while (gameEngine.isRunning() && ts.shouldUpdate()) {
         gameEngine.update(ts.getUpdateDeltaTime());
-#ifndef NDEBUG
-        ++updateIterations;
-#endif
+        VOIDLIGHT_DEBUG_ONLY(++updateIterations;)
       }
     }
     if (!gameEngine.isRunning()) {
       break;
     }
 
-#ifndef NDEBUG
+    VOIDLIGHT_DEBUG_ONLY(
     auto updateEnd = std::chrono::high_resolution_clock::now();
     double updateMs = std::chrono::duration<double, std::milli>(updateEnd - updateStart).count();
     updateSamples[sampleIndex++ % PERF_SAMPLE_COUNT] = updateMs;
@@ -136,7 +166,7 @@ int main(int, char*[]) {
                                    ts.isUsingSoftwareFrameLimiting()));
       intervalUpdateIterations = 0;
     }
-#endif
+    )
 
     // Render with interpolation alpha (calculated from remaining accumulator)
     {

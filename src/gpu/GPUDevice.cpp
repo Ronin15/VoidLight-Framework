@@ -37,14 +37,14 @@ bool GPUDevice::init(SDL_Window* window) {
 
     const char* const preferredDriver = GPUPlatformConfig::getPreferredDriverName();
 
+    // Enable GPU validation in debug builds only; disabled elsewhere for performance.
+    bool debugMode = false;
+    VOIDLIGHT_DEBUG_ONLY(debugMode = true;)
+
     // Create the GPU device using the platform-native backend this build targets.
     m_device = SDL_CreateGPUDevice(
         requestedFormats,
-#ifdef DEBUG
-        true,   // debug_mode - enable validation in debug builds
-#else
-        false,  // no validation in release for performance
-#endif
+        debugMode,
         preferredDriver
     );
 

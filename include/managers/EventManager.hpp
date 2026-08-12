@@ -17,6 +17,7 @@
  * - Built-in processing for selected engine-level event types
  */
 
+#include "core/Logger.hpp"
 #include "entities/EntityHandle.hpp"
 #include "events/EventTypeId.hpp"
 #include "utils/ResourceHandle.hpp"
@@ -30,9 +31,9 @@
 #include <mutex>
 #include <queue>
 #include <shared_mutex>
+#include <unordered_map>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 #include <limits>
 #include <algorithm>
@@ -44,8 +45,6 @@ class WeatherEvent;
 class NPCSpawnEvent;
 class MerchantSpawnEvent;
 class ResourceChangeEvent;
-class WorldEvent;
-class CameraEvent;
 class CameraMovedEvent;
 class CameraZoomChangedEvent;
 class CameraShakeStartedEvent;
@@ -171,33 +170,6 @@ private:
 };
 
 /**
- * @brief Performance statistics for monitoring
- */
-struct PerformanceStats {
-  double totalTime{0.0};
-  uint64_t callCount{0};
-  double avgTime{0.0};
-  double minTime{std::numeric_limits<double>::max()};
-  double maxTime{0.0};
-
-  void addSample(double time) {
-    totalTime += time;
-    callCount++;
-    avgTime = totalTime / callCount;
-    minTime = std::min(minTime, time);
-    maxTime = std::max(maxTime, time);
-  }
-
-  void reset() {
-    totalTime = 0.0;
-    callCount = 0;
-    avgTime = 0.0;
-    minTime = std::numeric_limits<double>::max();
-    maxTime = 0.0;
-  }
-};
-
-/**
  * @brief High-performance event processing hub
  *
  * EventManager owns handler registration, deferred queue draining,
@@ -214,7 +186,7 @@ public:
    * @brief Initializes the EventManager and its internal systems
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Checks if the Event Manager has been initialized
@@ -253,8 +225,9 @@ public:
    *          then enqueue in a single batch with one lock acquisition.
    */
   struct DeferredEvent {
-    EventTypeId typeId;
-    EventData data;
+    // Custom is a safe empty default; producers always overwrite before enqueue.
+    EventTypeId typeId{EventTypeId::Custom};
+    EventData data{};
   };
 
   /**
@@ -334,11 +307,11 @@ public:
 
   // ==================== Global Controls ====================
 
-#ifndef NDEBUG
+  VOIDLIGHT_DEBUG_ONLY(
   // Threading control (benchmarking only - compiles out in release)
   void enableThreading(bool enable);
   bool isThreadingEnabled() const;
-#endif
+  )
 
   /**
    * @brief Sets global pause state (for menu states)
@@ -462,16 +435,6 @@ public:
   // ==================== Performance & Diagnostics ====================
 
   /**
-   * @brief Gets performance stats for an event type
-   */
-  PerformanceStats getPerformanceStats(EventTypeId typeId) const;
-
-  /**
-   * @brief Resets all performance statistics
-   */
-  void resetPerformanceStats() const;
-
-  /**
    * @brief Gets the number of pending events in the dispatch queue
    */
   size_t getPendingEventCount() const;
@@ -513,8 +476,6 @@ private:
   mutable EventPool<NPCSpawnEvent> m_npcSpawnPool;
   mutable EventPool<MerchantSpawnEvent> m_merchantSpawnPool;
   mutable EventPool<ResourceChangeEvent> m_resourceChangePool;
-  mutable EventPool<WorldEvent> m_worldPool;
-  mutable EventPool<CameraEvent> m_cameraPool;
 
   // Hot-path event pools (triggered frequently during gameplay)
   mutable EventPool<ParticleEffectEvent> m_particleEffectPool;
@@ -528,30 +489,18 @@ private:
 
   // Threading and synchronization
   mutable std::shared_mutex m_handlersMutex;
-  std::atomic<bool> m_threadingEnabled{true};
+  VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_threadingEnabled{true};)
   std::atomic<bool> m_initialized{false};
   std::atomic<bool> m_globallyPaused{false};
-
-  // Performance monitoring
-  mutable std::array<PerformanceStats, static_cast<size_t>(EventTypeId::COUNT)>
-      m_performanceStats;
-  mutable std::mutex m_perfMutex;
-
-  // Timing
-  std::atomic<uint64_t> m_lastUpdateTime{0};
 
   // Deferred dispatch queue
   struct PendingDispatch {
     uint64_t sequence{0};
-    EventTypeId typeId;
-    EventData data;
+    EventTypeId typeId{EventTypeId::Custom};
+    EventData data{};
   };
   mutable std::mutex m_dispatchMutex;  // Protects concurrent enqueue from AI workers
 
-  // Async batch tracking for safe shutdown
-  std::vector<std::future<void>> m_batchFutures;
-  std::vector<std::future<void>> m_reusableBatchFutures;
-  std::mutex m_batchFuturesMutex;
   mutable std::deque<PendingDispatch> m_pendingDispatch;
   mutable std::deque<PendingDispatch> m_pendingCombatDispatch;
   mutable uint64_t m_nextDeferredSequence{0};
@@ -564,6 +513,14 @@ private:
   mutable std::vector<PreparedCombatEvent> m_preparedCombatBuffer;
   mutable std::vector<std::future<void>> m_combatPrepFutures;
 
+  // Snapshot of m_handlersByType taken once per drain, under m_handlersMutex,
+  // then used lock-free for the rest of drainDispatchQueueWithBudget(). Safe
+  // as a reused member (not a local): this function has exactly one caller
+  // (EventManager::update(), main-thread, once per frame) and is not itself
+  // reentrant, so nothing can clobber it mid-use.
+  mutable std::array<std::vector<HandlerEntry>, static_cast<size_t>(EventTypeId::COUNT)>
+      m_handlersSnapshotBuffer;
+
   void dispatchPendingEvent(const PendingDispatch& pendingDispatch,
                             std::string_view errorContext) const;
   void dispatchPendingEventWithHandlers(const PendingDispatch& pendingDispatch,
@@ -574,7 +531,6 @@ private:
   void commitPreparedCombatEvent(const PendingDispatch& pendingDispatch,
                                  const PreparedCombatEvent& preparedCombat,
                                  float gameTime) const;
-  uint64_t getCurrentTimeNanos() const;
   void enqueueDispatch(EventTypeId typeId, EventData&& data) const;
   size_t getPendingQueueSizeUnsafe() const;
   void dropOldestPendingUnsafe() const;

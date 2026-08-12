@@ -201,13 +201,17 @@ void HarvestController::completeHarvest() {
     auto& edm = EntityDataManager::Instance();
     auto& wrm = WorldResourceManager::Instance();
 
-    // Validate target is still valid
-    const auto& hot = edm.getStaticHotDataByIndex(m_targetStaticIndex);
-    if (!hot.isAlive() || hot.kind != EntityKind::Harvestable) {
+    // Validate target is still valid. Use the generation-safe handle rather than
+    // the cached static index alone: static pool slots are reused with a new
+    // generation on destroy, so a freed+reoccupied slot holding a different
+    // harvestable could otherwise pass a bare index/isAlive()/kind check.
+    if (edm.getStaticHandle(m_targetStaticIndex) != m_currentTarget) {
         HARVEST_WARN("Harvest target no longer valid");
         cancelHarvest();
         return;
     }
+
+    const auto& hot = edm.getStaticHotDataByIndex(m_targetStaticIndex);
 
     // Get harvestable data (mutable for updating depleted state)
     auto& harvestData = edm.getHarvestableData(hot.typeLocalIndex);

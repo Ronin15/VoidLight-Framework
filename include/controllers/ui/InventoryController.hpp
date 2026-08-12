@@ -17,6 +17,7 @@
 
 #include "controllers/ControllerBase.hpp"
 #include "controllers/IUpdatable.hpp"
+#include "entities/EntityHandle.hpp"
 #include "utils/ResourceHandle.hpp"
 #include <cstddef>
 #include <cstdint>
@@ -136,6 +137,11 @@ private:
     int m_draggedContainerSourceSlot{-1};
     uint32_t m_openContainerInventoryIndex{NO_OPEN_CONTAINER_INVENTORY};
     size_t m_openContainerStaticIndex{SIZE_MAX};
+    // Generation-safe identity of the open container's static-pool slot. Cached
+    // alongside the index so revalidation can reject a slot that was freed and
+    // reoccupied by a different container (static slots reuse indices with a new
+    // generation on destroy).
+    EntityHandle m_openContainerHandle{};
     VoidLight::ResourceHandle m_pendingHotbarAssignment{};
     VoidLight::ResourceHandle m_draggedHotbarAssignment{};
     VoidLight::ResourceHandle m_draggedInventoryHandle{};

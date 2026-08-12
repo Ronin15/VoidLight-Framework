@@ -506,9 +506,9 @@ BOOST_AUTO_TEST_CASE(TestStaticMovableSeparation)
     // Initialize managers
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);
 
     // Create static body via CollisionManager (buildings, obstacles)
@@ -551,9 +551,9 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes)
     // Test that broadphase performance is improved with separate static/movable storage
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);
 
     const int NUM_STATIC_BODIES = 200; // Simulate world tiles
@@ -640,9 +640,9 @@ BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM)
     // Test that batch movable updates work correctly with EDM-centric system
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(5000.0f);
 
     const int NUM_MOVABLE_BODIES = 50;
@@ -718,9 +718,9 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation)
     // Test that static body cache is properly invalidated when static bodies change
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);
 
     // Add a static body
@@ -776,7 +776,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation)
 BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation)
 {
     // Test trigger area creation and basic functionality
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Test createTriggerArea method
     AABB triggerAABB(100.0f, 100.0f, 50.0f, 50.0f);
@@ -818,7 +818,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation)
 BOOST_AUTO_TEST_CASE(TestTriggerCooldowns)
 {
     // Test trigger cooldown functionality
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Set default cooldown
     CollisionManager::Instance().setDefaultTriggerCooldown(1.5f);
@@ -846,7 +846,7 @@ BOOST_AUTO_TEST_CASE(TestBodyLayerFiltering)
     // Test collision layer filtering functionality via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Create movable entities with different layers via EDM
     EntityID playerId = 5000;
@@ -899,7 +899,7 @@ BOOST_AUTO_TEST_CASE(TestBodyEnableDisable)
     // Test body enable/disable functionality via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     EntityID bodyId = 6000;
     Vector2D pos(150.0f, 150.0f);
@@ -934,7 +934,7 @@ BOOST_AUTO_TEST_CASE(TestBodyResize)
     // Test body resize functionality via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     Vector2D originalPos(200.0f, 200.0f);
 
@@ -973,7 +973,7 @@ BOOST_AUTO_TEST_CASE(TestVelocityManagement)
     // Test velocity setting via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     EntityID bodyId = 8000;
     Vector2D pos(100.0f, 100.0f);
@@ -1027,7 +1027,7 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity)
 
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Create two overlapping NPC entities in EDM (Active tier = participates in collision)
     Vector2D posA(100.0f, 100.0f);
@@ -1051,7 +1051,7 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity)
     // EDM-CENTRIC: Use BackgroundSimulationManager to update tiers
     // This populates m_activeIndices for collision detection
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);       // Large radius to include test entities
     bgm.setBackgroundRadius(4000.0f);
     bgm.update(posA, 0.016f);           // Update with reference point near entities
@@ -1119,10 +1119,10 @@ struct CollisionIntegrationFixture {
         }
         
         // Initialize EventManager for event testing
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         
         // Initialize CollisionManager
-        CollisionManager::Instance().init();
+        BOOST_REQUIRE(CollisionManager::Instance().init());
         
         eventCount = 0;
         lastEventPosition = Vector2D(0, 0);
@@ -1423,7 +1423,7 @@ BOOST_AUTO_TEST_CASE(TestWorldBounds)
     // Test world bounds functionality
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Set world bounds
     float minX = -500.0f, minY = -300.0f;
@@ -1456,7 +1456,7 @@ BOOST_AUTO_TEST_CASE(TestLayerCollisionFiltering)
     // Test that collision detection respects layer filtering via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Create two movable bodies that should NOT collide due to layer filtering
     EntityID player1Id = 10000;
@@ -1501,7 +1501,7 @@ BOOST_AUTO_TEST_CASE(TestMixedBodyTypeInteractions)
     // Test interactions between different body types
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     EntityID movableId = 11001;
     EntityID triggerId = 11002;
@@ -1570,7 +1570,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
 
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     // Test 1: Static bodies exactly at grid boundaries
     float cellBoundary = 128.0f;
@@ -1702,7 +1702,7 @@ BOOST_AUTO_TEST_CASE(TestEDMBatchPositionUpdate)
     // EDM-CENTRIC: Test batch position updates via EntityDataManager
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     const int NUM_ENTITIES = 50;
     std::vector<EntityHandle> handles;
@@ -1757,7 +1757,7 @@ BOOST_AUTO_TEST_CASE(TestEDMMultiBatchUpdates)
     // EDM-CENTRIC: Test multiple batch updates (like AIManager does per-thread)
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     const int NUM_BATCHES = 4;
     const int ENTITIES_PER_BATCH = 25;
@@ -1822,7 +1822,7 @@ BOOST_AUTO_TEST_CASE(TestEDMBatchUpdatePerformance)
     // EDM-CENTRIC: Measure performance of batch position updates via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
 
     const int NUM_ENTITIES = 500;
     std::vector<EntityHandle> handles;
@@ -1883,9 +1883,9 @@ BOOST_AUTO_TEST_CASE(TestTriggerDetectionFlag)
     // Test that NEEDS_TRIGGER_DETECTION flag is properly set and queried
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);
 
     // Create player - should have NEEDS_TRIGGER_DETECTION flag set automatically
@@ -1948,9 +1948,9 @@ BOOST_AUTO_TEST_CASE(TestEventOnlyTriggerDetection)
     // Test that EventOnly triggers are detected via spatial queries
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);
 
     // Create player at position X
@@ -2010,11 +2010,11 @@ BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection)
     // Test that NPCs with NEEDS_TRIGGER_DETECTION flag can fire trigger events
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(2000.0f);
-    EventManager::Instance().init();
+    BOOST_REQUIRE(EventManager::Instance().init());
 
     // Create NPC with NEEDS_TRIGGER_DETECTION enabled
     EntityID npcId = 52000;
@@ -2085,9 +2085,9 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection)
     // Test that sweep-and-prune path works correctly for large entity counts
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
-    CollisionManager::Instance().init();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
     auto& bgm = BackgroundSimulationManager::Instance();
-    bgm.init();
+    BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(5000.0f);
 
     const int NUM_NPCS = 100;  // Above the sweep threshold (50)

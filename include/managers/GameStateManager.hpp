@@ -16,6 +16,19 @@ namespace VoidLight {
 class GPURenderer;
 }
 
+/**
+ * Owns the active GameState stack and transition policy.
+ *
+ * Transition contract (standard exit-then-enter):
+ * - changeState / changeStateClearingStack: exit leaving state(s) first, then
+ *   enter the destination. If enter() fails, the previous state is restored
+ *   when possible so the stack is never left empty without a recovery attempt.
+ * - Full-screen replace (stack empty after exits): GameStateManager clears
+ *   global UI via UIManager::prepareForStateTransition() before enter().
+ *   Destination enter() only builds UI; it may defensively wipe-first.
+ * - pushState / popState: overlay transitions — no full UI clear. Overlay
+ *   states add/remove their own widgets; the underlying state keeps its UI.
+ */
 class GameStateManager {
 
  public:
@@ -60,6 +73,9 @@ class GameStateManager {
   float getCurrentFPS() const { return m_currentFPS; }
 
  private:
+  // Full-screen replace only (no underlying state left on the stack).
+  void clearUIForFullScreenReplace();
+
   // All registered states, available for activation
   std::unordered_map<GameStateId, std::shared_ptr<GameState>> m_registeredStates;
   // The stack of active states

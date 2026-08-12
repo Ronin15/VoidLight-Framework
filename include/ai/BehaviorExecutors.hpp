@@ -23,10 +23,12 @@
  * All config is stored in EDM's BehaviorConfigData union.
  */
 
+#include "ai/BehaviorCommonState.hpp"       // For BehaviorData, PathData
 #include "ai/BehaviorConfig.hpp"
 #include "ai/BehaviorStateData.hpp"
-#include "managers/EntityDataManager.hpp"  // For BehaviorType, BehaviorData, PathData, etc.
-#include "managers/EventManager.hpp"       // For EventManager::DeferredEvent
+#include "managers/EntityDataTypes.hpp"     // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
+#include "managers/EventManager.hpp"        // For EventManager::DeferredEvent
+#include "managers/SparseSidecar.hpp"       // For SparseSidecar<KnockbackData>
 #include <vector>
 
 /**

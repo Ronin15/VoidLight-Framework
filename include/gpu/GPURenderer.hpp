@@ -4,12 +4,7 @@
 #ifndef GPU_RENDERER_HPP
 #define GPU_RENDERER_HPP
 
-#include "gpu/GPUTypes.hpp"
-#include "gpu/GPUDevice.hpp"
-#include "gpu/GPUTexture.hpp"
 #include "gpu/GPUSampler.hpp"
-#include "gpu/GPUBuffer.hpp"
-#include "gpu/GPUTransferBuffer.hpp"
 #include "gpu/GPUPipeline.hpp"
 #include "gpu/GPUVertexPool.hpp"
 #include "gpu/SpriteBatch.hpp"
@@ -17,9 +12,10 @@
 #include <SDL3/SDL_gpu.h>
 #include <memory>
 #include <span>
-#include <vector>
 
 namespace VoidLight {
+
+class GPUTexture;
 
 /**
  * Main GPU renderer singleton.
@@ -87,6 +83,7 @@ public:
     SDL_GPUGraphicsPipeline* getSpriteOpaquePipeline() const;
     SDL_GPUGraphicsPipeline* getSpriteAlphaPipeline() const;
     SDL_GPUGraphicsPipeline* getParticlePipeline() const;
+    SDL_GPUGraphicsPipeline* getParticlePipelineAdditive() const;
     SDL_GPUGraphicsPipeline* getPrimitivePipeline() const;
     SDL_GPUGraphicsPipeline* getCompositePipeline() const;
 
@@ -185,7 +182,7 @@ public:
 
 private:
     GPURenderer() = default;
-    ~GPURenderer() = default;
+    ~GPURenderer();
 
     // Non-copyable
     GPURenderer(const GPURenderer&) = delete;
@@ -211,7 +208,6 @@ private:
     uint32_t m_swapchainWidth{0};
     uint32_t m_swapchainHeight{0};
     bool m_frameActive{false};
-    bool m_frameReadyForPresentation{false};
 
     // Intermediate scene texture
     std::unique_ptr<GPUTexture> m_sceneTexture;
@@ -224,6 +220,7 @@ private:
     GPUPipeline m_spriteOpaquePipeline;
     GPUPipeline m_spriteAlphaPipeline;
     GPUPipeline m_particlePipeline;
+    GPUPipeline m_particlePipelineAdditive;
     GPUPipeline m_primitivePipeline;
     GPUPipeline m_compositePipeline;
 

@@ -119,9 +119,6 @@ void PathfinderManager::clean() {
     // Wait for grid rebuild tasks to complete before shutdown
     waitForGridRebuildCompletion();
 
-    // Wait for batch processing to complete before shutdown
-    waitForBatchCompletion();
-
     commitCompletedPaths();
 
     // Unsubscribe from events
@@ -159,9 +156,6 @@ void PathfinderManager::prepareForStateTransition() {
     // Wait for any running grid rebuild tasks to complete BEFORE clearing data
     // This prevents async tasks from accessing deleted world data during state transitions
     waitForGridRebuildCompletion();
-
-    // Wait for batch processing to complete before clearing data
-    waitForBatchCompletion();
 
     commitCompletedPaths();
 
@@ -298,18 +292,28 @@ uint64_t PathfinderManager::requestPath(
         std::vector<Vector2D> path;
         bool cacheHit = false;
 
-        // Cache lookup (brief lock, shared across all pathfinding tasks)
+        // Cache lookup (shared_lock allows concurrent readers)
         {
-            std::unique_lock<std::shared_mutex> lock(m_cacheMutex);
+            std::shared_lock<std::shared_mutex> lock(m_cacheMutex);
             auto it = m_pathCache.find(cacheKey);
             if (it != m_pathCache.end()) {
                 path = it->second.path;
-                it->second.lastUsed = std::chrono::steady_clock::now();
-                it->second.useCount++;
                 cacheHit = true;
                 m_cacheHits.fetch_add(1, std::memory_order_relaxed);
             } else {
                 m_cacheMisses.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+
+        // Bump cache-entry metadata under a separate try-lock so reads stay concurrent
+        if (cacheHit) {
+            std::unique_lock<std::shared_mutex> lock(m_cacheMutex, std::try_to_lock);
+            if (lock.owns_lock()) {
+                auto it = m_pathCache.find(cacheKey);
+                if (it != m_pathCache.end()) {
+                    it->second.lastUsed = std::chrono::steady_clock::now();
+                    it->second.useCount++;
+                }
             }
         }
 
@@ -844,8 +848,13 @@ void PathfinderManager::clearWeightFields() {
         return;
     }
 
+    // Publish a fresh grid with weights reset instead of mutating the live
+    // one in place. In-flight findPath() calls on worker threads hold their
+    // own gridSnapshot shared_ptr (captured at request time) and keep
+    // reading the old grid safely until they finish -- there is nothing to
+    // wait for, since nobody mutates the instance they're holding.
     if (auto grid = getGridSnapshot()) {
-        grid->resetWeights(1.0f);
+        setGrid(grid->cloneWithResetWeights(1.0f));
     }
 }
 
@@ -1504,6 +1513,10 @@ void PathfinderManager::prewarmPathCache() {
 }
 
 void PathfinderManager::subscribeToEvents() {
+    // GameEngine::init() awaits EventManager::init() before PathfinderManager::init()
+    // runs, so this gate should never bail during normal startup. It remains as
+    // defense-in-depth (e.g. standalone/test init without that ordering): if it
+    // ever trips, registration is skipped permanently with no retry.
     if (!EventManager::Instance().isInitialized()) {
         PATHFIND_WARN("EventManager not initialized, delaying event subscription");
         return;
@@ -1723,20 +1736,23 @@ void PathfinderManager::onTileChanged(int x, int y) {
 }
 
 void PathfinderManager::waitForGridRebuildCompletion() {
-    // Swap out futures to avoid holding lock during wait (mirrors AIManager pattern)
-    std::vector<std::future<void>> localFutures;
-
+    // Swap out futures into the reusable member buffer to avoid holding the lock
+    // during the wait while preserving capacity across rebuilds (mirrors AIManager pattern).
+    // waitForGridRebuildCompletion runs on the main thread during state transitions, so
+    // m_reusableGridRebuildFutures is not accessed concurrently outside the lock.
     {
         std::lock_guard<std::mutex> lock(m_gridRebuildFuturesMutex);
-        localFutures = std::move(m_gridRebuildFutures);
-        // m_gridRebuildFutures is now empty, new tasks can be added concurrently
+        m_reusableGridRebuildFutures.clear();
+        m_reusableGridRebuildFutures.swap(m_gridRebuildFutures);
+        // m_gridRebuildFutures now retains the reusable buffer's capacity, so new
+        // tasks can be added concurrently without reallocating.
     }
 
-    if (!localFutures.empty()) {
+    if (!m_reusableGridRebuildFutures.empty()) {
         PATHFIND_INFO(std::format("Waiting for {} grid rebuild task(s) to complete before state transition...",
-                      localFutures.size()));
+                      m_reusableGridRebuildFutures.size()));
 
-        for (auto& future : localFutures) {
+        for (auto& future : m_reusableGridRebuildFutures) {
             if (future.valid()) {
                 try {
                     future.wait(); // Block until task completes
@@ -1748,23 +1764,6 @@ void PathfinderManager::waitForGridRebuildCompletion() {
         }
 
         PATHFIND_INFO("Grid rebuild synchronization complete - safe to proceed with state transition");
-    }
-}
-
-void PathfinderManager::waitForBatchCompletion() {
-    // No lock needed: only called during state transitions when update is paused
-    // Use swap to preserve capacity for next use
-    m_reusableBatchFutures.clear();
-    std::swap(m_reusableBatchFutures, m_batchFutures);
-
-    for (auto& future : m_reusableBatchFutures) {
-        if (future.valid()) {
-            try {
-                future.wait();
-            } catch (const std::exception& e) {
-                PATHFIND_ERROR(std::format("Exception waiting for batch completion: {}", e.what()));
-            }
-        }
     }
 }
 

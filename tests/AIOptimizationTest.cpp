@@ -49,10 +49,21 @@ struct AITestFixture {
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
-        AIManager::Instance().init();
-        BackgroundSimulationManager::Instance().init();
+        // NOTE: global fixtures run outside any test-case context, so Boost.Test
+        // assertion macros (BOOST_REQUIRE/BOOST_CHECK) here raise a framework
+        // setup_error (exit 200) even when all cases pass. Fail via throw instead.
+        if (!CollisionManager::Instance().init()) {
+            throw std::runtime_error("CollisionManager::init() failed");
+        }
+        if (!PathfinderManager::Instance().init()) {
+            throw std::runtime_error("PathfinderManager::init() failed");
+        }
+        if (!AIManager::Instance().init()) {
+            throw std::runtime_error("AIManager::init() failed");
+        }
+        if (!BackgroundSimulationManager::Instance().init()) {
+            throw std::runtime_error("BackgroundSimulationManager::init() failed");
+        }
     }
 
     ~AITestFixture() {

@@ -7,6 +7,7 @@
 #include "core/GameEngine.hpp"
 #include "managers/GameStateManager.hpp"
 #include "managers/InputManager.hpp"
+#include "managers/SoundManager.hpp"
 #include "managers/UIConstants.hpp"
 #include "managers/UIManager.hpp"
 
@@ -17,6 +18,13 @@ bool GameOverState::enter() {
   auto& ui = UIManager::Instance();
 
   gameEngine.setGlobalPause(true);
+
+  // Want silence on this screen; gameplay may still have been playing music.
+  SoundManager::Instance().stopMusic();
+
+  // Full-screen owner: ensure a clean UI slate before building this screen.
+  // GameStateManager already clears UI on full-screen replace; this is defensive.
+  ui.prepareForStateTransition();
 
   const int windowWidth = gameEngine.getWidthInPixels();
   const int windowHeight = gameEngine.getHeightInPixels();
@@ -50,7 +58,7 @@ bool GameOverState::enter() {
                           buttonWidth, buttonHeight, "Main Menu");
 
   ui.setOnClick("gameover_retry_btn", [this]() {
-    mp_stateManager->changeState(GameStateId::GAME_PLAY);
+    mp_stateManager->changeState(m_returnState);
   });
 
   ui.setOnClick("gameover_mainmenu_btn", [this]() {
@@ -71,7 +79,7 @@ void GameOverState::handleInput() {
   const auto& inputMgr = InputManager::Instance();
 
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
-    mp_stateManager->changeState(GameStateId::GAME_PLAY);
+    mp_stateManager->changeState(m_returnState);
   }
 
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_M)) {
@@ -80,8 +88,8 @@ void GameOverState::handleInput() {
 }
 
 bool GameOverState::exit() {
-  auto& ui = UIManager::Instance();
-  ui.prepareForStateTransition();
+  // Full-screen replace: GameStateManager clears all UI after this exit().
+  UIManager::Instance().clearKeyboardSelection();
   return true;
 }
 

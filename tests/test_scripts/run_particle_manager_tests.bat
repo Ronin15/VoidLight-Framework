@@ -162,7 +162,7 @@ for %%e in (%TEST_EXECUTABLES%) do (
     
     REM Add delay between test suites for resource cleanup
     echo Allowing time for resource cleanup...
-    timeout /t 2 /nobreak >nul
+    ping -n 3 127.0.0.1 >nul
 )
 
 REM Print summary

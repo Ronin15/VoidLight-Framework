@@ -9,7 +9,7 @@
 
 using namespace VoidLight;
 
-#ifndef NDEBUG
+#ifdef VOIDLIGHT_FRAME_PROFILER_ENABLED
 
 namespace {
 

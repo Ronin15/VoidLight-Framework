@@ -30,13 +30,13 @@ public:
     GameTimeManagerTestFixture() {
         // Get the singleton instance and initialize with default values
         gameTime = &GameTimeManager::Instance();
-        gameTime->init(12.0f, 1.0f);  // Start at noon, normal time scale
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));  // Start at noon, normal time scale
     }
 
     ~GameTimeManagerTestFixture() {
         // Reset to known state for next test
         gameTime->setGlobalPause(false);  // Ensure not paused
-        gameTime->init(12.0f, 1.0f);  // Reset to defaults
+        BOOST_CHECK(gameTime->init(12.0f, 1.0f));  // Reset to defaults
     }
 
 protected:
@@ -117,7 +117,7 @@ BOOST_FIXTURE_TEST_SUITE(TimeProgressionTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestTimeProgression) {
     // Init at midnight
-    gameTime->init(0.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(0.0f, 1.0f));
     float initialHour = gameTime->getGameHour();
 
     // Update with 1 hour of game time (3600 seconds at 1.0 time scale)
@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE(TestTimeProgression) {
 
 BOOST_AUTO_TEST_CASE(TestTimeProgressionWithScale) {
     // Init at midnight with 2x time scale
-    gameTime->init(0.0f, 2.0f);
+    BOOST_REQUIRE(gameTime->init(0.0f, 2.0f));
     float initialHour = gameTime->getGameHour();
 
     // Update with 1 real hour (3600 real seconds = 2 game hours at 2x scale)
@@ -141,7 +141,7 @@ BOOST_AUTO_TEST_CASE(TestTimeProgressionWithScale) {
 
 BOOST_AUTO_TEST_CASE(TestDayProgression) {
     // Init at 23:00
-    gameTime->init(23.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(23.0f, 1.0f));
     int initialDay = gameTime->getGameDay();
 
     // Update with 2 hours (past midnight)
@@ -155,7 +155,7 @@ BOOST_AUTO_TEST_CASE(TestDayProgression) {
 }
 
 BOOST_AUTO_TEST_CASE(TestTimeScaleChange) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     BOOST_CHECK(approxEqual(gameTime->getTimeScale(), 1.0f));
 
     gameTime->setTimeScale(5.0f);
@@ -166,7 +166,7 @@ BOOST_AUTO_TEST_CASE(TestTimeScaleChange) {
 }
 
 BOOST_AUTO_TEST_CASE(TestTotalGameTimeSeconds) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     float initialSeconds = gameTime->getTotalGameTimeSeconds();
 
     // 12 hours = 43200 seconds
@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(PauseResumeTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestPauseResume) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Initially not paused
     BOOST_CHECK(!gameTime->isGloballyPaused());
@@ -203,7 +203,7 @@ BOOST_AUTO_TEST_CASE(TestPauseResume) {
 }
 
 BOOST_AUTO_TEST_CASE(TestUpdateWhilePaused) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     float initialHour = gameTime->getGameHour();
 
     // Pause and update
@@ -216,7 +216,7 @@ BOOST_AUTO_TEST_CASE(TestUpdateWhilePaused) {
 }
 
 BOOST_AUTO_TEST_CASE(TestResumeAfterPause) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Pause, then resume
     gameTime->setGlobalPause(true);
@@ -241,35 +241,35 @@ BOOST_FIXTURE_TEST_SUITE(DaytimeNighttimeTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestDaytimeDetection) {
     // Set to noon - should be daytime
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     BOOST_CHECK(gameTime->isDaytime());
     BOOST_CHECK(!gameTime->isNighttime());
 
     // Set to 8 AM - should be daytime
-    gameTime->init(8.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(8.0f, 1.0f));
     BOOST_CHECK(gameTime->isDaytime());
     BOOST_CHECK(!gameTime->isNighttime());
 }
 
 BOOST_AUTO_TEST_CASE(TestNighttimeDetection) {
     // Set to midnight - should be nighttime
-    gameTime->init(0.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(0.0f, 1.0f));
     BOOST_CHECK(!gameTime->isDaytime());
     BOOST_CHECK(gameTime->isNighttime());
 
     // Set to 3 AM - should be nighttime
-    gameTime->init(3.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(3.0f, 1.0f));
     BOOST_CHECK(!gameTime->isDaytime());
     BOOST_CHECK(gameTime->isNighttime());
 
     // Set to 22:00 (10 PM) - should be nighttime
-    gameTime->init(22.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(22.0f, 1.0f));
     BOOST_CHECK(!gameTime->isDaytime());
     BOOST_CHECK(gameTime->isNighttime());
 }
 
 BOOST_AUTO_TEST_CASE(TestCustomDaylightHours) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Set custom daylight hours: 8 AM to 6 PM
     gameTime->setDaylightHours(8.0f, 18.0f);
@@ -297,40 +297,40 @@ BOOST_FIXTURE_TEST_SUITE(TimeOfDayNameTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestTimeOfDayName) {
     // Morning: 5:00 - 8:00
-    gameTime->init(6.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(6.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Morning");
 
     // Day: 8:00 - 17:00
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Day");
 
     // Evening: 17:00 - 21:00
-    gameTime->init(19.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(19.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Evening");
 
     // Night: 21:00 - 5:00
-    gameTime->init(23.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(23.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Night");
 
-    gameTime->init(2.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(2.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Night");
 }
 
 BOOST_AUTO_TEST_CASE(TestTimeOfDayBoundaries) {
     // At 5:00 exactly - should be Morning
-    gameTime->init(5.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(5.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Morning");
 
     // At 8:00 exactly - should be Day
-    gameTime->init(8.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(8.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Day");
 
     // At 17:00 exactly - should be Evening
-    gameTime->init(17.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(17.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Evening");
 
     // At 21:00 exactly - should be Night
-    gameTime->init(21.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(21.0f, 1.0f));
     BOOST_CHECK_EQUAL(std::string(gameTime->getTimeOfDayName()), "Night");
 }
 
@@ -343,7 +343,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(SetGameHourDayTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestSetGameHour) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Set to valid hour
     gameTime->setGameHour(18.0f);
@@ -359,7 +359,7 @@ BOOST_AUTO_TEST_CASE(TestSetGameHour) {
 }
 
 BOOST_AUTO_TEST_CASE(TestSetGameHourInvalidValues) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     float initialHour = gameTime->getGameHour();
 
     // Negative hour should be ignored
@@ -372,7 +372,7 @@ BOOST_AUTO_TEST_CASE(TestSetGameHourInvalidValues) {
 }
 
 BOOST_AUTO_TEST_CASE(TestSetGameDay) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Set valid day
     gameTime->setGameDay(5);
@@ -383,7 +383,7 @@ BOOST_AUTO_TEST_CASE(TestSetGameDay) {
 }
 
 BOOST_AUTO_TEST_CASE(TestSetGameDayMinimum) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
 
     // Day 0 should be converted to 1
     gameTime->setGameDay(0);
@@ -403,7 +403,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(FormatTimeTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTime24Hour) {
-    gameTime->init(14.5f, 1.0f);  // 2:30 PM
+    BOOST_REQUIRE(gameTime->init(14.5f, 1.0f));  // 2:30 PM
 
     std::string formatted(gameTime->formatCurrentTime(true));
     BOOST_CHECK_EQUAL(formatted, "14:30");
@@ -411,18 +411,18 @@ BOOST_AUTO_TEST_CASE(TestFormatCurrentTime24Hour) {
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTime12Hour) {
     // Test PM time
-    gameTime->init(14.5f, 1.0f);  // 2:30 PM
+    BOOST_REQUIRE(gameTime->init(14.5f, 1.0f));  // 2:30 PM
     std::string formatted1(gameTime->formatCurrentTime(false));
     BOOST_CHECK_EQUAL(formatted1, "2:30 PM");
 
     // Test AM time
-    gameTime->init(9.25f, 1.0f);  // 9:15 AM
+    BOOST_REQUIRE(gameTime->init(9.25f, 1.0f));  // 9:15 AM
     std::string formatted2(gameTime->formatCurrentTime(false));
     BOOST_CHECK_EQUAL(formatted2, "9:15 AM");
 }
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTimeMidnight) {
-    gameTime->init(0.0f, 1.0f);  // Midnight
+    BOOST_REQUIRE(gameTime->init(0.0f, 1.0f));  // Midnight
 
     std::string formatted24(gameTime->formatCurrentTime(true));
     BOOST_CHECK_EQUAL(formatted24, "00:00");
@@ -432,7 +432,7 @@ BOOST_AUTO_TEST_CASE(TestFormatCurrentTimeMidnight) {
 }
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTimeNoon) {
-    gameTime->init(12.0f, 1.0f);  // Noon
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));  // Noon
 
     std::string formatted24(gameTime->formatCurrentTime(true));
     BOOST_CHECK_EQUAL(formatted24, "12:00");
@@ -456,10 +456,10 @@ public:
         eventManager = &EventManager::Instance();
 
         // Initialize EventManager for event handling
-        eventManager->init();
+        BOOST_REQUIRE(eventManager->init());
 
         // Initialize GameTime to known state
-        gameTime->init(12.0f, 1.0f);  // Start at noon, normal time scale
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));  // Start at noon, normal time scale
     }
 
     ~GameTimeEventTestFixture() {
@@ -468,7 +468,7 @@ public:
 
         // Reset time state
         gameTime->setGlobalPause(false);
-        gameTime->init(12.0f, 1.0f);
+        BOOST_CHECK(gameTime->init(12.0f, 1.0f));
     }
 
 protected:
@@ -480,7 +480,7 @@ BOOST_FIXTURE_TEST_SUITE(EventEmissionTests, GameTimeEventTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestHourChangedEventEmission) {
     // Initialize to just before hour change
-    gameTime->init(11.95f, 1.0f);  // 11:57 AM
+    BOOST_REQUIRE(gameTime->init(11.95f, 1.0f));  // 11:57 AM
 
     std::atomic<bool> eventReceived{false};
     int receivedHour = -1;
@@ -514,7 +514,7 @@ BOOST_AUTO_TEST_CASE(TestHourChangedEventEmission) {
 
 BOOST_AUTO_TEST_CASE(TestDayChangedEventEmission) {
     // Initialize to near end of day
-    gameTime->init(23.95f, 1.0f);  // 11:57 PM
+    BOOST_REQUIRE(gameTime->init(23.95f, 1.0f));  // 11:57 PM
 
     std::atomic<bool> eventReceived{false};
     int receivedDay = -1;
@@ -543,7 +543,7 @@ BOOST_AUTO_TEST_CASE(TestDayChangedEventEmission) {
 }
 
 BOOST_AUTO_TEST_CASE(TestSeasonChangedEventEmission) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     gameTime->setGameDay(30);
     gameTime->setGameHour(23.95f);
 
@@ -572,7 +572,7 @@ BOOST_AUTO_TEST_CASE(TestSeasonChangedEventEmission) {
 
 BOOST_AUTO_TEST_CASE(TestMultipleTimeEventsInSequence) {
     // Test that multiple events fire correctly in sequence
-    gameTime->init(23.5f, 1.0f);  // 11:30 PM
+    BOOST_REQUIRE(gameTime->init(23.5f, 1.0f));  // 11:30 PM
 
     std::atomic<int> hourEventCount{0};
     std::atomic<int> dayEventCount{0};
@@ -601,7 +601,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleTimeEventsInSequence) {
 }
 
 BOOST_AUTO_TEST_CASE(TestNoEventWhenPaused) {
-    gameTime->init(11.95f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(11.95f, 1.0f));
 
     std::atomic<bool> eventReceived{false};
 
@@ -633,7 +633,7 @@ BOOST_AUTO_TEST_CASE(TestNoEventWhenPaused) {
 }
 
 BOOST_AUTO_TEST_CASE(TestYearChangedEventEmission) {
-    gameTime->init(12.0f, 1.0f);
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));
     gameTime->setGameDay(120);
     gameTime->setGameHour(23.95f);
 

@@ -34,15 +34,13 @@ struct CrowdRuntimeFixture
 {
     CrowdRuntimeFixture()
     {
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        BackgroundSimulationManager::Instance().init();
-        CollisionManager::Instance().init();
+        BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
         CollisionManager::Instance().setWorldBounds(0.0f, 0.0f, 2000.0f, 2000.0f);
 
-#ifndef NDEBUG
-        AIInternal::ResetCrowdStats();
-#endif
+        VOIDLIGHT_STATS_ONLY(AIInternal::ResetCrowdStats();)
     }
 
     ~CrowdRuntimeFixture()
@@ -103,13 +101,13 @@ BOOST_AUTO_TEST_CASE(TestEmptyQueriesReuseCacheAndUpdateStats)
     BOOST_CHECK(positions.empty());
     BOOST_REQUIRE_EQUAL(reusableBuffer.size(), 1u);
 
-#ifndef NDEBUG
+    VOIDLIGHT_STATS_ONLY(
     const auto stats = AIInternal::GetCrowdStats();
     BOOST_CHECK_EQUAL(stats.queryCount, 2u);
     BOOST_CHECK_EQUAL(stats.cacheMisses, 1u);
     BOOST_CHECK_EQUAL(stats.cacheHits, 1u);
     BOOST_CHECK_EQUAL(stats.resultsCount, 0u);
-#endif
+    )
 }
 
 BOOST_AUTO_TEST_CASE(TestCacheInvalidationAndBufferReuse)
@@ -123,14 +121,14 @@ BOOST_AUTO_TEST_CASE(TestCacheInvalidationAndBufferReuse)
     BOOST_REQUIRE_EQUAL(bufferB.size(), 1u);
     BOOST_CHECK_CLOSE(bufferB[0].getX(), 1.0f, 0.001f);
 
-#ifndef NDEBUG
+    VOIDLIGHT_STATS_ONLY(
     AIInternal::ResetCrowdStats();
     const auto cleared = AIInternal::GetCrowdStats();
     BOOST_CHECK_EQUAL(cleared.queryCount, 0u);
     BOOST_CHECK_EQUAL(cleared.cacheHits, 0u);
     BOOST_CHECK_EQUAL(cleared.cacheMisses, 0u);
     BOOST_CHECK_EQUAL(cleared.resultsCount, 0u);
-#endif
+    )
 }
 
 BOOST_AUTO_TEST_SUITE_END()

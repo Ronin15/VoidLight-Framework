@@ -102,7 +102,7 @@ public:
      * @brief Initializes the PathfinderManager and its subsystems
      * @return true if initialization successful, false otherwise
      */
-    bool init();
+    [[nodiscard]] bool init();
 
     /**
      * @brief Checks if PathfinderManager has been initialized
@@ -435,8 +435,14 @@ private:
     std::atomic<bool> m_globallyPaused{false}; // Global pause state for update() early exit
     std::atomic<bool> m_prewarming{false}; // Track if cache pre-warming is in progress
 
-    // Statistics tracking
-    mutable std::atomic<uint64_t> m_enqueuedRequests{0};
+    // Statistics tracking — fetch_add'd from concurrent ThreadSystem pathfinding
+    // tasks (cacheHits/Misses, completed/failedRequests, processedCount,
+    // totalProcessingTimeMs). Cache-line isolated to avoid false sharing with the
+    // read-mostly state flags above (m_initialized/m_isShutdown/m_globallyPaused),
+    // which are read every frame in update()/requestPath(). The 7 uint64 atomics
+    // (56B) + the double atomic (8B) fill exactly one 64B line, so the trailing
+    // main-thread bookkeeping below naturally starts on the next line.
+    alignas(64) mutable std::atomic<uint64_t> m_enqueuedRequests{0};
     mutable std::atomic<uint64_t> m_enqueueFailures{0};
     mutable std::atomic<uint64_t> m_completedRequests{0};
     mutable std::atomic<uint64_t> m_failedRequests{0};
@@ -481,10 +487,6 @@ private:
     std::vector<std::future<void>> m_reusableGridRebuildFutures;  // Swap target to preserve capacity
     std::mutex m_gridRebuildFuturesMutex;
 
-    // WorkerBudget integration for coordinated batch processing
-    std::vector<std::future<void>> m_batchFutures;
-    std::vector<std::future<void>> m_reusableBatchFutures;  // Swap target to preserve capacity
-    // No mutex needed: update and state transitions never run concurrently
 
     struct PathCompletion {
         static constexpr size_t MAX_WAYPOINTS = 32;
@@ -521,9 +523,6 @@ private:
     // Auto-scaling cache optimization
     void calculateOptimalCacheSettings(); // Calculate dynamic parameters based on world size
     void prewarmPathCache(); // Seed cache with sector-based paths for fast warmup
-
-    // Batch completion synchronization
-    void waitForBatchCompletion(); // Wait for all pending batch futures to complete
 
     // Event handlers
     void onCollisionObstacleChanged(const Vector2D& position, float radius, const std::string& description);

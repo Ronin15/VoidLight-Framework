@@ -621,4 +621,5 @@ printFloat4("v", v); // Prints: v: [5.00, 5.00, 5.00, 5.00]
 - [AIManager Documentation](../ai/AIManager.md) - SIMD distance calculations
 - [CollisionManager Documentation](../managers/CollisionManager.md) - SIMD AABB operations
 - [ParticleManager Documentation](../managers/ParticleManager.md) - SIMD particle updates
+- [Build Safety Controls](../performance/BuildSafetyControls.md) - Build type safety/optimization tradeoffs, `load_byte16` bounds assertion
 - [AGENTS.md](../../AGENTS.md) - Repo build and architecture guidance for SIMD-related work

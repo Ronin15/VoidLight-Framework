@@ -34,11 +34,6 @@
 #include <future>
 #include <vector>
 
-// Forward declarations
-class EntityDataManager;
-struct EntityHotData;
-struct TransformData;
-
 namespace VoidLight {
     struct CollisionInfo;
 }

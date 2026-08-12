@@ -246,6 +246,12 @@ bool Camera::hasTarget() const {
 bool Camera::setConfig(const Config& config) {
     if (config.isValid()) {
         m_config = config;
+        // isValid() guarantees zoomLevels is non-empty. Re-clamp the active zoom
+        // index into the new range so a later zoomIn/zoomOut cannot index
+        // zoomLevels[] out of bounds, and resync m_zoom to the clamped index.
+        const int maxZoomIndex = static_cast<int>(m_config.zoomLevels.size()) - 1;
+        m_currentZoomIndex = std::clamp(m_currentZoomIndex, 0, maxZoomIndex);
+        m_zoom = m_config.zoomLevels[m_currentZoomIndex];
         CAMERA_INFO(std::format("Camera configuration updated (followLag={}s, deadZone={}px, catchup={}px)",
                                  m_config.followLag, m_config.deadZoneRadius, m_config.maxCatchupDistance));
         return true;

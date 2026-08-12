@@ -248,6 +248,32 @@ BOOST_AUTO_TEST_CASE(TestSaveToFile) {
     BOOST_CHECK_EQUAL(settings.get<std::string>("gameplay", "mode", ""), "adventure");
 }
 
+// A whole-valued float (e.g. 1.0f) must survive a save/load round-trip as a
+// float, not collapse to an int. Regression guard for the JSON layer preserving
+// integer-vs-real token identity (JsonValue::isIntegerNumber()).
+BOOST_AUTO_TEST_CASE(TestWholeValuedFloatRoundTrip) {
+    auto& settings = SettingsManager::Instance();
+
+    settings.clearAll();
+    settings.set("audio", "master_volume", 1.0f);   // whole-valued float
+    settings.set("audio", "balance", 0.0f);         // whole-valued float (zero)
+    settings.set("graphics", "vsync_level", 2);     // genuine int
+
+    BOOST_CHECK(settings.saveToFile(testFile));
+
+    settings.clearAll();
+    BOOST_CHECK(settings.loadFromFile(testFile));
+
+    // Floats reload as floats (would return the default if collapsed to int).
+    BOOST_CHECK_CLOSE(settings.get<float>("audio", "master_volume", -1.0f), 1.0f, 0.001f);
+    BOOST_CHECK_CLOSE(settings.get<float>("audio", "balance", -1.0f), 0.0f, 0.001f);
+
+    // The genuine int reloads as an int, and get<float> on it returns the
+    // default (type identity preserved in both directions).
+    BOOST_CHECK_EQUAL(settings.get<int>("graphics", "vsync_level", -1), 2);
+    BOOST_CHECK_CLOSE(settings.get<float>("graphics", "vsync_level", 42.0f), 42.0f, 0.001f);
+}
+
 BOOST_AUTO_TEST_CASE(TestChangeListener) {
     auto& settings = SettingsManager::Instance();
 

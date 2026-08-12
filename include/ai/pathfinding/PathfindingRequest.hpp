@@ -10,7 +10,7 @@
 #include <functional>
 #include <cstdint>
 #include "utils/Vector2D.hpp"
-#include "entities/Entity.hpp"
+#include "entities/EntityHandle.hpp"  // EntityID
 #include "ai/pathfinding/PathfindingGrid.hpp"
 
 namespace VoidLight {

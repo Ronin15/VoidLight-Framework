@@ -99,6 +99,8 @@ struct ChaseStateData
 
 struct PatrolStateData
 {
+    Vector2D patrolTargets[4];        // The 4 assigned patrol waypoints (persistent; NOT the EDM
+                                      // waypoint slot, which the pathfinder overwrites with nav nodes)
     Vector2D currentPatrolTarget;     // Current target waypoint position
     Vector2D assignedPosition;        // Starting/home position
     float patrolMoveTimer{0.0f};      // Timer for dwell at waypoint

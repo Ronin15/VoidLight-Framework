@@ -13,17 +13,6 @@
 #include "gpu/GPUDevice.hpp"
 #include "gpu/GPURenderer.hpp"
 #include "utils/FrameProfiler.hpp"
-#include "gameStates/AIDemoState.hpp"
-#include "gameStates/AdvancedAIDemoState.hpp"
-#include "gameStates/EventDemoState.hpp"
-#include "gameStates/GamePlayState.hpp"
-#include "gameStates/GameOverState.hpp"
-#include "gameStates/LoadingState.hpp"
-#include "gameStates/LogoState.hpp"
-#include "gameStates/MainMenuState.hpp"
-#include "gameStates/OverlayDemoState.hpp"
-#include "gameStates/SettingsMenuState.hpp"
-#include "gameStates/UIDemoState.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -32,6 +21,7 @@
 #include "managers/FontManager.hpp"  // For FrameProfiler overlay
 #include "managers/GameStateManager.hpp"
 #include "managers/GameTimeManager.hpp"
+#include "core/TimestepManager.hpp"
 #include "managers/InputManager.hpp"
 #include "managers/ParticleManager.hpp"
 #include "managers/PathfinderManager.hpp"
@@ -462,8 +452,13 @@ bool GameEngine::init(std::string_view title) {
   initTasks.reserve(12); // Reserve capacity for typical number of init tasks
 
   // CRITICAL: Initialize Event Manager FIRST - #1
-  // All other managers that register event handlers depend on this
-  initTasks.push_back(
+  // All other managers that register event handlers depend on this. Kept in its
+  // own future (not initTasks) so it can be awaited BEFORE the managers whose
+  // init() registers persistent EventManager handlers (CollisionManager::
+  // subscribeWorldEvents, PathfinderManager::subscribeToEvents). Without this
+  // ordering those subscribe paths race EventManager::init() and bail on their
+  // isInitialized() gate, permanently skipping registration.
+  auto eventFuture =
       VoidLight::ThreadSystem::Instance().enqueueTaskWithResult(
           []() -> bool {
             GAMEENGINE_INFO("Creating Event Manager");
@@ -474,7 +469,7 @@ bool GameEngine::init(std::string_view title) {
             }
             GAMEENGINE_INFO("Event Manager initialized successfully");
             return true;
-          }));
+          });
 
   // Initialize EntityDataManager - #1.5
   // Central data authority for all entities (Phase 1 of Entity System Overhaul)
@@ -521,7 +516,10 @@ bool GameEngine::init(std::string_view title) {
   const std::string textureResPath = VoidLight::ResourcePath::resolve("res/img");
   constexpr std::string_view texturePrefix = "";
 
-  texMgr.loadGPU(textureResPath, std::string(texturePrefix));
+  if (!texMgr.loadGPU(textureResPath, std::string(texturePrefix)))
+  {
+    GAMEENGINE_ERROR("Failed to load one or more GPU textures");
+  }
 
   // Initialize sound manager in a separate thread - #3
   // Resolve paths before lambda capture
@@ -540,8 +538,28 @@ bool GameEngine::init(std::string_view title) {
             GAMEENGINE_INFO("Loading sounds and music");
             constexpr std::string_view sfxPrefix = "sfx";
             constexpr std::string_view musicPrefix = "music";
-            soundMgr.loadSFX(sfxPath, std::string(sfxPrefix));
-            soundMgr.loadMusic(musicPath, std::string(musicPrefix));
+            if (!soundMgr.loadSFX(sfxPath, std::string(sfxPrefix)))
+            {
+              GAMEENGINE_ERROR("Failed to load one or more sound effects");
+            }
+            if (!soundMgr.loadMusic(musicPath, std::string(musicPrefix)))
+            {
+              GAMEENGINE_ERROR("Failed to load one or more music tracks");
+            }
+
+            // Apply persisted volume/mute settings so playback respects the
+            // Settings menu from the very first sound played this session.
+            auto &settingsMgr = VoidLight::SettingsManager::Instance();
+            bool const muted = settingsMgr.get<bool>("audio", "muted", false);
+            float const masterVolume =
+                settingsMgr.get<float>("audio", "master_volume", 1.0f);
+            float const musicVolume =
+                settingsMgr.get<float>("audio", "music_volume", 0.7f);
+            float const sfxVolume =
+                settingsMgr.get<float>("audio", "sfx_volume", 0.8f);
+            soundMgr.setMusicVolume(muted ? 0.0f : masterVolume * musicVolume);
+            soundMgr.setSFXVolume(muted ? 0.0f : masterVolume * sfxVolume);
+
             return true;
           }));
 
@@ -572,10 +590,11 @@ bool GameEngine::init(std::string_view title) {
 
   // Initialize save game manager in a separate thread - #5
   // Use SDL_GetPrefPath for a writable save location (works with bundles)
-  const char* prefPath = SDL_GetPrefPath("HammerForgedGames", VOIDLIGHT_APP_NAME);
+  char* prefPath = SDL_GetPrefPath("HammerForgedGames", VOIDLIGHT_APP_NAME);
   std::string saveDir;
   if (prefPath) {
     saveDir = prefPath;
+    SDL_free(prefPath);
     GAMEENGINE_INFO(std::format("Using SDL pref path for saves: {}", saveDir));
   } else {
     saveDir = VoidLight::ResourcePath::resolve("res");
@@ -596,6 +615,27 @@ bool GameEngine::init(std::string_view title) {
             }
             return true;
           }));
+
+  // Await EventManager before any manager whose init() registers persistent
+  // EventManager handlers. CollisionManager::init() (subscribeWorldEvents) and
+  // PathfinderManager::init() (subscribeToEvents) both register during init and
+  // are joined below, ahead of the initTasks join. Awaiting here guarantees
+  // EventManager has published its handler containers, so those subscribe paths
+  // never bail on their isInitialized() gate. EventManager::init() has no
+  // dependency on these managers, so this only serializes one-time startup.
+  GAMEENGINE_INFO(
+      "Waiting for EventManager (event-handler registration dependency)");
+  try {
+    if (!eventFuture.get()) {
+      GAMEENGINE_CRITICAL("EventManager initialization failed");
+      return false;
+    }
+  } catch (const std::exception &e) {
+    GAMEENGINE_CRITICAL(
+        std::format("EventManager initialization threw exception: {}",
+                    e.what()));
+    return false;
+  }
 
   // Initialize Pathfinder Manager - #6
   // CRITICAL: Must complete BEFORE AIManager (explicit dependency)
@@ -742,19 +782,10 @@ bool GameEngine::init(std::string_view title) {
 
   GAMEENGINE_DEBUG("UI Manager initialized successfully");
 
-  // Setting Up initial game states
-  mp_gameStateManager->addState(std::make_unique<LogoState>());
-  mp_gameStateManager->addState(
-      std::make_unique<LoadingState>()); // Shared loading screen state
-  mp_gameStateManager->addState(std::make_unique<MainMenuState>());
-  mp_gameStateManager->addState(std::make_unique<SettingsMenuState>());
-  mp_gameStateManager->addState(std::make_unique<GamePlayState>());
-  mp_gameStateManager->addState(std::make_unique<GameOverState>());
-  mp_gameStateManager->addState(std::make_unique<AIDemoState>());
-  mp_gameStateManager->addState(std::make_unique<AdvancedAIDemoState>());
-  mp_gameStateManager->addState(std::make_unique<EventDemoState>());
-  mp_gameStateManager->addState(std::make_unique<UIDemoState>());
-  mp_gameStateManager->addState(std::make_unique<OverlayDemoState>());
+  // NOTE: Concrete game states are registered by the application composition
+  // root (VoidLightMain) after init() returns, before the initial state is
+  // pushed. This keeps Core dependent only on the GameState interface and
+  // GameStateManager, never on concrete GameState subclasses.
 
   // Wait for all initialization tasks to complete
   bool allTasksSucceeded = true;
@@ -1021,6 +1052,14 @@ void GameEngine::handleEvents() {
   mp_gameStateManager->handleInput();
 }
 
+GameEngine::GameEngine() : m_windowWidth{1280}, m_windowHeight{720} {}
+
+GameEngine::~GameEngine() = default;
+
+bool GameEngine::isUsingSoftwareFrameLimiting() const {
+  return m_timestepManager->isUsingSoftwareFrameLimiting();
+}
+
 void GameEngine::setRunning(bool running) { m_running = running; }
 
 bool GameEngine::getRunning() const { return m_running; }
@@ -1076,6 +1115,10 @@ void GameEngine::update(float deltaTime) {
   if (!m_running) {
     return;
   }
+
+  // 1.5 Sound system - advances any pending delayed music start
+  //     (SoundManager::playMusic() delays the actual start; see there).
+  SoundManager::Instance().update(deltaTime);
 
   // 2. Game states - player movement and state logic
   //    MUST update BEFORE AIManager so NPCs react to current player position.

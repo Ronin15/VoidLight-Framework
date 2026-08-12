@@ -6,6 +6,7 @@
 #define BOOST_TEST_MODULE ParticleManagerPerformanceTest
 #include <boost/test/unit_test.hpp>
 
+#include "core/Logger.hpp"
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
 #include "events/ParticleEffectEvent.hpp"
@@ -37,7 +38,7 @@ struct ParticleManagerPerformanceFixture {
     }
 
     // Initialize for performance tests
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
   }
 
@@ -495,11 +496,9 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
   for (size_t targetCount : testCounts) {
     // Test single-threaded
     if (manager->isInitialized()) manager->clean();
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
-    #ifndef NDEBUG
-    manager->enableThreading(false);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(manager->enableThreading(false);)
 
     createParticles(targetCount);
     size_t actualCount = manager->getActiveParticleCount();
@@ -516,11 +515,9 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
 
     // Test multi-threaded
     if (manager->isInitialized()) manager->clean();
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
-    #ifndef NDEBUG
-    manager->enableThreading(true);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(manager->enableThreading(true);)
 
     createParticles(targetCount);
 
@@ -577,9 +574,7 @@ BOOST_FIXTURE_TEST_CASE(TestThreadingThreshold,
   std::cout << "==========================================\n" << std::endl;
 
   // Restore threading
-  #ifndef NDEBUG
-  manager->enableThreading(true);
-  #endif
+  VOIDLIGHT_DEBUG_ONLY(manager->enableThreading(true);)
 }
 
 // Ad-hoc high-count benchmarks for update cost at scale (Debug build)
@@ -592,7 +587,7 @@ BOOST_FIXTURE_TEST_CASE(HighCountBenchmarks,
   for (size_t target : targets) {
     // Fresh state
     if (manager->isInitialized()) manager->clean();
-    manager->init();
+    BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
     // Create many effects to reach target more quickly
@@ -643,7 +638,7 @@ BOOST_FIXTURE_TEST_CASE(WorkerBudgetAdaptiveTuning,
 
   // Fresh state
   if (manager->isInitialized()) manager->clean();
-  manager->init();
+  BOOST_REQUIRE(manager->init());
   manager->registerBuiltInEffects();
 
   // Part 1: Batch Sizing Hill-Climb Convergence

@@ -10,11 +10,14 @@
 #include "entities/EntityStateManager.hpp"
 #include "utils/ResourceHandle.hpp"
 #include <cstdint>
+#include <vector>
 
 namespace VoidLight {
 class Camera;
 class GPURenderer;
 }  // Forward declarations
+
+struct InventorySlotData;  // Forward declaration (defined in managers/EntityDataTypes.hpp)
 
 class Player : public Entity {
 public:
@@ -167,5 +170,9 @@ private:
 
   // PERFORMANCE: Cache gold resource handle to avoid repeated lookups in gold methods
   VoidLight::ResourceHandle m_goldHandle{};
+
+  // Reusable scratch for inventory snapshots on equip/unequip (main-thread only),
+  // avoids a per-call heap allocation when copying inventory slots
+  mutable std::vector<InventorySlotData> m_inventorySnapshotSlots;
 };
 #endif // PLAYER_HPP

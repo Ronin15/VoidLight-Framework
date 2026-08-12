@@ -43,7 +43,7 @@ getOrLoadResourceByName(ResourceTemplateManager *manager,
     return handle;
   }
 
-  manager->loadResourcesFromJson("res/data/materials.json");
+  BOOST_REQUIRE(manager->loadResourcesFromJson("res/data/materials.json"));
 
   handle = findResourceByName(manager, name);
   return handle;
@@ -717,7 +717,7 @@ BOOST_AUTO_TEST_CASE(TestWorldRemovalClearsRegistrations) {
   BOOST_CHECK(!worldManager->hasWorld(worldId));
 
   // Recreate world - should be empty
-  worldManager->createWorld(worldId);
+  BOOST_REQUIRE(worldManager->createWorld(worldId));
   BOOST_CHECK_EQUAL(worldManager->getInventoryCount(worldId), 0);
   BOOST_CHECK_EQUAL(worldManager->queryInventoryTotal(worldId, goldHandle), 0);
 

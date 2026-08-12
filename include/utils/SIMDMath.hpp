@@ -18,7 +18,11 @@
  * for multiple platforms without duplicating logic.
  */
 
+#include <algorithm>
+#include <bit>
+#include <cassert>
 #include <cmath>
+#include <cstdint>
 
 // ============================================================================
 // Platform Detection
@@ -275,7 +279,7 @@ inline Float4 mul(Float4 a, Float4 b) {
  * More efficient than separate mul + add on modern CPUs
  */
 inline Float4 madd(Float4 a, Float4 b, Float4 c) {
-#if defined(VOIDLIGHT_SIMD_AVX2)
+#if defined(VOIDLIGHT_SIMD_AVX2) && defined(__FMA__)
     return _mm_fmadd_ps(a, b, c);
 #elif defined(VOIDLIGHT_SIMD_NEON)
     return vmlaq_f32(c, a, b);
@@ -582,8 +586,13 @@ inline Int4 shift_right_int(Int4 v) {
 
 /**
  * @brief Load 16 bytes from memory
+ * @param ptr Pointer to at least `remaining` bytes
+ * @param remaining Valid byte count available at ptr; caller-known loop bound,
+ * checked here so a future change to that bound fails loudly instead of
+ * silently reading past the buffer.
  */
-inline Byte16 load_byte16(const uint8_t* ptr) {
+inline Byte16 load_byte16(const uint8_t* ptr, size_t remaining) {
+    assert(remaining >= 16 && "load_byte16: fewer than 16 bytes available at ptr");
 #if defined(VOIDLIGHT_SIMD_SSE2)
     return _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr));
 #elif defined(VOIDLIGHT_SIMD_NEON)

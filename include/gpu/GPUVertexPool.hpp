@@ -64,11 +64,10 @@ public:
 
     /**
      * Upload vertex data to the GPU buffer.
-     * Must be called during a copy pass.
+     * Must be called during a copy pass. No-op when there is nothing to upload.
      * @param copyPass Active copy pass
-     * @return true on success
      */
-    bool upload(SDL_GPUCopyPass* copyPass);
+    void upload(SDL_GPUCopyPass* copyPass);
 
     // Accessors
     SDL_GPUBuffer* getGPUBuffer() const { return m_gpuBuffers[m_frameIndex].get(); }

@@ -228,6 +228,7 @@ bool InventoryController::tryOpenNearbyContainer() {
     closeOpenContainer();
     container.setOpen(true);
     m_openContainerStaticIndex = closestIndex;
+    m_openContainerHandle = edm.getStaticHandle(closestIndex);
     m_openContainerInventoryIndex = container.inventoryIndex;
     setInventoryVisible(true);
     refreshContainerUI();
@@ -246,18 +247,16 @@ void InventoryController::update(float) {
     }
 
     auto& edm = EntityDataManager::Instance();
-    if (m_openContainerStaticIndex >= edm.getStaticHotDataArray().size() ||
+    // Generation-safe revalidation: getStaticHandle() returns an invalid handle
+    // for an out-of-bounds, dead, or reoccupied slot (different generation/kind),
+    // so this single check subsumes the bounds/isAlive()/kind guards.
+    if (edm.getStaticHandle(m_openContainerStaticIndex) != m_openContainerHandle ||
         !edm.isValidInventoryIndex(m_openContainerInventoryIndex)) {
         closeOpenContainer();
         return;
     }
 
     const auto& hot = edm.getStaticHotDataByIndex(m_openContainerStaticIndex);
-    if (!hot.isAlive() || hot.kind != EntityKind::Container) {
-        closeOpenContainer();
-        return;
-    }
-
     const Vector2D delta = hot.transform.position - player->getPosition();
     const float distanceSq =
         (delta.getX() * delta.getX()) + (delta.getY() * delta.getY());
@@ -914,7 +913,10 @@ void InventoryController::refreshContainerUI() {
     }
 
     auto& edm = EntityDataManager::Instance();
-    if (!edm.isValidInventoryIndex(m_openContainerInventoryIndex)) {
+    // Generation-safe revalidation: reject a static slot that was freed and
+    // reoccupied by a different container before refreshing its UI.
+    if (edm.getStaticHandle(m_openContainerStaticIndex) != m_openContainerHandle ||
+        !edm.isValidInventoryIndex(m_openContainerInventoryIndex)) {
         closeOpenContainer();
         return;
     }
@@ -1338,6 +1340,7 @@ void InventoryController::closeOpenContainer() {
 
     m_openContainerInventoryIndex = NO_OPEN_CONTAINER_INVENTORY;
     m_openContainerStaticIndex = SIZE_MAX;
+    m_openContainerHandle = EntityHandle{};
     if (m_draggedContainerHandle.isValid()) {
         updateDragGhost(VoidLight::ResourceHandle{}, false);
     }

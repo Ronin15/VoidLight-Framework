@@ -250,7 +250,12 @@ struct GlobalFixture {
         if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("ThreadSystem::init() failed");
         }
-        EventManager::Instance().init();
+        // Global fixtures run outside any test-case context; a Boost.Test
+        // assertion macro here raises a framework setup_error (exit 200) even
+        // when all cases pass. Fail via throw instead.
+        if (!EventManager::Instance().init()) {
+            throw std::runtime_error("EventManager::init() failed");
+        }
     }
 
     ~GlobalFixture() {
@@ -277,7 +282,7 @@ BOOST_GLOBAL_FIXTURE(GlobalFixture);
 struct EventManagerScalingFixture {
     EventManagerScalingFixture() {
         // Initialize EventManager
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
@@ -291,7 +296,7 @@ struct EventManagerScalingFixture {
 
         // Reset EventManager
         EventManager::Instance().clean();
-        EventManager::Instance().init();
+        BOOST_CHECK(EventManager::Instance().init());
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
@@ -303,9 +308,7 @@ struct EventManagerScalingFixture {
         cleanup();
         handlers.clear();
 
-        #ifndef NDEBUG
-        EventManager::Instance().enableThreading(true);
-        #endif
+        VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(true);)
         // Use default threshold (100) - matches EventManager::m_threadingThreshold
 
         // WorkerBudget: all workers available to each manager during its update window
@@ -770,10 +773,13 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
     auto runBenchmark = [&](int numTriggers, bool useThreading) -> double {
         // Reset
         EventManager::Instance().clean();
-        EventManager::Instance().init();
-        #ifndef NDEBUG
-        EventManager::Instance().enableThreading(useThreading);
-        #endif
+        BOOST_REQUIRE(EventManager::Instance().init());
+        // enableThreading() is a Debug-only benchmark toggle (same convention as
+        // AIManager/ParticleManager/CollisionManager's m_useThreading); outside
+        // Debug this reference is dead-code-eliminated (same technique as the
+        // Logger.hpp macros), so useThreading is never actually unused.
+        if (false) { (void)useThreading; }
+        VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(useThreading);)
         std::this_thread::sleep_for(std::chrono::milliseconds(30));
 
         // Register handlers
@@ -863,9 +869,7 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
     std::cout << "========================================\n" << std::endl;
 
     // Restore threading
-    #ifndef NDEBUG
-    EventManager::Instance().enableThreading(true);
-    #endif
+    VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(true);)
 }
 
 // ---------------------------------------------------------------------------
@@ -890,7 +894,7 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
 
     // Setup handlers
     eventMgr.clean();
-    eventMgr.init();
+    BOOST_REQUIRE(eventMgr.init());
     std::atomic<int> callCount{0};
     for (int i = 0; i < 3; ++i) {
         eventMgr.registerHandler(EventTypeId::Weather,
@@ -968,7 +972,7 @@ BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
 
     auto& eventMgr = EventManager::Instance();
     eventMgr.clean();
-    eventMgr.init();
+    BOOST_REQUIRE(eventMgr.init());
 
     // Register a simple handler
     std::atomic<int> handlerCalls{0};
@@ -1120,7 +1124,7 @@ BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
     std::cout << "Batch speedup: " << std::setprecision(2) << (singleNoAlloc / batchNoAlloc) << "x" << std::endl;
 
     eventMgr.clean();
-    eventMgr.init();
+    BOOST_REQUIRE(eventMgr.init());
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,7 +1163,7 @@ BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
         EntityDataManager::Instance().clean();
 
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        EventManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
     };
 
     auto setupCombatScene = [&resetCombatManagers](int totalEvents) {

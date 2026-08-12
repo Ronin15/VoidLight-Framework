@@ -72,7 +72,12 @@ private:
   // --- Controllers (owned by ControllerRegistry) ---
   ControllerRegistry m_controllers;
 
-  // Data-driven NPC rendering (direct member like AdvancedAIDemoState)
+  // Data-driven NPC/projectile rendering (direct members like AdvancedAIDemoState).
+  // Intentional asymmetry: these are NOT IUpdatable and are driven explicitly from
+  // update()/render() because their per-frame work needs ordering the registry's
+  // updateAll() does not provide. ResourceRenderController lives in m_controllers
+  // instead because it requires a camera argument (resourceCtrl->update(dt, *m_camera))
+  // and so cannot participate in the parameterless updateAll() pass either.
   NPCRenderController m_npcRenderCtrl{};
   ProjectileRenderController m_projectileRenderCtrl{};
 

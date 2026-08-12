@@ -4,11 +4,11 @@ project(VoidLight_Template VERSION 1.0.0 LANGUAGES C CXX)
 # Set build configurations
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug" CACHE STRING
-        "Choose the type of build (Debug, Release, or Profile)" FORCE)
+        "Choose the type of build (Debug, Release, Profile, or ReleaseSafe)" FORCE)
 endif()
 
 # Define available build configurations
-set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Profile" CACHE STRING "" FORCE)
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release;Profile;ReleaseSafe" CACHE STRING "" FORCE)
 
 # Set output directory paths based on build type
 set(OUTPUT_BASE_DIR "${CMAKE_SOURCE_DIR}/bin")
@@ -22,19 +22,19 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR})
 # Debug build settings
 if(APPLE)
     # macOS-specific debug flags with dSYM generation and LLDB compatibility
-    set(CMAKE_C_FLAGS_DEBUG 
-        "-g3 -O0 -gdwarf-4 -glldb -fno-limit-debug-info -DDEBUG")
+    set(CMAKE_C_FLAGS_DEBUG
+        "-g3 -O0 -gdwarf-4 -glldb -fno-limit-debug-info -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
     set(CMAKE_CXX_FLAGS_DEBUG
-        "-g3 -O0 -Wall -Wextra -Wpedantic -gdwarf-4 -glldb -fno-limit-debug-info -fstandalone-debug -DDEBUG")
+        "-g3 -O0 -Wall -Wextra -Wpedantic -gdwarf-4 -glldb -fno-limit-debug-info -fstandalone-debug -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
     
     # Ensure debug symbols are preserved (don't strip them)
     set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -g")
     set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -g")
 else()
     # Other platforms
-    set(CMAKE_C_FLAGS_DEBUG 
-        "${CMAKE_C_FLAGS_DEBUG} -g3 -O0 -DDEBUG")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g3 -O0 -Wall -Wextra -Wpedantic -DDEBUG")
+    set(CMAKE_C_FLAGS_DEBUG
+        "${CMAKE_C_FLAGS_DEBUG} -g3 -O0 -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g3 -O0 -Wall -Wextra -Wpedantic -DDEBUG -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
 endif()
 
 # Release build settings - keep minimal safe flags for dependencies (SDL3 etc.)
@@ -47,8 +47,8 @@ set(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} -flt
 if(APPLE)
     # Apple Silicon specific optimizations
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64")
-        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -mcpu=apple-m1")
-        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mcpu=apple-m1")
+        set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -mcpu=native")
+        set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -mcpu=native")
     endif()
 
     # Aggressive flags for our project targets only (not SDL3)
@@ -63,6 +63,27 @@ else()
     set(VOIDLIGHT_AGGRESSIVE_FLAGS
         "-ffunction-sections -fdata-sections -Wl,--gc-sections -ffast-math -ftree-vectorize \
         -funroll-loops -march=x86-64-v3 -mtune=generic -msse4.2 -mavx -mavx2 -mfma")
+endif()
+
+# ReleaseSafe build settings - optimized but with assertions and STL bounds checks preserved
+# Deliberately omits -DNDEBUG so assert()/BOOST_REQUIRE-style checks stay live, and skips
+# the aggressive Release-only flags (-ffast-math, unrolling, wide SIMD) below.
+# STL hardening (VOIDLIGHT_HARDENING_FLAGS) is applied only to our project targets further
+# below, not here, to keep FetchContent dependencies (SDL3, SDL3_ttf, SDL3_mixer) unaffected -
+# same reasoning as VOIDLIGHT_AGGRESSIVE_FLAGS for Release.
+# VOIDLIGHT_STATS_ENABLED gates telemetry/counter code that is fine to keep
+# in a soak-testing build but must never ship in Release or Profile (see
+# VOIDLIGHT_STATS_ONLY in core/Logger.hpp).
+set(CMAKE_C_FLAGS_RELEASESAFE "-O2 -g -DVOIDLIGHT_STATS_ENABLED -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
+set(CMAKE_CXX_FLAGS_RELEASESAFE "-O2 -g -Wall -Wextra -Wpedantic -DVOIDLIGHT_STATS_ENABLED -DVOIDLIGHT_FRAME_PROFILER_ENABLED")
+
+if(APPLE)
+    # libc++ (Xcode 16.3+/recent LLVM) removed _LIBCPP_ENABLE_ASSERTIONS in favor of
+    # _LIBCPP_HARDENING_MODE. EXTENSIVE covers container bounds/precondition checks,
+    # matching what _GLIBCXX_ASSERTIONS provides on libstdc++ platforms.
+    set(VOIDLIGHT_HARDENING_FLAGS "-D_LIBCPP_HARDENING_MODE=_LIBCPP_HARDENING_MODE_EXTENSIVE")
+else()
+    set(VOIDLIGHT_HARDENING_FLAGS "-D_GLIBCXX_ASSERTIONS")
 endif()
 
 # Profile build settings - Valgrind-compatible optimized build
@@ -145,7 +166,7 @@ endif()
 
 # Check for Boost unit test framework (optional, only needed for tests)
 # SaveGameManager now uses header-only binary serialization (no Boost dependency)
-find_package(Boost QUIET COMPONENTS unit_test_framework)
+find_package(Boost 1.80.0 QUIET COMPONENTS unit_test_framework)
 
 if(Boost_FOUND AND TARGET Boost::unit_test_framework)
     message(STATUS "Found Boost Unit Test Framework - Tests will be enabled")
@@ -160,9 +181,9 @@ message(STATUS
 
 # Specify the stable release tags for each SDL3 component
 # SDL3 3.4.0 is first stable release - includes native PNG loading (SDL_LoadPNG)
-set(SDL3_GIT_TAG "release-3.4.10")          # SDL3 3.4.0 stable release
-set(SDL3_TTF_GIT_TAG "release-3.2.2")      # SDL3_ttf stable release
-set(SDL3_MIXER_GIT_TAG "release-3.2.0")    # SDL3_mixer stable release
+set(SDL3_GIT_TAG "release-3.4.14")         # SDL3 current stable release
+set(SDL3_TTF_GIT_TAG "release-3.2.2")      # SDL3_ttf current stable release
+set(SDL3_MIXER_GIT_TAG "release-3.2.4")    # SDL3_mixer current stable release
 
 # Download and configure SDL3
 FetchContent_Declare(
@@ -184,9 +205,9 @@ FetchContent_Declare(
 )
 
 # Build options for SDL3_ttf
-set(SDL3TTF_SAMPLES FALSE CACHE BOOL "Build the SDL3_ttf sample programs")
-set(SDL3TTF_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
-set(SDL3TTF_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
+set(SDLTTF_SAMPLES FALSE CACHE BOOL "Build the SDL3_ttf sample programs")
+set(SDLTTF_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
+set(SDLTTF_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
 
 # Download and configure SDL3_mixer
 FetchContent_Declare(
@@ -196,15 +217,19 @@ FetchContent_Declare(
 )
 
 # Build options for SDL3_mixer
-set(SDL3MIXER_SAMPLES FALSE CACHE BOOL "Build the SDL3_mixer sample programs")
-set(SDL3MIXER_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
-set(SDL3MIXER_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
+set(SDLMIXER_SAMPLES FALSE CACHE BOOL "Build the SDL3_mixer sample programs")
+set(SDLMIXER_VENDORED TRUE CACHE BOOL "Use vendored third-party libraries")
+set(SDLMIXER_DEPS_SHARED FALSE CACHE BOOL "Use shared dependencies")
+# SDL3_mixer 3.2.0 vendored mpg123: its cmake exports the binary dir as the build-interface
+# include path but never generates or copies mpg123.h there (only via install()).
+# Disable mpg123 and rely on SDL_mixer's built-in drmp3 decoder for MP3 instead.
+set(SDLMIXER_MP3_MPG123 OFF CACHE BOOL "" FORCE)
 
 # Make the SDL3 packages available
 FetchContent_MakeAvailable(SDL3 SDL3_ttf SDL3_mixer)
 
 # Find all source files
-file(GLOB_RECURSE SOURCES
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     "src/core/*.cpp"
     "src/managers/*.cpp"
     "src/gameStates/*.cpp"
@@ -222,7 +247,7 @@ list(FILTER SOURCES EXCLUDE REGEX ".*VoidLightMain\\.cpp$")
 
 # SDL3_GPU support is mandatory for this project.
 # Add GPU module sources
-file(GLOB GPU_SOURCES "src/gpu/*.cpp")
+file(GLOB GPU_SOURCES CONFIGURE_DEPENDS "src/gpu/*.cpp")
 list(APPEND SOURCES ${GPU_SOURCES})
 
 if(WIN32)
@@ -447,6 +472,10 @@ elseif(CMAKE_BUILD_TYPE STREQUAL "Profile")
     # Profile build: Valgrind-compatible optimization (no AVX, SSE4.2 max)
     separate_arguments(_voidlight_opt_flags NATIVE_COMMAND "${VOIDLIGHT_PROFILE_FLAGS}")
     target_compile_options(VoidLightObjects PRIVATE ${_voidlight_opt_flags})
+elseif(CMAKE_BUILD_TYPE STREQUAL "ReleaseSafe")
+    # ReleaseSafe build: STL hardening (bounds/precondition checks) for our code only
+    separate_arguments(_voidlight_opt_flags NATIVE_COMMAND "${VOIDLIGHT_HARDENING_FLAGS}")
+    target_compile_options(VoidLightObjects PRIVATE ${_voidlight_opt_flags})
 endif()
 
 # Create static library for tests
@@ -466,6 +495,9 @@ add_executable(${PROJECT_NAME}
     $<TARGET_OBJECTS:VoidLightObjects>
     src/core/VoidLightMain.cpp
 )
+
+# Convenience alias for the dev loop: build and link just the main binary
+add_custom_target(app DEPENDS ${PROJECT_NAME})
 
 # Configure window icon
 # Note: The icon is set programmatically via SDL_SetWindowIcon in GameEngine.cpp

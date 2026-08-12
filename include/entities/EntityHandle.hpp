@@ -13,6 +13,11 @@
 #include <ostream>
 #include <string>
 
+// Type alias for entity ID (moved here from Entity.hpp so lightweight
+// consumers that only need entity identity don't have to pull in the full
+// Entity class).
+using EntityID = VoidLight::UniqueID::IDType;
+
 /**
  * @brief Entity type enumeration for fast type checking without RTTI
  *
@@ -167,8 +172,13 @@ struct EntityHandle {
 
     // Construct with all components
     constexpr EntityHandle(IDType entityId, EntityKind entityKind,
-                          Generation gen) noexcept
-        : id(entityId), kind(entityKind), padding{}, generation(gen) {}
+                          Generation entityGeneration) noexcept
+        : id(entityId)
+        , kind(entityKind)
+        , padding{}
+        , generation(entityGeneration)
+    {
+    }
 
     // Validity check
     [[nodiscard]] constexpr bool isValid() const noexcept {

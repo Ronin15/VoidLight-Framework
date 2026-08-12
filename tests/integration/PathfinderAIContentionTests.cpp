@@ -55,9 +55,9 @@ BOOST_AUTO_TEST_SUITE(PathfinderAIContentionTestSuite)
 struct ContentionFixture {
     ContentionFixture() {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
-        EventManager::Instance().init();
-        CollisionManager::Instance().init();
-        PathfinderManager::Instance().init();
+        BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(CollisionManager::Instance().init());
+        BOOST_REQUIRE(PathfinderManager::Instance().init());
         PathfinderManager::Instance().resetStats();
         BOOST_REQUIRE(AIManager::Instance().init());
     }

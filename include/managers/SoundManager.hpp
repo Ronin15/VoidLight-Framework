@@ -27,7 +27,7 @@ public:
    * @brief Initializes the SoundManager and SDL audio subsystem
    * @return true if initialization successful, false otherwise
    */
-  bool init();
+  [[nodiscard]] bool init();
 
   /**
    * @brief Loads a sound effect from a file or all sound effects from a
@@ -38,7 +38,7 @@ public:
    * loading directory
    * @return true if at least one sound was loaded successfully, false otherwise
    */
-  bool loadSFX(const std::string &filePath, const std::string &soundID);
+  [[nodiscard]] bool loadSFX(const std::string &filePath, const std::string &soundID);
 
   /**
    * @brief Loads a music file for background music playback
@@ -46,24 +46,37 @@ public:
    * @param musicID Unique identifier for the music track(s)
    * @return true if music was loaded successfully, false otherwise
    */
-  bool loadMusic(const std::string &filePath, const std::string &musicID);
+  [[nodiscard]] bool loadMusic(const std::string &filePath, const std::string &musicID);
 
   /**
    * @brief Plays a loaded sound effect
    * @param soundID Unique identifier of the sound effect to play
    * @param loops Number of additional loops to play (0 = play once, default: 0)
-   * @param volume Volume level from 0.0-1.0 (default: 1.0)
+   * @param volume Per-call gain multiplier (default: 1.0). Multiplied by the
+   *               global SFX volume; the product is clamped to 0.0-10.0.
    */
   void playSFX(const std::string &soundID, int loops = 0, float volume = 1.0f);
 
   /**
-   * @brief Plays a loaded music track
+   * @brief Stops whatever music is currently playing and requests a new
+   * track to start after a short delay (MUSIC_START_DELAY_SEC), rather than
+   * immediately. A later playMusic()/stopMusic() call replaces or cancels a
+   * still-pending request. Requires update() to be called each frame for
+   * the delay to advance.
    * @param musicID Unique identifier of the music track to play
    * @param loops Number of loops (-1 = infinite loop, default: -1)
-   * @param volume Volume level from 0.0-1.0 (default: 1.0)
+   * @param volume Per-call gain multiplier (default: 1.0). Multiplied by the
+   *               global music volume; the product is clamped to 0.0-10.0.
    */
   void playMusic(const std::string &musicID, int loops = -1,
                  float volume = 1.0f);
+
+  /**
+   * @brief Advances the pending delayed music-start timer (see playMusic()).
+   * Call once per frame from the main loop.
+   * @param deltaTime Seconds elapsed since the last update
+   */
+  void update(float deltaTime);
 
   /**
    * @brief Pauses currently playing music
@@ -88,13 +101,15 @@ public:
 
   /**
    * @brief Sets the global music volume level
-   * @param volume Volume level from 0.0-1.0
+   * @param volume Volume level from 0.0-10.0 (1.0 = unity gain; values >1.0
+   *               amplify). Inputs are clamped to this range.
    */
   void setMusicVolume(float volume);
 
   /**
    * @brief Sets the global sound effects volume level
-   * @param volume Volume level from 0.0-1.0
+   * @param volume Volume level from 0.0-10.0 (1.0 = unity gain; values >1.0
+   *               amplify). Inputs are clamped to this range.
    */
   void setSFXVolume(float volume);
 
@@ -131,13 +146,13 @@ public:
 
   /**
    * @brief Gets the current music volume level
-   * @return Current music volume (0.0-1.0)
+   * @return Current music volume (0.0-10.0; 1.0 = unity gain)
    */
   float getMusicVolume() const { return m_musicVolume; }
 
   /**
    * @brief Gets the current sound effects volume level
-   * @return Current SFX volume (0.0-1.0)
+   * @return Current SFX volume (0.0-10.0; 1.0 = unity gain)
    */
   float getSFXVolume() const { return m_sfxVolume; }
 
@@ -156,26 +171,40 @@ private:
   // Audio storage
   std::unordered_map<std::string, MIX_Audio *> m_audioMap{};
 
-  // Track management for active sounds
-  std::unordered_map<std::string, std::vector<MIX_Track *>> m_activeSfxTracks{};
-  std::vector<MIX_Track *> m_activeMusicTracks{};
-  std::unordered_map<MIX_Track *, std::string>
+  // Track management for active sounds. Mutable because cleanupStoppedTracks()
+  // reaps dead tracks from const observer paths (e.g. isMusicPlaying()).
+  mutable std::unordered_map<std::string, std::vector<MIX_Track *>> m_activeSfxTracks{};
+  mutable std::vector<MIX_Track *> m_activeMusicTracks{};
+  mutable std::unordered_map<MIX_Track *, std::string>
       m_trackToAudioMap{}; // Track -> AudioID mapping
 
   // State management
   bool m_initialized{false};
-  std::atomic<bool> m_sfxLoaded{false};
-  std::atomic<bool> m_musicLoaded{false};
   std::mutex m_loadMutex{};
   std::atomic<bool> m_isShutdown{false};
   float m_musicVolume{1.0f};
   float m_sfxVolume{1.0f};
 
+  // Delayed music start: playMusic() queues a request instead of playing
+  // immediately; update() starts it once the delay elapses. A later
+  // playMusic()/stopMusic() call replaces/cancels the pending request.
+  static constexpr float MUSIC_START_DELAY_SEC = 2.0f;
+  struct PendingMusicRequest {
+    std::string musicID;
+    int loops{-1};
+    float volume{1.0f};
+    float delayRemaining{0.0f};
+    bool active{false};
+  };
+  PendingMusicRequest m_pendingMusic{};
+
   // Internal helper methods
-  bool loadAudio(const std::string &filePath, const std::string &idPrefix);
+  [[nodiscard]] bool loadAudio(const std::string &filePath, const std::string &idPrefix);
   MIX_Track *createAndConfigureTrack(MIX_Group *group, const std::string &tag);
-  void cleanupStoppedTracks();
+  void cleanupStoppedTracks() const;
   std::vector<std::string> getSupportedExtensions() const;
+  void playMusicImmediate(const std::string &musicID, int loops, float volume);
+  void stopActiveMusicTracks();
 
   // Delete copy constructor and assignment operator
   SoundManager(const SoundManager &) = delete;            // Prevent copying

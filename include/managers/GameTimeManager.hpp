@@ -19,26 +19,15 @@
  * - Time-based events and scheduling
  */
 
+#include "managers/Season.hpp"
 #include <atomic>
 #include <chrono>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <cstdint>
 
 // Forward declaration
 enum class WeatherType;
-
-/**
- * @brief Type-safe season enumeration
- */
-enum class Season : uint8_t
-{
-    Spring = 0,
-    Summer = 1,
-    Fall = 2,
-    Winter = 3
-};
 
 /**
  * @brief Weather probability configuration for a season
@@ -120,7 +109,7 @@ public:
      * @param timeScale Scale factor for time progression (1.0 = real time)
      * @return True if initialization succeeded, false otherwise
      */
-    bool init(float startHour = 12.0f, float timeScale = 1.0f);
+    [[nodiscard]] bool init(float startHour = 12.0f, float timeScale = 1.0f);
 
     /**
      * @brief Update game time based on real elapsed time

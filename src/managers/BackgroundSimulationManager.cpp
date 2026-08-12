@@ -378,16 +378,13 @@ void BackgroundSimulationManager::simulateNPC(float deltaTime, size_t index) {
     }
 }
 
-void BackgroundSimulationManager::simulateItem(float, size_t index) {
-    auto& edm = EntityDataManager::Instance();
-
+void BackgroundSimulationManager::simulateItem(float, size_t) {
     // Items in background tier:
     // - Update pickup timer if still counting down
     // - Could implement despawn timer for dropped items
-
-    // Get item data
-    auto hotData = edm.getHotDataByIndex(index);
-    if (hotData.kind != EntityKind::DroppedItem) return;
+    //
+    // processBatch already validated aliveness and routed only DroppedItem
+    // entities here, so no re-fetch or kind re-check is needed.
 
     // Items don't need position simulation - they stay where dropped
     // The main purpose of background item simulation is:

@@ -68,11 +68,13 @@ void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config,
     state.assignedPosition = hotData.transform.position;
     state.patrolThrottleTimer = 0.0f;
 
-    // Generate initial waypoints in the waypoint slot
-    auto waypointSlot = edm.getWaypointSlot(edmIndex);
+    // Generate the 4 persistent patrol targets into PatrolStateData. These must NOT live in the
+    // EDM waypoint slot: PathfinderManager overwrites that slot with computed nav-path nodes once a
+    // path completes, which would otherwise collapse the patrol route to the first few path nodes.
     for (size_t i = 0; i < 4; ++i) {
-        waypointSlot[i] = generateRandomWaypoint(hotData.transform.position, config.boundaryPadding);
+        state.patrolTargets[i] = generateRandomWaypoint(hotData.transform.position, config.boundaryPadding);
     }
+    state.currentPatrolTarget = state.patrolTargets[0];
 
     shared.setInitialized(true);
 }
@@ -134,17 +136,15 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
     Vector2D currentPos = ctx.transform.position;
     auto& edm = EntityDataManager::Instance();
 
-    // Get waypoints from slot
-    auto waypointSlot = edm.getWaypointSlot(ctx.edmIndex);
-
-    // Check if at current waypoint
-    Vector2D currentWaypoint = waypointSlot[patrol.currentPatrolIndex % 4];
+    // Patrol goal comes from the persistent PatrolStateData targets, not the EDM waypoint slot
+    // (the pathfinder owns that slot). The slot below is still used for nav-path following.
+    Vector2D currentWaypoint = patrol.patrolTargets[patrol.currentPatrolIndex % 4];
     if (isAtWaypoint(currentPos, currentWaypoint, config.waypointReachedRadius)) {
         patrol.patrolMoveTimer += elapsed;
         if (patrol.patrolMoveTimer >= config.waypointCooldown) {
             patrol.currentPatrolIndex = (patrol.currentPatrolIndex + 1) % 4;
             patrol.patrolMoveTimer = 0.0f;
-            patrol.currentPatrolTarget = waypointSlot[patrol.currentPatrolIndex];
+            patrol.currentPatrolTarget = patrol.patrolTargets[patrol.currentPatrolIndex];
         }
         ctx.transform.velocity = Vector2D(0, 0);
         return;
@@ -210,7 +210,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
         if (shared.separationTimer > config.advanceWaypointDelay) {
             // Skip to next waypoint
             patrol.currentPatrolIndex = (patrol.currentPatrolIndex + 1) % 4;
-            patrol.currentPatrolTarget = waypointSlot[patrol.currentPatrolIndex];
+            patrol.currentPatrolTarget = patrol.patrolTargets[patrol.currentPatrolIndex];
             shared.separationTimer = 0.0f;
             if (ctx.pathData) ctx.pathData->clear();
         }
