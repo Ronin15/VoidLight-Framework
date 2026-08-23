@@ -77,6 +77,7 @@ the SDL3_GPU rendering path.
 
 - [Architecture Overview](ARCHITECTURE.md)
 - [Interpolation System](architecture/InterpolationSystem.md)
+- [Implementation slices (workflow and gates)](framework-implementation-slices.md)
 
 ## Performance & Development
 

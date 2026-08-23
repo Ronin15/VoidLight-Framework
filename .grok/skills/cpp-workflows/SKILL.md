@@ -36,7 +36,7 @@ Work **inline** (no subagent) when ALL are true:
 
 | Signal | Workflow |
 |--------|----------|
-| Non-trivial feature or multi-system change | Design → Implement → Review |
+| Non-trivial feature, multi-system change, or numbered slice | Design → Implement → Review |
 | User names a specialist | Matching phase below |
 | Build / test / sanitizer failure after a change | Implement (fix) then Review if risky |
 | PR, diff, or standards review | Review |
@@ -82,6 +82,7 @@ User says → do:
 - "Design the AI combat handoff before we code" → **Design**
 - "Implement X" (contracts clear) → **Implement**
 - "Implement X" (ownership unclear) → **Design** then **Implement**
+- "Implement slice X" → **Design** if contracts unclear, else **Implement**; **Review** before commit
 - "Full pass on this feature" / "design then implement then review" → full pipeline
 - "Review my branch" → **Review**, scope `branch changes`
 - "Review only uncommitted" → **Review**, scope `uncommitted changes`
@@ -106,10 +107,13 @@ subagent_type: cpp-specialist
 ```
 
 Prompt: owning module(s), success criteria, validation commands, prior design if any.
+For a numbered slice, include the slice section path and require the
+slice-complete gate (`ninja -C build` + core-only tests). Do not run
+cppcheck / clang-tidy / ASan / TSan as a per-change gate.
 
 Optional supplements: `voidlight-cpp-engineer`, `voidlight-test-suite-generator`,
 `voidlight-build-validate`. Per-change self-check catalog: `voidlight-quality-check`
-(static analysis is pre-commit/PR, not every edit).
+(static analysis is a branch/PR gate, not every edit or commit).
 
 ## Review
 

@@ -48,6 +48,7 @@ Read these files before editing matching paths:
 - Do not add compatibility overloads, ad-hoc safety layers, or new abstractions unless the task requires them.
 - Keep production and test updates in the same change when behavior changes.
 - Before finishing, run the most targeted build or test feasible and state exactly what you verified.
+- Treat implementation slices as full features: runtime behavior, docs, tests, and acceptance. See `docs/framework-implementation-slices.md`. Review a completed slice (**cpp-review-specialist**) before committing it.
 
 ## Fast Commands
 
@@ -96,9 +97,16 @@ Tests:
 Slow scripts:
 
 ```bash
-./tests/test_scripts/run_all_tests.sh --core-only --errors-only
+./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # slice-complete gate
 ./tests/test_scripts/run_controller_tests.sh --verbose
 ```
+
+Slice / local gates (see `docs/framework-implementation-slices.md`):
+
+- **Per-change:** targeted `ninja -C build` / `ninja -C build app` + named Boost.Test executable.
+- **Slice complete:** `ninja -C build` then `./tests/test_scripts/run_all_tests.sh --core-only --errors-only`.
+- **Slice review:** **cpp-review-specialist** before committing the slice.
+- **Branch / PR only (not each commit):** cppcheck, clang-tidy, ASan, TSan. Sanitizers are mutually exclusive.
 
 Boost.Test notes:
 
@@ -113,6 +121,7 @@ See `tests/TESTING.md` for broader test documentation.
 - Source: `src/{core,managers,controllers,gameStates,entities,events,ai,collisions,utils,world,gpu}`
 - Headers mirror source under `include/`
 - Other important dirs: `tests/`, `docs/`, `res/`, `res/shaders/`
+- Slice implementation workflow and gates: `docs/framework-implementation-slices.md`.
 - Dependency direction: `Core -> Managers -> GameStates -> Entities/Controllers`
 - **Managers serve the states:** states own screen lifecycle and policy; domain managers provide services states call. `GameStateManager` is state-stack infrastructure (not a domain manager). Full-screen transitions use exit-then-enter; UI is cleared in the transition and rebuilt in `enter()`. See `docs/ARCHITECTURE.md`.
 - Common architectural anchors: `GameEngine`, `ThreadSystem`, `EntityDataManager`, `AIManager`, `EventManager`, `ControllerRegistry`, `GPURenderer`, `GPUSceneRecorder`, `SpriteBatch`

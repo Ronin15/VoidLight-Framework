@@ -37,6 +37,7 @@ before designing.
 - `docs/ARCHITECTURE.md`
 - Subsystem docs under `docs/{core,managers,ai,events,gpu,gameStates,controllers}/`
 - `docs/review-non-issues.md` (do not re-open adjudicated non-issues without re-verification)
+- `docs/framework-implementation-slices.md` (slice workflow, gates, section shape)
 - `.claude/rules/edm.md`, `.claude/rules/simd.md` when AI/EDM or SIMD is involved
 
 ## Ownership Boundaries
@@ -75,7 +76,9 @@ Place each piece of work in its owning layer. Dependency direction:
 
 ## Required Design Outputs
 
-- **Goal / success criteria / in-scope / out-of-scope**, owning subsystem.
+- **Goal / success criteria / in-scope / out-of-scope**, owning subsystem, and
+  the owning slice when the work is a numbered slice (see
+  `docs/framework-implementation-slices.md`).
 - **Ownership** for every new type/field/API (manager vs controller vs EDM vs behavior vs state).
 - **Call / frame flow**: which thread, which manager update order, main-thread vs worker batch.
 - **Data layout & lifetime**: SoA fields, cross-frame state in EDM (not locals), reusable
@@ -102,6 +105,18 @@ Place each piece of work in its owning layer. Dependency direction:
 - No per-frame allocations on hot paths; reserve/reuse member or thread-local buffers.
 - SIMD via `include/utils/SIMDMath.hpp` (4-wide + scalar tail, scalar fallback).
 - Prefer deterministic merge of worker outputs (stable range order), not worker timing.
+
+## Slices
+
+Treat a numbered slice as a full feature: runtime behavior, docs, tests, and
+acceptance checks integrated before it is complete. Scaffolding is valid only
+when it lands final owner modules and tests that preserve current behavior —
+say exactly what is deferred. For new slice sections use Goal / Current
+foundation / Architecture notes / Checklist / Acceptance checks.
+
+Do not mark a slice complete in the design. Completion requires the
+slice-complete gate and **cpp-review-specialist** before commit.
+cppcheck, clang-tidy, ASan, and TSan are branch/PR gates, not per-change.
 
 ## Optional skill supplements (do not replace this agent)
 

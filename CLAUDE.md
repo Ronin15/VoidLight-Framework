@@ -58,9 +58,11 @@ Boost.Test executables. See `tests/TESTING.md`. Prefer direct executables over w
 ./bin/debug/ai_manager_edm_integration_tests
 ./bin/debug/behavior_functionality_tests --run_test="FleeFromAttacker*"
 
-./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # slow (7–20 min)
+./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # slice-complete gate
 ./tests/test_scripts/run_controller_tests.sh --verbose
 ```
+
+**Slice gates** (`docs/framework-implementation-slices.md`): per-change = targeted build + named test; slice complete = `ninja -C build` + core-only tests; **review the slice before committing**. cppcheck, clang-tidy, ASan, and TSan are **branch/PR gates**, not per-change or per-commit gates.
 
 Test names use the `BOOST_AUTO_TEST_CASE` name directly (`ThreadingModeComparison`, not `TestThreadingModeComparison`). Suite prefix optional; verify with `--list_content`.
 
@@ -70,7 +72,7 @@ C++20 SDL3 engine, CMake/Ninja, data-oriented, 10K+ entities at 60+ FPS.
 
 **Dependency direction**: `Core → Managers → GameStates → Entities/Controllers`. Three known, accepted boundary bends exist: `GameEngine.hpp` (Core) includes `GameStateManager.hpp` since the engine owns/drives the state machine; `GameStateManager.hpp` includes the `GameState` interface header since it owns game states; `BinarySerializer.hpp` (Utils) includes `core/Logger.hpp` for direct logging. See `docs/architecture/dependency_analysis_2026-03-31.md`. No other Core/Manager/GameState boundary is crossed.
 
-**Layout**: `src/` and `include/` mirror each other: `{core, managers, controllers, gameStates, entities, events, ai, collisions, utils, world, gpu}`. Tests in `tests/`, assets in `res/`, docs in `docs/`.
+**Layout**: `src/` and `include/` mirror each other: `{core, managers, controllers, gameStates, entities, events, ai, collisions, utils, world, gpu}`. Tests in `tests/`, assets in `res/`, docs in `docs/`. Slice implementation workflow and gates: `docs/framework-implementation-slices.md`.
 
 ### Key Systems
 - **Core**: GameEngine (fixed timestep) | ThreadSystem (WorkerBudget) | Logger | TimestepManager | GameStateManager (state push/pop/change, owned by GameEngine; lives in `managers/` but is core state-machine infrastructure)
@@ -219,7 +221,7 @@ m_controllers.get<WeatherController>()->getCurrentWeather();    // single use �
 - Do not add compatibility overloads, ad-hoc safety layers, or new abstractions unless the task requires them.
 - When the user names a file, work on exactly that file — don't substitute similar-sounding ones.
 - Keep production code and tests aligned in the same change. Run the most targeted test executable when feasible.
-- Every code change is followed by a quality check: targeted build + most-targeted tests + C++20 standards/threading/architecture self-check. State exactly what was verified. Static analysis (cppcheck/clang-tidy) is a pre-commit/PR step, not a per-change gate.
+- Every code change is followed by a quality check: targeted build + most-targeted tests + C++20 standards/threading/architecture self-check. State exactly what was verified. Static analysis (cppcheck/clang-tidy) and sanitizers (ASan/TSan) are **branch/PR gates**, not per-change or per-commit gates. A completed slice is reviewed (`cpp-review-specialist`) before it is committed.
 - Fix root causes in production code. NEVER bypass failing tests by changing expectations unless explicitly told to.
 - For `EventManager` regressions, distinguish missing state-owned handler wiring in tests from a production bug before editing prod code.
 - For rendering issues (jitter/shimmer/flicker), trace the full pipeline first (camera → interpolation → floor/round → sub-pixel offset → draw). No speculative fixes.

@@ -85,25 +85,36 @@ editing. Prefer a plan from **cpp-design-specialist** for non-trivial multi-syst
 7. Delete dead code entirely — do not comment it out.
 8. Do not re-flag or “fix” items in `docs/review-non-issues.md` without re-tracing.
 
+## Slices
+
+Treat a numbered slice as a full feature — runtime behavior, docs, tests, and
+acceptance checks all integrated before marking it complete. Follow
+`docs/framework-implementation-slices.md`. If a dependency does not exist yet,
+call the work foundation and leave the checklist incomplete.
+
 ## Validation (narrowest first)
 
-Build:
+Per-change:
 
 ```bash
-cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build
-# or: ninja -C build app
-```
-
-Tests (prefer direct executables):
-
-```bash
+ninja -C build app
 ./bin/debug/<test_executable>
-./bin/debug/<test_executable> --list_content
 ./bin/debug/<test_executable> --run_test="TestCase*"
 ```
 
 Examples: `entity_data_manager_tests`, `ai_manager_edm_integration_tests`,
 `behavior_functionality_tests --run_test="FleeFromAttacker*"`.
+
+Slice complete (before marking the slice done):
+
+```bash
+ninja -C build
+./tests/test_scripts/run_all_tests.sh --core-only --errors-only
+```
+
+Do **not** run cppcheck, clang-tidy, ASan, or TSan as a per-change or
+per-commit gate. Those are branch/PR gates. After a slice is complete, hand
+off to **cpp-review-specialist** before commit.
 
 Notes:
 
@@ -129,3 +140,4 @@ Claude-agent analogue (reference only): `.claude/agents/game-engine-specialist/`
 
 - Non-trivial architecture / multi-system design → **cpp-design-specialist** first.
 - After risky or multi-file changes → **cpp-review-specialist** for a review pass.
+- After a numbered slice is complete → **cpp-review-specialist** before commit.

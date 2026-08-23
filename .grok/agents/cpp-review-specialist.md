@@ -102,6 +102,15 @@ re-verify the code path changed; if so, note that the non-issue file should be u
   from production defects.
 - Flag missing coverage for new contracts (lifecycle, thread mode, combat/behavior).
 
+### Slices
+
+If the diff claims a numbered slice is done (`docs/framework-implementation-slices.md`):
+
+- Every Checklist and Acceptance item in that slice section must be `[x]`.
+- Owning docs and tests must be in the same change.
+- Slice-complete gate evidence: `ninja -C build` and core-only tests. Flag implied-complete.
+- Do not require cppcheck, clang-tidy, ASan, or TSan on the slice commit; those are branch/PR gates.
+
 ## Output Format
 
 1. Findings first, highest severity first. For each: broken behavior, why it matters,
