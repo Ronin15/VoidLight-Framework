@@ -291,8 +291,7 @@ bool AdvancedAIDemoState::enter() {
                                {UIPositionMode::CENTERED_H, 0, statusY, -1,
                                 UIConstants::INFO_LABEL_HEIGHT});
 
-    // Initialize combat HUD (health/stamina bars, target frame)
-    UIManager::Instance().createCombatHUD();
+    m_controllers.get<HudController>()->initializeActionHUD();
 
     // Log status
     GAMESTATE_INFO(std::format("Created {} NPCs with advanced AI behaviors",
@@ -536,15 +535,6 @@ void AdvancedAIDemoState::update(float deltaTime) {
 
     // Update controllers (CombatController handles cooldowns, stamina regen)
     m_controllers.updateAll(deltaTime);
-
-    // Update combat HUD (health/stamina bars, target frame)
-    auto& gameplayHudCtrl = *m_controllers.get<HudController>();
-    UIManager::Instance().updateCombatHUD(
-        m_player->getHealth(),
-        m_player->getStamina(),
-        gameplayHudCtrl.hasActiveTarget(),
-        gameplayHudCtrl.getTargetLabel(),
-        gameplayHudCtrl.getTargetHealth());
 
     // Update UI (moved from render path for consistent frame timing)
     if (!ui.isShutdown()) {

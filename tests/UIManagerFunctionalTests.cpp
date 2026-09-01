@@ -656,31 +656,6 @@ BOOST_AUTO_TEST_CASE(TestSetImageSourceAppliesTextureAndSourceRectTogether) {
     ui.removeComponent("image_source");
 }
 
-BOOST_AUTO_TEST_CASE(TestCombatHUDHelperOwnsExpectedComponents) {
-    auto& ui = UIManager::Instance();
-
-    ui.createCombatHUD();
-
-    BOOST_CHECK(ui.hasComponent("hud_health_label"));
-    BOOST_CHECK(ui.hasComponent("hud_health_bar"));
-    BOOST_CHECK(ui.hasComponent("hud_stamina_label"));
-    BOOST_CHECK(ui.hasComponent("hud_stamina_bar"));
-    BOOST_CHECK(ui.hasComponent("hud_target_name"));
-    BOOST_CHECK(ui.hasComponent("hud_target_hp_label"));
-    BOOST_CHECK(ui.hasComponent("hud_target_health"));
-
-    ui.updateCombatHUD(75.0f, 40.0f, true, "Training Target", 25.0f);
-    BOOST_CHECK_CLOSE(ui.getValue("hud_health_bar"), 75.0f, 0.001f);
-    BOOST_CHECK_CLOSE(ui.getValue("hud_stamina_bar"), 40.0f, 0.001f);
-    BOOST_CHECK_EQUAL(ui.getText("hud_target_name"), "Training Target");
-    BOOST_CHECK_CLOSE(ui.getValue("hud_target_health"), 25.0f, 0.001f);
-
-    ui.destroyCombatHUD();
-    BOOST_CHECK(!ui.hasComponent("hud_health_label"));
-    BOOST_CHECK(!ui.hasComponent("hud_health_bar"));
-    BOOST_CHECK(!ui.hasComponent("hud_target_name"));
-}
-
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================

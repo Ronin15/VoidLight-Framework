@@ -10,8 +10,8 @@ Core contracts:
 
 - GPU text is atlas-backed through SDL3_ttf draw sequences
 - raster text placement is snapped to whole pixels before vertex emission
-- combat HUD helpers are part of the public API
 - UI update belongs in `GameState::update()`, not in `render()`
+- gameplay action HUD policy (vitals, target, harvest, hotbar) lives on `HudController`; `UIManager` is the widget service
 
 ## Basic Pattern
 
@@ -44,18 +44,6 @@ Guidelines:
 - do not generate one GPU texture per UI label
 - do not apply UV flips or half-texel offsets
 - snap integer-layout text positions before emitting vertices
-
-## Combat HUD Helpers
-
-Built-in combat HUD helpers are used by gameplay/demo states:
-
-```cpp
-createCombatHUD();
-updateCombatHUD(playerHealth, playerStamina, hasTarget, targetName, targetHealth);
-destroyCombatHUD();
-```
-
-Use them from states that own combat flow instead of rebuilding the same health/stamina/target frame wiring by hand.
 
 ## Input Focus and Simulated Clicks
 

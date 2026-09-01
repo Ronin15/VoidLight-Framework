@@ -355,4 +355,135 @@ BOOST_AUTO_TEST_CASE(TestHotbarMoveRejectsInvalidSlotsAndEmptySource)
     BOOST_CHECK(!controller.getHotbarItem(1).isValid());
 }
 
+BOOST_AUTO_TEST_CASE(TestActionHUDCreatesExpectedWidgets)
+{
+    auto player = createPlayer();
+    HudController controller(player);
+    controller.initializeActionHUD();
+
+    auto& ui = UIManager::Instance();
+    BOOST_CHECK(ui.hasComponent(HudController::HEALTH_LABEL_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::HEALTH_BAR_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::STAMINA_LABEL_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::STAMINA_BAR_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::TARGET_NAME_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::TARGET_HP_LABEL_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::TARGET_HEALTH_BAR_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::HARVEST_LABEL_ID));
+    BOOST_CHECK(ui.hasComponent(HudController::HARVEST_BAR_ID));
+    BOOST_CHECK_EQUAL(ui.getText(HudController::HEALTH_LABEL_ID), "HP");
+    BOOST_CHECK_EQUAL(ui.getText(HudController::STAMINA_LABEL_ID), "SP");
+    BOOST_CHECK_EQUAL(ui.getText(HudController::HARVEST_LABEL_ID), "Harvest");
+    BOOST_CHECK(!ui.hasComponent(HudController::hotbarSlotId(0)));
+}
+
+BOOST_AUTO_TEST_CASE(TestActionHUDWritesPlayerVitalsAsPercent)
+{
+    auto player = createPlayer();
+    player->setMaxHealth(200.0f);
+    player->setMaxStamina(200.0f);
+
+    HudController controller(player);
+    controller.initializeActionHUD();
+    controller.update(0.0f);
+
+    auto& ui = UIManager::Instance();
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HEALTH_BAR_ID), 50.0f, 0.01f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::STAMINA_BAR_ID), 50.0f, 0.01f);
+
+    player->takeDamage(50.0f);
+    player->consumeStamina(50.0f);
+    controller.update(0.0f);
+
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HEALTH_BAR_ID), 25.0f, 0.01f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::STAMINA_BAR_ID), 25.0f, 0.01f);
+}
+
+BOOST_AUTO_TEST_CASE(TestActionHUDTargetWidgetsFollowTargetState)
+{
+    auto player = createPlayer();
+    EntityHandle playerHandle = player->getHandle();
+    EntityHandle target = createNPCTarget();
+    HudController controller(player);
+    controller.subscribe();
+    controller.initializeActionHUD();
+
+    dispatchDamage(playerHandle, target, 25.0f);
+    controller.update(0.0f);
+
+    auto& ui = UIManager::Instance();
+    BOOST_REQUIRE(controller.hasActiveTarget());
+    BOOST_CHECK_EQUAL(ui.getText(HudController::TARGET_NAME_ID), "Human Guard");
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::TARGET_HEALTH_BAR_ID),
+                      controller.getTargetHealth(), 0.01f);
+
+    controller.update(HudController::TARGET_DISPLAY_DURATION + 0.01f);
+
+    BOOST_CHECK(!controller.hasActiveTarget());
+}
+
+BOOST_AUTO_TEST_CASE(TestSetVisibleHidesAndRestoresActionHUDWithoutForceShowingTarget)
+{
+    auto player = createPlayer();
+    HudController controller(player);
+    controller.initializeActionHUD();
+    controller.update(0.0f);
+
+    auto& ui = UIManager::Instance();
+    const float fullHealthPct = ui.getValue(HudController::HEALTH_BAR_ID);
+    BOOST_CHECK_CLOSE(fullHealthPct, 100.0f, 0.01f);
+    BOOST_CHECK_EQUAL(ui.getText(HudController::TARGET_NAME_ID), "");
+
+    controller.setVisible(false);
+    player->takeDamage(40.0f);
+    controller.update(0.0f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HEALTH_BAR_ID), fullHealthPct, 0.01f);
+
+    controller.setVisible(true);
+    BOOST_CHECK_EQUAL(ui.getText(HudController::TARGET_NAME_ID), "");
+    controller.update(0.0f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HEALTH_BAR_ID), 60.0f, 0.01f);
+    BOOST_CHECK_EQUAL(ui.getText(HudController::TARGET_NAME_ID), "");
+}
+
+BOOST_AUTO_TEST_CASE(TestHarvestProgressShowsAndHidesWidget)
+{
+    auto player = createPlayer();
+    HudController controller(player);
+    controller.initializeActionHUD();
+
+    auto& ui = UIManager::Instance();
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HARVEST_BAR_ID), 0.0f, 0.01f);
+
+    controller.setHarvestProgress(true, 0.4f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HARVEST_BAR_ID), 0.4f, 0.01f);
+
+    controller.setHarvestProgress(false, 0.0f);
+    controller.setHarvestProgress(true, 0.9f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HARVEST_BAR_ID), 0.9f, 0.01f);
+
+    controller.setVisible(false);
+    controller.setHarvestProgress(true, 0.25f);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HARVEST_BAR_ID), 0.9f, 0.01f);
+
+    controller.setVisible(true);
+    BOOST_CHECK_CLOSE(ui.getValue(HudController::HARVEST_BAR_ID), 0.25f, 0.01f);
+
+    controller.setHarvestProgress(false, 0.0f);
+}
+
+BOOST_AUTO_TEST_CASE(TestHotbarRemainsOptionalWhenOnlyActionHUDInitialized)
+{
+    auto player = createPlayer();
+    HudController controller(player);
+    controller.initializeActionHUD();
+
+    auto& ui = UIManager::Instance();
+    BOOST_CHECK(ui.hasComponent(HudController::HEALTH_BAR_ID));
+    BOOST_CHECK(!ui.hasComponent(HudController::hotbarSlotId(0)));
+
+    controller.initializeHotbarUI();
+    BOOST_CHECK(ui.hasComponent(HudController::hotbarSlotId(0)));
+}
+
 BOOST_AUTO_TEST_SUITE_END()

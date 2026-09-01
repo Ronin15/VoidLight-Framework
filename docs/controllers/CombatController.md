@@ -39,7 +39,7 @@ ATTACK_COOLDOWN = 0.5f
 
 ## HUD Integration
 
-`CombatController` does not own target-frame HUD state. It emits combat damage through the event path; `HudController` subscribes to combat events and supplies target label/health data to the active state. States should use the dedicated combat HUD helpers in `UIManager` instead of rebuilding target widgets by hand.
+`CombatController` does not own target-frame HUD state. It emits combat damage through the event path; `HudController` subscribes to combat events and owns the action HUD widgets (vitals, target frame). Production states must not rebuild those widgets through `UIManager` helpers.
 
 ## Notes
 

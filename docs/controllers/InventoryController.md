@@ -47,7 +47,7 @@ handle/inventory becomes invalid.
 - `refreshInventoryUI()` rebuilds the grid entries, so click/drag handlers must copy any `ResourceHandle` they need before triggering refresh.
 - Gear slots are displayed inside the existing inventory overlay; inventory items remain visible while gear is assigned.
 - Container slots are controller-owned UI over EDM container inventory data.
-- Pause/resume hides or restores inventory and hotbar UI through controller APIs instead of direct component ownership in the state.
+- Pause/resume hides or restores inventory through this controller and the action HUD (including hotbar) through `HudController::setVisible()`.
 
 ## Rules
 

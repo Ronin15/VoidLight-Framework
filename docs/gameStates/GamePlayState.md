@@ -23,9 +23,15 @@ When the world is ready, `enter()`:
 - caches the player handle in `AIManager`
 - initializes the camera and `GPUSceneRecorder`
 - registers controllers through `ControllerRegistry`
-- creates event log, time label, FPS label, inventory UI, hotbar UI, and combat HUD
+- creates event log, time label, and FPS label (session chrome)
+- initializes inventory UI, then `HudController::initializeActionHUD()` and `initializeHotbarUI()`
 - spawns a bootstrap merchant through `EventManager::spawnMerchant(...)`
 - subscribes state-owned time/weather/harvest handlers
+
+Pause/resume toggles session chrome (`event_log`, `time_label`, `fps`) directly
+and the action HUD through `HudController::setVisible()`. The state does not
+enumerate `hud_*` widget ids. Each update feeds `HarvestController` progress
+into `HudController::setHarvestProgress()`.
 
 ## Controller Ownership
 

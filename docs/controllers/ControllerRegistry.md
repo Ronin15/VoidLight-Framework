@@ -169,9 +169,9 @@ void GamePlayState::render() {
 
     // Check if controller exists
     if (auto* hud = m_controllers.get<HudController>()) {
-        updateTargetFrame(hud->hasActiveTarget(),
-                          hud->getTargetLabel(),
-                          hud->getTargetHealth());
+        if (hud->hasActiveTarget()) {
+            renderTargetFrame(hud->getTargetLabel(), hud->getTargetHealth());
+        }
     }
 }
 ```

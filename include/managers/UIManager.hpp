@@ -572,13 +572,6 @@ public:
                                 int offsetX = UIConstants::BOTTOM_RIGHT_OFFSET_X,
                                 int offsetY = UIConstants::BOTTOM_RIGHT_OFFSET_Y);
 
-  // Combat HUD helpers
-  void createCombatHUD();
-  void updateCombatHUD(float playerHealth, float playerStamina,
-                       bool hasTarget, const std::string& targetName,
-                       float targetHealth);
-  void destroyCombatHUD();
-
   // Utility methods
   void setGlobalFont(const std::string &fontID);
   void setGlobalScale(float scale);

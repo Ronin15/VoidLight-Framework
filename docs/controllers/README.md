@@ -17,7 +17,7 @@ Current controller families:
 | Controller | Role | Notes |
 |-----------|------|-------|
 | [CombatController](CombatController.md) | Player melee/ranged combat, stamina timing, ammo use, and melee fallback | Emits damage/projectiles through current gameplay paths; logs player combat feedback |
-| [HudController](HudController.md) | State-scoped HUD: hotbar UI + transient combat target state | Owns hotbar components; subscribes to Combat and ResourceChange events |
+| [HudController](HudController.md) | State-scoped action HUD: vitals, target frame, optional hotbar, harvest progress | Creates widgets via UIManager; `setVisible()` for pause/resume; demos may skip hotbar |
 | [InventoryController](InventoryController.md) | Player inventory overlay, container UI, gear UI, pickup, slot reordering, loot/store transfers, and hotbar assignment | Syncs from ResourceChange events; uses EDM ordered slots; hands hotbar writes to HudController |
 | [WeatherController](WeatherController.md) | Weather state tracking | Event-driven |
 | [DayNightController](DayNightController.md) | Time-of-day visuals and GPU lighting | Requires `update(dt)` each frame |
@@ -54,5 +54,5 @@ bool GamePlayState::exit() {
 - Controllers may subscribe to events, but GameStates still own overall teardown order.
 - Controllers should not become shadow managers or alternate data stores.
 - Controllers must not directly mutate AI behavior state in EDM. Queue behavior messages instead.
-- UI-facing values are fine, but GameStates should remain responsible for deciding when and how to render UI.
+- UI-facing values are fine, but GameStates should remain responsible for deciding when and how to render UI. Reusable gameplay HUD flow (vitals, target, hotbar, harvest widget) belongs on `HudController`; session chrome stays on the state.
 - Render-focused controllers such as `ResourceRenderController` live in `controllers/render/`; state-owned render helpers should still follow the same registry lifecycle when they are registry-managed.

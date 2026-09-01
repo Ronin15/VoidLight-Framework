@@ -190,7 +190,9 @@ bool GamePlayState::enter() {
     ui.setComponentPositioning("fps", fpsPos);
 
     inventoryCtrl.initializeInventoryUI();
-    m_controllers.get<HudController>()->initializeHotbarUI();
+    auto& hudCtrl = *m_controllers.get<HudController>();
+    hudCtrl.initializeActionHUD();
+    hudCtrl.initializeHotbarUI();
     if (mp_Player) {
       Vector2D const merchantSpawnPos =
           mp_Player->getPosition() + Vector2D(-96.0f, 32.0f);
@@ -206,9 +208,6 @@ bool GamePlayState::enter() {
 
     // Subscribe all controllers at once
     m_controllers.subscribeAll();
-
-    // Initialize combat HUD (health/stamina bars, target frame)
-    ui.createCombatHUD();
 
     registerEventHandlers();
 
@@ -284,14 +283,9 @@ void GamePlayState::update(float deltaTime) {
     // Update data-driven NPCs (animations handled by NPCRenderController)
     m_npcRenderCtrl.update(deltaTime);
 
-    // Update combat HUD (health/stamina bars, target frame)
-    auto& gameplayHudCtrl = *m_controllers.get<HudController>();
-    ui.updateCombatHUD(
-        mp_Player->getHealth(),
-        mp_Player->getStamina(),
-        gameplayHudCtrl.hasActiveTarget(),
-        gameplayHudCtrl.getTargetLabel(),
-        gameplayHudCtrl.getTargetHealth());
+    auto& hudCtrl = *m_controllers.get<HudController>();
+    auto& harvestCtrl = *m_controllers.get<HarvestController>();
+    hudCtrl.setHarvestProgress(harvestCtrl.isHarvesting(), harvestCtrl.getProgress());
 
     if (!mp_Player->isAlive() && !m_transitioningToGameOver) {
       m_transitioningToGameOver = true;
@@ -582,24 +576,15 @@ void GamePlayState::pause() {
   ui.setComponentVisible("time_label", false);
   ui.setComponentVisible("fps", false);
 
-  // Hide combat HUD components
-  ui.setComponentVisible("hud_health_label", false);
-  ui.setComponentVisible("hud_health_bar", false);
-  ui.setComponentVisible("hud_stamina_label", false);
-  ui.setComponentVisible("hud_stamina_bar", false);
-  ui.setComponentVisible("hud_target_name", false);
-  ui.setComponentVisible("hud_target_hp_label", false);
-  ui.setComponentVisible("hud_target_health", false);
+  if (auto* hudCtrl = m_controllers.get<HudController>()) {
+    hudCtrl->setVisible(false);
+  }
 
   if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
     inventoryCtrl->cancelDragOperation();
     if (inventoryCtrl->isInventoryVisible()) {
       ui.setComponentVisible(InventoryController::INVENTORY_PANEL_ID, false);
     }
-  }
-
-  if (auto* hudCtrl = m_controllers.get<HudController>()) {
-    hudCtrl->setHotbarVisible(false);
   }
 
   if (auto* socialCtrl = m_controllers.get<SocialController>();
@@ -634,21 +619,13 @@ void GamePlayState::resume() {
     ui.setComponentVisible("fps", true);
   }
 
-  // Show combat HUD components (always visible during gameplay)
-  ui.setComponentVisible("hud_health_label", true);
-  ui.setComponentVisible("hud_health_bar", true);
-  ui.setComponentVisible("hud_stamina_label", true);
-  ui.setComponentVisible("hud_stamina_bar", true);
-  // Target frame visibility controlled by updateCombatHUD() based on
-  // hasActiveTarget()
+  if (auto* hudCtrl = m_controllers.get<HudController>()) {
+    hudCtrl->setVisible(true);
+  }
 
   if (auto* inventoryCtrl = m_controllers.get<InventoryController>();
       inventoryCtrl && inventoryCtrl->isInventoryVisible()) {
     inventoryCtrl->setInventoryVisible(true);
-  }
-
-  if (auto* hudCtrl = m_controllers.get<HudController>()) {
-    hudCtrl->setHotbarVisible(true);
   }
 
   // Resume all controllers (re-subscribe to events after pause)
@@ -658,6 +635,12 @@ void GamePlayState::resume() {
 }
 
 void GamePlayState::handleInput() {
+  // Loading-intent enter() returns before controllers exist. The next frame
+  // still delivers handleInput() before update() transitions to LoadingState.
+  if (!m_initialized) {
+    return;
+  }
+
   // Cache manager references for better performance
   const InputManager &inputMgr = InputManager::Instance();
   auto &ui = UIManager::Instance();

@@ -48,6 +48,7 @@ MOVEMENT_CANCEL_THRESHOLD = 8.0f
 - EDM provides the harvestable payload, depletion state, and dropped-item creation.
 - Successful inventory inserts emit `ResourceChangeEvent` for UI and inventory synchronization.
 - Harvest completion emits `HarvestResourceEvent` so world/tile systems can react visually.
+- `GamePlayState` feeds `isHarvesting()` / `getProgress()` into `HudController::setHarvestProgress()` each frame; harvest UI is not owned here.
 
 ## Inventory Fallback
 

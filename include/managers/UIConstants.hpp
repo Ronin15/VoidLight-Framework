@@ -116,6 +116,15 @@ namespace UIConstants {
   constexpr int STATUS_BAR_LABEL_PADDING = 12;    // Label text inset from panel edges
   constexpr int FPS_COUNTER_WIDTH = 160;           // Width for high-DPI FPS badge
 
+  // Gameplay action HUD layout (top-left vitals/target/harvest cluster)
+  constexpr int HUD_MARGIN_LEFT = 20;
+  constexpr int HUD_MARGIN_TOP = 40;
+  constexpr int HUD_LABEL_WIDTH = 50;
+  constexpr int HUD_BAR_WIDTH = 150;
+  constexpr int HUD_BAR_HEIGHT = 28;
+  constexpr int HUD_ROW_SPACING = 40;
+  constexpr int HUD_LABEL_BAR_GAP = 12;
+
   // Timing and Animation Constants
   constexpr float DEFAULT_TOOLTIP_DELAY = 1.0f; // Default tooltip hover delay in seconds
   constexpr float MAX_UI_SCALE = 3.0f;          // Maximum UI scale factor (allows high-DPI scaling)
