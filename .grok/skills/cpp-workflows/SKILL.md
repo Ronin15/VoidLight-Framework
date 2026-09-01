@@ -5,142 +5,70 @@ description: >-
   Use when the user asks for cpp-design-specialist, cpp-specialist, or
   cpp-review-specialist; when planning or implementing managers, EDM, AI,
   controllers, events, GPU/rendering, or threading; when reviewing a PR or
-  branch diff; or when a non-trivial C++ feature needs the full specialist
-  pipeline. Slash: /cpp-workflows.
+  branch diff; or when a numbered slice or non-trivial C++ feature needs the
+  full specialist pipeline. Slash: /cpp-workflows.
 ---
 
-# C++ Workflows (Grok-native)
+# C++ Workflows
 
-Canonical guardrails: root `AGENTS.md` / `Claude.md` and nested path `AGENTS.md` files.
+Canonical rules: root and nested `AGENTS.md`.  
+Agents: `.grok/agents/cpp-*.md` (self-contained; they load `AGENTS.md`).  
+Slice process and gates: `docs/framework-implementation-slices.md`.  
+Models: `~/.grok/config.toml` → `[subagents.models]`.
 
-**Agents (source of truth):** `.grok/agents/cpp-*.md`  
-**Models:** user `~/.grok/config.toml` → `[subagents.models]`  
-(design/review → `grok-4.5`, implement → `grok-composer-2.5-fast`)
-
-Do not restate full guardrails in `spawn_subagent` prompts — agents load `agents_md`.
-
-Repo skills under `.agents/skills/` and `.claude/skills/` **supplement** agents; they do
-not replace them. Prefer spawning the agent, then loading a skill only if that phase
-needs its checklist or scripts.
+Do not restate full guardrails in `spawn_subagent` prompts — agents load
+`agents_md`. Only the parent session may spawn (depth 1).
 
 ## Inline vs delegate
 
-Work **inline** (no subagent) when ALL are true:
+Work **inline** when all of these are true: one or two files, no ownership /
+lifecycle / EDM-AI contract change, user did not ask for a specialist or
+review. Examples: typo, comment, single-test fix, rename.
 
-- One or two files, localized change
-- No architecture, ownership, lifecycle, or EDM/AI contract change
-- User did not ask for a specialist or review pass
-- Examples: typo, comment, single test fix, rename, fmt-only
+**Delegate** when any of these are true:
 
-**Delegate** when ANY are true:
-
-| Signal | Workflow |
-|--------|----------|
-| Non-trivial feature, multi-system change, or numbered slice | Design → Implement → Review |
-| User names a specialist | Matching phase below |
-| Build / test / sanitizer failure after a change | Implement (fix) then Review if risky |
-| PR, diff, or standards review | Review |
+| Signal | Route |
+|--------|--------|
+| Numbered slice, multi-system change, or non-trivial feature | Design → Implement → Review |
 | Ownership / EDM / controller placement unclear | Design first |
-| Touches hot paths, threading, GPU frame, or transitions | Implement (or Design first if unclear), then Review |
+| Contracts are clear; user wants code | Implement; Review if risky or multi-file |
+| User names a specialist | That phase |
+| PR, diff, or standards review | Review |
+| Build / test failure after a change | Implement (fix); Review if risky |
+| Hot path, threading, GPU frame, or transitions | Implement (Design first if unclear), then Review |
 
-When unsure: **Implement** for coding tasks, **Review** after substantive diffs,
+When unsure: **Implement** for coding, **Review** after substantive diffs,
 **Design** when ownership or multi-manager flow is unclear.
 
-## Shared spawn conventions
+Do not run Design and Implement in parallel on the same feature unless asked.
+Prefer `background: true`; collect with `get_command_or_subagent_output`.
 
-Use the `spawn_subagent` tool. Only the **parent** session may spawn (depth limit 1).
+## Pipeline
 
-| Subagent | `capability_mode` | Typical next step |
-|----------|-------------------|-------------------|
-| `cpp-design-specialist` | `read-only` (or omit; agent is `permission_mode: plan`) | Implement |
-| `cpp-specialist` | omit / `all` | Review if risky or multi-file |
-| `cpp-review-specialist` | `read-only` (or omit; agent is `permission_mode: plan`) | Design or Implement |
+1. **Design** (`cpp-design-specialist`) — ownership, data flow, threading,
+   lifecycle, tests. Prompt: goal, in/out of scope, owning subsystem,
+   files/areas, constraints.
+2. **Implement** (`cpp-specialist`) — code + per-change tests. Feed the design
+   summary. For a numbered slice, include the slice section path and require
+   the slice-complete gate from `docs/framework-implementation-slices.md`.
+3. **Review** (`cpp-review-specialist`) — severity-ordered findings. Scope:
+   `branch changes` | `uncommitted changes` | file list. Do not fix unless
+   asked.
 
-- Prefer `background: true` for independent units; collect with `get_command_or_subagent_output`.
-- One subagent per logical unit unless the user asks for parallel work.
-- Do **not** run Design + Implement in parallel on the same feature unless the user asks.
-- Model pins live in `~/.grok/config.toml` — do not invent model overrides here.
+Stop early when the user asked for only one phase, design says “inline /
+single-file” and the user wants the parent to code, or implement is red —
+fix before Review unless asked.
 
-## Auto-route: Design → Implement → Review
+Numbered slice: Design if contracts unclear, else Implement; **Review before
+commit**.
 
-Default pipeline for non-trivial work:
+## Optional workflows (user-asked only)
 
-1. **Design** (`cpp-design-specialist`) — ownership, data flow, threading, lifecycle, tests.
-2. **Implement** (`cpp-specialist`) — code + targeted build/tests; feed prior design summary.
-3. **Review** (`cpp-review-specialist`) — severity-ordered findings; re-enforces specialist standards.
+Not part of design → implement → review, per-change, or slice-complete:
 
-Stop early when:
+| Skill | When |
+|-------|------|
+| `voidlight-quality-gate` | Focused cppcheck + clang-tidy (branch/PR) |
+| `voidlight-benchmark-regression` | Platform-local benches vs `test_results/baseline/` |
 
-- User asked only for design / only for implement / only for review.
-- Design concludes “inline / single-file” and user wants parent to code.
-- Implement fails validation — fix first; do not open Review on a red build unless asked.
-
-## Invocation examples
-
-User says → do:
-
-- "Design the AI combat handoff before we code" → **Design**
-- "Implement X" (contracts clear) → **Implement**
-- "Implement X" (ownership unclear) → **Design** then **Implement**
-- "Implement slice X" → **Design** if contracts unclear, else **Implement**; **Review** before commit
-- "Full pass on this feature" / "design then implement then review" → full pipeline
-- "Review my branch" → **Review**, scope `branch changes`
-- "Review only uncommitted" → **Review**, scope `uncommitted changes`
-- "Fix this test failure" + error → **Implement** (targeted fix + re-run)
-
-## Design
-
-```
-subagent_type: cpp-design-specialist
-capability_mode: read-only
-```
-
-Prompt: goal, in/out of scope, owning subsystem, files/areas, constraints.
-
-Optional supplements after design returns: `voidlight-architecture-guard`,
-`voidlight-dependency-analyzer`.
-
-## Implement
-
-```
-subagent_type: cpp-specialist
-```
-
-Prompt: owning module(s), success criteria, validation commands, prior design if any.
-For a numbered slice, include the slice section path and require the
-slice-complete gate (`ninja -C build` + core-only tests). Do not run
-cppcheck / clang-tidy / ASan / TSan as a per-change gate.
-
-Optional supplements: `voidlight-cpp-engineer`, `voidlight-test-suite-generator`,
-`voidlight-build-validate`. Per-change self-check catalog: `voidlight-quality-check`
-(static analysis is a branch/PR gate, not every edit or commit).
-
-## Review
-
-```
-subagent_type: cpp-review-specialist
-capability_mode: read-only
-```
-
-```text
-Full Repository Path: <abs path>
-Review scope: branch changes | uncommitted changes | <file list>
-Base Branch: <only if non-default base>
-Custom Instructions: <optional>
-```
-
-Summarize as a severity-sorted table; do not fix unless asked.
-
-Optional supplements: `voidlight-systems-reviewer`, `voidlight-architecture-guard`,
-`voidlight-quality-gate`, `voidlight-quality-check`.
-
-## Claude / repo skill map (supplement only)
-
-| Phase | Grok agent | Optional skills / Claude analogues |
-|-------|------------|--------------------------------------|
-| Design | `cpp-design-specialist` | architecture-guard, dependency-analyzer · `.claude/agents/systems-integrator` |
-| Implement | `cpp-specialist` | cpp-engineer, test-suite-generator, build-validate · `.claude/agents/game-engine-specialist` |
-| Review | `cpp-review-specialist` | systems-reviewer, architecture-guard, quality-gate/check · `.claude/agents/game-systems-architect` |
-| Validate (scripts) | parent or implement | build-validate, quality-check, benchmark-regression, memory-profiler · `.claude/agents/quality-engineer` |
-
-Agents under `.grok/agents/` always win over skill prose when guidance conflicts.
+Agents under `.grok/agents/` win over skill prose when guidance conflicts.

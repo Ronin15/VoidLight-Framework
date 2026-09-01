@@ -476,7 +476,7 @@ private:
     mutable Vector2D m_lastRenderedCenter{0.0f, 0.0f};
 
     // Shake random number generation (mutable for const generateShakeOffset)
-    // Per CLAUDE.md: NEVER use static vars in threaded code - use member vars instead
+    // Per AGENTS.md: NEVER use static vars in threaded code - use member vars instead
     mutable std::mt19937 m_shakeRng{std::random_device{}()};
     mutable std::uniform_real_distribution<float> m_shakeDist{-1.0f, 1.0f};
 

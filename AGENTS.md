@@ -1,6 +1,6 @@
 # AGENTS.md — VoidLight-Framework
 
-Codex instructions for this repository. Match existing subsystem patterns, fix root causes, and keep changes aligned with production architecture.
+Repo agent instructions. Match existing subsystem patterns, fix root causes, and keep changes aligned with production architecture.
 
 ## Instruction Order
 
@@ -8,17 +8,18 @@ Apply guidance in this order:
 
 1. Explicit user instructions
 2. Root `AGENTS.md`
-3. Any nested `AGENTS.md` or `AGENTS.override.md` that applies to touched paths
+3. Nested `AGENTS.md` for touched paths (deeper files win on conflict)
 4. Existing local subsystem patterns
 5. General style preferences
 
-- Codex is launched from the project root, so only this root file is guaranteed
-  to load automatically. Before editing a path covered by nested guidance, read
-  the matching nested file explicitly.
-- This is repo-level guidance. Narrower nested `AGENTS.md` files add
-  subtree-specific rules and override broader guidance for their subtree.
-- Keep this file durable, concise, and repo-specific. Move subsystem-only detail into nested agent files when needed.
-- If the user names a specific file, work in that file only unless they approve spillover.
+Grok loads `AGENTS.md` from the repo root down to the current working
+directory. Nested files under `include/`, `src/`, and `tests/` apply when
+those trees are in scope. Follow the matching nested file before editing a
+listed subtree. If the user names a specific file, stay in that file unless
+they approve spillover.
+
+Keep this file durable and repo-specific. Put subtree-only rules in that
+subtree's `AGENTS.md`.
 
 ## Subtree Guidance
 
@@ -49,6 +50,7 @@ Read these files before editing matching paths:
 - Keep production and test updates in the same change when behavior changes.
 - Before finishing, run the most targeted build or test feasible and state exactly what you verified.
 - Treat implementation slices as full features: runtime behavior, docs, tests, and acceptance. See `docs/framework-implementation-slices.md`. Review a completed slice (**cpp-review-specialist**) before committing it.
+- Specialist routing (design → implement → review) lives in `.grok/skills/cpp-workflows`. Use **cpp-design-specialist**, **cpp-specialist**, and **cpp-review-specialist** for numbered slices and non-trivial C++ work.
 
 ## Fast Commands
 
@@ -97,16 +99,16 @@ Tests:
 Slow scripts:
 
 ```bash
-./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # slice-complete gate
+./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # branch/PR gate
 ./tests/test_scripts/run_controller_tests.sh --verbose
 ```
 
 Slice / local gates (see `docs/framework-implementation-slices.md`):
 
-- **Per-change:** targeted `ninja -C build` / `ninja -C build app` + named Boost.Test executable.
-- **Slice complete:** `ninja -C build` then `./tests/test_scripts/run_all_tests.sh --core-only --errors-only`.
+- **Per-change:** targeted `ninja -C build` / `ninja -C build app` + named Boost.Test executable for the touched system.
+- **Slice complete:** `ninja -C build` then the Boost.Test executables covering the slice's changed code.
 - **Slice review:** **cpp-review-specialist** before committing the slice.
-- **Branch / PR only (not each commit):** cppcheck, clang-tidy, ASan, TSan. Sanitizers are mutually exclusive.
+- **Branch / PR** (not each commit or slice completion): `./tests/test_scripts/run_all_tests.sh --core-only --errors-only`; cppcheck, clang-tidy, ASan, TSan. Sanitizers are mutually exclusive.
 
 Boost.Test notes:
 
@@ -122,6 +124,7 @@ See `tests/TESTING.md` for broader test documentation.
 - Headers mirror source under `include/`
 - Other important dirs: `tests/`, `docs/`, `res/`, `res/shaders/`
 - Slice implementation workflow and gates: `docs/framework-implementation-slices.md`.
+- Grok specialists and skills: `.grok/agents/`, `.grok/skills/` (routing: `.grok/skills/cpp-workflows`).
 - Dependency direction: `Core -> Managers -> GameStates -> Entities/Controllers`
 - **Managers serve the states:** states own screen lifecycle and policy; domain managers provide services states call. `GameStateManager` is state-stack infrastructure (not a domain manager). Full-screen transitions use exit-then-enter; UI is cleared in the transition and rebuilt in `enter()`. See `docs/ARCHITECTURE.md`.
 - Common architectural anchors: `GameEngine`, `ThreadSystem`, `EntityDataManager`, `AIManager`, `EventManager`, `ControllerRegistry`, `GPURenderer`, `GPUSceneRecorder`, `SpriteBatch`

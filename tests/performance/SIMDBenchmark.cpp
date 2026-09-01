@@ -716,7 +716,7 @@ BOOST_AUTO_TEST_CASE(TestPlatformDetection) {
 
     std::cout << "\nNOTE: SIMD speedups are typically higher in Release builds (-O3)." << std::endl;
     std::cout << "Debug builds may show lower speedups due to disabled optimizations." << std::endl;
-    std::cout << "Production speedups (CLAUDE.md claims): 2-4x in Release mode." << std::endl;
+    std::cout << "Production speedups (docs/utils/SIMDMath.md): 2-4x in Release mode." << std::endl;
 }
 
 BOOST_AUTO_TEST_CASE(BenchmarkAIDistanceCalculation) {
@@ -724,8 +724,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkAIDistanceCalculation) {
     result.print();
 
     if (isSIMDAvailable()) {
-        // Report against CLAUDE.md claims (informational)
-        std::cout << "\nCLAUDE.md claim: 3-4x speedup in Release builds" << std::endl;
+        // Report against documented SIMD targets (informational)
+        std::cout << "\nDocumented target: 3-4x speedup in Release builds" << std::endl;
         std::cout << "Measured: " << result.speedup << "x in " << getBuildConfiguration() << " build" << std::endl;
 
 #ifndef DEBUG
@@ -761,9 +761,9 @@ BOOST_AUTO_TEST_CASE(BenchmarkCollisionBoundsExpansion) {
             BOOST_REQUIRE_GE(result.speedup, 0.9f); // Allow up to 10% slower (measurement variance)
         }
 
-        // ARM64 specific check (CLAUDE.md claims 2-3x on Apple Silicon)
+        // ARM64 specific check (documented 2-3x on Apple Silicon)
 #if defined(VOIDLIGHT_SIMD_NEON)
-        std::cout << "\nCLAUDE.md claim: 2-3x speedup on ARM64 in Release builds" << std::endl;
+        std::cout << "\nDocumented target: 2-3x speedup on ARM64 in Release builds" << std::endl;
         std::cout << "Measured: " << result.speedup << "x" << std::endl;
 #endif
 #else
@@ -820,7 +820,7 @@ BOOST_AUTO_TEST_CASE(BenchmarkSummary) {
     std::cout << "2. SIMD provides measurable performance improvement" << std::endl;
     std::cout << "3. Results match scalar implementation (correctness)" << std::endl;
     std::cout << "4. Platform-specific SIMD intrinsics work correctly" << std::endl;
-    std::cout << "\nCLAUDE.md Performance Claims (Release builds):" << std::endl;
+    std::cout << "\nDocumented SIMD targets (Release builds):" << std::endl;
     std::cout << "- AIManager distance calculations: 3-4x speedup" << std::endl;
     std::cout << "- CollisionManager bounds (ARM64): 2-3x speedup" << std::endl;
     std::cout << "- ParticleManager physics: 2-4x speedup" << std::endl;

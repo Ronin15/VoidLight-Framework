@@ -33,7 +33,7 @@ static std::atomic<uint64_t> g_authoritativeFrame{0};
 // MEMORY MANAGEMENT: Uses buffer reuse pattern to avoid per-frame allocations
 // - Pre-allocated fixed-size array (no dynamic allocation per frame)
 // - Marks entries as stale instead of clearing
-// - Reuses vector capacity across frames (CLAUDE.md requirement)
+// - Reuses vector capacity across frames (AGENTS.md requirement)
 struct SpatialQueryCache {
   struct CacheEntry {
     uint64_t frameNumber{0};

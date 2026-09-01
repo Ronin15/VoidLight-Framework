@@ -480,7 +480,7 @@ Vector2D Camera::getTargetPosition() const {
 }
 
 Vector2D Camera::generateShakeOffset() const {
-    // Per CLAUDE.md: Use member vars instead of static for thread safety
+    // Per AGENTS.md: Use member vars instead of static for thread safety
     const float normalizedTime = 1.0f - (m_shakeTimeRemaining / std::max(m_shakeTimeRemaining + 0.1f, 0.1f));
     const float currentIntensity = m_shakeIntensity * (1.0f - normalizedTime); // Fade out over time
 

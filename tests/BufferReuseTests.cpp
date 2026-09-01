@@ -16,7 +16,7 @@
 // TEST SUITE: BufferReusePatternTests
 // ============================================================================
 // Tests that verify the fundamental buffer reuse patterns used throughout VoidLight
-// These patterns are documented in CLAUDE.md "Memory Management" section
+// These patterns are documented in AGENTS.md "Performance and Threading"
 
 BOOST_AUTO_TEST_SUITE(BufferReusePatternTests)
 
@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_SUITE(BufferReusePatternTests)
 // Test: Verify vector clear() preserves capacity
 // ----------------------------------------------------------------------------
 // This is the fundamental pattern used in AIManager, CollisionManager, ParticleManager
-// From CLAUDE.md: "clear() keeps capacity, no dealloc"
+// From AGENTS.md: preserve capacity with clear(), never swap() away reusable capacity
 
 BOOST_AUTO_TEST_CASE(TestVectorClearPreservesCapacity) {
     std::vector<int> buffer;
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // TEST SUITE: ReserveBeforePopulateTests
 // ============================================================================
 // Tests that verify proper use of reserve() before populating vectors
-// From CLAUDE.md: "reserve() before loops | Avoid push_back() without reserve"
+// From AGENTS.md: call reserve() when size is known; avoid per-frame allocations
 
 BOOST_AUTO_TEST_SUITE(ReserveBeforePopulateTests)
 
@@ -211,7 +211,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // TEST SUITE: MemberVariableBufferTests
 // ============================================================================
 // Tests that verify member variable buffer reuse patterns
-// From CLAUDE.md: "Member vars for hot-path buffers"
+// From AGENTS.md: reuse member buffers on hot paths
 
 BOOST_AUTO_TEST_SUITE(MemberVariableBufferTests)
 

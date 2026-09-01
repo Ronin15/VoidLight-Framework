@@ -128,7 +128,7 @@ namespace {
             std::cout << "Testing frame time degradation with increasing entity counts" << std::endl;
             std::cout << std::endl;
 
-            // Entity counts aligned with engine's 10K+ AI target (see CLAUDE.md)
+            // Entity counts aligned with engine's 10K+ AI target (see AGENTS.md)
             std::vector<size_t> entityCounts = {500, 1000, 2500, 5000, 10000};
             std::vector<FrameStats> scalingResults;
 

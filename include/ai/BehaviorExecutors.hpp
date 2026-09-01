@@ -71,7 +71,7 @@ struct BehaviorContext {
     // Pre-fetched knockback sidecar — worker threads call knockback.get(edmIndex) for O(1)
     // presence check without touching EntityDataManager::Instance().
     // Reference (not pointer) because a BehaviorContext is always constructed with the
-    // process-wide sidecar — null has no meaning here and CLAUDE.md forbids nullable accessors.
+    // process-wide sidecar — null has no meaning here and AGENTS.md forbids nullable accessors.
     // Declared last so the initializer list order matches declaration order.
     SparseSidecar<KnockbackData>& knockback;
 

@@ -1,74 +1,73 @@
 # Framework Implementation Slices
 
-Agent **implementation workflow** for this repo. Work that is a complete feature
-chunk is a **numbered slice** with a **Goal**, **Checklist**, and **Acceptance
-checks**. This file owns the process — not a product roadmap. Future slices are
-added as `## Slice N` sections when that work is scheduled.
+Process for complete feature chunks in this repo. This file owns the process —
+not a product roadmap. Add work as a `## Slice N` section when it is scheduled.
 
-A slice is not done until every Checklist and Acceptance item in **that
-section** is `[x]`, owning docs and tests are integrated, the slice-complete
-gate has passed, and the slice has been **reviewed**.
+A **numbered slice** has a **Goal**, **Checklist**, and **Acceptance checks**.
+It is not done until every item in **that section** is `[x]`, owning docs and
+tests are updated, the slice-complete gate has passed, and
+**cpp-review-specialist** has reviewed the diff.
+
+Do not implement from chat notes. Add the section first, then implement from
+it. **Code wins over stale slice prose.** Durable contracts live in `AGENTS.md`
+and subsystem docs.
 
 ## Ground Rules
 
-- Preserve runnable defaults: `ninja -C build app` and
-  `./bin/<cfg>/VoidLight_Template` should keep working after every slice.
-- Partial wiring stays `[ ]` with remaining notes in that slice section —
-  never implied complete elsewhere.
-- If a dependent system does not exist yet, label the work as foundation or
-  preparation and leave the checklist incomplete.
-- Implement only the open slice's scope. Do not expand into unrelated
-  refactors.
-- Read [ARCHITECTURE.md](ARCHITECTURE.md) and the owning live modules before
-  editing. **Code wins over stale slice prose.** Durable contracts stay in
-  `AGENTS.md`, `CLAUDE.md`, and subsystem docs.
-- Do not implement from chat notes or a gap list. Add a `## Slice N` section
-  first (Goal / Checklist / Acceptance), then implement from that section.
+- Keep `ninja -C build app` and `./bin/<cfg>/VoidLight_Template` working after
+  every slice.
+- Partial wiring stays `[ ]` with remaining notes in that section — never
+  implied complete elsewhere.
+- If a dependent system does not exist yet, label the work as foundation and
+  leave the checklist incomplete.
+- Implement only the open slice's scope. No unrelated refactors.
 
-## Gating (do not mix these)
+## Gates (do not mix these)
+
+Canonical gate names used by agents and `AGENTS.md`:
 
 | Gate | When | What |
 | --- | --- | --- |
-| **Per-change** | Every edit while implementing | Targeted `ninja -C build` or `ninja -C build app` plus the named Boost.Test executable for the touched system. Architecture / threading self-check. **Not** cppcheck, clang-tidy, ASan, or TSan. |
-| **Slice complete** | Before marking the slice done | Every Checklist and Acceptance item `[x]`; owning docs and tests updated; `ninja -C build`; then `./tests/test_scripts/run_all_tests.sh --core-only --errors-only` (`.bat` on Windows). No benches. |
-| **Slice review** | **Before committing the slice** | `cpp-review-specialist` on the slice diff. Do not commit a completed slice unreviewed. |
-| **Branch / PR** | When the branch is ready to merge — **not** each incremental commit | cppcheck, clang-tidy, ASan, TSan (sanitizers are mutually exclusive). Optional Valgrind. These are **branch gates**, not per-change or per-commit gates. |
+| **Per-change** | Every edit while implementing | Targeted `ninja -C build` or `ninja -C build app` plus the named Boost.Test executable for the touched system. **Not** cppcheck, clang-tidy, ASan, TSan, or the core-only suite. |
+| **Slice complete** | Before marking the slice done | Every Checklist and Acceptance item `[x]`; owning docs and tests updated; `ninja -C build`; then the Boost.Test executables covering the slice's changed code (`--run_test` when a case is enough). No `run_all_tests.sh --core-only`. No benches. |
+| **Slice review** | Before committing the slice | `cpp-review-specialist` on the slice diff. Do not commit a completed slice unreviewed. |
+| **Branch / PR** | When the branch is ready to merge — not each commit or slice completion | `./tests/test_scripts/run_all_tests.sh --core-only --errors-only` (`.bat` on Windows); cppcheck, clang-tidy, ASan, TSan (sanitizers are mutually exclusive). Optional Valgrind. |
 
 Interactive `./bin/<cfg>/VoidLight_Template` is display-gated. Leave visual/GPU
-residuals `[ ]` on the live slice until confirmed; do not block the
-compile/core-test gate on a display.
+residuals `[ ]` until confirmed; they do not block slice-complete.
 
-## Agent Workflow: Implementing A Slice
+## Implementing a slice
 
-1. **Open or add** the slice section (`## Slice N: …`). Read **Goal**,
-   **Current foundation**, and **Architecture notes**. Cross-read
-   [ARCHITECTURE.md](ARCHITECTURE.md) and any doc linked in the slice.
-2. **Implement only that slice's scope** in the owning `include/` + `src/`
-   modules.
-3. **Check off Checklist items** as each integration lands (runtime behavior +
-   tests for that item). Use the **per-change** gate while iterating.
-4. **Satisfy Acceptance checks** — each must pass before the slice is done.
-5. **Update durable docs** the slice touches when contracts change.
-6. **Set Status** (if present) and run the **slice-complete** gate.
-7. **Review before commit.** Route the finished diff to
-   **cpp-review-specialist**. Do not commit until that review has run.
-8. When fully complete, move the entire section to
+Route through `.grok/skills/cpp-workflows` when using specialists.
+
+1. **Open or add** `## Slice N: …`. Read Goal, Current foundation, and
+   Architecture notes. Cross-read [ARCHITECTURE.md](ARCHITECTURE.md) and any
+   doc linked in the slice.
+2. **Design first** (`cpp-design-specialist`) if ownership, lifecycle, or
+   multi-manager flow is unclear. Do not mark the slice complete in the design.
+3. **Implement only that slice's scope** (`cpp-specialist`) in the owning
+   `include/` + `src/` modules. Check off Checklist items as each integration
+   lands (runtime behavior + tests). Use the **per-change** gate while iterating.
+4. **Satisfy Acceptance checks.** Update durable docs when contracts change.
+5. **Slice-complete gate**, then **slice review**. Do not commit until review
+   has run.
+6. When fully complete, move the entire section to
    `docs/framework-implementation-slices-archive.md` (create that file when the
-   first slice is archived). Leave residual follow-ups only in a later slice
-   — do not delete acceptance history.
+   first slice is archived). Leave residual follow-ups only in a later slice —
+   do not delete acceptance history.
 
-### Standard slice section shape
+### Section shape
 
-| Block | Agent use |
+| Block | Use |
 | --- | --- |
-| **Goal** | What "done" means for this chunk |
+| **Goal** | What “done” means |
 | **Current foundation** | What already exists — do not rebuild |
-| **Architecture notes** / **Problem** | Constraints and ownership boundaries |
-| **Checklist** | `[ ]` / `[x]` implementation steps — check off as you land each |
-| **Acceptance checks** | `[ ]` / `[x]` verification gates — all required before complete |
-| **Status** | Open/partial note, or one-line completion record before archive move |
+| **Architecture notes** / **Problem** | Constraints and ownership |
+| **Checklist** | `[ ]` / `[x]` implementation steps |
+| **Acceptance checks** | `[ ]` / `[x]` verification gates — all required |
+| **Status** | Open/partial note, or one-line completion record before archive |
 
-### Template (copy into a new `## Slice N` section)
+### Template
 
 ```markdown
 ## Slice N: Title
@@ -93,7 +92,7 @@ Acceptance checks:
 
 - [ ] …
 - [ ] `ninja -C build` passes
-- [ ] `./tests/test_scripts/run_all_tests.sh --core-only --errors-only` passes
+- [ ] Targeted Boost.Test executables for the changed code pass
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
 Status: Not started
