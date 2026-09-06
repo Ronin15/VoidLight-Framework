@@ -293,7 +293,7 @@ void GamePlayState::update(float deltaTime) {
       if (auto* gameOverState = dynamic_cast<GameOverState*>(
               mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
         // Sticky return target: always re-pin before transition so a prior
-        // Advanced AI death cannot leave Retry pointed at the wrong state.
+        // death in another state cannot leave Retry pointed at the wrong id.
         gameOverState->setReturnState(GameStateId::GAME_PLAY);
       }
 

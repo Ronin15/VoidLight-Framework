@@ -17,7 +17,7 @@ Current controller families:
 | Controller | Role | Notes |
 |-----------|------|-------|
 | [CombatController](CombatController.md) | Player melee/ranged combat, stamina timing, ammo use, and melee fallback | Emits damage/projectiles through current gameplay paths; logs player combat feedback |
-| [HudController](HudController.md) | State-scoped action HUD: vitals, target frame, optional hotbar, harvest progress | Creates widgets via UIManager; `setVisible()` for pause/resume; demos may skip hotbar |
+| [HudController](HudController.md) | State-scoped action HUD: vitals, target frame, optional hotbar, harvest progress | Creates widgets via UIManager; `setVisible()` for pause/resume; hotbar init is optional |
 | [InventoryController](InventoryController.md) | Player inventory overlay, container UI, gear UI, pickup, slot reordering, loot/store transfers, and hotbar assignment | Syncs from ResourceChange events; uses EDM ordered slots; hands hotbar writes to HudController |
 | [WeatherController](WeatherController.md) | Weather state tracking | Event-driven |
 | [DayNightController](DayNightController.md) | Time-of-day visuals and GPU lighting | Requires `update(dt)` each frame |

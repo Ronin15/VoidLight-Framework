@@ -4,7 +4,7 @@
 
 ## Overview
 
-`CombatController` is the player-facing combat helper used by gameplay and demo states. It is frame-updatable because it owns:
+`CombatController` is the player-facing combat helper used by `GamePlayState`. It is frame-updatable because it owns:
 
 - attack cooldown timing
 - stamina regeneration

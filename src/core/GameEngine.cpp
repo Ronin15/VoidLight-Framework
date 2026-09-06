@@ -1104,7 +1104,7 @@ void GameEngine::update(float deltaTime) {
   //
   // STATE-MANAGED SYSTEMS (Updated by individual states):
   // - UIManager: Optional, state-specific, only updated when UI is actually used
-  //   See UIDemoState::update() for proper state-managed pattern
+  //   See MainMenuState::update() for the state-managed pattern
 
   // Mark frame start for WorkerBudget per-frame caching
   VoidLight::WorkerBudgetManager::Instance().markFrameStart();

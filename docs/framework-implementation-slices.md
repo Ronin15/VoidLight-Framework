@@ -134,7 +134,7 @@ Current foundation (at slice start; landed APIs are in Status):
 
 Architecture notes:
 
-- **GamePlayState is the production HUD consumer.** Design the controller for that state. `AdvancedAIDemoState` and other demos are showcase code; they may add `HudController` and call a subset of init, but they must not justify new public APIs, extra widgets, or a “universal HUD facade.”
+- **GamePlayState is the production HUD consumer.** Design the controller for that state. Tooling states such as AIDemo/EventDemo must not justify new public APIs, extra widgets, or a “universal HUD facade.”
 - **Do not kitchen-sink `HudController`.** It is not a dump for every on-screen label. Keep time, event log, and FPS on `GamePlayState` (session chrome, multiple writers, debug toggle). Keep inventory and trade on their controllers.
 - `HudController` owns the action HUD subtree: HP/SP bars, target name/bar, hotbar, harvest progress. It creates those widgets via `UIManager` primitives, updates them with dirty-flag `setValue`/`setText`/visibility, and exposes `setVisible(bool)` for pause/resume of **its** subtree.
 - `UIManager` stays the widget service (storage, layout, theme, hit-testing). Move combat-HUD *policy* off the manager. Existing `createCombatHUD` helpers should die or become private/test-only if design proves a thin helper is still needed; production states must not call them.

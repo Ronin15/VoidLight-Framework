@@ -80,4 +80,4 @@ Typical manager order when present:
 
 ## GameOverState
 
-This branch adds a dedicated `GameOverState` so gameplay/demo states can route player death into a real state instead of handling game-over UI inline.
+This branch adds a dedicated `GameOverState` so GamePlayState (and AIDemo/EventDemo if they set a return state) can route player death into a real state instead of handling game-over UI inline.

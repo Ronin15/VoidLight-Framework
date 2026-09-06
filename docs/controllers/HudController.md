@@ -37,7 +37,7 @@ Target getters (`hasActiveTarget()`, `getTargetLabel()`, `getTargetHealth()`) re
 - Toggle `setVisible(false)` on pause, `true` on resume. `setVisible(true)` restores player vitals and hotbar, then applies current logical target/harvest visibility (it does not force-show target/harvest)
 - Let `InventoryController` assign and reorder items through `assignHotbarItem()`, `moveHotbarItem()`, and `clearHotbarItem()` instead of mutating UI components directly
 
-`AdvancedAIDemoState` calls `initializeActionHUD()` only (no hotbar, harvest feed, or `setVisible`). Target-state-only tests may add the controller without either init. Hotbar tests may call `initializeHotbarUI()` only.
+`GamePlayState` is the production HUD consumer. Target-state-only tests may add the controller without either init. Hotbar tests may call `initializeHotbarUI()` only.
 
 ## Rules
 

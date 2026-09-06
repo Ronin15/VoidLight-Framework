@@ -46,8 +46,8 @@ so the same registered `LoadingState` instance can be reused.
    drain stays on so that lifecycle event can run: collision rebuilds static
    colliders from the handler (not from `update()`) and fires Immediate
    `StaticCollidersReady`. Destination `enter()` (GamePlayState,
-   AdvancedAIDemoState) already unpauses and EventManager is the gameplay
-   bus again.
+   AIDemoState, EventDemoState) already unpauses and EventManager is the
+   gameplay bus again.
 3. loading UI is created in pixel-space using `GameEngine::getWidthInPixels()`
    and `getHeightInPixels()`.
 4. `startAsyncWorldLoad()` enqueues world generation on `ThreadSystem`.

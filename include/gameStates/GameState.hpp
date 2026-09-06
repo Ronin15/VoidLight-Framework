@@ -24,10 +24,7 @@ enum class GameStateId : uint8_t
     GAME_OVER,
     PAUSE,
     AI_DEMO,
-    ADVANCED_AI_DEMO,
     EVENT_DEMO,
-    UI_DEMO,
-    OVERLAY_DEMO,
     COUNT
 };
 

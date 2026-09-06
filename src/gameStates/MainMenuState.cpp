@@ -69,24 +69,22 @@ bool MainMenuState::enter() {
   int buttonHeight = 50;
   int buttonSpacing = 20;
 
-  // Calculate relative offsets from center for 8 buttons
-  // Total height: 8 buttons * 50px + 7 gaps * 20px = 540px
-  // Center the group by starting at -270 from center
+  // Five buttons: Start Game, AI Demo (load test), Event Demo (power bench),
+  // Settings, Exit. Not a five-demo showcase.
+  // Total height: 5 buttons * 50px + 4 gaps * 20px = 330px
+  // Center the group by starting at -165 from center
   int buttonStep = buttonHeight + buttonSpacing; // 70px between each button
-  int firstButtonOffset = -270; // Top of centered button group
+  int firstButtonOffset = -165; // Top of centered button group
 
   // Use createCenteredButton helper for streamlined button creation
   ui.createCenteredButton("mainmenu_start_game_btn", firstButtonOffset, buttonWidth, buttonHeight, "Start Game");
   ui.createCenteredButton("mainmenu_ai_demo_btn", firstButtonOffset + buttonStep, buttonWidth, buttonHeight, "AI Demo");
-  ui.createCenteredButton("mainmenu_advanced_ai_demo_btn", firstButtonOffset + 2 * buttonStep, buttonWidth, buttonHeight, "Advanced AI Demo");
-  ui.createCenteredButton("mainmenu_event_demo_btn", firstButtonOffset + 3 * buttonStep, buttonWidth, buttonHeight, "Event Demo");
-  ui.createCenteredButton("mainmenu_ui_example_btn", firstButtonOffset + 4 * buttonStep, buttonWidth, buttonHeight, "UI Demo");
-  ui.createCenteredButton("mainmenu_overlay_demo_btn", firstButtonOffset + 5 * buttonStep, buttonWidth, buttonHeight, "Overlay Demo");
-  ui.createCenteredButton("mainmenu_settings_btn", firstButtonOffset + 6 * buttonStep, buttonWidth, buttonHeight, "Settings");
+  ui.createCenteredButton("mainmenu_event_demo_btn", firstButtonOffset + 2 * buttonStep, buttonWidth, buttonHeight, "Event Demo");
+  ui.createCenteredButton("mainmenu_settings_btn", firstButtonOffset + 3 * buttonStep, buttonWidth, buttonHeight, "Settings");
 
   // Exit button uses danger style (manual creation + positioning)
-  ui.createButtonDanger("mainmenu_exit_btn", {ui.getWidthInPixels()/2 - buttonWidth/2, ui.getHeightInPixels()/2 + firstButtonOffset + 7 * buttonStep, buttonWidth, buttonHeight}, "Exit");
-  ui.setComponentPositioning("mainmenu_exit_btn", {UIPositionMode::CENTERED_BOTH, 0, firstButtonOffset + 7 * buttonStep, buttonWidth, buttonHeight});
+  ui.createButtonDanger("mainmenu_exit_btn", {ui.getWidthInPixels()/2 - buttonWidth/2, ui.getHeightInPixels()/2 + firstButtonOffset + 4 * buttonStep, buttonWidth, buttonHeight}, "Exit");
+  ui.setComponentPositioning("mainmenu_exit_btn", {UIPositionMode::CENTERED_BOTH, 0, firstButtonOffset + 4 * buttonStep, buttonWidth, buttonHeight});
 
   // Set up button callbacks - capture mp_stateManager for proper architecture
   ui.setOnClick("mainmenu_start_game_btn", [this]() {
@@ -97,20 +95,8 @@ bool MainMenuState::enter() {
     mp_stateManager->changeState(GameStateId::AI_DEMO);
   });
 
-  ui.setOnClick("mainmenu_advanced_ai_demo_btn", [this]() {
-    mp_stateManager->changeState(GameStateId::ADVANCED_AI_DEMO);
-  });
-
   ui.setOnClick("mainmenu_event_demo_btn", [this]() {
     mp_stateManager->changeState(GameStateId::EVENT_DEMO);
-  });
-
-  ui.setOnClick("mainmenu_ui_example_btn", [this]() {
-    mp_stateManager->changeState(GameStateId::UI_DEMO);
-  });
-
-  ui.setOnClick("mainmenu_overlay_demo_btn", [this]() {
-    mp_stateManager->changeState(GameStateId::OVERLAY_DEMO);
   });
 
   ui.setOnClick("mainmenu_settings_btn", [this]() {
@@ -259,7 +245,8 @@ void MainMenuState::handleInput() {
     openQuitDialog();
   }
 
-  // Developer debug shortcuts for demo states — Debug builds only.
+  // Debug shortcuts: A = AI Demo (load test), E = Event Demo (power bench),
+  // S = Settings. Not a five-demo showcase.
   VOIDLIGHT_DEBUG_ONLY(
     const auto& inputManager = InputManager::Instance();
     if (inputManager.wasKeyPressed(SDL_SCANCODE_A)) {
@@ -267,12 +254,6 @@ void MainMenuState::handleInput() {
     }
     if (inputManager.wasKeyPressed(SDL_SCANCODE_E)) {
         mp_stateManager->changeState(GameStateId::EVENT_DEMO);
-    }
-    if (inputManager.wasKeyPressed(SDL_SCANCODE_U)) {
-        mp_stateManager->changeState(GameStateId::UI_DEMO);
-    }
-    if (inputManager.wasKeyPressed(SDL_SCANCODE_O)) {
-        mp_stateManager->changeState(GameStateId::OVERLAY_DEMO);
     }
     if (inputManager.wasKeyPressed(SDL_SCANCODE_S)) {
         if (auto* settingsState = dynamic_cast<SettingsMenuState*>(
@@ -479,12 +460,11 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
     }
   }
 
-  // River receding to the horizon, offset to the right so it runs behind the
-  // grass instead of directly behind the (screen-centered) button column: a
-  // stack of bands whose width and tile size shrink toward the vanishing
-  // point (squared depth compresses perspective). A sine travelling along the
-  // river's length modulates band brightness, which reads as flowing,
-  // shimmering water; bands also fade with atmospheric depth.
+  // River receding to the horizon, offset right so it runs behind the grass
+  // instead of the centered 300×330 button stack (5 buttons, first offset
+  // -165). Bands shrink toward the vanishing point (squared depth). A sine
+  // along the river modulates brightness as flowing water; bands fade with
+  // depth.
   const float riverCx = screenW * 0.76f;
   const float nearHalf = screenW * 0.13f;
   const float farHalf = screenW * 0.007f;
@@ -528,12 +508,10 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
   drawTile(m_tiles.tree, screenW * 0.17f, yH + screenH * 0.02f, treeMidW, 110, 128, 118);
   drawTile(m_tiles.tree, screenW * 0.62f, yH + screenH * 0.02f, treeMidW, 110, 128, 118);
 
-  // Mid-ground decorations, between the horizon and the foreground band
-  // below - previously this whole strip (behind/around the button column
-  // and the smaller framing trees) was empty. Kept clear of the button
-  // column (centered, ~490-790px wide, y~150-630), the mid-trees, and the
-  // river (whose left edge is still close to screen center up here, well
-  // before it widens toward the bottom of the screen).
+  // Mid-ground decorations between the horizon and the foreground band.
+  // Keep clear of the centered 300×330 button stack, the mid-trees, and the
+  // river (left edge is still near screen center up here, before it widens
+  // toward the bottom).
   const float midFlowerW = screenH * 0.045f;
   drawTile(m_tiles.bush, screenW * 0.255f, screenH * 0.50f, midFlowerW * 1.2f, 140, 155, 130);
   drawTile(m_tiles.mushroom, screenW * 0.33f, screenH * 0.58f, midFlowerW * 0.55f, 190, 180, 155);
@@ -561,9 +539,8 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
   drawTile(m_tiles.woodPile, campfireCenter.getX() - woodW * 0.5f,
            campfireCenter.getY() - woodW * 0.5f, woodW, 225, 175, 120);
 
-  // Riverbank rocks, and decorations scattered across the meadow foreground
-  // (kept clear of the centered button column and the moved river - verified
-  // against the river's per-band bounds computed above, not just eyeballed).
+  // Riverbank rocks and meadow-foreground decorations. Keep clear of the
+  // centered 300×330 button stack and the river (per-band bounds above).
   const float rockW = screenH * 0.05f;
   drawTile(m_tiles.rock, riverCx - nearHalf - rockW, screenH * 0.86f, rockW, 150, 152, 158);
   const float flowerW = screenH * 0.045f;

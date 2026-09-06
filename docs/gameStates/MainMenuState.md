@@ -8,6 +8,9 @@
 `GameEngine::setGlobalPause(true)`, creates the main menu UI, and routes button
 callbacks to typed `GameStateId` transitions.
 
+Buttons: Start Game, AI Demo (load test), Event Demo (power bench), Settings,
+Exit. Debug shortcuts `A` / `E` jump to AI Demo / Event Demo.
+
 ## UI and Input
 
 - menu buttons are centered with `UIManager` positioning helpers

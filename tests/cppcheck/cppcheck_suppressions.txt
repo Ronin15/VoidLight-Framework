@@ -21,8 +21,6 @@ missingInclude:*/entities/playerStates/PlayerRunningState.hpp
 missingInclude:*/gameStates/EventDemoState.hpp
 missingInclude:*/gameStates/AIDemoState.hpp
 missingInclude:*/gameStates/MainMenuState.hpp
-missingInclude:*/gameStates/UIExampleState.hpp
-missingInclude:*/gameStates/OverlayDemoState.hpp
 missingInclude:*/utils/Vector2D.hpp
 missingInclude:*/utils/BinarySerializer.hpp
 

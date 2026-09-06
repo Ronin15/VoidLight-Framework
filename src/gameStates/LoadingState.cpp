@@ -58,8 +58,9 @@ bool LoadingState::enter() {
   // (rebuild static colliders, Immediate StaticCollidersReady). LoadingState
   // waits on PathfinderManager::isGridReady(). EventManager must stay
   // unpaused so that deferred lifecycle event can drain.
-  // Destination enter() unpauses (GamePlayState, AdvancedAIDemoState) via
-  // GameEngine::setGlobalPause(false); EventManager is the gameplay bus again.
+  // Destination enter() unpauses (GamePlayState, AIDemoState, EventDemoState)
+  // via GameEngine::setGlobalPause(false); EventManager is the gameplay bus
+  // again.
   GameEngine::Instance().setGlobalPause(true);
   EventManager::Instance().setGlobalPause(false);
 

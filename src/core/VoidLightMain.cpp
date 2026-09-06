@@ -10,16 +10,13 @@
 #include "managers/GameStateManager.hpp"
 #include "utils/FrameProfiler.hpp"
 #include "gameStates/AIDemoState.hpp"
-#include "gameStates/AdvancedAIDemoState.hpp"
 #include "gameStates/EventDemoState.hpp"
 #include "gameStates/GamePlayState.hpp"
 #include "gameStates/GameOverState.hpp"
 #include "gameStates/LoadingState.hpp"
 #include "gameStates/LogoState.hpp"
 #include "gameStates/MainMenuState.hpp"
-#include "gameStates/OverlayDemoState.hpp"
 #include "gameStates/SettingsMenuState.hpp"
-#include "gameStates/UIDemoState.hpp"
 #include <array>
 #include <chrono>
 #include <format>
@@ -42,10 +39,7 @@ static void registerInitialStates(GameStateManager& stateManager) {
   stateManager.addState(std::make_unique<GamePlayState>());
   stateManager.addState(std::make_unique<GameOverState>());
   stateManager.addState(std::make_unique<AIDemoState>());
-  stateManager.addState(std::make_unique<AdvancedAIDemoState>());
   stateManager.addState(std::make_unique<EventDemoState>());
-  stateManager.addState(std::make_unique<UIDemoState>());
-  stateManager.addState(std::make_unique<OverlayDemoState>());
 }
 
 int main(int, char*[]) {

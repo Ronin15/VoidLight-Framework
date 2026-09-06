@@ -168,8 +168,6 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineCallsEndFrame) {
     // Verify game states never end the frame directly
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
         sourcePath("src/gameStates/LogoState.cpp"),
         sourcePath("src/gameStates/GameOverState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
@@ -177,7 +175,6 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineCallsEndFrame) {
         sourcePath("src/gameStates/PauseState.cpp"),
         sourcePath("src/gameStates/SettingsMenuState.cpp"),
         sourcePath("src/gameStates/LoadingState.cpp"),
-        sourcePath("src/gameStates/UIDemoState.cpp"),
         sourcePath("src/gameStates/EventDemoState.cpp")
     };
 
@@ -204,8 +201,6 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineBeginsScenePass) {
     // Verify GameStates NEVER begin the pass directly
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
         sourcePath("src/gameStates/LogoState.cpp"),
         sourcePath("src/gameStates/GameOverState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
@@ -213,7 +208,6 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineBeginsScenePass) {
         sourcePath("src/gameStates/PauseState.cpp"),
         sourcePath("src/gameStates/SettingsMenuState.cpp"),
         sourcePath("src/gameStates/LoadingState.cpp"),
-        sourcePath("src/gameStates/UIDemoState.cpp"),
         sourcePath("src/gameStates/EventDemoState.cpp")
     };
 
@@ -346,11 +340,9 @@ BOOST_AUTO_TEST_CASE(TestCompleteRenderingFlow) {
     // Step 3: At least one GameState implements GPU rendering hooks
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
         sourcePath("src/gameStates/GamePlayState.cpp"),
         sourcePath("src/gameStates/LoadingState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
         sourcePath("src/gameStates/EventDemoState.cpp"),
         sourcePath("src/gameStates/LogoState.cpp")
     };
@@ -600,13 +592,12 @@ BOOST_AUTO_TEST_SUITE(DeterministicRenderingTests)
 BOOST_AUTO_TEST_CASE(TestNoRandomInRenderMethods) {
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
         sourcePath("src/gameStates/GameOverState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
         sourcePath("src/gameStates/GamePlayState.cpp"),
         sourcePath("src/gameStates/PauseState.cpp"),
         sourcePath("src/gameStates/SettingsMenuState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
+        sourcePath("src/gameStates/EventDemoState.cpp"),
         sourcePath("src/gameStates/LogoState.cpp")
     };
 

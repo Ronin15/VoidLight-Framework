@@ -180,7 +180,7 @@ See `tests/TESTING.md` for broader test documentation.
 
 - Call `prepareForStateTransition()` on active managers before cleanup.
 - In AI-heavy states, clean up in this order when initialized: `AIManager`, `ProjectileManager`, `BackgroundSimulationManager`, `WorldManager`, `WorldResourceManager`, `EventManager`, `CollisionManager`, `PathfinderManager`, `EntityDataManager`, `WorkerBudgetManager`, `ParticleManager`.
-- Demo states may skip managers they never initialized.
+- AIDemo (load test) and EventDemo (power bench) may skip managers they never initialized.
 - `ControllerRegistry::clear()` must be called in `GamePlayState::exit()`, not just `unsubscribeAll()`.
 - `EventManager` supports persistent and transient handlers. Persistent manager-level handlers register in `init()` with `registerPersistentHandler[WithToken]()` and survive transitions. State-level handlers register in `enter()` with `registerHandler[WithToken]()` and are cleared by `clearTransientHandlers()`. `clearAllHandlers()` is for shutdown only.
 - Collision callbacks are manager-owned infrastructure; projectile collisions use the persistent projectile hit sink rather than state-owned callbacks.
@@ -211,7 +211,7 @@ See `tests/TESTING.md` for broader test documentation.
 - For `EventManager` regressions, first distinguish missing state-owned handler wiring in tests from a production defect.
 - Delete dead code and unused parameters. Do not comment them out.
 - `FrameProfiler` uses `F3`. Prefer RAII timers: `ScopedPhaseTimer`, `ScopedManagerTimer`, `ScopedRenderTimer`, `ScopedRenderTimerGPU`. Profiling is a no-op in release builds; hitch detection starts above 20 ms.
-- Demo states are test and showcase code. `GamePlayState` stays production-clean.
+- AIDemo (load test) and EventDemo (power bench) are production-adjacent tooling. `GamePlayState` stays production-clean.
 - Use `SettingsMenuState` and `MainMenuState` as menu references.
 - `WorldResourceManager` is a spatial index over EDM, not a quantity store.
 - `CollisionManager::subscribeWorldEvents()` is persistent manager infrastructure registered from `init()`; do not rewire it during state transitions.

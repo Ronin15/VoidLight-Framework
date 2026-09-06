@@ -71,14 +71,15 @@ Key states include:
 - `LoadingState`
 - `GamePlayState`
 - `PauseState`
-- demo states (`AIDemoState`, `AdvancedAIDemoState`, `EventDemoState`, `OverlayDemoState`, `UIDemoState`)
+- `AIDemoState` (load test)
+- `EventDemoState` (power bench)
 - `GameOverState`
 
 Important transitions:
 
 - `MainMenuState -> LoadingState -> GamePlayState`
 - `GamePlayState -> GameOverState`
-- AI-heavy demos may also route to `GameOverState`
+- AIDemo/EventDemo may also route to `GameOverState` if they set a return state
 
 ## State Transitions (UI + lifecycle)
 
