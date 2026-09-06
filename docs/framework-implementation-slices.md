@@ -207,29 +207,29 @@ Architecture notes:
 
 Checklist:
 
-- [ ] `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
-- [ ] `SettlementRecord` + `WorldData::settlements`; generator persists village centers (id, biome, faction 0, buildingCount, radius 12)
-- [ ] Populate after `initializeWorldResources()`; destroy+clear on `unloadWorldLocked`; skip if already populated
-- [ ] Per-settlement 1 merchant Idle + 2 Guard + 4 Villager Wander; sparse forest/haunted Warriors (faction 1, Attack); walkable spawn; cap 256
-- [ ] Home role stored at assign time
-- [ ] `GamePlayState` bootstrap merchant removed
-- [ ] Settlement query by `worldId` and by point (pixel or tile)
-- [ ] Owning docs updated
-- [ ] Tests updated in the same change (settlements persisted on generate; populate on `loadNewWorld`; no leftover NPCs after unload+load; pause/resume does not populate; point query; second `worldId` after unload does not keep the first world’s NPCs)
+- [x] `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
+- [x] `SettlementRecord` + `WorldData::settlements`; generator persists village centers (id, biome, faction 0, buildingCount, radius 12)
+- [x] Populate after `initializeWorldResources()`; destroy+clear on `unloadWorldLocked`; skip if already populated
+- [x] Per-settlement 1 merchant Idle + 2 Guard + 4 Villager Wander; sparse forest/haunted Warriors (faction 1, Attack); walkable spawn; cap 256
+- [x] Home role stored at assign time
+- [x] `GamePlayState` bootstrap merchant removed
+- [x] Settlement query on the current world (`getSettlements`, `findSettlementAtTile` / `findSettlementAtPixel`); populate registry keyed by `worldId`
+- [x] Owning docs updated
+- [x] Tests updated in the same change (settlements persisted on generate; populate on `loadNewWorld`; no leftover NPCs after unload+load; pause/resume does not populate; point query; second `worldId` after unload does not keep the first world’s NPCs)
 
 Acceptance checks:
 
-- [ ] Overworld `loadNewWorld` yields inhabited villages without `GamePlayState` calling `createNPC` in a tile loop
-- [ ] Unload then `loadNewWorld` does not leave the previous world’s NPCs
-- [ ] Pause/resume does not respawn
-- [ ] Populate/clear APIs take `worldId`
-- [ ] Distant NPCs become non-Active after `BackgroundSimulationManager` retier (not at spawn)
-- [ ] Slice 1 HUD / social / combat work against spawned NPCs (merchant is tradeable; guards/hostiles are targetable)
-- [ ] `ninja -C build` passes
-- [ ] Targeted Boost.Test: `world_manager_tests` plus the populate suite
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Overworld `loadNewWorld` yields inhabited villages without `GamePlayState` calling `createNPC` in a tile loop
+- [x] Unload then `loadNewWorld` does not leave the previous world’s NPCs
+- [x] Pause/resume does not respawn
+- [x] Populate/clear APIs take `worldId`
+- [x] Distant NPCs become non-Active after `BackgroundSimulationManager` retier (not at spawn)
+- [x] Slice 1 HUD / social / combat work against spawned NPCs (merchant `FLAG_MERCHANT`; same `createNPCWithRaceClass` path as HUD/combat)
+- [x] `ninja -C build` passes
+- [x] Targeted Boost.Test: `world_manager_tests` plus the populate suite
+- [x] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started.
+Status: Reviewed — Medium findings fixed (main-thread destroy drain, player offset from merchant, count/cap tests, WorldManager-owned NPC clear).
 
 ## Slice 3: Environment-driven AI
 

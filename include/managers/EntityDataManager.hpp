@@ -417,7 +417,11 @@ public:
     void destroyEntity(EntityHandle handle);
 
     /**
-     * @brief Process pending destructions (call at end of frame)
+     * @brief Process pending destructions (main thread only)
+     *
+     * GameEngine drains this at end of frame. prepareForStateTransition
+     * and WorldManager::unloadWorld (main/test callers) may drain after
+     * enqueueing. Worker/load paths must only call destroyEntity().
      */
     void processDestructionQueue();
 

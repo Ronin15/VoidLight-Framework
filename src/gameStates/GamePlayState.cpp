@@ -82,15 +82,23 @@ bool GamePlayState::enter() {
     // Local references for init-only managers (not cached as members)
     auto &gameTimeMgr = GameTimeManager::Instance();
 
-    // Create player and position at screen center
+    // Create player one tile east of the first settlement so HUD/trade
+    // meet populated NPCs without overlapping the center merchant.
+    // Fall back to screen center when the world has no settlements.
     mp_Player = std::make_shared<Player>();
     mp_Player->ensurePhysicsBodyRegistered();
     mp_Player->initializeInventory();
 
-    // Position player at screen center
-    Vector2D const screenCenter(gameEngine.getWidthInPixels() / 2.0,
-                                gameEngine.getHeightInPixels() / 2.0);
-    mp_Player->setPosition(screenCenter);
+    Vector2D spawnPos(gameEngine.getWidthInPixels() / 2.0,
+                      gameEngine.getHeightInPixels() / 2.0);
+    const auto settlements = WorldManager::Instance().getSettlements();
+    if (!settlements.empty()) {
+      const auto& home = settlements.front();
+      spawnPos = Vector2D(
+          (static_cast<float>(home.centerTileX) + 1.5f) * VoidLight::TILE_SIZE,
+          (static_cast<float>(home.centerTileY) + 0.5f) * VoidLight::TILE_SIZE);
+    }
+    mp_Player->setPosition(spawnPos);
     spawnStarterGearChest();
 
     // Set player handle in AIManager for collision culling reference point
@@ -193,18 +201,6 @@ bool GamePlayState::enter() {
     auto& hudCtrl = *m_controllers.get<HudController>();
     hudCtrl.initializeActionHUD();
     hudCtrl.initializeHotbarUI();
-    if (mp_Player) {
-      Vector2D const merchantSpawnPos =
-          mp_Player->getPosition() + Vector2D(-96.0f, 32.0f);
-      EventManager::Instance().spawnMerchant("GeneralMerchant",
-                                             merchantSpawnPos.getX(),
-                                             merchantSpawnPos.getY(),
-                                             "Human",
-                                             1,
-                                             0.0f,
-                                             false,
-                                             EventManager::DispatchMode::Immediate);
-    }
 
     // Subscribe all controllers at once
     m_controllers.subscribeAll();

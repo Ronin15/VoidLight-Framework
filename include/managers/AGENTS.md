@@ -14,6 +14,12 @@ conflict, this file wins.
 - Use stable identifiers and indices only where the caller can prove
   freshness. Preserve generation checks for handles that can outlive
   entity slot reuse.
+- World populate: settlement queries (`getSettlements`,
+  `findSettlementAt*`) are current-world, like `getTileCopyAt`. The
+  populate registry is `worldId`-keyed (`isWorldPopulated`,
+  `getPopulatedNpcCount`, `clearPopulatedNpcs`). Callers that need those
+  NPCs gone without unloading tiles use `clearPopulatedNpcs`, not
+  ad-hoc `destroyEntity` on EDM handles.
 - Do not expose nullable pointer-return accessors unless the current
   subsystem already uses them as an optional lookup contract.
 

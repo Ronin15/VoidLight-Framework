@@ -6,6 +6,7 @@
 #ifndef WORLD_DATA_HPP
 #define WORLD_DATA_HPP
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -195,9 +196,35 @@ struct Tile {
     uint32_t harvestableIndex = UINT32_MAX;
 };
 
+struct SettlementRecord {
+    uint32_t id{0};       // 1-based
+    int centerTileX{0};
+    int centerTileY{0};
+    int radiusTiles{12};
+    Biome biome{Biome::PLAINS};
+    uint8_t faction{0};
+    uint8_t buildingCount{0};
+
+    [[nodiscard]] bool containsTile(int tileX, int tileY) const noexcept {
+        const int dx = tileX - centerTileX;
+        const int dy = tileY - centerTileY;
+        return dx * dx + dy * dy <= radiusTiles * radiusTiles;
+    }
+
+    [[nodiscard]] bool containsPixel(float worldX, float worldY) const noexcept {
+        const float centerX = (static_cast<float>(centerTileX) + 0.5f) * TILE_SIZE;
+        const float centerY = (static_cast<float>(centerTileY) + 0.5f) * TILE_SIZE;
+        const float radius = static_cast<float>(radiusTiles) * TILE_SIZE;
+        const float dx = worldX - centerX;
+        const float dy = worldY - centerY;
+        return dx * dx + dy * dy <= radius * radius;
+    }
+};
+
 struct WorldData {
     std::string worldId;
     std::vector<std::vector<Tile>> grid;
+    std::vector<SettlementRecord> settlements;
 };
 
 }

@@ -93,7 +93,12 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorld) {
         BOOST_REQUIRE(worldData != nullptr);
         BOOST_CHECK_EQUAL(worldData->grid.size(), 20);
         BOOST_CHECK_EQUAL(worldData->grid[0].size(), 20);
+        BOOST_CHECK(worldData->settlements.empty());
     });
+
+    const std::string worldId = worldManager->getCurrentWorldId();
+    BOOST_CHECK(!worldManager->isWorldPopulated(worldId));
+    BOOST_CHECK_EQUAL(worldManager->getPopulatedNpcCount(worldId), 0u);
 }
 
 BOOST_AUTO_TEST_CASE(TestUnloadWorldRemovesWRMState) {

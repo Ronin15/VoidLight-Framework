@@ -899,6 +899,16 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
         buildingsPlaced++;
       }
     }
+
+    SettlementRecord record;
+    record.id = static_cast<uint32_t>(world.settlements.size() + 1);
+    record.centerTileX = villageX;
+    record.centerTileY = villageY;
+    record.radiusTiles = BldgCfg::VILLAGE_RADIUS;
+    record.biome = world.grid[villageY][villageX].biome;
+    record.faction = 0;
+    record.buildingCount = static_cast<uint8_t>(buildingsPlaced);
+    world.settlements.push_back(record);
   }
 
   WORLD_MANAGER_DEBUG(std::format("Generated {} villages with buildings", villageCenters.size()));

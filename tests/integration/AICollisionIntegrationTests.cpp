@@ -345,6 +345,12 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     std::cout << "Setting up world for pathfinding grid..." << std::endl;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
 
+    {
+        auto& worldMgr = WorldManager::Instance();
+        worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
+        EntityDataManager::Instance().processDestructionQueue();
+    }
+
     // Wait for world generation to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(300));
 

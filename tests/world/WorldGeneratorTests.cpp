@@ -351,6 +351,37 @@ BOOST_AUTO_TEST_CASE(TestBuildingGeneration) {
     BOOST_CHECK_GT(buildingTileCount, 0);
 }
 
+BOOST_AUTO_TEST_CASE(TestSettlementRecordsPersisted) {
+    WorldGenerationConfig config;
+    config.width = 100;
+    config.height = 100;
+    config.seed = 55555;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.2f;
+    config.mountainLevel = 0.9f;
+
+    auto world = WorldGenerator::generateWorld(config);
+    BOOST_REQUIRE(world != nullptr);
+    BOOST_REQUIRE(!world->settlements.empty());
+
+    for (size_t i = 0; i < world->settlements.size(); ++i) {
+        const SettlementRecord& record = world->settlements[i];
+        BOOST_CHECK_EQUAL(record.id, static_cast<uint32_t>(i + 1));
+        BOOST_CHECK_EQUAL(record.radiusTiles, 12);
+        BOOST_CHECK_EQUAL(record.faction, 0);
+        BOOST_CHECK_GT(record.buildingCount, 0);
+        BOOST_REQUIRE(record.centerTileY >= 0);
+        BOOST_REQUIRE(record.centerTileX >= 0);
+        BOOST_REQUIRE(static_cast<size_t>(record.centerTileY) < world->grid.size());
+        BOOST_REQUIRE(static_cast<size_t>(record.centerTileX) <
+                      world->grid[static_cast<size_t>(record.centerTileY)].size());
+        BOOST_CHECK(record.biome ==
+                    world->grid[static_cast<size_t>(record.centerTileY)]
+                               [static_cast<size_t>(record.centerTileX)].biome);
+    }
+}
+
 BOOST_AUTO_TEST_CASE(TestBuildingNoOverlap) {
     WorldGenerationConfig config;
     config.width = 50;

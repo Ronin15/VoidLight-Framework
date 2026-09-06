@@ -704,6 +704,10 @@ void AIManager::assignBehavior(EntityHandle handle,
   edm.reassignBehaviorConfig(edmIndex, config);
   Behaviors::init(edmIndex, config);
 
+  auto& charData = edm.getCharacterDataByIndex(edmIndex);
+  charData.homeRole = static_cast<uint8_t>(behaviorType);
+  charData.behaviorType = static_cast<uint8_t>(behaviorType);
+
   // Add to guard/faction indices for the new behavior
   addToIndices(edmIndex, behaviorType);
 
@@ -776,6 +780,10 @@ void AIManager::assignBehavior(EntityHandle handle,
   // Set config in EDM and initialize state (after old indices removed)
   edm.reassignBehaviorConfig(edmIndex, config);
   Behaviors::init(edmIndex, config);
+
+  auto& charData = edm.getCharacterDataByIndex(edmIndex);
+  charData.homeRole = static_cast<uint8_t>(config.type);
+  charData.behaviorType = static_cast<uint8_t>(config.type);
 
   // Add to guard/faction indices for the new behavior
   addToIndices(edmIndex, config.type);
@@ -1417,6 +1425,9 @@ void AIManager::commitQueuedBehaviorTransitions() {
     edm.clearBehaviorData(edmIndex);
     edm.reassignBehaviorConfig(edmIndex, cmd.config);
     Behaviors::init(edmIndex, cmd.config);
+
+    auto& charData = edm.getCharacterDataByIndex(edmIndex);
+    charData.behaviorType = static_cast<uint8_t>(cmd.config.type);
 
     addToIndices(edmIndex, cmd.config.type);
   }

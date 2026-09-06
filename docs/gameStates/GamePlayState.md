@@ -18,14 +18,15 @@ the transition.
 When the world is ready, `enter()`:
 
 - resumes global managers
-- creates and initializes the player
+- creates and initializes the player one tile east of the first settlement
+  center (screen center if the world has no settlements)
 - spawns the starter gear chest near the player
 - caches the player handle in `AIManager`
 - initializes the camera and `GPUSceneRecorder`
 - registers controllers through `ControllerRegistry`
 - creates event log, time label, and FPS label (session chrome)
 - initializes inventory UI, then `HudController::initializeActionHUD()` and `initializeHotbarUI()`
-- spawns a bootstrap merchant through `EventManager::spawnMerchant(...)`
+- world already arrives inhabited from `WorldManager::loadNewWorld` (settlement NPCs + sparse hostiles); debug `R` still spawns a hostile Warrior
 - subscribes state-owned time/weather/harvest handlers
 
 Pause/resume toggles session chrome (`event_log`, `time_label`, `fps`) directly

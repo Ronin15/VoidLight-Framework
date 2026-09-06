@@ -29,6 +29,11 @@ deeper file wins.
 - Prefer production wiring over fakes when the behavior depends on event
   contracts, manager caches, EDM slot reuse, pathfinding, collision, AI
   command commits, or UI manager state.
+- NPCs created by world populate are WorldManager-owned. After
+  `loadNewWorld`, tests that need an empty NPC set must call
+  `WorldManager::clearPopulatedNpcs` then
+  `EntityDataManager::processDestructionQueue` on the test thread. Do
+  not hand-roll `destroyEntity` and leave the populate registry stale.
 
 ## Design and Execution
 

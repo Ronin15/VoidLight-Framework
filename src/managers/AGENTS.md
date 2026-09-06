@@ -40,6 +40,11 @@ file wins.
   manager work completes.
 - Structural EDM operations are main-thread operations. Worker code
   should use pre-cached indices and non-overlapping batch ranges.
+- `processDestructionQueue()` is main-thread only: `GameEngine` end of
+  frame, `prepareForStateTransition()`, and `WorldManager::unloadWorld()`
+  (main/test callers). Worker and `loadNewWorld` paths only
+  `destroyEntity()` (enqueue). Do not drain the queue from
+  `unloadWorldLocked` or other load-worker code.
 - Index-based hot-data access is valid only inside the batch/window that
   proved the index current. Use handles and generation checks across
   frames or asynchronous boundaries.

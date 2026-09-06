@@ -1222,8 +1222,8 @@ void GameEngine::processBackgroundTasks() {
 
   // Drain deferred entity destructions — returns slots to m_freeSlots,
   // keeping the free list healthy for next frame's allocations.
-  // This is the ONLY place processDestructionQueue runs during gameplay.
-  // (prepareForStateTransition also calls it during state changes.)
+  // Gameplay drain is here only. Unload/transition also drain from
+  // WorldManager::unloadWorld (main/test) and EntityDataManager::prepareForStateTransition.
   EntityDataManager::Instance().processDestructionQueue();
 }
 

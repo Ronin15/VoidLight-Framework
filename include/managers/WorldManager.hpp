@@ -9,6 +9,7 @@
 #include "world/WorldData.hpp"
 #include "world/WorldGenerator.hpp"
 #include "managers/Season.hpp"
+#include "entities/EntityHandle.hpp"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -316,6 +317,21 @@ public:
      */
     bool getWorldBounds(float& minX, float& minY, float& maxX, float& maxY) const;
 
+    // Populate registry is keyed by worldId so unload/reload can prove
+    // the previous world's NPCs are gone. Settlement records live on the
+    // current WorldData, same as getTileCopyAt / getWorldBounds.
+    [[nodiscard]] bool isWorldPopulated(const std::string& worldId) const;
+    [[nodiscard]] size_t getPopulatedNpcCount(const std::string& worldId) const;
+    [[nodiscard]] std::vector<VoidLight::SettlementRecord> getSettlements() const;
+    [[nodiscard]] std::optional<VoidLight::SettlementRecord> findSettlementAtTile(
+        int tileX, int tileY) const;
+    [[nodiscard]] std::optional<VoidLight::SettlementRecord> findSettlementAtPixel(
+        float worldX, float worldY) const;
+    // Queues populated NPCs for destroy and drops the worldId registry entry.
+    // Does not unload tiles. Does not drain EDM's destruction queue (main thread
+    // only — see EntityDataManager::processDestructionQueue).
+    void clearPopulatedNpcs(const std::string& worldId);
+
 private:
     WorldManager() = default;
     ~WorldManager() {
@@ -330,10 +346,13 @@ private:
     void fireWorldLoadedEvent(const std::string& worldId);
     void fireWorldUnloadedEvent(const std::string& worldId);
     void initializeWorldResources();
+    void populateWorldEntities();
+    void clearPopulatedEntities(const std::string& worldId);
     std::optional<std::string> unloadWorldLocked();  // Assumes caller already holds lock
     bool applyTileUpdateLocked(int x, int y, const VoidLight::Tile& newTile);
 
     std::unique_ptr<VoidLight::WorldData> m_currentWorld;
+    std::unordered_map<std::string, std::vector<EntityHandle>> m_populatedNpcsByWorldId;
     std::unique_ptr<VoidLight::TileRenderer> m_tileRenderer;
 
     mutable std::mutex m_loadMutex;

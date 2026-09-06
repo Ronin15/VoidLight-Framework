@@ -7,6 +7,7 @@
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
 #include "core/ThreadSystem.hpp"
+#include "managers/AIManager.hpp"
 #include "managers/GameStateManager.hpp"
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
@@ -48,8 +49,12 @@ bool LoadingState::enter() {
   GAMESTATE_INFO(
       std::format("Entering LoadingState - Target: {}", static_cast<int>(m_targetStateId)));
 
-  // Pause game time during loading (time shouldn't advance while loading)
+  // Pause systems that should not tick during generate/populate.
+  // GamePlayState::enter() unpauses via GameEngine::setGlobalPause(false).
   GameTimeManager::Instance().setGlobalPause(true);
+  if (AIManager::Instance().isInitialized()) {
+    AIManager::Instance().setGlobalPause(true);
+  }
 
   // Full-screen owner: ensure a clean UI slate before building the loading
   // screen. GameStateManager already clears UI on full-screen replace; this

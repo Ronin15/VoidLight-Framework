@@ -9,6 +9,7 @@
 #include "utils/ResourcePath.hpp"
 #include "core/ThreadSystem.hpp"
 #include "events/TimeEvent.hpp"
+#include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameTimeManager.hpp"
@@ -18,6 +19,7 @@
 #include "utils/JsonReader.hpp"
 #include "utils/Vector2D.hpp"
 #include "world/HarvestConfig.hpp"
+#include "world/WorldPopulation.hpp"
 
 #include <algorithm>
 #include <format>
@@ -164,6 +166,7 @@ bool WorldManager::loadNewWorld(
 
       // Initialize world resources based on world data
       initializeWorldResources();
+      populateWorldEntities();
 
       // Season handler is persistent — survives state transitions.
       // Only wire up on first world load (handler not yet registered).
@@ -227,6 +230,17 @@ void WorldManager::unloadWorld() {
   if (unloadedWorldId) {
     fireWorldUnloadedEvent(*unloadedWorldId);
   }
+
+  // Public unload is main/test-thread. loadNewWorld's worker uses
+  // unloadWorldLocked and must not drain here.
+  if (EntityDataManager::Instance().isInitialized()) {
+    EntityDataManager::Instance().processDestructionQueue();
+  }
+}
+
+void WorldManager::clearPopulatedNpcs(const std::string& worldId) {
+  std::lock_guard<std::shared_mutex> lock(m_worldMutex);
+  clearPopulatedEntities(worldId);
 }
 
 std::optional<std::string> WorldManager::unloadWorldLocked() {
@@ -245,6 +259,7 @@ std::optional<std::string> WorldManager::unloadWorldLocked() {
     m_tileRenderer->clearChunkCache();
   }
 
+  clearPopulatedEntities(worldId);
   WorldResourceManager::Instance().removeWorld(worldId);
 
   m_currentWorld.reset();
@@ -575,6 +590,109 @@ bool WorldManager::getWorldBounds(float &minX, float &minY, float &maxX,
          VoidLight::TILE_SIZE; // Convert tiles to pixels
 
   return true;
+}
+
+bool WorldManager::isWorldPopulated(const std::string& worldId) const {
+  std::shared_lock<std::shared_mutex> lock(m_worldMutex);
+  return m_populatedNpcsByWorldId.find(worldId) != m_populatedNpcsByWorldId.end();
+}
+
+size_t WorldManager::getPopulatedNpcCount(const std::string& worldId) const {
+  std::shared_lock<std::shared_mutex> lock(m_worldMutex);
+  auto it = m_populatedNpcsByWorldId.find(worldId);
+  if (it == m_populatedNpcsByWorldId.end()) {
+    return 0;
+  }
+  return it->second.size();
+}
+
+std::vector<VoidLight::SettlementRecord> WorldManager::getSettlements() const {
+  std::shared_lock<std::shared_mutex> lock(m_worldMutex);
+  if (!m_currentWorld) {
+    return {};
+  }
+  return m_currentWorld->settlements;
+}
+
+std::optional<VoidLight::SettlementRecord> WorldManager::findSettlementAtTile(
+    int tileX, int tileY) const {
+  std::shared_lock<std::shared_mutex> lock(m_worldMutex);
+  if (!m_currentWorld) {
+    return std::nullopt;
+  }
+
+  for (const auto& settlement : m_currentWorld->settlements) {
+    if (settlement.containsTile(tileX, tileY)) {
+      return settlement;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<VoidLight::SettlementRecord> WorldManager::findSettlementAtPixel(
+    float worldX, float worldY) const {
+  std::shared_lock<std::shared_mutex> lock(m_worldMutex);
+  if (!m_currentWorld) {
+    return std::nullopt;
+  }
+
+  for (const auto& settlement : m_currentWorld->settlements) {
+    if (settlement.containsPixel(worldX, worldY)) {
+      return settlement;
+    }
+  }
+  return std::nullopt;
+}
+
+void WorldManager::populateWorldEntities() {
+  if (!m_currentWorld) {
+    return;
+  }
+
+  const std::string& worldId = m_currentWorld->worldId;
+  if (m_populatedNpcsByWorldId.find(worldId) != m_populatedNpcsByWorldId.end()) {
+    return;
+  }
+
+  if (!EntityDataManager::Instance().isInitialized() ||
+      !AIManager::Instance().isInitialized()) {
+    WORLD_MANAGER_WARN(std::format(
+        "Skipping world population for {}: EntityDataManager or AIManager is not initialized",
+        worldId));
+    return;
+  }
+
+  std::vector<EntityHandle> handles;
+  handles.reserve(VoidLight::WorldPopulation::MAX_POPULATED_NPCS_PER_WORLD);
+  VoidLight::WorldPopulation::populate(*m_currentWorld, handles);
+  m_populatedNpcsByWorldId[worldId] = std::move(handles);
+
+  WORLD_MANAGER_INFO(std::format(
+      "Populated {} NPCs for world {}",
+      m_populatedNpcsByWorldId[worldId].size(), worldId));
+}
+
+void WorldManager::clearPopulatedEntities(const std::string& worldId) {
+  auto it = m_populatedNpcsByWorldId.find(worldId);
+  if (it == m_populatedNpcsByWorldId.end()) {
+    return;
+  }
+
+  auto& edm = EntityDataManager::Instance();
+  auto& ai = AIManager::Instance();
+  if (edm.isInitialized()) {
+    for (const EntityHandle& handle : it->second) {
+      if (edm.getIndex(handle) == SIZE_MAX) {
+        continue;
+      }
+      if (ai.isInitialized()) {
+        ai.unregisterEntity(handle);
+      }
+      edm.destroyEntity(handle);
+    }
+  }
+
+  m_populatedNpcsByWorldId.erase(it);
 }
 
 void WorldManager::initializeWorldResources() {

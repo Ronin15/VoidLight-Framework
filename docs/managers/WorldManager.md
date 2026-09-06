@@ -14,6 +14,7 @@ harvestables that match tile obstacles.
 - expose world bounds and dimensions
 - coordinate chunk cache invalidation and season-driven tile refresh
 - initialize harvestable/resource entities for the active world
+- populate settlement NPCs after resource init (`WorldPopulation`, keyed by `worldId`)
 - set the active world explicitly on `WorldResourceManager`
 
 ## Active World Handoff
@@ -54,6 +55,39 @@ Some resources are still distributed by biome or elevation when no dedicated til
 - forest-only rare materials
 - celestial or swamp specialty resources
 - high-elevation specialty stone/resources
+
+## World Population
+
+`loadNewWorld` calls `populateWorldEntities()` immediately after
+`initializeWorldResources()`, still under `m_worldMutex`. Population is a
+load-time helper (`WorldPopulation`), not a manager singleton and not a
+`GamePlayState` tile loop.
+
+- Per overworld settlement: 1 merchant (Idle), 2 guards, 4 villagers (Wander).
+- Sparse forest/haunted hostiles (Human/Warrior, faction 1, Attack) at one
+  candidate per 64×64 tile block, capped at 32 hostiles.
+- Total populated NPCs are capped at 256 per `worldId`.
+- Default simulation tier is Active; `BackgroundSimulationManager` retier
+  after the player exists. Populate does not assign tiers from camera/player.
+- Registry is keyed by `worldId`. If that id is already populated, skip
+  (idempotent). `unloadWorldLocked()` / `clearPopulatedNpcs` queue those
+  NPC handles for destroy and drop the registry entry before
+  `m_currentWorld.reset()`. `unloadWorld()` drains the EDM destruction
+  queue on the calling (main/test) thread after dropping world locks.
+- `LoadingState` pauses `AIManager` for the async load so
+  `AIManager::update()` does not run against NPCs being created. WorldManager
+  does not locally pause AI. `assignBehavior` still serializes index updates
+  with `m_entitiesMutex`.
+- Public queries (shared `m_worldMutex`): `isWorldPopulated(worldId)` and
+  `getPopulatedNpcCount(worldId)` for the populate registry; `getSettlements()`,
+  `findSettlementAtTile`, and `findSettlementAtPixel` for the current world
+  (same current-world rule as `getTileCopyAt`).
+- Debug `R` Warriors spawned from `GamePlayState` are not registered in the
+  populated-NPC map.
+
+Do not populate from `GamePlayState`. When saved-world `loadWorld` lands
+later, it must call the same populate after `WorldData` is restored if NPCs
+are not in the save.
 
 ## Rendering Notes
 

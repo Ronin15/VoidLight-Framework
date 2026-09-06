@@ -241,7 +241,8 @@ struct CharacterData {
 
     // Faction and AI
     uint8_t faction{0};        // 0=Friendly, 1=Enemy, 2=Neutral
-    uint8_t behaviorType{0};   // BehaviorType enum
+    uint8_t behaviorType{0};   // BehaviorType enum (current)
+    uint8_t homeRole{static_cast<uint8_t>(BehaviorType::None)};
     uint8_t priority{5};       // AI priority (0-9)
     uint8_t stateFlags{0};     // alive, stunned, invulnerable, etc.
     enum CombatStyle : uint8_t { Melee = 0, Ranged = 1 };

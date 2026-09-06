@@ -128,6 +128,12 @@ struct BehaviorTestFixture {
             throw std::runtime_error("Failed to load test world for behavior tests");
         }
 
+        {
+            auto& worldMgr = WorldManager::Instance();
+            worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
+            EntityDataManager::Instance().processDestructionQueue();
+        }
+
         // EVENT-DRIVEN: Process any deferred events (triggers WorldLoaded task on ThreadSystem)
         EventManager::Instance().update();
         std::this_thread::sleep_for(std::chrono::milliseconds(50));

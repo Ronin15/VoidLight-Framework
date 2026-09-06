@@ -36,6 +36,7 @@ set(ALL_TESTS
     json_reader_tests
     world_generator_tests
     world_manager_tests
+    world_population_tests
     world_manager_event_integration_tests
     collision_system_tests
     pathfinding_system_tests
@@ -155,6 +156,8 @@ foreach(test_name ${ALL_TESTS})
         set(test_source "world/WorldGeneratorTests.cpp")
     elseif(${test_name} STREQUAL "world_manager_tests")
         set(test_source "world/WorldManagerTests.cpp")
+    elseif(${test_name} STREQUAL "world_population_tests")
+        set(test_source "world/WorldPopulationTests.cpp")
     elseif(${test_name} STREQUAL "world_manager_event_integration_tests")
         set(test_source "world/WorldManagerEventIntegrationTests.cpp")
     elseif(${test_name} STREQUAL "collision_system_tests")
