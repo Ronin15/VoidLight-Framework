@@ -62,6 +62,8 @@ void alertNearbyGuards(const Vector2D& location, EntityHandle criminal);
 - Trade UI is created through `UIManager`; price display and selection highlights are controller-managed.
 - Buying and selling update inventory, gold, and relationship/memory state.
 - Theft reporting records negative interaction state, fires event traffic, and alerts nearby guards.
+- After the existing memory write, `reportTheft` calls `AIManager::worsenStance(victimFaction, thiefFaction)` only (directed; does not write the reverse cell).
+- `recordGift` calls `AIManager::improveStance(npcFaction, playerFaction)` only. Both writes run on the main thread; no new events.
 
 ## GamePlayState Integration
 

@@ -21,6 +21,7 @@
 
 #include "ai/BehaviorConfig.hpp"
 #include "ai/AICommandBus.hpp"
+#include "ai/FactionStance.hpp"
 #include "core/Logger.hpp"
 #include "entities/EntityHandle.hpp"
 #include "managers/EntityDataManager.hpp"
@@ -190,6 +191,33 @@ public:
                            std::vector<size_t>& outEdmIndices,
                            bool excludePlayer = true) const;
 
+  static constexpr uint8_t MAX_FACTIONS = 16;
+
+  /**
+   * @brief Directed stance of fromFaction toward towardFaction.
+   * Out-of-range factions return Neutral.
+   */
+  [[nodiscard]] FactionStance getStance(uint8_t fromFaction, uint8_t towardFaction) const;
+  /**
+   * @brief Set a directed stance cell. Out-of-range or diagonal (i,i) is a no-op.
+   */
+  void setStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance stance);
+  [[nodiscard]] bool isHostileTo(uint8_t fromFaction, uint8_t towardFaction) const;
+  [[nodiscard]] bool isAlliedTo(uint8_t fromFaction, uint8_t towardFaction) const;
+  /** Allied → Neutral → Hostile. Out-of-range or diagonal is a no-op. */
+  void worsenStance(uint8_t fromFaction, uint8_t towardFaction);
+  /** Hostile → Neutral → Allied. Out-of-range or diagonal is a no-op. */
+  void improveStance(uint8_t fromFaction, uint8_t towardFaction);
+  /** Fill Neutral, then set the diagonal to Allied. Main-thread lifecycle reset. */
+  void resetFactionStances();
+  /**
+   * @brief Scan entities whose faction is Allied from fromFaction's row.
+   * Uses incrementally maintained faction indices. Safe for worker reads.
+   */
+  void scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center, float radius,
+                          std::vector<size_t>& outEdmIndices,
+                          bool excludePlayer = true) const;
+
   // Global controls
   void setGlobalPause(bool paused);
   bool isGloballyPaused() const;
@@ -308,11 +336,17 @@ private:
 
   // Cached player edmIndex (updated once per frame during update(), SIZE_MAX = no player)
   size_t m_cachedPlayerEdmIdx{SIZE_MAX};
+  uint8_t m_cachedPlayerFaction{0};
+
+  // Directed 16×16 Allied/Neutral/Hostile table. Main-thread writes only;
+  // workers read a copied row on BehaviorContext or scanAlliedInRadius.
+  std::array<std::array<FactionStance, MAX_FACTIONS>, MAX_FACTIONS> m_factionStances{};
+  EventManager::HandlerToken m_combatHandlerToken{};
+  bool m_combatHandlerRegistered{false};
 
   // Incrementally maintained behavior/faction indices for O(G)/O(F) radius scans.
   // Modified only on main thread (under m_entitiesMutex write lock in assignBehavior etc.),
   // read-only during batch processing — thread-safe by construction.
-  static constexpr uint8_t MAX_FACTIONS = 16;
   std::vector<size_t> m_guardEdmIndices;                           // EDM indices of Guard-assigned entities
   std::array<std::vector<size_t>, MAX_FACTIONS> m_factionEdmIndices;  // Per-faction EDM indices
   std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> m_pendingBehaviorMessages;

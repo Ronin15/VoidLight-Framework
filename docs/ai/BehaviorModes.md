@@ -14,10 +14,15 @@ This page catalogs the behavior families and the configuration style. Modes are 
   - waypoint or route-driven guard movement
 - `Guard`
   - alert, suspicious, and defensive area control
+  - player auto-detect and lastAttacker/lastTarget/memory threat classification consult `AIManager` faction stance (`Hostile`), not `faction == 1`
+  - help / alarm / all-clear scans use `scanAlliedInRadius` (Allied row, including same faction)
 - `Attack`
   - melee/ranged aggression settings plus target engagement rules
+  - auto-acquire and player fallback require directed `Hostile` stance; lastTarget / lastAttacker / explicitTarget stay alive-only (unfiltered by stance)
+  - AOE friendly-fire skip is Allied, not raw faction id
 - `Flee`
   - panic/retreat behavior with recovery thresholds
+  - distress broadcast filters allies by Allied stance rather than `faction != myFaction`
 - `Follow`
   - formation or distance-preserving follower behavior
 
@@ -64,3 +69,5 @@ Use:
 - variant-specific state lives in the matching dense state pool, not in `BehaviorData`
 - per-frame locals must not be used for path/state that should survive updates
 - behavior switching is initialized through typed `Behaviors::init...` helpers after `reassignBehaviorConfig(...)`, not by constructing a new class instance
+- Attack, Guard, and help-call scans consult the `AIManager` directed stance table; Idle / Wander / Patrol call `tryEngageHostileInRange` after recent-attack / fear checks
+- `Behaviors::getRelationshipLevel` remains per-NPC memory and is unchanged by faction stance

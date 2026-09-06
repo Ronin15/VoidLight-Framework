@@ -198,6 +198,61 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx) {
     return ctx.memoryData.lastAttacker;
 }
 
+bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction) {
+    if (faction >= ctx.factionStanceRow.size()) {
+        return false;
+    }
+    return ctx.factionStanceRow[faction] == FactionStance::Hostile;
+}
+
+bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction) {
+    if (faction >= ctx.factionStanceRow.size()) {
+        return false;
+    }
+    return ctx.factionStanceRow[faction] == FactionStance::Allied;
+}
+
+bool tryEngageHostileInRange(BehaviorContext& ctx) {
+    if (!ctx.hasHostileInRow) {
+        return false;
+    }
+
+    const float rangeSq = HOSTILE_ENGAGE_RANGE * HOSTILE_ENGAGE_RANGE;
+    if (ctx.playerValid && ctx.playerHandle.isValid() &&
+        isHostileTowardFaction(ctx, ctx.playerFaction)) {
+        const float distSq =
+            Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
+        if (distSq <= rangeSq) {
+            ctx.memoryData.lastTarget = ctx.playerHandle;
+            switchBehavior(ctx.edmIndex, BehaviorType::Attack);
+            return true;
+        }
+    }
+
+    thread_local std::vector<size_t> s_hostileScanBuffer;
+    AIManager::Instance().scanActiveIndicesInRadius(
+        ctx.transform.position, HOSTILE_ENGAGE_RANGE, s_hostileScanBuffer, true);
+
+    auto& edm = EntityDataManager::Instance();
+    for (size_t idx : s_hostileScanBuffer) {
+        if (idx == ctx.edmIndex) {
+            continue;
+        }
+        const auto& hot = edm.getHotDataByIndex(idx);
+        if (!hot.isAlive()) {
+            continue;
+        }
+        const uint8_t faction = edm.getCharacterDataByIndex(idx).faction;
+        if (!isHostileTowardFaction(ctx, faction)) {
+            continue;
+        }
+        ctx.memoryData.lastTarget = edm.getHandle(idx);
+        switchBehavior(ctx.edmIndex, BehaviorType::Attack);
+        return true;
+    }
+    return false;
+}
+
 Vector2D normalizeDirection(const Vector2D& vector) {
     float len = std::sqrt(vector.getX() * vector.getX() + vector.getY() * vector.getY());
     if (len < 0.0001f) return Vector2D{0.0f, 0.0f};

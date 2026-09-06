@@ -455,13 +455,13 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
             float timeSinceLastDistress = std::fmod(flee.fleeTimer - 0.5f, config.distressBroadcastInterval);
             if (timeSinceLastDistress < ctx.deltaTime) {
                 thread_local std::vector<size_t> s_distressBuffer;
-                uint8_t myFaction = ctx.characterData.faction;
                 AIManager::Instance().scanGuardsInRadius(
                     ctx.transform.position, 400.0f, s_distressBuffer, true);
                 auto& edm = EntityDataManager::Instance();
                 for (size_t guardIdx : s_distressBuffer) {
                     if (guardIdx == ctx.edmIndex) continue;
-                    if (edm.getCharacterDataByIndex(guardIdx).faction != myFaction) continue;
+                    if (!Behaviors::isAlliedTowardFaction(
+                            ctx, edm.getCharacterDataByIndex(guardIdx).faction)) continue;
                     Behaviors::deferBehaviorMessage(guardIdx, BehaviorMessage::DISTRESS);
                 }
             }

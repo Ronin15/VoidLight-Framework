@@ -126,6 +126,9 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
+    if (tryEngageHostileInRange(ctx)) {
+        return;
+    }
 
     // Throttle patrol movement logic — peaceful walking between waypoints
     patrol.patrolThrottleTimer += ctx.deltaTime;

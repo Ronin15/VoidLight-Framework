@@ -11,6 +11,7 @@
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
 #include "entities/resources/EquipmentResources.hpp"
+#include "events/EntityEvents.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
@@ -22,6 +23,9 @@
 #include <algorithm>
 #include <format>
 #include <unordered_map>
+
+static_assert(AIManager::MAX_FACTIONS == 16,
+              "BehaviorContext factionStanceRow size must match AIManager::MAX_FACTIONS");
 
 // Use SIMD abstraction layer
 using namespace VoidLight::SIMD;
@@ -162,6 +166,51 @@ bool AIManager::init() {
 
     m_activeIndicesBuffer.reserve(INITIAL_CAPACITY);
 
+    resetFactionStances();
+
+    auto& eventMgr = EventManager::Instance();
+    if (eventMgr.isInitialized() && !m_combatHandlerRegistered) {
+      m_combatHandlerToken = eventMgr.registerPersistentHandlerWithToken(
+          EventTypeId::Combat, [this](const EventData& data) {
+            if (!data.isActive() || !data.event) {
+              return;
+            }
+            const auto damageEvent = std::dynamic_pointer_cast<DamageEvent>(data.event);
+            if (!damageEvent || damageEvent->getDamage() <= 0.0f) {
+              return;
+            }
+
+            const EntityHandle attackerHandle = damageEvent->getSource();
+            const EntityHandle victimHandle = damageEvent->getTarget();
+            if (!attackerHandle.isValid() || !victimHandle.isValid()) {
+              return;
+            }
+
+            auto& edm = EntityDataManager::Instance();
+            const size_t attackerIdx = edm.getIndex(attackerHandle);
+            const size_t victimIdx = edm.getIndex(victimHandle);
+            if (attackerIdx == SIZE_MAX || victimIdx == SIZE_MAX) {
+              return;
+            }
+
+            const uint8_t attackerFaction =
+                edm.getCharacterDataByIndex(attackerIdx).faction;
+            const uint8_t victimFaction =
+                edm.getCharacterDataByIndex(victimIdx).faction;
+            if (attackerFaction == victimFaction ||
+                attackerFaction >= MAX_FACTIONS ||
+                victimFaction >= MAX_FACTIONS) {
+              return;
+            }
+
+            setStance(victimFaction, attackerFaction, FactionStance::Hostile);
+            setStance(attackerFaction, victimFaction, FactionStance::Hostile);
+          });
+      m_combatHandlerRegistered = true;
+    } else {
+      AI_WARN("EventManager not initialized, skipping combat stance handler");
+    }
+
     m_initialized.store(true, std::memory_order_release);
     m_globallyPaused.store(false, std::memory_order_release);
     m_isShutdown = false;
@@ -197,6 +246,13 @@ void AIManager::clean() {
   m_pendingBehaviorMessages.clear();
   m_pendingMeleeFallbackEquips.clear();
   m_pendingRangedAttacks.clear();
+
+  if (m_combatHandlerRegistered && EventManager::Instance().isInitialized()) {
+    EventManager::Instance().removeHandler(m_combatHandlerToken);
+  }
+  m_combatHandlerRegistered = false;
+  m_combatHandlerToken = {};
+  resetFactionStances();
 
   {
     std::unique_lock<std::shared_mutex> entitiesLock(m_entitiesMutex);
@@ -257,6 +313,8 @@ void AIManager::prepareForStateTransition() {
                std::format("Cleaned {} AI entities", entityCount));
     AI_DEBUG("Cleaned up all entities for state transition");
   }
+
+  resetFactionStances();
 
   // Reset all counters and stats
   m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
@@ -359,9 +417,13 @@ void AIManager::update(float deltaTime) {
           const auto &playerTransform = edm.getTransformByIndex(playerIdx);
           cachedPlayerPosition = playerTransform.position;
           cachedPlayerVelocity = playerTransform.velocity;
+          m_cachedPlayerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
+        } else {
+          m_cachedPlayerFaction = 0;
         }
       } else {
         m_cachedPlayerEdmIdx = SIZE_MAX;
+        m_cachedPlayerFaction = 0;
       }
     }
 
@@ -1088,6 +1150,108 @@ void AIManager::scanFactionInRadius(uint8_t faction, const Vector2D &center,
   }
 }
 
+FactionStance AIManager::getStance(uint8_t fromFaction, uint8_t towardFaction) const {
+  if (fromFaction >= MAX_FACTIONS || towardFaction >= MAX_FACTIONS) {
+    return FactionStance::Neutral;
+  }
+  return m_factionStances[fromFaction][towardFaction];
+}
+
+void AIManager::setStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance stance) {
+  if (fromFaction >= MAX_FACTIONS || towardFaction >= MAX_FACTIONS) {
+    return;
+  }
+  if (fromFaction == towardFaction) {
+    return;
+  }
+  m_factionStances[fromFaction][towardFaction] = stance;
+}
+
+bool AIManager::isHostileTo(uint8_t fromFaction, uint8_t towardFaction) const {
+  return getStance(fromFaction, towardFaction) == FactionStance::Hostile;
+}
+
+bool AIManager::isAlliedTo(uint8_t fromFaction, uint8_t towardFaction) const {
+  return getStance(fromFaction, towardFaction) == FactionStance::Allied;
+}
+
+void AIManager::worsenStance(uint8_t fromFaction, uint8_t towardFaction) {
+  if (fromFaction >= MAX_FACTIONS || towardFaction >= MAX_FACTIONS) {
+    return;
+  }
+  if (fromFaction == towardFaction) {
+    return;
+  }
+  FactionStance& cell = m_factionStances[fromFaction][towardFaction];
+  if (cell == FactionStance::Allied) {
+    cell = FactionStance::Neutral;
+  } else if (cell == FactionStance::Neutral) {
+    cell = FactionStance::Hostile;
+  }
+}
+
+void AIManager::improveStance(uint8_t fromFaction, uint8_t towardFaction) {
+  if (fromFaction >= MAX_FACTIONS || towardFaction >= MAX_FACTIONS) {
+    return;
+  }
+  if (fromFaction == towardFaction) {
+    return;
+  }
+  FactionStance& cell = m_factionStances[fromFaction][towardFaction];
+  if (cell == FactionStance::Hostile) {
+    cell = FactionStance::Neutral;
+  } else if (cell == FactionStance::Neutral) {
+    cell = FactionStance::Allied;
+  }
+}
+
+void AIManager::resetFactionStances() {
+  for (uint8_t faction = 0; faction < MAX_FACTIONS; ++faction) {
+    m_factionStances[faction].fill(FactionStance::Neutral);
+    m_factionStances[faction][faction] = FactionStance::Allied;
+  }
+}
+
+void AIManager::scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center,
+                                   float radius,
+                                   std::vector<size_t>& outEdmIndices,
+                                   bool excludePlayer) const {
+  outEdmIndices.clear();
+  if (fromFaction >= MAX_FACTIONS) {
+    return;
+  }
+
+  const float radiusSq = radius * radius;
+  auto& edm = EntityDataManager::Instance();
+  for (uint8_t faction = 0; faction < MAX_FACTIONS; ++faction) {
+    if (m_factionStances[fromFaction][faction] != FactionStance::Allied) {
+      continue;
+    }
+    for (size_t edmIdx : m_factionEdmIndices[faction]) {
+      if (edmIdx >= m_edmToStorageIndex.size()) {
+        continue;
+      }
+      const size_t storageIdx = m_edmToStorageIndex[edmIdx];
+      if (storageIdx == SIZE_MAX || storageIdx >= m_storage.size()) {
+        continue;
+      }
+      const auto& hotData = edm.getHotDataByIndex(edmIdx);
+      if (!hotData.isAlive()) {
+        continue;
+      }
+      const float distSq =
+          Vector2D::distanceSquared(center, hotData.transform.position);
+      if (distSq <= radiusSq) {
+        outEdmIndices.push_back(edmIdx);
+      }
+    }
+  }
+
+  if (excludePlayer && m_cachedPlayerEdmIdx != SIZE_MAX) {
+    std::erase(outEdmIndices, m_cachedPlayerEdmIdx);
+  }
+}
+
 void AIManager::addToIndices(size_t edmIndex, BehaviorType behaviorType) {
   // Guard index
   if (behaviorType == BehaviorType::Guard) {
@@ -1455,6 +1619,7 @@ void AIManager::resetBehaviors() {
   m_edmToStorageIndex.clear();
   m_guardEdmIndices.clear();
   for (auto& fv : m_factionEdmIndices) fv.clear();
+  resetFactionStances();
 
   // Reset counters
   m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
@@ -1662,11 +1827,25 @@ void AIManager::processBatch(
     // Store previous position for interpolation
     transform.previousPosition = transform.position;
 
+    std::array<FactionStance, 16> stanceRow;
+    stanceRow.fill(FactionStance::Neutral);
+    bool hasHostileInRow = false;
+    if (characterData.faction < MAX_FACTIONS) {
+      stanceRow = m_factionStances[characterData.faction];
+      for (FactionStance stance : stanceRow) {
+        if (stance == FactionStance::Hostile) {
+          hasHostileInRow = true;
+          break;
+        }
+      }
+    }
+
     BehaviorContext ctx(
         transform, edmHotData, m_storage.handles[storageIdx].getId(), edmIdx,
         deltaTime, playerHandle, playerPos, playerVel, playerValid,
         behaviorData, pathData, memoryData, characterData,
         0.0f, 0.0f, worldWidth, worldHeight, true, gameTime,
+        stanceRow, m_cachedPlayerFaction, hasHostileInRow,
         edm.knockbackSidecar());
 
     switch (ref.type) {

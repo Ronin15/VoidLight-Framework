@@ -73,8 +73,31 @@ Branch-local helper APIs:
 - `scanActiveIndicesInRadius(...)`
 - `scanGuardsInRadius(...)`
 - `scanFactionInRadius(...)`
+- `scanAlliedInRadius(...)` — factions whose directed stance from the caller is Allied (includes the diagonal)
 
 Prefer EDM indices in behavior code to avoid repeated handle-to-index lookups.
+
+## Faction Stance
+
+`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table. This table is the only engagement authority for Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, and it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player).
+
+Defaults after `resetFactionStances()`:
+
+- `stance[i][i] = Allied`
+- every other pair = Neutral
+
+Public APIs (main-thread writes; workers read a copied `BehaviorContext` row or `scanAlliedInRadius`):
+
+- `getStance` / `setStance` / `isHostileTo` / `isAlliedTo`
+- `worsenStance` (Allied → Neutral → Hostile)
+- `improveStance` (Hostile → Neutral → Allied)
+- `resetFactionStances()`
+
+Out-of-range gets return Neutral / false. Out-of-range or diagonal sets/worsen/improve are no-ops so the diagonal stays Allied.
+
+`resetFactionStances()` runs from `init()`, `prepareForStateTransition()`, `clean()`, and `resetBehaviors()`.
+
+A persistent `EventTypeId::Combat` handler (registered in `init()` when `EventManager` is already initialized) writes mutual Hostile after a committed `DamageEvent` with `damage > 0` and different in-range factions. Same-faction hits do not write the table. The handler is not unregistered on state transition; `clean()` removes it.
 
 ## Combat and Memory Integration
 

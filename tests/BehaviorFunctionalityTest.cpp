@@ -21,11 +21,20 @@
 #include "entities/Player.hpp"
 #include "events/EntityEvents.hpp"
 #include "world/WorldData.hpp"
+#include <array>
 #include <format>
 #include <memory>
 #include <vector>
 #include <thread>
 #include <chrono>
+
+namespace {
+std::array<FactionStance, 16> makeNeutralStanceRow() {
+    std::array<FactionStance, 16> row;
+    row.fill(FactionStance::Neutral);
+    return row;
+}
+} // namespace
 
 // Test helper for data-driven NPCs (NPCs are purely data, no Entity class)
 class TestNPC {
@@ -615,7 +624,11 @@ BOOST_AUTO_TEST_CASE(TestAttackBehavior) {
     entity->resetUpdateCount();
 
     EntityHandle handle = entity->getHandle();
+    auto& edm = EntityDataManager::Instance();
+    const size_t attackerIdx = edm.getIndex(handle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
     AIManager::Instance().assignBehavior(handle, "Attack");
+    edm.getMemoryData(attackerIdx).lastTarget = playerEntity->getHandle();
 
     // Capture initial behavior execution count
     size_t initialBehaviorCount = AIManager::Instance().getBehaviorUpdateCount();
@@ -638,6 +651,7 @@ BOOST_AUTO_TEST_CASE(TestAttackBehavior) {
 
 BOOST_AUTO_TEST_CASE(TestAttackAutoAcquiresNearbyEnemyTarget) {
     auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
 
     auto attacker = TestNPC::create(300.0f, 300.0f);
     auto target = TestNPC::create(360.0f, 300.0f);
@@ -648,7 +662,9 @@ BOOST_AUTO_TEST_CASE(TestAttackAutoAcquiresNearbyEnemyTarget) {
     size_t attackerIdx = edm.getIndex(attackerHandle);
     BOOST_REQUIRE(attackerIdx != SIZE_MAX);
 
-    AIManager::Instance().assignBehavior(attackerHandle, "Attack");
+    const uint8_t attackerFaction = edm.getCharacterDataByIndex(attackerIdx).faction;
+    aiMgr.setStance(attackerFaction, 2, FactionStance::Hostile);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
 
     const float testDeltaTime = 0.1f;
     for (int i = 0; i < 20; ++i) {
@@ -658,6 +674,208 @@ BOOST_AUTO_TEST_CASE(TestAttackAutoAcquiresNearbyEnemyTarget) {
     const auto& memData = edm.getMemoryData(attackerIdx);
     BOOST_CHECK(memData.lastTarget.isValid());
     BOOST_CHECK(memData.lastTarget == target->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDoesNotDefaultAgroPlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto attacker = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDoesNotAcquireNeutralOtherFaction) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto attacker = TestNPC::create(300.0f, 300.0f);
+    auto other = TestNPC::create(360.0f, 300.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(other->getHandle(), 2);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != other->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerWhenStanceHostile) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto attacker = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerAfterDirectCombatHit) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    const EntityHandle playerHandle = playerEntity->getHandle();
+    auto attacker = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerHandle)).faction;
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    auto damageEvent = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, attackerHandle, 10.0f);
+    EventManager::Instance().dispatchEvent(damageEvent, EventManager::DispatchMode::Immediate);
+
+    BOOST_CHECK(aiMgr.isHostileTo(1, playerFaction));
+    BOOST_CHECK(aiMgr.isHostileTo(playerFaction, 1));
+
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerAfterFactionMateHit) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    const EntityHandle playerHandle = playerEntity->getHandle();
+    auto attacker = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    auto mate = TestNPC::create(playerPos.getX() + 60.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const EntityHandle mateHandle = mate->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(mateHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerHandle)).faction;
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+    aiMgr.assignBehavior(mateHandle, "Idle");
+
+    auto damageEvent = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, mateHandle, 10.0f);
+    EventManager::Instance().dispatchEvent(damageEvent, EventManager::DispatchMode::Immediate);
+
+    BOOST_CHECK(aiMgr.isHostileTo(1, playerFaction));
+    BOOST_CHECK(aiMgr.isHostileTo(playerFaction, 1));
+
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDoesNotAutoDetectNeutralPlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto guard = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle guardHandle = guard->getHandle();
+    const size_t guardIdx = edm.getIndex(guardHandle);
+    BOOST_REQUIRE(guardIdx != SIZE_MAX);
+
+    edm.setFaction(guardHandle, 1);
+    aiMgr.assignBehavior(guardHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, guard->getPosition());
+    }
+
+    const auto ref = edm.getBehaviorConfigRef(guardIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Guard);
+    BOOST_CHECK_LT(static_cast<int>(edm.getGuardState(ref.index).currentAlertLevel), 3);
+    BOOST_CHECK(edm.getMemoryData(guardIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDetectsHostilePlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto guard = TestNPC::create(playerPos.getX() + 100.0f, playerPos.getY());
+    const EntityHandle guardHandle = guard->getHandle();
+    const size_t guardIdx = edm.getIndex(guardHandle);
+    BOOST_REQUIRE(guardIdx != SIZE_MAX);
+
+    edm.setFaction(guardHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(guardHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, guard->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(guardIdx).lastTarget == playerEntity->getHandle());
+    const auto ref = edm.getBehaviorConfigRef(guardIdx);
+    BOOST_CHECK(ref.type == BehaviorType::Guard || ref.type == BehaviorType::Attack);
+    if (ref.type == BehaviorType::Guard) {
+        BOOST_CHECK_GE(static_cast<int>(edm.getGuardState(ref.index).currentAlertLevel), 3);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto idleNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle idleHandle = idleNpc->getHandle();
+    const size_t idleIdx = edm.getIndex(idleHandle);
+    BOOST_REQUIRE(idleIdx != SIZE_MAX);
+
+    edm.setFaction(idleHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(idleHandle, "Idle");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, idleNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(idleIdx).type == BehaviorType::Attack);
 }
 
 BOOST_AUTO_TEST_CASE(TestAttackBehaviorRespectsAuthoredRangeWhenClosing) {
@@ -775,6 +993,7 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackUsesFullWeaponReach) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                        makeNeutralStanceRow(), 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
@@ -824,6 +1043,7 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackPressuresInsideReachBeforeWeaponReady) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                        makeNeutralStanceRow(), 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
@@ -869,6 +1089,7 @@ BOOST_AUTO_TEST_CASE(TestAttackBehaviorSynchronizesCurrentAttackMode) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                        makeNeutralStanceRow(), 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
@@ -928,6 +1149,7 @@ BOOST_AUTO_TEST_CASE(TestRangedAttackWithoutAmmoResetsForRepositioning) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                        makeNeutralStanceRow(), 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);

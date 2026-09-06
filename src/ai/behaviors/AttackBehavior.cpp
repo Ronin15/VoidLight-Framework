@@ -51,7 +51,6 @@ constexpr float CHARGE_DISTANCE_THRESHOLD_MULT = 1.5f;
 constexpr float FEAR_FLEE_THRESHOLD = 0.7f;
 constexpr float BRAVERY_FLEE_THRESHOLD = 0.3f;
 constexpr float TARGET_SCAN_RANGE_MULTIPLIER = 6.0f;
-constexpr float MIN_TARGET_SCAN_RANGE = 250.0f;
 
 enum class AttackState : uint8_t {
     SEEKING = 0,
@@ -348,18 +347,15 @@ void moveToPosition(BehaviorContext& ctx, const Vector2D& targetPos, float speed
     }
 }
 
-bool isAttackTargetCandidate(size_t selfIdx, size_t candidateIdx, const CharacterData& selfCharData) {
+bool isAttackTargetCandidate(size_t selfIdx, size_t candidateIdx, const BehaviorContext& ctx) {
     if (candidateIdx == SIZE_MAX || candidateIdx == selfIdx) return false;
 
     auto& edm = EntityDataManager::Instance();
     const auto& targetHot = edm.getHotDataByIndex(candidateIdx);
     if (!targetHot.isAlive()) return false;
 
-    const uint8_t myFaction = selfCharData.faction;
     const uint8_t targetFaction = edm.getCharacterDataByIndex(candidateIdx).faction;
-    if (targetFaction == myFaction) return false;
-
-    return true;
+    return Behaviors::isHostileTowardFaction(ctx, targetFaction);
 }
 
 bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
@@ -370,9 +366,10 @@ bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
     EntityHandle bestTarget{};
     float bestDistanceSq = std::numeric_limits<float>::max();
 
-    if (ctx.playerValid && ctx.playerHandle.isValid()) {
+    if (ctx.playerValid && ctx.playerHandle.isValid() &&
+        Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
         const size_t playerIdx = edm.getIndex(ctx.playerHandle);
-        if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx.characterData)) {
+        if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx)) {
             targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
             bestTarget = ctx.playerHandle;
             bestDistanceSq = Vector2D::distanceSquared(ctx.transform.position, targetPos);
@@ -380,12 +377,12 @@ bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
     }
 
     const float scanRange =
-        std::max(config.attackRange * TARGET_SCAN_RANGE_MULTIPLIER, MIN_TARGET_SCAN_RANGE);
+        std::max(config.attackRange * TARGET_SCAN_RANGE_MULTIPLIER, Behaviors::HOSTILE_ENGAGE_RANGE);
     AIManager::Instance().scanActiveIndicesInRadius(
         ctx.transform.position, scanRange, s_scanBuffer, false);
 
     for (size_t candidateIdx : s_scanBuffer) {
-        if (!isAttackTargetCandidate(ctx.edmIndex, candidateIdx, ctx.characterData)) {
+        if (!isAttackTargetCandidate(ctx.edmIndex, candidateIdx, ctx)) {
             continue;
         }
 
@@ -583,15 +580,6 @@ void markTacticalRetreatEncounter(VoidLight::AttackStateData& attack,
 void recordResolvedAttack(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
                           EntityHandle targetHandle,
                           const VoidLight::AttackBehaviorConfig& config) {
-    auto& edm = EntityDataManager::Instance();
-
-    if (ctx.characterData.faction > 1) {
-        size_t targetIdx = edm.getIndex(targetHandle);
-        if (targetIdx != SIZE_MAX && edm.getCharacterDataByIndex(targetIdx).faction == 0) {
-            edm.setFaction(edm.getHandle(ctx.edmIndex), 1);
-        }
-    }
-
     ctx.memoryData.lastTarget = targetHandle;
 
     attack.attackTimer = 0.0f;
@@ -608,9 +596,8 @@ void recordResolvedAttack(BehaviorContext& ctx, VoidLight::AttackStateData& atta
 }
 
 void broadcastRetreatToAllies(const BehaviorContext& ctx) {
-    uint8_t myFaction = ctx.characterData.faction;
-    AIManager::Instance().scanFactionInRadius(
-        myFaction, ctx.transform.position, 200.0f, s_scanBuffer, true);
+    AIManager::Instance().scanAlliedInRadius(
+        ctx.characterData.faction, ctx.transform.position, 200.0f, s_scanBuffer, true);
     for (size_t idx : s_scanBuffer) {
         if (idx == ctx.edmIndex) continue;
         Behaviors::deferBehaviorMessage(idx, BehaviorMessage::RETREAT);
@@ -887,12 +874,14 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         if (attackerIdx != SIZE_MAX && edm.getHotDataByIndex(attackerIdx).isAlive()) {
             targetPos = edm.getHotDataByIndex(attackerIdx).transform.position;
             hasTarget = true;
+            ctx.memoryData.lastTarget = ctx.memoryData.lastAttacker;
         }
     }
 
-    if (!hasTarget && ctx.playerValid && ctx.playerHandle.isValid()) {
+    if (!hasTarget && ctx.playerValid && ctx.playerHandle.isValid() &&
+        Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
         size_t playerIdx = edm.getIndex(ctx.playerHandle);
-        if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx.characterData)) {
+        if (playerIdx != SIZE_MAX && edm.getHotDataByIndex(playerIdx).isAlive()) {
             targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
             hasTarget = true;
             ctx.memoryData.lastTarget = ctx.playerHandle;
@@ -983,7 +972,6 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
                         s_scanBuffer.clear();
                         AIManager::Instance().scanActiveIndicesInRadius(
                             targetPos, config.aoeRadius, s_scanBuffer, false);
-                        uint8_t myFaction = ctx.characterData.faction;
 
                         for (size_t aoeIdx : s_scanBuffer)
                         {
@@ -993,7 +981,8 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
                             EntityHandle aoeTarget = edm.getHandle(aoeIdx);
                             if (aoeTarget == targetHandle) continue;
                             if (config.avoidFriendlyFire &&
-                                edm.getCharacterDataByIndex(aoeIdx).faction == myFaction) continue;
+                                Behaviors::isAlliedTowardFaction(
+                                    ctx, edm.getCharacterDataByIndex(aoeIdx).faction)) continue;
 
                             float distSq = Vector2D::distanceSquared(targetPos, aoeHot.transform.position);
                             float dist = std::sqrt(distSq);

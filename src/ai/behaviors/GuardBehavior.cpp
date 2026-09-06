@@ -233,12 +233,11 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
     isEnemyFaction = false;
     witnessAlertLevel = 0;
 
-    uint8_t myFaction = ctx.characterData.faction;
-
     if (ctx.memoryData.lastAttacker.isValid()) {
         size_t idx = edm.getIndex(ctx.memoryData.lastAttacker);
         if (idx != SIZE_MAX && edm.getHotDataByIndex(idx).isAlive()) {
-            isEnemyFaction = (edm.getCharacterDataByIndex(idx).faction != myFaction);
+            isEnemyFaction = Behaviors::isHostileTowardFaction(
+                ctx, edm.getCharacterDataByIndex(idx).faction);
             return ctx.memoryData.lastAttacker;
         }
     }
@@ -246,7 +245,8 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
     if (ctx.memoryData.lastTarget.isValid()) {
         size_t idx = edm.getIndex(ctx.memoryData.lastTarget);
         if (idx != SIZE_MAX && edm.getHotDataByIndex(idx).isAlive()) {
-            isEnemyFaction = (edm.getCharacterDataByIndex(idx).faction != myFaction);
+            isEnemyFaction = Behaviors::isHostileTowardFaction(
+                ctx, edm.getCharacterDataByIndex(idx).faction);
             return ctx.memoryData.lastTarget;
         }
     }
@@ -284,12 +284,13 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
 
         if (recentThreat.isValid()) {
             size_t idx = edm.getIndex(recentThreat);
-            isEnemyFaction = (edm.getCharacterDataByIndex(idx).faction != myFaction);
+            isEnemyFaction = Behaviors::isHostileTowardFaction(
+                ctx, edm.getCharacterDataByIndex(idx).faction);
             return recentThreat;
         }
     }
 
-    if (ctx.playerValid && ctx.characterData.faction == 1) {
+    if (ctx.playerValid && Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
         float detectionRange = guard.cachedDetectionRange;
         float distSq = Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
         if (distSq <= detectionRange * detectionRange) {
@@ -457,9 +458,8 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
     if (guard.currentAlertLevel == 3 && !guard.helpCalled && config.canCallForHelp) {
         guard.helpCalled = true;
         thread_local std::vector<size_t> s_helpBuffer;
-        uint8_t myFaction = ctx.characterData.faction;
-        AIManager::Instance().scanFactionInRadius(
-            myFaction, ctx.transform.position, config.helpCallRadius, s_helpBuffer, true);
+        AIManager::Instance().scanAlliedInRadius(
+            ctx.characterData.faction, ctx.transform.position, config.helpCallRadius, s_helpBuffer, true);
         for (size_t idx : s_helpBuffer) {
             if (idx == ctx.edmIndex) continue;
             Behaviors::deferBehaviorMessage(idx, BehaviorMessage::RAISE_ALERT);
@@ -512,9 +512,8 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
                     if (!guard.helpCalled && config.canCallForHelp) {
                         guard.helpCalled = true;
                         thread_local std::vector<size_t> s_alarmBuffer;
-                        uint8_t myFaction = ctx.characterData.faction;
-                        AIManager::Instance().scanFactionInRadius(
-                            myFaction, ctx.transform.position, config.alarmHelpCallRadius, s_alarmBuffer, true);
+                        AIManager::Instance().scanAlliedInRadius(
+                            ctx.characterData.faction, ctx.transform.position, config.alarmHelpCallRadius, s_alarmBuffer, true);
                         for (size_t idx : s_alarmBuffer) {
                             if (idx == ctx.edmIndex) continue;
                             Behaviors::deferBehaviorMessage(idx, BehaviorMessage::RAISE_ALERT);
@@ -623,9 +622,8 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         if (guard.currentAlertLevel == 0) {
             guard.helpCalled = false;
             thread_local std::vector<size_t> s_calmBuffer;
-            uint8_t myFaction = ctx.characterData.faction;
-            AIManager::Instance().scanFactionInRadius(
-                myFaction, ctx.transform.position, config.helpCallRadius, s_calmBuffer, true);
+            AIManager::Instance().scanAlliedInRadius(
+                ctx.characterData.faction, ctx.transform.position, config.helpCallRadius, s_calmBuffer, true);
             for (size_t idx : s_calmBuffer) {
                 if (idx == ctx.edmIndex) continue;
                 Behaviors::deferBehaviorMessage(idx, BehaviorMessage::CALM_DOWN);

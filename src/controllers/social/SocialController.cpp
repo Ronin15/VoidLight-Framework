@@ -641,6 +641,16 @@ void SocialController::reportTheft(EntityHandle thief,
 
     recordInteraction(victim, InteractionType::Theft, THEFT_RELATIONSHIP_LOSS);
 
+    const uint8_t victimFaction = edm.getCharacterDataByIndex(victimIdx).faction;
+    uint8_t thiefFaction = 0;
+    if (thief.isValid()) {
+        const size_t thiefIdx = edm.getIndex(thief);
+        if (thiefIdx != SIZE_MAX) {
+            thiefFaction = edm.getCharacterDataByIndex(thiefIdx).faction;
+        }
+    }
+    AIManager::Instance().worsenStance(victimFaction, thiefFaction);
+
     Vector2D theftLocation = edm.getHotDataByIndex(victimIdx).transform.position;
 
     auto theftEvent = std::make_shared<TheftEvent>(
@@ -748,6 +758,26 @@ void SocialController::recordTrade(EntityHandle npcHandle, float tradeValue, boo
 void SocialController::recordGift(EntityHandle npcHandle, float giftValue) {
     float value = GIFT_RELATIONSHIP_BASE + (giftValue * GIFT_VALUE_SCALE);
     recordInteraction(npcHandle, InteractionType::Gift, value);
+
+    auto& edm = EntityDataManager::Instance();
+    const size_t npcIdx = edm.getIndex(npcHandle);
+    if (npcIdx == SIZE_MAX) {
+        return;
+    }
+
+    const uint8_t npcFaction = edm.getCharacterDataByIndex(npcIdx).faction;
+    uint8_t playerFaction = 0;
+    auto player = mp_player.lock();
+    if (player) {
+        const EntityHandle playerHandle = player->getHandle();
+        if (playerHandle.isValid()) {
+            const size_t playerIdx = edm.getIndex(playerHandle);
+            if (playerIdx != SIZE_MAX) {
+                playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
+            }
+        }
+    }
+    AIManager::Instance().improveStance(npcFaction, playerFaction);
 }
 
 void SocialController::dispatchResourceChange(EntityHandle ownerHandle,

@@ -325,6 +325,9 @@ void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& 
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
+    if (tryEngageHostileInRange(ctx)) {
+        return;
+    }
 
     updateTimers(state, ctx.deltaTime, ctx.pathData);
 

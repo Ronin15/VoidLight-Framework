@@ -382,6 +382,42 @@ BOOST_AUTO_TEST_CASE(TestReportTheftWithInvalidVictim) {
     BOOST_CHECK_EQUAL(controller.getRelationshipLevel(victim), SocialController::RELATIONSHIP_NEUTRAL);
 }
 
+BOOST_AUTO_TEST_CASE(TestTheftWorsensFactionStance) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle victim = spawnNPC("Warrior");
+    BOOST_REQUIRE(player->getHandle().isValid());
+    edm.setFaction(victim, 1);
+
+    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
+    const float relationshipBefore = controller.getRelationshipLevel(victim);
+
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+
+    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Hostile);
+    BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
+    BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
+}
+
+BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle npc = spawnNPC("Warrior");
+    edm.setFaction(npc, 1);
+    BOOST_REQUIRE(player->addToInventory(breadHandle, 2));
+
+    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
+    const float relationshipBefore = controller.getRelationshipLevel(npc);
+    BOOST_REQUIRE(controller.tryGift(npc, breadHandle, 1));
+    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Allied);
+    BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
+    BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================

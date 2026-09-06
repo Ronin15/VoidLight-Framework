@@ -356,7 +356,7 @@ Current foundation:
 
 Architecture notes:
 
-- Stance enum: Allied / Neutral / Hostile. Storage: `std::array<std::array<…>, MAX_FACTIONS>` on `AIManager`. Defaults: same id → Allied; 0 vs 1 → Hostile; all other pairs → Neutral. Main-thread writes after combat commit and SocialController theft/gift.
+- Stance enum: Allied / Neutral / Hostile. Storage: `std::array<std::array<…>, MAX_FACTIONS>` on `AIManager`. Defaults: same id → Allied; **all other pairs Neutral** (override the earlier 0-vs-1 Hostile default — that made warriors agro the player). Main-thread writes after combat commit and SocialController theft/gift.
 - `scanFactionInRadius` / help / Attack target filter / Flee ally seek consult stance, not raw `==`. Replace the `faction == 1` / `faction == 0` hostility checks in Guard and Attack.
 - Territory: query Slice 2 settlements (`center + radiusTiles * TILE_SIZE`) for faction at a point. No new spatial hash.
 - Player standing: compact per-faction scores on the player’s EDM character/memory sidecar, updated from the same main-thread commits. Keep `getRelationshipLevel(npc, subject)` for individuals.

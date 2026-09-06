@@ -26,9 +26,11 @@
 #include "ai/BehaviorCommonState.hpp"       // For BehaviorData, PathData
 #include "ai/BehaviorConfig.hpp"
 #include "ai/BehaviorStateData.hpp"
+#include "ai/FactionStance.hpp"
 #include "managers/EntityDataTypes.hpp"     // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
 #include "managers/EventManager.hpp"        // For EventManager::DeferredEvent
 #include "managers/SparseSidecar.hpp"       // For SparseSidecar<KnockbackData>
+#include <array>
 #include <vector>
 
 /**
@@ -68,6 +70,13 @@ struct BehaviorContext {
     // for systems that need absolute time (e.g., MemoryEntry timestamps).
     float gameTime{0.0f};
 
+    // Copy of AIManager's directed stance row for this entity's faction. Size is 16 to
+    // avoid including AIManager.hpp here (that header already includes behavior headers).
+    // FactionStance{} is Allied — ctor fills Neutral before copying the provided row.
+    std::array<FactionStance, 16> factionStanceRow;
+    uint8_t playerFaction{0};
+    bool hasHostileInRow{false};
+
     // Pre-fetched knockback sidecar — worker threads call knockback.get(edmIndex) for O(1)
     // presence check without touching EntityDataManager::Instance().
     // Reference (not pointer) because a BehaviorContext is always constructed with the
@@ -81,12 +90,20 @@ struct BehaviorContext {
                     const CharacterData& cData,
                     float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
                     float gTime,
+                    const std::array<FactionStance, 16>& stanceRow,
+                    uint8_t pFaction,
+                    bool hostileInRow,
                     SparseSidecar<KnockbackData>& kbSidecar)
         : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt),
           playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid),
           sharedState(bData), pathData(pData), memoryData(mData), characterData(cData),
           worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY),
-          worldBoundsValid(wBoundsValid), gameTime(gTime), knockback(kbSidecar) {}
+          worldBoundsValid(wBoundsValid), gameTime(gTime),
+          playerFaction(pFaction), hasHostileInRow(hostileInRow),
+          knockback(kbSidecar) {
+        factionStanceRow.fill(FactionStance::Neutral);
+        factionStanceRow = stanceRow;
+    }
 };
 
 // ============================================================================
@@ -139,6 +156,9 @@ namespace Behaviors {
 // alertness, etc.). Lives here, not on NPCMemoryData: EDM holds state
 // (`lastCombatTime`), policy decisions live in the behavior layer.
 constexpr float COMBAT_TIMEOUT_SECONDS = 5.0f;
+
+// Radius used by Idle/Wander/Patrol re-engage and Attack's minimum target scan.
+constexpr float HOSTILE_ENGAGE_RANGE = 250.0f;
 
 // ============================================================================
 // EXECUTION FUNCTIONS (one per behavior type)
@@ -367,6 +387,14 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx);
  * Standalone query — does not require BehaviorContext, callable from controllers.
  */
 [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle, EntityHandle subjectHandle);
+
+[[nodiscard]] bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction);
+[[nodiscard]] bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction);
+/**
+ * @brief Switch to Attack if a Hostile faction member is within HOSTILE_ENGAGE_RANGE.
+ * @return true if a transition was queued
+ */
+bool tryEngageHostileInRange(BehaviorContext& ctx);
 
 /**
  * @brief Normalize a direction vector

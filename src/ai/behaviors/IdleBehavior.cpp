@@ -191,6 +191,9 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
+    if (tryEngageHostileInRange(ctx)) {
+        return;
+    }
 
     // Execute behavior based on current mode
     switch (static_cast<VoidLight::IdleBehaviorConfig::IdleMode>(config.mode)) {
