@@ -6,13 +6,13 @@
 #include "events/NPCSpawnEvent.hpp"
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
-#include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/WorldManager.hpp"
 #include "utils/Vector2D.hpp"
+#include "world/NpcSpawn.hpp"
 #include <algorithm>
 #include <format>
 #include <random>
@@ -386,16 +386,16 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters &params, float x, float y) {
         npcClass = params.npcType;
       }
 
-      EntityHandle handle = edm.createNPCWithRaceClass(spawnPos, race, npcClass);
+      std::string behaviorOverride;
+      if (!params.aiBehaviors.empty()) {
+        behaviorOverride = params.aiBehaviors[i % params.aiBehaviors.size()];
+      } else if (!params.aiBehavior.empty()) {
+        behaviorOverride = params.aiBehavior;
+      }
 
+      EntityHandle handle = VoidLight::spawnNpc(spawnPos, race, npcClass, Sex::Unknown,
+                                                0xFF, behaviorOverride);
       if (handle.isValid()) {
-        // Assign AI behavior - rotate through list if multiple, otherwise use single
-        if (!params.aiBehaviors.empty()) {
-          const auto& behavior = params.aiBehaviors[i % params.aiBehaviors.size()];
-          AIManager::Instance().assignBehavior(handle, behavior);
-        } else if (!params.aiBehavior.empty()) {
-          AIManager::Instance().assignBehavior(handle, params.aiBehavior);
-        }
         spawnedHandles.push_back(handle);
       }
     }

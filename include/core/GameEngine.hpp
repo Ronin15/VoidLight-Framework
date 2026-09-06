@@ -122,11 +122,10 @@ public:
    *          - Periodic cache cleanup or memory defragmentation
    *          - Network polling for non-latency-critical updates
    *
+   * @note Currently drains EntityDataManager's destruction queue at frame end.
+   *       Skipped while globally paused (LoadingState exclusive structural window).
    * @note Global systems (EventManager, AIManager, etc.) are updated in the main
-   *       update loop for deterministic ordering. This method is for truly
-   *       asynchronous, non-critical tasks only.
-   * @warning Any work added must be thread-safe and not require main-thread
-   *          resources (SDL rendering, UI state, etc.).
+   *       update loop for deterministic ordering.
    */
   void processBackgroundTasks();
 
@@ -305,10 +304,13 @@ public:
   /**
    * @brief Sets global pause state for all game managers
    * @param paused true to pause all managers, false to resume
-   * @details Coordinates pause state across AIManager, ParticleManager,
-   *          CollisionManager, and PathfinderManager. When paused, managers
-   *          early-exit their update() methods, reducing CPU usage and
-   *          allowing ThreadSystem to go idle.
+   * @details Coordinates pause across AI, particles, collision, pathfinder,
+   *          background sim, projectiles, game time, and EventManager
+   *          deferred drain. Uses manager Instance() so it is safe before
+   *          GameEngine::init() caches pointers. When paused, those
+   *          managers early-exit update(). LoadingState then turns
+   *          EventManager drain back on so the gameplay/lifecycle bus can
+   *          deliver Deferred WorldLoaded.
    */
   void setGlobalPause(bool paused);
 

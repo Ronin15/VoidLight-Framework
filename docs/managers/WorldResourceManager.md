@@ -52,6 +52,7 @@ unregisterInventory(inventoryIndex);
 
 registerHarvestable(edmIndex, worldId);
 unregisterHarvestable(edmIndex);
+copyHarvestableIndices(worldId, out);  // snapshot static EDM indices; does not destroy
 
 registerDroppedItem(edmIndex, position, worldId);
 unregisterDroppedItem(edmIndex);

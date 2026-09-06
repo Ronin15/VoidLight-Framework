@@ -187,13 +187,6 @@ struct Tile {
     uint32_t buildingId = 0;        // 0 = no building, >0 = unique building ID
     uint8_t buildingSize = 0;       // 0 = no building, 1-4 = connected building count
     bool isTopLeftOfBuilding = false;  // Pre-computed flag for render optimization
-
-    // Harvestable deposit support (ore, gem deposits)
-    // Lazy-created EDM entity index for tile-based deposits
-    // UINT32_MAX = no entity created yet
-    // TODO: Connect to tile-based deposit system when implemented
-    // Currently harvestables are spawned at obstacle positions via WorldManager::spawnHarvestablesAtObstacles
-    uint32_t harvestableIndex = UINT32_MAX;
 };
 
 struct SettlementRecord {

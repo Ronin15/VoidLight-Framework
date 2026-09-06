@@ -5,16 +5,18 @@
 ## Overview
 
 `WorldManager` owns the active world, chunk-oriented rendering setup, world
-generation/loading, and the world-facing side of harvesting by spawning EDM
-harvestables that match tile obstacles.
+generation/loading, and coordinates harvest/NPC populate helpers. Harvest spawn
+policy lives in `WorldHarvestInit`; NPC spawn policy lives in `WorldPopulation`
+and `spawnNpc`. Registry and settlement queries stay on WorldManager.
 
 ## Responsibilities
 
 - load and unload worlds
 - expose world bounds and dimensions
 - coordinate chunk cache invalidation and season-driven tile refresh
-- initialize harvestable/resource entities for the active world
-- populate settlement NPCs after resource init (`WorldPopulation`, keyed by `worldId`)
+- initialize harvestable/resource entities for the active world (`WorldHarvestInit`)
+- populate settlement NPCs after resource init (`WorldPopulation` / `spawnNpc`, keyed by `worldId`)
+- destroy that world's harvestables then enqueue populated NPCs on unload
 - set the active world explicitly on `WorldResourceManager`
 
 ## Active World Handoff
@@ -29,7 +31,16 @@ This replaces the older event-driven active-world ownership model. Do not docume
 
 ## Harvestable Initialization
 
-`initializeWorldResources()` now spawns harvestables with positional coherence between tiles and EDM entities.
+`loadNewWorld` calls `WorldHarvestInit::initialize` after WRM `setActiveWorld`.
+Spawn behavior is obstacle-aligned, with biome/elevation fallbacks when no
+dedicated tile obstacle exists. Harvestables are static EDM entities registered
+into WRM.
+
+`unloadWorldLocked` snapshots that world's harvestable static indices from WRM,
+destroys them via `EntityDataManager::destroyEntity` (immediate static path),
+then clears populated NPCs and calls WRM `removeWorld`. `WorldManager::clean`
+uses the same locked unload. Public `unloadWorld` drains the EDM destruction
+queue after locks drop; the `loadNewWorld` worker uses locked unload only.
 
 ### Obstacle-aligned spawning
 
@@ -59,13 +70,14 @@ Some resources are still distributed by biome or elevation when no dedicated til
 ## World Population
 
 `loadNewWorld` calls `populateWorldEntities()` immediately after
-`initializeWorldResources()`, still under `m_worldMutex`. Population is a
-load-time helper (`WorldPopulation`), not a manager singleton and not a
-`GamePlayState` tile loop.
+`WorldHarvestInit::initialize`, still under `m_worldMutex`. Population is a
+load-time helper (`WorldPopulation` + `spawnNpc`), not a manager singleton and
+not a `GamePlayState` tile loop.
 
-- Per overworld settlement: 1 merchant (Idle), 2 guards, 4 villagers (Wander).
-- Sparse forest/haunted hostiles (Human/Warrior, faction 1, Attack) at one
-  candidate per 64×64 tile block, capped at 32 hostiles.
+- Per overworld settlement: 1 merchant, 2 guards, 4 villagers. Empty
+  `behaviorOverride` keeps `classes.json` suggestedBehavior (Idle/Guard/Wander).
+- Sparse forest/haunted hostiles (Human/Warrior, faction 1) pass `"Attack"` to
+  `spawnNpc`. Do not change Warrior `suggestedBehavior` in JSON.
 - Total populated NPCs are capped at 256 per `worldId`.
 - Default simulation tier is Active; `BackgroundSimulationManager` retier
   after the player exists. Populate does not assign tiers from camera/player.
@@ -74,16 +86,21 @@ load-time helper (`WorldPopulation`), not a manager singleton and not a
   NPC handles for destroy and drop the registry entry before
   `m_currentWorld.reset()`. `unloadWorld()` drains the EDM destruction
   queue on the calling (main/test) thread after dropping world locks.
-- `LoadingState` pauses `AIManager` for the async load so
-  `AIManager::update()` does not run against NPCs being created. WorldManager
-  does not locally pause AI. `assignBehavior` still serializes index updates
-  with `m_entitiesMutex`.
+- `LoadingState` takes the exclusive structural window (`setGlobalPause(true)`).
+  Gameplay producers pause; EventManager stays the gameplay and lifecycle bus
+  with deferred drain on so WorldLoaded can complete (WorldManager is not
+  paused). GameEngine skips destroy-drain while globally paused.
+  `GamePlayState::enter()` already `setGlobalPause(false)`.
 - Public queries (shared `m_worldMutex`): `isWorldPopulated(worldId)` and
   `getPopulatedNpcCount(worldId)` for the populate registry; `getSettlements()`,
   `findSettlementAtTile`, and `findSettlementAtPixel` for the current world
   (same current-world rule as `getTileCopyAt`).
-- Debug `R` Warriors spawned from `GamePlayState` are not registered in the
-  populated-NPC map.
+- Debug `R` Warriors spawned from `GamePlayState` via `spawnNpc` are not
+  registered in the populated-NPC map.
+
+Do not dump later-slice policy into WorldManager (environment/stance/forage/
+decision → AI/EDM; discovery → WorldData + SaveGameManager + HUD; background
+tick → BSM).
 
 Do not populate from `GamePlayState`. When saved-world `loadWorld` lands
 later, it must call the same populate after `WorldData` is restored if NPCs
@@ -101,4 +118,4 @@ are not in the save.
 ## Guidance
 
 - Treat world harvestables as EDM entities registered into WRM, not as an internal WorldManager-only resource table.
-- If you add a new harvestable obstacle type, update both the world generation/render data and the obstacle-to-resource spawn logic here.
+- If you add a new harvestable obstacle type, update both the world generation/render data and `WorldHarvestInit`.

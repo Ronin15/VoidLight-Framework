@@ -34,6 +34,12 @@ deeper file wins.
   `WorldManager::clearPopulatedNpcs` then
   `EntityDataManager::processDestructionQueue` on the test thread. Do
   not hand-roll `destroyEntity` and leave the populate registry stale.
+- World unload (`unloadWorld` or `loadNewWorld` replacement via
+  `unloadWorldLocked`) destroys static harvestables for that `worldId`
+  before WRM `removeWorld`. Tests that unload without
+  `prepareForStateTransition` should still observe WRM harvestable count
+  0 and no remaining EDM harvestables for the old world. Public
+  `unloadWorld` drains queued NPCs; locked unload does not.
 
 ## Design and Execution
 

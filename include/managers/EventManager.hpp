@@ -314,7 +314,15 @@ public:
   )
 
   /**
-   * @brief Sets global pause state (for menu states)
+   * @brief Pause deferred drain only (menu / global pause).
+   *
+   * EventManager is the single bus for gameplay events (combat, weather,
+   * spawn, resource) and engine/lifecycle events (world loaded/unloaded,
+   * static colliders ready). Pause skips EventManager::update() deferred
+   * drain; Immediate dispatch still runs. LoadingState re-enables drain
+   * after GameEngine::setGlobalPause(true) so Deferred WorldLoaded can
+   * complete; gameplay producers stay paused, so the queue is lifecycle
+   * traffic until GamePlayState unpauses.
    */
   void setGlobalPause(bool paused);
 

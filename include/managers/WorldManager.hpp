@@ -219,6 +219,8 @@ public:
     [[nodiscard]] bool loadNewWorld(const VoidLight::WorldGenerationConfig& config,
                      const VoidLight::WorldGenerationProgressCallback& progressCallback = nullptr);
     [[nodiscard]] bool loadWorld(const std::string& worldId);
+    // Main/test-thread unload: locked unload then processDestructionQueue.
+    // Load worker uses unloadWorldLocked only (no drain).
     void unloadWorld();
 
     std::optional<VoidLight::Tile> getTileCopyAt(int x, int y) const;
@@ -347,6 +349,7 @@ private:
     void fireWorldUnloadedEvent(const std::string& worldId);
     void initializeWorldResources();
     void populateWorldEntities();
+    void destroyHarvestablesForWorld(const std::string& worldId);
     void clearPopulatedEntities(const std::string& worldId);
     std::optional<std::string> unloadWorldLocked();  // Assumes caller already holds lock
     bool applyTileUpdateLocked(int x, int y, const VoidLight::Tile& newTile);

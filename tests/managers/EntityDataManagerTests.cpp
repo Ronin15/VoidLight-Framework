@@ -8,6 +8,7 @@
 
 #include "core/ThreadSystem.hpp"
 #include "entities/resources/EquipmentResources.hpp"
+#include "ai/BehaviorConfig.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
@@ -227,6 +228,24 @@ BOOST_AUTO_TEST_CASE(TestCreateNPC) {
     BOOST_CHECK(hot.isAlive());
 }
 
+BOOST_AUTO_TEST_CASE(TestCreateMonsterAndAnimalAutoRegisterSuggestedBehavior) {
+    EntityHandle monster = edm->createMonster(Vector2D(10.0f, 10.0f), "Goblin", "Scout");
+    BOOST_REQUIRE(monster.isValid());
+    const size_t monsterIdx = edm->getIndex(monster);
+    BOOST_REQUIRE_NE(monsterIdx, SIZE_MAX);
+    const auto& monsterData = edm->getCharacterDataByIndex(monsterIdx);
+    BOOST_CHECK_EQUAL(monsterData.behaviorType, static_cast<uint8_t>(BehaviorType::Chase));
+    BOOST_CHECK_EQUAL(monsterData.homeRole, static_cast<uint8_t>(BehaviorType::Chase));
+
+    EntityHandle animal = edm->createAnimal(Vector2D(20.0f, 10.0f), "Wolf", "Pup");
+    BOOST_REQUIRE(animal.isValid());
+    const size_t animalIdx = edm->getIndex(animal);
+    BOOST_REQUIRE_NE(animalIdx, SIZE_MAX);
+    const auto& animalData = edm->getCharacterDataByIndex(animalIdx);
+    BOOST_CHECK_EQUAL(animalData.behaviorType, static_cast<uint8_t>(BehaviorType::Follow));
+    BOOST_CHECK_EQUAL(animalData.homeRole, static_cast<uint8_t>(BehaviorType::Follow));
+}
+
 BOOST_AUTO_TEST_CASE(TestCreatePlayer) {
     Vector2D position(300.0f, 400.0f);
     EntityHandle handle = edm->registerPlayer(1,position);
@@ -404,6 +423,10 @@ BOOST_AUTO_TEST_SUITE_END()
 // ============================================================================
 
 BOOST_FIXTURE_TEST_SUITE(DestructionQueueTests, EntityDataManagerTestFixture)
+
+// Direct drain is a legal caller (with unloadWorld and prepareForStateTransition).
+// GameEngine::processBackgroundTasks skips processDestructionQueue while
+// globally paused so LoadingState's load worker can own structural create.
 
 BOOST_AUTO_TEST_CASE(TestDestroyEntity) {
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");

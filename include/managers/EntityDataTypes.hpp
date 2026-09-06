@@ -241,7 +241,10 @@ struct CharacterData {
 
     // Faction and AI
     uint8_t faction{0};        // 0=Friendly, 1=Enemy, 2=Neutral
-    uint8_t behaviorType{0};   // BehaviorType enum (current)
+    // AIManager-written mirror of the current BehaviorType (assign + transition
+    // commit). Production AI reads BehaviorConfig.type; do not treat this as home.
+    uint8_t behaviorType{0};
+    // Home role written on assignBehavior only. Slice 7 restores this; not current type.
     uint8_t homeRole{static_cast<uint8_t>(BehaviorType::None)};
     uint8_t priority{5};       // AI priority (0-9)
     uint8_t stateFlags{0};     // alive, stunned, invulnerable, etc.

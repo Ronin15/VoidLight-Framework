@@ -13,12 +13,11 @@
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameTimeManager.hpp"
-#include "managers/ResourceTemplateManager.hpp"
 #include "managers/TextureManager.hpp"
 #include "managers/WorldResourceManager.hpp"
 #include "utils/JsonReader.hpp"
 #include "utils/Vector2D.hpp"
-#include "world/HarvestConfig.hpp"
+#include "world/WorldHarvestInit.hpp"
 #include "world/WorldPopulation.hpp"
 
 #include <algorithm>
@@ -259,6 +258,7 @@ std::optional<std::string> WorldManager::unloadWorldLocked() {
     m_tileRenderer->clearChunkCache();
   }
 
+  destroyHarvestablesForWorld(worldId);
   clearPopulatedEntities(worldId);
   WorldResourceManager::Instance().removeWorld(worldId);
 
@@ -323,9 +323,6 @@ void WorldManager::update() {
   if (!m_initialized.load(std::memory_order_acquire) || !m_currentWorld) {
     return;
   }
-
-  // Currently no per-frame world updates needed
-  // This could be extended for dynamic world changes, weather effects, etc.
 }
 
 bool WorldManager::handleHarvestResource(int entityId, int targetX,
@@ -672,6 +669,19 @@ void WorldManager::populateWorldEntities() {
       m_populatedNpcsByWorldId[worldId].size(), worldId));
 }
 
+void WorldManager::destroyHarvestablesForWorld(const std::string& worldId) {
+  auto& wrm = WorldResourceManager::Instance();
+  auto& edm = EntityDataManager::Instance();
+  std::vector<size_t> harvestableIndices;
+  wrm.copyHarvestableIndices(worldId, harvestableIndices);
+  for (size_t staticIndex : harvestableIndices) {
+    EntityHandle handle = edm.getStaticHandle(staticIndex);
+    if (handle.isValid()) {
+      edm.destroyEntity(handle);
+    }
+  }
+}
+
 void WorldManager::clearPopulatedEntities(const std::string& worldId) {
   auto it = m_populatedNpcsByWorldId.find(worldId);
   if (it == m_populatedNpcsByWorldId.end()) {
@@ -696,286 +706,11 @@ void WorldManager::clearPopulatedEntities(const std::string& worldId) {
 }
 
 void WorldManager::initializeWorldResources() {
-  if (!m_currentWorld || m_currentWorld->grid.empty()) {
+  if (!m_currentWorld) {
     WORLD_MANAGER_WARN("Cannot initialize resources - no world loaded");
     return;
   }
-
-  WORLD_MANAGER_INFO(std::format("Initializing world resources for world: {}",
-                                 m_currentWorld->worldId));
-
-  // Get ResourceTemplateManager to access available resources
-  const auto &resourceMgr = ResourceTemplateManager::Instance();
-
-  // Count resources to distribute based on biomes and elevation
-  int totalTiles = 0;
-  int forestTiles = 0;
-  int mountainTiles = 0;
-  int swampTiles = 0;
-  int celestialTiles = 0;
-  int highElevationTiles = 0;
-
-  // First pass: count tile types
-  for (const auto &row : m_currentWorld->grid) {
-    for (const auto &tile : row) {
-      if (!tile.isWater) {
-        totalTiles++;
-
-        switch (tile.biome) {
-        case VoidLight::Biome::FOREST:
-          forestTiles++;
-          break;
-        case VoidLight::Biome::MOUNTAIN:
-          mountainTiles++;
-          break;
-        case VoidLight::Biome::SWAMP:
-          swampTiles++;
-          break;
-        case VoidLight::Biome::CELESTIAL:
-          celestialTiles++;
-          break;
-        default:
-          // Desert, Ocean, and Haunted biomes don't affect base resource
-          // calculations
-          break;
-        }
-
-        if (tile.elevation > 0.7f) {
-          highElevationTiles++;
-        }
-      }
-    }
-  }
-
-  if (totalTiles == 0) {
-    WORLD_MANAGER_WARN("No land tiles found for resource initialization");
-    return;
-  }
-
-  try {
-    auto& edm = EntityDataManager::Instance();
-    const std::string& worldId = m_currentWorld->worldId;
-
-    // Helper to spawn harvestables AT tiles with matching obstacles
-    // This ensures EDM harvestable position = tile obstacle position
-    // When harvested, both EDM entity and tile obstacle are updated together
-    // EVERY obstacle gets a harvestable for visual/gameplay coherence
-    auto spawnHarvestablesAtObstacles = [&](const char* resourceId,
-                                            VoidLight::ResourceHandle handle,
-                                            VoidLight::ObstacleType targetObstacle,
-                                            int yieldMin, int yieldMax,
-                                            float respawnTime) {
-      if (!handle.isValid()) {
-        WORLD_MANAGER_ERROR(std::format("Invalid resource handle for obstacle type {}",
-                                        VoidLight::obstacleTypeToString(targetObstacle)));
-        return;
-      }
-
-      int spawned = 0;
-      const size_t gridHeight = m_currentWorld->grid.size();
-      if (gridHeight == 0) return;
-      const size_t gridWidth = m_currentWorld->grid[0].size();
-
-      // resourceId is loop-invariant, so resolve its harvest type once.
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
-
-      // Spawn harvestables at ALL tiles that have the matching obstacle
-      for (size_t y = 0; y < gridHeight; ++y) {
-        for (size_t x = 0; x < gridWidth; ++x) {
-          const auto& tile = m_currentWorld->grid[y][x];
-          if (tile.obstacleType != targetObstacle) continue;
-
-          Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
-                       static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
-
-          EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
-          if (h.isValid()) {
-            ++spawned;
-          }
-        }
-      }
-      WORLD_MANAGER_INFO(std::format("Spawned {} harvestables of {} at {} obstacles",
-                                     spawned, handle.toString(),
-                                     VoidLight::obstacleTypeToString(targetObstacle)));
-    };
-
-    // Helper for biome-based resources (for things without tile obstacles)
-    auto spawnHarvestablesInBiome = [&](const char* resourceId,
-                                        VoidLight::ResourceHandle handle,
-                                        VoidLight::Biome targetBiome,
-                                        int count, int yieldMin, int yieldMax,
-                                        float respawnTime) {
-      if (!handle.isValid()) {
-        WORLD_MANAGER_ERROR(std::format("Invalid resource handle for biome {}",
-                                        VoidLight::biomeToString(targetBiome)));
-        return;
-      }
-      if (count <= 0) return;
-
-      int spawned = 0;
-      const size_t gridHeight = m_currentWorld->grid.size();
-      if (gridHeight == 0) return;
-      const size_t gridWidth = m_currentWorld->grid[0].size();
-
-      // resourceId is loop-invariant, so resolve its harvest type once.
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
-
-      // Distribute harvestables across the world
-      for (size_t y = 0; y < gridHeight && spawned < count; ++y) {
-        for (size_t x = 0; x < gridWidth && spawned < count; ++x) {
-          const auto& tile = m_currentWorld->grid[y][x];
-          if (tile.isWater) continue;
-          if (tile.biome != targetBiome) continue;
-          // Skip tiles that already have obstacles (those are handled by spawnHarvestablesAtObstacles)
-          if (tile.obstacleType != VoidLight::ObstacleType::NONE) continue;
-
-          // Skip some tiles for natural distribution (every ~10 tiles)
-          if ((x + y * 7) % 10 != 0) continue;
-
-          Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
-                       static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
-
-          EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
-          if (h.isValid()) {
-            ++spawned;
-          }
-        }
-      }
-      WORLD_MANAGER_INFO(std::format("Spawned {} harvestables of type {} ({}) in {} biome",
-                                     spawned, handle.toString(),
-                                     VoidLight::harvestTypeToString(harvestType),
-                                     VoidLight::biomeToString(targetBiome)));
-    };
-
-    // Helper for high-elevation resources
-    auto spawnHarvestablesAtElevation = [&](const char* resourceId,
-                                            VoidLight::ResourceHandle handle,
-                                            float minElevation, int count,
-                                            int yieldMin, int yieldMax,
-                                            float respawnTime) {
-      if (!handle.isValid()) {
-        WORLD_MANAGER_ERROR(std::format("Invalid resource handle for elevation >= {}",
-                                        minElevation));
-        return;
-      }
-      if (count <= 0) return;
-
-      int spawned = 0;
-      const size_t gridHeight = m_currentWorld->grid.size();
-      if (gridHeight == 0) return;
-      const size_t gridWidth = m_currentWorld->grid[0].size();
-
-      // createHarvestable auto-registers with WRM using worldId.
-      // resourceId is loop-invariant, so derive its HarvestType once via HarvestConfig.
-      const auto harvestType = VoidLight::getHarvestTypeForResource(resourceId);
-
-      for (size_t y = 0; y < gridHeight && spawned < count; ++y) {
-        for (size_t x = 0; x < gridWidth && spawned < count; ++x) {
-          const auto& tile = m_currentWorld->grid[y][x];
-          if (tile.isWater || tile.elevation < minElevation) continue;
-          // Skip tiles with obstacles (those are handled by spawnHarvestablesAtObstacles)
-          if (tile.obstacleType != VoidLight::ObstacleType::NONE) continue;
-
-          // Skip some tiles for natural distribution
-          if ((x + y * 11) % 12 != 0) continue;
-
-          Vector2D pos(static_cast<float>(x) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f,
-                       static_cast<float>(y) * VoidLight::TILE_SIZE + VoidLight::TILE_SIZE * 0.5f);
-
-          EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax, respawnTime, worldId, harvestType);
-          if (h.isValid()) {
-            ++spawned;
-          }
-        }
-      }
-      WORLD_MANAGER_INFO(std::format("Spawned {} high-elevation harvestables of type {} ({})",
-                                     spawned, handle.toString(),
-                                     VoidLight::harvestTypeToString(harvestType)));
-    };
-
-    // Basic resources - spawn AT tile obstacles for visual coherence
-    // When harvested, both EDM entity and tile obstacle are updated
-    // All obstacles of matching type get harvestables (no count limit)
-    auto woodHandle = resourceMgr.getHandleById("wood");
-    spawnHarvestablesAtObstacles("wood", woodHandle, VoidLight::ObstacleType::TREE, 1, 3, 60.0f);
-
-    auto stoneHandle = resourceMgr.getHandleById("stone");
-    spawnHarvestablesAtObstacles("stone", stoneHandle, VoidLight::ObstacleType::ROCK, 1, 3, 90.0f);
-
-    // Ore deposits
-    auto ironHandle = resourceMgr.getHandleById("iron_ore");
-    spawnHarvestablesAtObstacles("iron_ore", ironHandle, VoidLight::ObstacleType::IRON_DEPOSIT, 2, 5, 90.0f);
-
-    auto goldHandle = resourceMgr.getHandleById("gold_ore");
-    spawnHarvestablesAtObstacles("gold_ore", goldHandle, VoidLight::ObstacleType::GOLD_DEPOSIT, 1, 3, 150.0f);
-
-    auto coalHandle = resourceMgr.getHandleById("coal");
-    spawnHarvestablesAtObstacles("coal", coalHandle, VoidLight::ObstacleType::COAL_DEPOSIT, 3, 6, 75.0f);
-
-    auto copperHandle = resourceMgr.getHandleById("copper_ore");
-    spawnHarvestablesAtObstacles("copper_ore", copperHandle, VoidLight::ObstacleType::COPPER_DEPOSIT, 2, 4, 60.0f);
-
-    auto mithrilHandle = resourceMgr.getHandleById("mithril_ore");
-    spawnHarvestablesAtObstacles("mithril_ore", mithrilHandle, VoidLight::ObstacleType::MITHRIL_DEPOSIT, 1, 2, 300.0f);
-
-    auto limestoneHandle = resourceMgr.getHandleById("limestone");
-    spawnHarvestablesAtObstacles("limestone", limestoneHandle, VoidLight::ObstacleType::LIMESTONE_DEPOSIT, 2, 4, 120.0f);
-
-    // Gem deposits
-    auto emeraldHandle = resourceMgr.getHandleById("rough_emerald");
-    spawnHarvestablesAtObstacles("rough_emerald", emeraldHandle, VoidLight::ObstacleType::EMERALD_DEPOSIT, 1, 2, 180.0f);
-
-    auto rubyHandle = resourceMgr.getHandleById("rough_ruby");
-    spawnHarvestablesAtObstacles("rough_ruby", rubyHandle, VoidLight::ObstacleType::RUBY_DEPOSIT, 1, 2, 180.0f);
-
-    auto sapphireHandle = resourceMgr.getHandleById("rough_sapphire");
-    spawnHarvestablesAtObstacles("rough_sapphire", sapphireHandle, VoidLight::ObstacleType::SAPPHIRE_DEPOSIT, 1, 2, 180.0f);
-
-    auto diamondHandle = resourceMgr.getHandleById("rough_diamond");
-    spawnHarvestablesAtObstacles("rough_diamond", diamondHandle, VoidLight::ObstacleType::DIAMOND_DEPOSIT, 1, 1, 360.0f);
-
-    // Rare biome-based resources (no tile obstacles - for resources without visual tiles)
-    if (forestTiles > 0) {
-      auto enchantedWoodHandle = resourceMgr.getHandleById("enchanted_wood");
-      spawnHarvestablesInBiome("enchanted_wood", enchantedWoodHandle, VoidLight::Biome::FOREST,
-                               std::max(1, forestTiles / 40), 1, 2, 120.0f);
-    }
-
-    if (celestialTiles > 0) {
-      auto crystalHandle = resourceMgr.getHandleById("crystal_essence");
-      spawnHarvestablesInBiome("crystal_essence", crystalHandle, VoidLight::Biome::CELESTIAL,
-                               std::max(1, celestialTiles / 30), 1, 2, 150.0f);
-    }
-
-    if (swampTiles > 0) {
-      auto voidSilkHandle = resourceMgr.getHandleById("void_silk");
-      spawnHarvestablesInBiome("void_silk", voidSilkHandle, VoidLight::Biome::SWAMP,
-                               std::max(1, swampTiles / 60), 1, 1, 200.0f);
-    }
-
-    // Mountain biome gets extra stone deposits
-    if (mountainTiles > 0) {
-      auto mountainStoneHandle = resourceMgr.getHandleById("stone");
-      spawnHarvestablesInBiome("stone", mountainStoneHandle, VoidLight::Biome::MOUNTAIN,
-                               std::max(1, mountainTiles / 25), 2, 5, 90.0f);
-    }
-
-    // High elevation resources
-    if (highElevationTiles > 0) {
-      auto enchantedStoneHandle = resourceMgr.getHandleById("enchanted_stone");
-      spawnHarvestablesAtElevation("enchanted_stone", enchantedStoneHandle, 0.7f,
-                                   std::max(1, highElevationTiles / 30),
-                                   1, 3, 90.0f);
-    }
-
-    WORLD_MANAGER_INFO(std::format(
-        "World harvestable initialization completed for {} ({} tiles processed)",
-        m_currentWorld->worldId, totalTiles));
-
-  } catch (const std::exception &ex) {
-    WORLD_MANAGER_ERROR(std::format(
-        "Error during world resource initialization: {}", ex.what()));
-  }
+  VoidLight::WorldHarvestInit::initialize(*m_currentWorld);
 }
 
 // ============================================================================

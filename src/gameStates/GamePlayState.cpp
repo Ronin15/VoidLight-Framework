@@ -39,6 +39,7 @@
 #include "managers/SoundManager.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Camera.hpp"
+#include "world/NpcSpawn.hpp"
 #include "world/WorldData.hpp"
 #include <array>
 #include <cmath>
@@ -686,16 +687,15 @@ void GamePlayState::handleInput() {
   }
 
   VOIDLIGHT_DEBUG_ONLY(
-  // Debug: R to spawn a hostile Warrior NPC near player (test hook)
+  // Debug: R to spawn a hostile Warrior NPC near player (test hook).
+  // Not registered in WorldManager's populate registry.
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
-    auto& edm = EntityDataManager::Instance();
-    auto& aiMgr = AIManager::Instance();
     Vector2D playerPos = mp_Player->getPosition();
     Vector2D spawnPos = playerPos + Vector2D(150.0f, 0.0f);
-    EntityHandle npc = edm.createNPCWithRaceClass(spawnPos, "Human", "Warrior",
-                                                   Sex::Unknown, 1);  // faction 1 = Enemy
-    if (npc.isValid()) {
-      aiMgr.assignBehavior(npc, "Attack");
+    EntityHandle npc = VoidLight::spawnNpc(spawnPos, "Human", "Warrior",
+                                           Sex::Unknown, 1, "Attack");
+    if (!npc.isValid()) {
+      GAMESTATE_WARN("Failed to spawn debug Warrior");
     }
   }
 

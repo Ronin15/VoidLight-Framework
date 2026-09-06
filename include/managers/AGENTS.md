@@ -20,6 +20,11 @@ conflict, this file wins.
   `getPopulatedNpcCount`, `clearPopulatedNpcs`). Callers that need those
   NPCs gone without unloading tiles use `clearPopulatedNpcs`, not
   ad-hoc `destroyEntity` on EDM handles.
+- Harvest spawn policy lives in `WorldHarvestInit`; NPC spawn policy
+  lives in `WorldPopulation` / `spawnNpc`. WorldManager stays the
+  coordinator (load/unload, registry, settlement queries). Do not dump
+  environment/stance/forage/decision, discovery, or background-tick
+  policy into WorldManager.
 - Do not expose nullable pointer-return accessors unless the current
   subsystem already uses them as an optional lookup contract.
 
@@ -29,6 +34,13 @@ conflict, this file wins.
   not a gameplay policy layer. AI decisions, controller flow, collision
   policy, world resource indexing, and render ownership stay in their
   owning systems.
+- Structural EDM has one owner at a time. Gameplay = main thread. Load
+  worker = owner only inside LoadingState's exclusive window. Tests that
+  call `loadNewWorld` on the test thread are the owner. `create*` and
+  `processDestructionQueue` share `m_structuralMutex`. Dynamic
+  `destroyEntity` only enqueues. Legal drain callers: GameEngine
+  frame-end (skipped when globally paused), public `unloadWorld`,
+  `prepareForStateTransition`.
 - Keep hot entity data compact and deliberate. Changes to
   `EntityHotData`, dense pools, sidecars, or parallel arrays must
   preserve alignment, slot reuse, cleanup, and batch-access assumptions.

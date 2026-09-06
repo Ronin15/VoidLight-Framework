@@ -37,7 +37,17 @@ so the same registered `LoadingState` instance can be reused.
 
 1. `enter()` validates that `configure(...)` supplied a target
    `GameStateId`.
-2. game time is globally paused while loading runs.
+2. `GameEngine::setGlobalPause(true)` then `EventManager::setGlobalPause(false)`.
+   EventManager is one bus for gameplay and engine/lifecycle events. The
+   exclusive window pauses gameplay *producers* (AI, collision update,
+   pathfinder update, game time, projectiles, particles) and GameEngine
+   destroy-drain so the load worker can create harvestables and NPCs.
+   WorldManager is not paused; it posts Deferred `WorldLoaded`. EventManager
+   drain stays on so that lifecycle event can run: collision rebuilds static
+   colliders from the handler (not from `update()`) and fires Immediate
+   `StaticCollidersReady`. Destination `enter()` (GamePlayState,
+   AdvancedAIDemoState) already unpauses and EventManager is the gameplay
+   bus again.
 3. loading UI is created in pixel-space using `GameEngine::getWidthInPixels()`
    and `getHeightInPixels()`.
 4. `startAsyncWorldLoad()` enqueues world generation on `ThreadSystem`.

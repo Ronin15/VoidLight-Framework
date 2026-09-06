@@ -24,6 +24,7 @@
 #include "managers/WorldManager.hpp"
 #include "managers/WorldResourceManager.hpp"
 #include "gameStates/GameOverState.hpp"
+#include "world/NpcSpawn.hpp"
 #include "core/WorkerBudget.hpp"
 #include "gpu/GPURenderer.hpp"
 #include "utils/GPUSceneRecorder.hpp"
@@ -555,9 +556,6 @@ void AdvancedAIDemoState::setupTestVillage() {
     return;
   }
 
-  auto& edm = EntityDataManager::Instance();
-  auto& aiMgr = AIManager::Instance();
-
   Vector2D playerPos = m_player->getPosition();
 
   // Village center is offset from player to give them room to approach
@@ -594,10 +592,9 @@ void AdvancedAIDemoState::setupTestVillage() {
   for (const auto& spawn : merchants) {
     Vector2D pos = villageCenter + spawn.offset;
     const char* race = getRandomFriendlyRace();
-    EntityHandle handle = edm.createNPCWithRaceClass(pos, race, spawn.npcClass);
+    EntityHandle handle = VoidLight::spawnNpc(pos, race, spawn.npcClass, Sex::Unknown,
+                                              0xFF, "Idle");
     if (handle.isValid()) {
-      // Merchants stay idle at their posts
-      aiMgr.assignBehavior(handle, "Idle");
       merchantCount++;
       GAMESTATE_DEBUG(std::format("Spawned {} {} at ({:.0f}, {:.0f})",
                                  race, spawn.npcClass, pos.getX(), pos.getY()));
@@ -620,10 +617,8 @@ void AdvancedAIDemoState::setupTestVillage() {
   for (const auto& offset : guardOffsets) {
     Vector2D pos = villageCenter + offset;
     const char* race = getRandomFriendlyRace();
-    EntityHandle handle = edm.createNPCWithRaceClass(pos, race, "Guard");
+    EntityHandle handle = VoidLight::spawnNpc(pos, race, "Guard", Sex::Unknown, 0xFF, "Guard");
     if (handle.isValid()) {
-      // Guards use Guard behavior (stationary but alert)
-      aiMgr.assignBehavior(handle, "Guard");
       guardCount++;
     }
   }
@@ -649,9 +644,9 @@ void AdvancedAIDemoState::setupTestVillage() {
   for (const auto& spawn : villagers) {
     Vector2D pos = villageCenter + spawn.offset;
     const char* race = getRandomFriendlyRace();
-    EntityHandle handle = edm.createNPCWithRaceClass(pos, race, spawn.npcClass);
+    EntityHandle handle = VoidLight::spawnNpc(pos, race, spawn.npcClass, Sex::Unknown,
+                                              0xFF, spawn.behavior);
     if (handle.isValid()) {
-      aiMgr.assignBehavior(handle, spawn.behavior);
       villagerCount++;
     }
   }
@@ -670,10 +665,9 @@ void AdvancedAIDemoState::setupTestVillage() {
   for (size_t i = 0; i < hostileOffsets.size(); ++i) {
     Vector2D pos = villageCenter + hostileOffsets[i];
     // Orcs spawn neutral (faction 2) — Attack behavior scans for nearest target dynamically
-    EntityHandle handle = edm.createNPCWithRaceClass(
-        pos, "Orc", hostileClasses[i % 3], Sex::Unknown, 2);
+    EntityHandle handle = VoidLight::spawnNpc(pos, "Orc", hostileClasses[i % 3],
+                                              Sex::Unknown, 2, "Attack");
     if (handle.isValid()) {
-      aiMgr.assignBehavior(handle, "Attack");
       hostileCount++;
     }
   }
@@ -681,9 +675,8 @@ void AdvancedAIDemoState::setupTestVillage() {
   // Add an Orc Mage for ranged combat testing
   {
     Vector2D pos = villageCenter + Vector2D(300.0f, 200.0f);
-    EntityHandle handle = edm.createNPCWithRaceClass(pos, "Orc", "Mage", Sex::Unknown, 2);
+    EntityHandle handle = VoidLight::spawnNpc(pos, "Orc", "Mage", Sex::Unknown, 2, "Attack");
     if (handle.isValid()) {
-      aiMgr.assignBehavior(handle, "Attack");
       hostileCount++;
     }
   }

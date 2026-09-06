@@ -101,8 +101,8 @@ Status: Not started
 ## Slice Records
 
 Implement from these sections, not from chat notes. Implement only the open
-slice's scope. Slice 1 is implemented (visual confirm leftover). Slice 2 is
-next. Do not implement Slices 3–8 until the prior slice is done.
+slice's scope. Slices 1–2 are implemented (Slice 1 visual confirm leftover).
+Slice 3 is next. Do not implement Slices 4–9 until the prior slice is done.
 
 Scheduled order (do not skip ahead). Data deps may be narrower than schedule
 order; do not pull a later slice forward unless this file is updated first.
@@ -111,12 +111,13 @@ order; do not pull a later slice forward unless this file is updated first.
 | --- | --- | --- |
 | 1 Gameplay HUD | — | — |
 | 2 World population | — | 1 |
-| 3 Environment-driven AI | 2 | 2 |
-| 4 Faction stance | 2 | 3 |
-| 5 Survival / forage | 2, 4 | 4 |
-| 6 Autonomous decision | 2, 3, 4, 5 | 5 |
-| 7 Production minimap | 2 (4 for faction-colored dots) | 6 |
-| 8 Background-tier simulation | 2, 5 | 7 |
+| 3 Load / spawn / destroy contracts | 2 | 2 |
+| 4 Environment-driven AI | 2 | 3 |
+| 5 Faction stance | 2 | 4 |
+| 6 Survival / forage | 2, 5 | 5 |
+| 7 Autonomous decision | 2, 4, 5, 6 | 6 |
+| 8 Production minimap | 2 (5 for faction-colored dots) | 7 |
+| 9 Background-tier simulation | 2, 6 | 8 |
 
 ## Slice 1: Gameplay HUD ownership and vitals cohesion
 
@@ -196,7 +197,7 @@ Architecture notes:
   - 1× `Human` / `GeneralMerchant`, `assignBehavior(..., "Idle")`, at or adjacent to the village center.
   - 2× `Human` / `Guard`, `"Guard"`, on distinct `isTopLeftOfBuilding` tiles in the radius (fall back to walkable tiles near center if fewer buildings).
   - 4× `Human` / `Villager`, `"Wander"`, walkable tiles inside the radius.
-- After `assignBehavior`, write the assigned `BehaviorType` as **home role** (new `uint8_t` on `CharacterData` or `NPCMemoryData` — design picks). `CharacterData.behaviorType` stays the current behavior. Slice 6 reads home role; do not leave it unset.
+- After `assignBehavior`, write the assigned `BehaviorType` as **home role** (new `uint8_t` on `CharacterData` or `NPCMemoryData` — design picks). `CharacterData.behaviorType` stays the current behavior. Slice 7 reads home role; do not leave it unset.
 - Forest and haunted tiles **outside** every settlement radius: sparse hostiles. `Human` / `Warrior`, faction override 1, `"Attack"`. One candidate per 64×64 tile block that contains forest/haunted land; skip if inside any settlement radius; cap 32 hostiles per world.
 - Cap total populated NPCs at 256 per `worldId` (named constant). Production 200×200 is ~5 villages → 5×7 + hostiles, well under the cap.
 - Do **not** set simulation tiers from player position at populate (player does not exist yet). Leave default `Active`; `BackgroundSimulationManager` retier after GamePlayState is running.
@@ -231,7 +232,57 @@ Acceptance checks:
 
 Status: Reviewed — Medium findings fixed (main-thread destroy drain, player offset from merchant, count/cap tests, WorldManager-owned NPC clear).
 
-## Slice 3: Environment-driven AI
+## Slice 3: Load, spawn, and destroy contracts
+
+Goal: Encode four boring rules so improvisation has to fight the code, not the comments. Structural EDM has one owner thread at a time. Destroy drain is one function with three named callers. NPC spawn is one helper with many placers. WorldManager stays a coordinator; harvest spawn policy leaves it the same way population did.
+
+Current foundation:
+
+- `LoadingState` runs `WorldManager::loadNewWorld` on a `ThreadSystem` worker. That worker already creates harvestables and (Slice 2) NPCs. EDM header still says structural ops are main-thread only; `m_creationMutex` comments say create is worker-safe. Drain does not take that mutex. `GameEngine::processBackgroundTasks` still drains every frame during load.
+- `GameEngine::setGlobalPause(true)` already pauses AI, particles, collision, pathfinder, background sim, projectiles, game time, and events. `LoadingState::enter()` only pauses GameTime + AI. Collision / BSM / projectiles / EventManager / destroy-drain still run against entities being created.
+- Dynamic `destroyEntity` enqueues; static (harvestable/item/container) destroys immediately. Production drains: GameEngine frame-end, `WorldManager::unloadWorld` (main/test), `EDM::prepareForStateTransition`. `unloadWorldLocked` must not drain. Unload drops WRM harvestable indexes but does not destroy EDM harvestables.
+- One factory: `createNPCWithRaceClass` auto-registers `classes.json` `suggestedBehavior`. Placers disagree: WorldPopulation trusts JSON except hostiles (`Attack` vs Warrior `Chase`); debug `R` overrides Attack; `EventManager::spawnNPC` / `spawnMerchant` create then assign again; tests often unassign then assign.
+- `WorldPopulation` owns spawn algorithm. Harvest init (~280 lines) and population registry still live on WorldManager. `Tile::harvestableIndex` is dead.
+
+Architecture notes:
+
+- **Exclusive structural window (A1), not a spawn-manifest rewrite.** Gameplay: main thread owns create/drain/register. Load: the load worker is the structural owner only while the window is held. Tests calling `loadNewWorld` on the test thread *are* the owner. Rewrite the EDM THREADING CONTRACT to this; delete the `m_creationMutex` contradiction.
+- **LoadingState window:** `GameEngine::setGlobalPause(true)` then **immediately** `EventManager::setGlobalPause(false)`. Full engine pause would skip deferred `WorldLoaded` drain; collision rebuilds static colliders from that handler and fires Immediate `StaticCollidersReady`; LoadingState waits for `PathfinderManager::isGridReady()`. Pathfinder `update()` being paused is fine (grid rebuild is event-driven). Immediate `WorldUnloaded` does not consult pause. `GamePlayState::enter()` already `setGlobalPause(false)`.
+- **Drain gate:** `processBackgroundTasks` skips `processDestructionQueue` when `GameEngine::isGloballyPaused()`. `processDestructionQueue` also takes the create/structural mutex so a missed pause is a lock, not a data race. Rename `m_creationMutex` to `m_structuralMutex` if that is a local mechanical rename; do not add a second lock order.
+- **One drain function, three legal callers (B1):** frame-end (skipped in window), public `unloadWorld` (main/test after locks dropped), `prepareForStateTransition`. Worker/`unloadWorldLocked`/`clearPopulatedNpcs`/`destroyAllNPCsForStateTransition` only enqueue (plus static harvestable destroy on unload).
+- **Unload harvestables:** before `WRM::removeWorld`, snapshot that world's harvestable EDM indices and `destroyEntity` each (static immediate). Add a narrow WRM copy/query API if needed; do not have WRM call EDM destroy. Tests: unload without EDM transition leaves zero harvestables for the old worldId.
+- **One spawn helper (C1):** `VoidLight::spawnNpc(pos, race, class, sex, factionOverride, behaviorOverride)` in `include/world/NpcSpawn.hpp` + `src/world/NpcSpawn.cpp`. Factory still auto-assigns suggestedBehavior. Helper assigns override only when non-empty / different. WorldPopulation, debug `R`, `NPCSpawnEvent::execute`, and demos that already create+assign should call it. `spawnMerchant` stays event sugar over the helper. Do **not** populate through deferred MerchantSpawn. Hostile placer passes `"Attack"` override; do not change Warrior `suggestedBehavior` in JSON (class default stays class data). Debug `R` is not registered in `m_populatedNpcsByWorldId`.
+- **`createMonster` / `createAnimal`:** same auto-register contract as NPCs (they already load `suggestedBehavior`). Do not leave a third AI-register story.
+- **`behaviorType`:** AIManager-written mirror of current type (assign + transition commit). Production AI reads `BehaviorConfig.type`. `homeRole` is home (assign only). Comment both fields.
+- **WorldManager coordinator (D1):** extract `WorldHarvestInit` beside `WorldPopulation`. Registry + settlement queries stay on WorldManager. Delete dead `Tile::harvestableIndex`. Delete `WorldManager::update` “weather effects” comment. Do not dump Slices 4–9 into WorldManager (environment/stance/forage/decision → AI/EDM; discovery → WorldData + SaveGameManager + HUD; background tick → BSM). TileRenderer header split is residual if it balloons.
+
+Checklist:
+
+- [x] Exclusive load window: LoadingState uses engine global pause; EventManager remains unpaused; destroy-drain skipped while globally paused
+- [x] EDM THREADING CONTRACT = one structural owner; drain takes structural mutex
+- [x] Unload destroys harvestables (static) + enqueues populated NPCs; public unload drains; locked unload does not drain
+- [x] `spawnNpc` helper; WorldPopulation / debug `R` / NPCSpawnEvent use it; MerchantSpawn stays sugar
+- [x] `WorldHarvestInit` extracted; `Tile::harvestableIndex` removed
+- [x] `behaviorType` / `homeRole` comments; monster/animal auto-register matches NPC
+- [x] Owning docs + AGENTS.md updated (WorldManager stays coordinator; Slices 4–9 dump list)
+- [x] Tests updated in the same change
+
+Acceptance checks:
+
+- [x] Production load still creates harvestables + NPCs on the load worker inside the window; GameEngine does not drain during that window
+- [x] Unload then loadNewWorld leaves no previous-world NPCs **or harvestables** (no EDM transition required)
+- [x] Guard with no override stays Guard; Warrior with `"Attack"` override is Attack; `homeRole` set on assign
+- [x] EventManager `spawnMerchant` still creates a merchant through the helper
+- [x] Pause/resume still does not populate; debug `R` still works and is not in the populate registry
+- [x] `ninja -C build` passes
+- [x] Targeted Boost.Test: `world_manager_tests`, `world_population_tests`, `entity_data_manager_tests`, plus event spawn coverage
+- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+
+Status: Partial — implementation landed and targeted tests passed; slice review remaining.
+
+Landed: exclusive load window (`setGlobalPause(true)`; EventManager remains the gameplay and lifecycle bus with deferred drain on for WorldLoaded; GameEngine skip drain); `m_structuralMutex`; harvestable destroy before WRM `removeWorld`; `spawnNpc` + `WorldHarvestInit`; `behaviorType`/`homeRole` comments; monster/animal auto-register. GameEngine drain-skip is wired in `processBackgroundTasks` (no full-engine pause test).
+
+## Slice 4: Environment-driven AI
 
 Goal: Guard/Chase/Wander/Patrol/Flee/Attack use a per-frame environment snapshot so night and heavy weather reduce detection and change move-speed/caution. Worker batches do not call `WeatherController` or `GameTimeManager`.
 
@@ -288,9 +339,9 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests` and/or `ai_manager_edm_integration_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slice 2.
+Status: Not started. Depends on Slice 2. Scheduled after Slice 3.
 
-## Slice 4: Faction stance and territory
+## Slice 5: Faction stance and territory
 
 Goal: Attack, help, and flee-to-allies use a 16×16 stance table on `AIManager` instead of `faction == 1`. Settlements from Slice 2 supply default faction and a point-in-radius territory query. Combat death, theft, and gifts can change stance on the main thread. Player faction standing is stored beside, not instead of, `Behaviors::getRelationshipLevel`.
 
@@ -334,9 +385,9 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `social_controller_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slice 2. Scheduled after Slice 3.
+Status: Not started. Depends on Slice 2. Scheduled after Slice 4.
 
-## Slice 5: Survival and resource AI
+## Slice 6: Survival and resource AI
 
 Goal: NPCs with resource need path to WRM harvestables, deplete them through the same EDM harvest path as the player, and react to scarcity. Player `HarvestResourceEvent` participates. Workers do not query WRM every entity every frame.
 
@@ -344,7 +395,7 @@ Current foundation:
 
 - `WorldResourceManager::queryHarvestablesInRadius` (`include/managers/WorldResourceManager.hpp`) is a registry/spatial index over EDM, guarded by `m_registryMutex`. `HarvestController` is player-only and already fires `HarvestResourceEvent` (`src/controllers/world/HarvestController.cpp`). `ResourceChangeEvent` already fires.
 - NPC inventories exist on `CharacterData.inventoryIndex`. No need field. `BehaviorType` is Wander…Idle + Custom (`include/ai/BehaviorConfig.hpp`); no Forage. Variant state lives in per-behavior pools (`include/ai/BehaviorStateData.hpp`).
-- Slice 2 NPCs and Slice 4 stance are the actors.
+- Slice 2 NPCs and Slice 5 stance are the actors.
 - EDM expansion rule (`EntityDataTypes.hpp`): fields needed every frame go on the hot/character line; “some NPCs, sometimes” go in `SparseSidecar`.
 
 Architecture notes:
@@ -352,7 +403,7 @@ Architecture notes:
 - Add need/pressure as `SparseSidecar` (0–1, decay per AI tick, threshold to forage). Clear on destroy / `prepareForStateTransition()`.
 - Add `BehaviorType::Forage` immediately before `Custom`, bump `COUNT`, register `"Forage"` in `AIManager::registerDefaultBehaviors()`. Add `ForageBehaviorConfig` + `ForageStateData` pools and `executeForage` in `BehaviorExecutors` / `src/ai/behaviors/`. Path to nearest harvestable from a **sampled** WRM query: cooldown or need-crossed; reusable buffer; snapshot harvestable positions on the main thread in `AIManager::update()` if workers must not take `m_registryMutex`.
 - Deplete via the existing harvestable EDM payload / `HarvestResourceEvent` so world tiles update the same way as player harvest (`HarvestController` already emits that event).
-- Scarcity: when a sampled radius query returns below a threshold (named constant, e.g. fewer than 2 harvestables in 512 px), emit an event (reuse `ResourceChangeEvent` if it can carry “depleted area”; otherwise add `EventTypeId` and bump `COUNT`). Attack/Wander/Flee may `switchBehavior` using Slice 4 stance. Player harvest of the last local node must emit the same signal.
+- Scarcity: when a sampled radius query returns below a threshold (named constant, e.g. fewer than 2 harvestables in 512 px), emit an event (reuse `ResourceChangeEvent` if it can carry “depleted area”; otherwise add `EventTypeId` and bump `COUNT`). Attack/Wander/Flee may `switchBehavior` using Slice 5 stance. Player harvest of the last local node must emit the same signal.
 - Files: `include/managers/EntityDataTypes.hpp`, `src/managers/EntityDataManager.cpp`, `include/ai/BehaviorConfig.hpp`, `BehaviorStateData.hpp`, `BehaviorExecutors.hpp/.cpp`, new forage sources, `include/ai/BehaviorConfig.hpp` COUNT, `include/events/EventTypeId.hpp` if scarcity is new, `HarvestController.cpp` only if the player path must emit the same scarcity event, `docs/ai/BehaviorModes.md`, `docs/managers/WorldResourceManager.md`, `tests/ai/` or `BehaviorFunctionalityTest.cpp`, `tests/controllers/HarvestControllerTests.cpp` if player signal changes.
 - Out of scope: crafting, shop sim, player economy HUD.
 
@@ -376,16 +427,16 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, plus harvest tests if the player signal changes
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slices 2 and 4.
+Status: Not started. Depends on Slices 2 and 5.
 
-## Slice 6: Autonomous decision layer
+## Slice 7: Autonomous decision layer
 
 Goal: In `AIManager::processBatch`, a staggered selector can `switchBehavior` from scored motives (health, emotion, memory, stance, environment snapshot, need, `PersonalityTraits`) and restore the NPC’s home role when override scores drop. No A↔B flicker on consecutive frames.
 
 Current foundation:
 
 - `Behaviors::switchBehavior` + `AICommandBus`. Idle/Patrol/Guard already contain hardcoded switches (`src/ai/behaviors/*`). `AIManager::commitQueuedBehaviorTransitions()` clears behavior data before `init()`; new state is set after that commit (`AGENTS.md`).
-- Slice 2 writes home role at populate/assign. Slices 3–5 supply environment, stance, need.
+- Slice 2 writes home role at populate/assign. Slices 4–6 supply environment, stance, need.
 - `PersonalityTraits` on `NPCMemoryData` (bravery, aggression, composure, loyalty) — written at spawn, read every frame.
 
 Architecture notes:
@@ -416,9 +467,9 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `ai_manager_edm_integration_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slices 2–5.
+Status: Not started. Depends on Slices 2–6.
 
-## Slice 7: Production minimap
+## Slice 8: Production minimap
 
 Goal: GamePlayState shows a gameplay minimap: local area, discovery grid, player marker, settlement dots from Slice 2. Discovery is world data and is saved/loaded with the existing save slot. Pause uses existing `HudController::setVisible()` or the sibling controller’s equivalent.
 
@@ -426,16 +477,16 @@ Current foundation:
 
 - Slice 1: `HudController::initializeActionHUD`, `setVisible`, public `hud_*` ids. Session chrome stays on `GamePlayState`. Do not kitchen-sink unrelated widgets into the action HUD.
 - OverlayDemo has demo-only `overlay_demo_minimap_panel`. `docs/ui/Minimap_Implementation.md` is an old widget-in-UIManager plan — do not implement that document’s ownership.
-- Slice 2 settlements (query by worldId). Slice 4 faction for optional dot color.
+- Slice 2 settlements (query by worldId). Slice 5 faction for optional dot color.
 - `SaveGameManager` (`docs/managers/SaveGameManager.md`) is player-slot binary (`FORGESAVE`); it has **no** world blob today. Discovery that dies on process exit is not this slice’s done state.
 - `TILE_SIZE = 32`. Production world 200×200 tiles.
 
 Architecture notes:
 
-- Discovery: bit grid on `WorldData` keyed with the world (chunk size 8 tiles → 25×25 bits for 200×200, packed bytes, no per-frame allocation). Update from player tile position on the main thread (mark the player’s chunk and 8-neighbors explored). Clear with the world on `unloadWorldLocked`.
+- Discovery: bit grid on `WorldData` keyed with the world (chunk size 8 tiles → 25×25 bits for 200×200, packed bytes, no per-frame allocation). Update from player tile position on the main thread (mark the player’s chunk and 8-neighbors explored). Clear with the world on `unloadWorldLocked`. Do **not** dump minimap policy or discovery mutation loops into `WorldManager`; it only owns world lifetime/clear.
 - Persist discovery in this slice: extend `SaveGameManager` with `worldId` + packed discovery bytes (and restore them on load into the matching `WorldData`). If the loaded worldId does not match, start unexplored.
 - Widgets via `UIManager` primitives (panel + GPU vertices through the existing UI path). Ids under a `hud_minimap_*` prefix. `cpp-design-specialist` picks `HudController` vs a sibling UI controller; pause/resume must hide the minimap with one visibility call, not a new id list on `GamePlayState`.
-- Markers: player from the controller’s player handle; settlements from Slice 2 records (downsampled, not all EDM NPCs). Faction-colored dots only if Slice 4 stance/faction is present; otherwise a single settlement color.
+- Markers: player from the controller’s player handle; settlements from Slice 2 records (downsampled, not all EDM NPCs). Faction-colored dots only if Slice 5 stance/faction is present; otherwise a single settlement color.
 - Files: `include/world/WorldData.hpp` (discovery), `include/managers/SaveGameManager.hpp/.cpp`, `include/controllers/ui/HudController.hpp/.cpp` (or new `include/controllers/ui/` controller), `src/gameStates/GamePlayState.cpp` only for layout/init of the chosen controller, `docs/controllers/HudController.md` or the new controller doc, `docs/ui/`, `tests/controllers/HudControllerTests.cpp` (or the new controller tests), save tests.
 - Out of scope: implementing `Minimap_Implementation.md`’s `MinimapWidget` class inside `UIManager`.
 
@@ -458,9 +509,9 @@ Acceptance checks:
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 - [ ] Interactive visual confirmation in `VoidLight_Template`
 
-Status: Not started. Data depends on Slice 2; faction-colored dots depend on Slice 4. Scheduled after Slice 6.
+Status: Not started. Data depends on Slice 2; faction-colored dots depend on Slice 5. Scheduled after Slice 7.
 
-## Slice 8: Background-tier simulation
+## Slice 9: Background-tier simulation
 
 Goal: `BackgroundSimulationManager` at 10 Hz advances patrol waypoint progress and need decay for Background-tier NPCs so returning to an area is not velocity-only freeze. No collision, pathfinding floods, or full `execute*` on that tier.
 
@@ -468,14 +519,14 @@ Current foundation:
 
 - `BackgroundSimulationManager::simulateNPC` integrates `position += velocity * dt` with 0.98 velocity decay at 10 Hz (`src/managers/BackgroundSimulationManager.cpp`). `processBatch` already filters by kind/alive. WorkerBudget already applies. `prepareForStateTransition()` exists.
 - Patrol persistent waypoints live in `PatrolStateData` (`patrolTargets[4]`, `currentPatrolIndex`, `patrolMoveTimer`) — not the EDM nav waypoint slot, which pathfinder overwrites (`include/ai/BehaviorStateData.hpp`).
-- Slice 2 population + default Active then BSM retier. Slice 5 need sidecar.
+- Slice 2 population + default Active then BSM retier. Slice 6 need sidecar.
 - Hibernated tier is data-only (no updates). Keep that.
 
 Architecture notes:
 
-- Extend `simulateNPC` (not a new function name unless design requires it) to: (1) if the NPC’s current or home behavior is Patrol and `PatrolStateData` is present, advance `patrolMoveTimer` at 10 Hz and, when dwell expires, wrap `currentPatrolIndex` and set position/velocity toward `patrolTargets[index]` without collision or pathfinder; (2) decay Slice 5 need on the sidecar. Do not call Guard/Attack/Forage executors.
+- Extend `simulateNPC` (not a new function name unless design requires it) to: (1) if the NPC’s current or home behavior is Patrol and `PatrolStateData` is present, advance `patrolMoveTimer` at 10 Hz and, when dwell expires, wrap `currentPatrolIndex` and set position/velocity toward `patrolTargets[index]` without collision or pathfinder; (2) decay Slice 6 need on the sidecar. Do not call Guard/Attack/Forage executors.
 - Clamp the interpolated position to world bounds already cached by other managers; do not query `CollisionManager`.
-- Files: `include/managers/BackgroundSimulationManager.hpp`, `src/managers/BackgroundSimulationManager.cpp`, `docs/managers/BackgroundSimulationManager.md`, `tests/managers/BackgroundSimulationManagerTests.cpp`.
+- Files: `include/managers/BackgroundSimulationManager.hpp`, `src/managers/BackgroundSimulationManager.cpp`, `docs/managers/BackgroundSimulationManager.md`, `tests/managers/BackgroundSimulationManagerTests.cpp`. Do **not** add background-tick hooks to WorldManager.
 - Out of scope: Hibernated-tier AI, a second simulation manager, stance pulses, spatial-hash rebuilds.
 
 Checklist:
@@ -493,4 +544,4 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `background_simulation_manager_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slices 2 and 5. Scheduled after Slice 7.
+Status: Not started. Depends on Slices 2 and 6. Scheduled after Slice 8.

@@ -30,10 +30,16 @@ Processing systems read from and write to EntityDataManager:
 
 ## Threading Contract
 
-**CRITICAL:**
-- **Structural operations** (create/destroy/register/getIndex) MUST be called from the main thread only
-- **Index-based accessors** (`getHotDataByIndex`, `getTransformByIndex`) are lock-free and safe for parallel batch processing
-- GameEngine::update() sequential order guarantees no concurrent structural changes
+One structural owner at a time (create, drain, register, getIndex, slot reuse):
+
+- **Gameplay:** the main thread is the owner.
+- **Load:** the load worker is the owner only inside LoadingState's exclusive window (`GameEngine::setGlobalPause(true)`). EventManager remains the gameplay and lifecycle bus; deferred drain stays on for `WorldLoaded`. Gameplay producers are paused so they do not enqueue onto that bus.
+- **Tests** that call `WorldManager::loadNewWorld` on the test thread are the owner.
+- **Workers during gameplay:** index-based hot data, non-overlapping batches, and `destroyEntity` enqueue only. Do not create, drain, or compact.
+- `create*` and `processDestructionQueue` share `m_structuralMutex` so a missed pause is a lock, not a data race.
+- Index-based accessors (`getHotDataByIndex`, `getTransformByIndex`) are lock-free for parallel batches with non-overlapping ranges.
+
+Legal `processDestructionQueue` callers: `GameEngine::processBackgroundTasks` (skipped when globally paused), public `WorldManager::unloadWorld`, and `prepareForStateTransition`. `unloadWorldLocked` does not drain.
 
 ## Data Structures
 
@@ -191,7 +197,7 @@ EntityHandle createTrigger(const Vector2D& position, float halfWidth, float half
 
 // Entity destruction
 void destroyEntity(EntityHandle handle);
-void processDestructionQueue();  // Call at end of frame
+void processDestructionQueue();  // GameEngine frame-end, public unloadWorld, prepareForStateTransition
 ```
 
 ### Entity Registration (Legacy Support)

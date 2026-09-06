@@ -39,6 +39,8 @@
 
 Combat-side emotion logic and behavior-message policy remain outside `EventManager`. Those stay in AI/behavior code; `EventManager` only applies the core damage result and then dispatches handlers.
 
+`setGlobalPause(true)` skips deferred drain (`update()`); Immediate dispatch still runs. EventManager is one bus for **gameplay** (combat, weather, spawn, resource) and **engine/lifecycle** (world loaded/unloaded, static colliders ready). LoadingState pauses gameplay producers, then turns deferred drain back on so WorldManager's Deferred `WorldLoaded` can complete. GamePlayState unpause restores the gameplay bus.
+
 ## Core API
 
 ### Lifecycle

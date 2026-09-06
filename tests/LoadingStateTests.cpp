@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "gameStates/LoadingState.hpp"
+#include "core/GameEngine.hpp"
 #include "core/ThreadSystem.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EventManager.hpp"
@@ -207,6 +208,9 @@ BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {
     loadingStatePtr->configure(GameStateId::MAIN_MENU, config);
     stateManager.pushState(GameStateId::LOADING);
 
+    BOOST_CHECK(GameEngine::Instance().isGloballyPaused());
+    BOOST_CHECK(!EventManager::Instance().isGloballyPaused());
+
     auto& ui = UIManager::Instance();
     BOOST_CHECK(ui.hasComponent("loading_title"));
     BOOST_CHECK(ui.hasComponent("loading_progress"));
@@ -231,6 +235,7 @@ BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {
     WorldManager::Instance().clean();
     PathfinderManager::Instance().clean();
     CollisionManager::Instance().clean();
+    GameEngine::Instance().setGlobalPause(false);
     GameTimeManager::Instance().setGlobalPause(false);
     UIManager::Instance().prepareForStateTransition();
     EventManager::Instance().clean();

@@ -7,9 +7,8 @@
 #include "core/GameEngine.hpp"
 #include "core/Logger.hpp"
 #include "core/ThreadSystem.hpp"
-#include "managers/AIManager.hpp"
+#include "managers/EventManager.hpp"
 #include "managers/GameStateManager.hpp"
-#include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
@@ -49,12 +48,20 @@ bool LoadingState::enter() {
   GAMESTATE_INFO(
       std::format("Entering LoadingState - Target: {}", static_cast<int>(m_targetStateId)));
 
-  // Pause systems that should not tick during generate/populate.
-  // GamePlayState::enter() unpauses via GameEngine::setGlobalPause(false).
-  GameTimeManager::Instance().setGlobalPause(true);
-  if (AIManager::Instance().isInitialized()) {
-    AIManager::Instance().setGlobalPause(true);
-  }
+  // Exclusive structural window: pause gameplay *producers* (AI, collision
+  // update, pathfinder update, projectiles, particles, game time) so the load
+  // worker is the only create/destroy owner. EventManager is still the single
+  // bus for both gameplay and engine/lifecycle events. Pause only skips its
+  // deferred drain; Immediate dispatch always runs. Gameplay managers are
+  // paused so they do not enqueue combat/weather/AI traffic. WorldManager is
+  // not paused — it posts Deferred WorldLoaded, which Collision handles
+  // (rebuild static colliders, Immediate StaticCollidersReady). LoadingState
+  // waits on PathfinderManager::isGridReady(). EventManager must stay
+  // unpaused so that deferred lifecycle event can drain.
+  // Destination enter() unpauses (GamePlayState, AdvancedAIDemoState) via
+  // GameEngine::setGlobalPause(false); EventManager is the gameplay bus again.
+  GameEngine::Instance().setGlobalPause(true);
+  EventManager::Instance().setGlobalPause(false);
 
   // Full-screen owner: ensure a clean UI slate before building the loading
   // screen. GameStateManager already clears UI on full-screen replace; this

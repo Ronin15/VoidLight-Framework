@@ -5,9 +5,7 @@
 
 #include "world/WorldPopulation.hpp"
 #include "core/Logger.hpp"
-#include "managers/AIManager.hpp"
-#include "managers/EntityDataManager.hpp"
-#include "utils/Vector2D.hpp"
+#include "world/NpcSpawn.hpp"
 #include "world/WorldData.hpp"
 
 #include <algorithm>
@@ -110,15 +108,16 @@ bool trySpawnNpc(std::vector<EntityHandle>& outHandles,
                  int tileY,
                  const std::string& race,
                  const std::string& charClass,
-                 uint8_t factionOverride)
+                 uint8_t factionOverride,
+                 const std::string& behaviorOverride = {})
 {
     if (outHandles.size() >= WorldPopulation::MAX_POPULATED_NPCS_PER_WORLD)
     {
         return false;
     }
 
-    EntityHandle handle = EntityDataManager::Instance().createNPCWithRaceClass(
-        tileCenterPixels(tileX, tileY), race, charClass, Sex::Unknown, factionOverride);
+    EntityHandle handle = spawnNpc(tileCenterPixels(tileX, tileY), race, charClass,
+                                   Sex::Unknown, factionOverride, behaviorOverride);
     if (!handle.isValid())
     {
         return false;
@@ -231,9 +230,9 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
                     {
                         continue;
                     }
-                    if (trySpawnNpc(outHandles, used, width, x, y, "Human", "Warrior", 1))
+                    if (trySpawnNpc(outHandles, used, width, x, y, "Human", "Warrior", 1,
+                                    "Attack"))
                     {
-                        AIManager::Instance().assignBehavior(outHandles.back(), "Attack");
                         ++hostilesSpawned;
                         spawned = true;
                         break;

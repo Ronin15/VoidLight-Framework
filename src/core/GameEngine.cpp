@@ -1222,9 +1222,13 @@ void GameEngine::processBackgroundTasks() {
 
   // Drain deferred entity destructions — returns slots to m_freeSlots,
   // keeping the free list healthy for next frame's allocations.
-  // Gameplay drain is here only. Unload/transition also drain from
+  // Gameplay drain is here only. Skip while globally paused so LoadingState's
+  // exclusive window can create harvestables/NPCs on the load worker without
+  // a concurrent freeSlot. Unload/transition also drain from
   // WorldManager::unloadWorld (main/test) and EntityDataManager::prepareForStateTransition.
-  EntityDataManager::Instance().processDestructionQueue();
+  if (!isGloballyPaused()) {
+    EntityDataManager::Instance().processDestructionQueue();
+  }
 }
 
 bool GameEngine::isVSyncEnabled() const noexcept {
@@ -1503,13 +1507,15 @@ void GameEngine::updateDisplayRefreshRate() {
 void GameEngine::setGlobalPause(bool paused) {
   m_globallyPaused = paused;
 
-  // Pause all managers (cached pointers guaranteed valid after init)
-  mp_aiManager->setGlobalPause(paused);
-  mp_particleManager->setGlobalPause(paused);
-  mp_collisionManager->setGlobalPause(paused);
-  mp_pathfinderManager->setGlobalPause(paused);
-  mp_backgroundSimManager->setGlobalPause(paused);
-  mp_projectileManager->setGlobalPause(paused);
+  // Pause is not a hot path. Use Instance() so LoadingState / tests can pause
+  // before GameEngine::init() has cached manager pointers. Each setter is an
+  // atomic store and is safe before manager init.
+  AIManager::Instance().setGlobalPause(paused);
+  ParticleManager::Instance().setGlobalPause(paused);
+  CollisionManager::Instance().setGlobalPause(paused);
+  PathfinderManager::Instance().setGlobalPause(paused);
+  BackgroundSimulationManager::Instance().setGlobalPause(paused);
+  ProjectileManager::Instance().setGlobalPause(paused);
   GameTimeManager::Instance().setGlobalPause(paused);
   EventManager::Instance().setGlobalPause(paused);
 

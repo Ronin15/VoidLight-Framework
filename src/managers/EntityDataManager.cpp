@@ -574,8 +574,8 @@ uint32_t EntityDataManager::allocateCharacterSlot() {
 EntityHandle EntityDataManager::createNPC(const Vector2D& position,
                                           float halfWidth,
                                           float halfHeight) {
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     size_t index = allocateSlot();
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
@@ -889,6 +889,9 @@ EntityHandle EntityDataManager::createMonster(const Vector2D& position,
                             monsterType, variant, position.getX(), position.getY(),
                             charData.maxHealth, charData.attackDamage));
 
+    AIManager::Instance().registerEntity(handle,
+        variantInfo.suggestedBehavior.empty() ? "Chase" : variantInfo.suggestedBehavior);
+
     return handle;
 }
 
@@ -990,6 +993,9 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     ENTITY_DEBUG(std::format("Created {} {} at ({},{}) HP:{:.0f} SPD:{:.0f}",
                             species, role, position.getX(), position.getY(),
                             charData.maxHealth, charData.moveSpeed));
+
+    AIManager::Instance().registerEntity(handle,
+        roleInfo.suggestedBehavior.empty() ? "Wander" : roleInfo.suggestedBehavior);
 
     return handle;
 }
@@ -1152,8 +1158,8 @@ EntityHandle EntityDataManager::createDroppedItem(const Vector2D& position,
         quantity = MAX_STACK_SIZE;
     }
 
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     // Allocate in STATIC pool (resources don't move, not in tier system)
     size_t index;
@@ -1284,8 +1290,8 @@ EntityHandle EntityDataManager::createContainer(const Vector2D& position,
         lockLevel = 10;
     }
 
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     // Auto-create inventory for this container
     uint32_t inventoryIndex = createInventory(maxSlots, false);  // Containers not world-tracked by default
@@ -1450,8 +1456,8 @@ EntityHandle EntityDataManager::createHarvestable(const Vector2D& position,
         respawnTime = 0.0f;
     }
 
-    // Thread safety: Lock for entire creation (called from worker thread during world load)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     // Allocate in STATIC pool (resources don't move, not in tier system)
     size_t index;
@@ -1534,8 +1540,8 @@ EntityHandle EntityDataManager::createProjectile(const Vector2D& position,
                                                  EntityHandle owner,
                                                  float damage,
                                                  float lifetime) {
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     size_t index = allocateSlot();
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
@@ -1605,8 +1611,8 @@ EntityHandle EntityDataManager::createAreaEffect(const Vector2D& position,
                                                  EntityHandle owner,
                                                  float damage,
                                                  float duration) {
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     size_t index = allocateSlot();
     EntityHandle::IDType id = VoidLight::UniqueID::generate();
@@ -1663,8 +1669,8 @@ EntityHandle EntityDataManager::createAreaEffect(const Vector2D& position,
 EntityHandle EntityDataManager::createStaticBody(const Vector2D& position,
                                                   float halfWidth,
                                                   float halfHeight) {
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     // Allocate slot in static storage (separate from dynamic m_hotData)
     size_t index;
@@ -1712,8 +1718,8 @@ EntityHandle EntityDataManager::createTrigger(const Vector2D& position,
                                                float halfHeight,
                                                VoidLight::TriggerTag tag,
                                                VoidLight::TriggerType type) {
-    // Thread safety: Lock for entire creation (may be called from worker thread)
-    std::lock_guard<std::mutex> lock(m_creationMutex);
+    // Structural owner: create holds m_structuralMutex for the whole operation.
+    std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     // Allocate slot in static storage (triggers don't move)
     size_t index;
@@ -1981,6 +1987,8 @@ void EntityDataManager::destroyEntity(EntityHandle handle) {
 }
 
 void EntityDataManager::destroyStaticResource(EntityHandle handle) {
+    std::lock_guard<std::mutex> structuralLock(m_structuralMutex);
+
     // Find entity in static pool
     auto it = m_staticIdToIndex.find(handle.id);
     if (it == m_staticIdToIndex.end()) {
@@ -2057,6 +2065,10 @@ void EntityDataManager::processDestructionQueue() {
         return;
     }
 
+    // Swap under the queue mutex first, then take the structural mutex for
+    // freeSlot. Create holds m_structuralMutex for the whole create and never
+    // takes m_destructionMutex, so this order cannot deadlock.
+    std::lock_guard<std::mutex> structuralLock(m_structuralMutex);
 
     for (const auto& handle : m_destroyBuffer) {
         auto it = m_idToIndex.find(handle.id);

@@ -116,11 +116,18 @@ BOOST_AUTO_TEST_CASE(TestUnloadWorldRemovesWRMState) {
     BOOST_REQUIRE(!worldId.empty());
     BOOST_REQUIRE(worldResourceManager->hasWorld(worldId));
 
+    const size_t harvestablesBeforeUnload =
+        worldResourceManager->getHarvestableCount(worldId);
+    BOOST_REQUIRE_GT(harvestablesBeforeUnload, 0u);
+    BOOST_REQUIRE_GT(EntityDataManager::Instance().getEntityCount(EntityKind::Harvestable), 0u);
+
     worldManager->unloadWorld();
 
     BOOST_CHECK(!worldManager->hasActiveWorld());
     BOOST_CHECK(!worldResourceManager->hasWorld(worldId));
     BOOST_CHECK(worldResourceManager->getActiveWorld().empty());
+    BOOST_CHECK_EQUAL(worldResourceManager->getHarvestableCount(worldId), 0u);
+    BOOST_CHECK_EQUAL(EntityDataManager::Instance().getEntityCount(EntityKind::Harvestable), 0u);
 }
 
 BOOST_AUTO_TEST_CASE(TestWorldUnloadedHandlerCanQueryWorldManager) {

@@ -460,6 +460,13 @@ public:
      */
     [[nodiscard]] size_t getHarvestableCount(const WorldId& worldId) const;
 
+    /**
+     * @brief Copy static EDM harvestable indices for a world into out.
+     *
+     * Clears out then copies. Callers destroy via EDM; WRM does not destroy.
+     */
+    void copyHarvestableIndices(const WorldId& worldId, std::vector<size_t>& out) const;
+
 private:
     WorldResourceManager() = default;
     ~WorldResourceManager();

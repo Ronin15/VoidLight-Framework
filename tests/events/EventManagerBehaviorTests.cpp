@@ -9,12 +9,16 @@
 #include <vector>
 
 #include "EventManagerTestAccess.hpp"
+#include "ai/BehaviorConfig.hpp"
 #include "core/ThreadSystem.hpp"
 #include "events/CameraEvent.hpp"
 #include "events/Event.hpp"
 #include "events/WeatherEvent.hpp"
+#include "managers/AIManager.hpp"
+#include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/PathfinderManager.hpp"
 
 struct ThreadSystemFixture {
   ThreadSystemFixture() {
@@ -129,6 +133,36 @@ BOOST_AUTO_TEST_CASE(SpawnNPC_DispatchesToHandlers) {
   BOOST_CHECK_GT(edm.getEntityCount(EntityKind::NPC), npcCountBefore);
 
   EventManager::Instance().removeHandler(tok);
+}
+
+BOOST_AUTO_TEST_CASE(SpawnMerchant_CreatesMerchantEntity) {
+  auto& edm = EntityDataManager::Instance();
+  BOOST_REQUIRE(CollisionManager::Instance().init());
+  BOOST_REQUIRE(PathfinderManager::Instance().init());
+  BOOST_REQUIRE(AIManager::Instance().init());
+  const size_t npcCountBefore = edm.getEntityCount(EntityKind::NPC);
+
+  BOOST_REQUIRE(EventManager::Instance().spawnMerchant(
+      "GeneralMerchant", 10.0f, 20.0f, "Human", 1, 0.0f, false));
+  EventManager::Instance().update();
+
+  BOOST_CHECK_GT(edm.getEntityCount(EntityKind::NPC), npcCountBefore);
+
+  bool foundMerchant = false;
+  for (size_t idx : edm.getIndicesByKind(EntityKind::NPC)) {
+    const auto& charData = edm.getCharacterDataByIndex(idx);
+    if (charData.isMerchant()) {
+      foundMerchant = true;
+      BOOST_CHECK_EQUAL(charData.homeRole, static_cast<uint8_t>(BehaviorType::Idle));
+      BOOST_CHECK_EQUAL(charData.behaviorType, static_cast<uint8_t>(BehaviorType::Idle));
+      break;
+    }
+  }
+  BOOST_CHECK(foundMerchant);
+
+  AIManager::Instance().clean();
+  PathfinderManager::Instance().clean();
+  CollisionManager::Instance().clean();
 }
 
 BOOST_AUTO_TEST_CASE(TriggerParticleEffect_DispatchesToHandlers) {

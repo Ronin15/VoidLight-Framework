@@ -491,6 +491,20 @@ size_t WorldResourceManager::getHarvestableCount(const WorldId& worldId) const {
     return (it != m_harvestableRegistry.end()) ? it->second.size() : 0;
 }
 
+void WorldResourceManager::copyHarvestableIndices(const WorldId& worldId,
+                                                  std::vector<size_t>& out) const {
+    out.clear();
+    std::shared_lock lock(m_registryMutex);
+
+    auto it = m_harvestableRegistry.find(worldId);
+    if (it == m_harvestableRegistry.end()) {
+        return;
+    }
+
+    out.reserve(it->second.size());
+    out.insert(out.end(), it->second.begin(), it->second.end());
+}
+
 // ============================================================================
 // DROPPED ITEM SPATIAL REGISTRATION
 // ============================================================================

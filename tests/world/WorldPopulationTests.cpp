@@ -16,6 +16,7 @@
 #include "managers/ResourceTemplateManager.hpp"
 #include "managers/WorldManager.hpp"
 #include "managers/WorldResourceManager.hpp"
+#include "world/NpcSpawn.hpp"
 #include "world/WorldData.hpp"
 #include "world/WorldPopulation.hpp"
 
@@ -283,6 +284,49 @@ BOOST_AUTO_TEST_CASE(TestDistantPopulatedNpcsRetier)
         }
     }
     BOOST_CHECK(sawNonActive);
+}
+
+BOOST_AUTO_TEST_CASE(TestUnloadDestroysHarvestablesWithoutEdmTransition)
+{
+    // Public unload drains NPCs and immediately destroys static harvestables.
+    // No EntityDataManager::prepareForStateTransition is required.
+    auto& worldMgr = WorldManager::Instance();
+    auto& wrm = WorldResourceManager::Instance();
+    auto& edm = EntityDataManager::Instance();
+    BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
+
+    const std::string worldId = worldMgr.getCurrentWorldId();
+    BOOST_REQUIRE_GT(wrm.getHarvestableCount(worldId), 0u);
+    BOOST_REQUIRE_GT(edm.getEntityCount(EntityKind::Harvestable), 0u);
+
+    worldMgr.unloadWorld();
+
+    BOOST_CHECK_EQUAL(wrm.getHarvestableCount(worldId), 0u);
+    BOOST_CHECK_EQUAL(edm.getEntityCount(EntityKind::Harvestable), 0u);
+    BOOST_CHECK(!worldMgr.isWorldPopulated(worldId));
+}
+
+BOOST_AUTO_TEST_CASE(TestSpawnNpcHelperBehaviorOverride)
+{
+    auto& edm = EntityDataManager::Instance();
+
+    EntityHandle guard = spawnNpc(Vector2D(32.0f, 32.0f), "Human", "Guard");
+    BOOST_REQUIRE(guard.isValid());
+    const size_t guardIdx = edm.getIndex(guard);
+    BOOST_REQUIRE_NE(guardIdx, SIZE_MAX);
+    const auto& guardData = edm.getCharacterDataByIndex(guardIdx);
+    BOOST_CHECK_EQUAL(guardData.homeRole, static_cast<uint8_t>(BehaviorType::Guard));
+    BOOST_CHECK_EQUAL(guardData.behaviorType, static_cast<uint8_t>(BehaviorType::Guard));
+
+    EntityHandle warrior = spawnNpc(Vector2D(64.0f, 32.0f), "Human", "Warrior",
+                                    Sex::Unknown, 1, "Attack");
+    BOOST_REQUIRE(warrior.isValid());
+    const size_t warriorIdx = edm.getIndex(warrior);
+    BOOST_REQUIRE_NE(warriorIdx, SIZE_MAX);
+    const auto& warriorData = edm.getCharacterDataByIndex(warriorIdx);
+    BOOST_CHECK_EQUAL(warriorData.homeRole, static_cast<uint8_t>(BehaviorType::Attack));
+    BOOST_CHECK_EQUAL(warriorData.behaviorType, static_cast<uint8_t>(BehaviorType::Attack));
+    BOOST_CHECK_EQUAL(warriorData.faction, 1);
 }
 
 BOOST_AUTO_TEST_CASE(TestClearPopulatedNpcsKeepsWorld)

@@ -38,12 +38,20 @@ file wins.
   budgeting, raw threads, private pools, or detached async schedulers.
 - Report completed work through the existing `WorkerBudget` path after
   manager work completes.
-- Structural EDM operations are main-thread operations. Worker code
-  should use pre-cached indices and non-overlapping batch ranges.
-- `processDestructionQueue()` is main-thread only: `GameEngine` end of
-  frame, `prepareForStateTransition()`, and `WorldManager::unloadWorld()`
-  (main/test callers). Worker and `loadNewWorld` paths only
-  `destroyEntity()` (enqueue). Do not drain the queue from
+- Structural EDM operations have one owner at a time. Gameplay: main
+  thread. Load: the load worker only inside LoadingState's exclusive
+  window (`GameEngine::setGlobalPause(true)`). EventManager is the
+  gameplay and lifecycle bus; LoadingState leaves deferred drain on so
+  WorldLoaded can complete while gameplay producers stay paused.
+  Worker code during gameplay should use pre-cached indices and
+  non-overlapping batch ranges.
+- `processDestructionQueue()` has three legal callers: `GameEngine`
+  frame-end (skipped when globally paused), `prepareForStateTransition()`,
+  and `WorldManager::unloadWorld()` (main/test after locks drop). Drain
+  takes `m_structuralMutex` after swapping the queue. Worker,
+  `unloadWorldLocked`, `clearPopulatedNpcs`, and
+  `destroyAllNPCsForStateTransition` only `destroyEntity()` (enqueue;
+  static harvestable destroy on unload is immediate). Do not drain from
   `unloadWorldLocked` or other load-worker code.
 - Index-based hot-data access is valid only inside the batch/window that
   proved the index current. Use handles and generation checks across

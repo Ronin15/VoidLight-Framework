@@ -27,13 +27,19 @@
  * - Supports 100K+ entities with tiered simulation
  *
  * THREADING CONTRACT:
- * - All structural operations (create/destroy/register/getIndex) MUST be called
- *   from the main thread only. These operations are NOT thread-safe.
+ * One structural owner at a time (create, drain, register, getIndex, slot reuse).
+ * - Gameplay: the main thread is the owner.
+ * - Load: the load worker is the owner only inside LoadingState's exclusive
+ *   window (GameEngine globally paused). EventManager stays the gameplay and
+ *   lifecycle bus: deferred drain is left on so WorldLoaded can complete;
+ *   gameplay producers are paused so they do not enqueue onto that bus.
+ * - Tests that call WorldManager::loadNewWorld on the test thread are the owner.
+ * - Workers during gameplay: index-based hot data, non-overlapping batches,
+ *   and destroyEntity enqueue only. Do not create, drain, or compact.
  * - Index-based accessors (getHotDataByIndex, getTransformByIndex) are lock-free
- *   and safe for parallel batch processing with non-overlapping index ranges.
- * - Parallel batch processing uses pre-cached indices to avoid map lookups.
- * - GameEngine::update() sequential order guarantees no concurrent structural changes:
- *   EventManager → GameStateManager → AIManager → CollisionManager → BackgroundSimManager
+ *   for parallel batches with non-overlapping index ranges.
+ * - m_structuralMutex serializes create and processDestructionQueue so a missed
+ *   pause is a lock, not a data race. Dynamic destroyEntity only enqueues.
  */
 
 #include "ai/BehaviorCommonState.hpp"
@@ -417,11 +423,16 @@ public:
     void destroyEntity(EntityHandle handle);
 
     /**
-     * @brief Process pending destructions (main thread only)
+     * @brief Process pending dynamic destructions (one structural owner)
      *
-     * GameEngine drains this at end of frame. prepareForStateTransition
-     * and WorldManager::unloadWorld (main/test callers) may drain after
-     * enqueueing. Worker/load paths must only call destroyEntity().
+     * Legal callers:
+     * - GameEngine::processBackgroundTasks (frame-end; skipped when globally paused)
+     * - WorldManager::unloadWorld (main/test, after world locks drop)
+     * - EntityDataManager::prepareForStateTransition
+     *
+     * Worker, unloadWorldLocked, clearPopulatedNpcs, and
+     * destroyAllNPCsForStateTransition only enqueue. Static harvestable
+     * destroy on unload is immediate via destroyEntity and does not drain.
      */
     void processDestructionQueue();
 
@@ -1426,8 +1437,9 @@ private:
     mutable bool m_triggerDetectionDirty{true};
 
     // Kind indices (per-kind dirty flags to avoid full rebuild when querying single kind)
-    // NOTE: Entity creation is protected by m_creationMutex (safe from worker threads).
-    // Destruction uses m_destructionMutex. These dirty flags don't need atomics.
+    // NOTE: Create and drain share m_structuralMutex (one structural owner).
+    // Dynamic destroyEntity only takes m_destructionMutex to enqueue.
+    // These dirty flags don't need atomics.
     std::array<std::vector<size_t>, static_cast<size_t>(EntityKind::COUNT)> m_kindIndices;
     mutable std::array<bool, static_cast<size_t>(EntityKind::COUNT)> m_kindIndicesDirty{};
 
@@ -1469,8 +1481,8 @@ private:
     std::vector<uint32_t> m_staticGenerations;
 
     // Thread safety for entity operations
-    std::mutex m_destructionMutex;  // Protects destruction queue
-    std::mutex m_creationMutex;     // Protects entity creation (allocateSlot + vector growth)
+    std::mutex m_destructionMutex;  // Protects destruction queue enqueue/swap
+    std::mutex m_structuralMutex;   // One owner: create + processDestructionQueue freeSlot
 
     // ========================================================================
     // CREATURE COMPOSITION REGISTRIES
