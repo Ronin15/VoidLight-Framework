@@ -126,7 +126,7 @@ Goal: `GamePlayState` has one state-scoped owner for the persistent **action HUD
 Current foundation (at slice start; landed APIs are in Status):
 
 - `HudController` already owns hotbar widgets and transient combat-target state. Hotbar init is optional (`initializeHotbarUI()`); demos may skip it.
-- `UIManager::createCombatHUD()` / `updateCombatHUD()` / `destroyCombatHUD()` currently own vitals widget construction. `GamePlayState` and `AdvancedAIDemoState` both call those helpers and push target state from `HudController` every frame.
+- `UIManager::createCombatHUD()` / `updateCombatHUD()` / `destroyCombatHUD()` currently own vitals widget construction. `GamePlayState` calls those helpers and pushes target state from `HudController` every frame. AdvancedAIDemo/UIDemo/OverlayDemo existed at slice start and were later removed; AIDemo/EventDemo remain benchmark tooling and must not expand HudController.
 - `GamePlayState` owns session chrome: `event_log`, `time_label`, FPS (`F2`). Pause/resume hardcodes `hud_*` ids plus that chrome.
 - `HarvestController` exposes `getProgress()` with no HUD widget.
 - `InventoryController` / `SocialController` own overlays and already write the GamePlayState event log by id. That stays out of `HudController`.
@@ -149,7 +149,7 @@ Checklist:
 - [x] `HudController` creates and updates action HUD widgets (vitals, target, hotbar, harvest progress)
 - [x] `GamePlayState` pause/resume uses `HudController::setVisible()` and only toggles state-owned chrome (`event_log`, `time_label`, `fps`)
 - [x] `UIManager::createCombatHUD` / `updateCombatHUD` / `destroyCombatHUD` are removed from the production state path
-- [x] `AdvancedAIDemoState` consumes the existing HudController subset without new demo-only HUD APIs
+- [x] Tooling states (AIDemo/EventDemo) do not gain new HudController APIs; AdvancedAIDemo/UIDemo/OverlayDemo were removed
 - [x] Dirty-flag vitals/target/harvest updates (no unconditional per-frame `setText`/`setValue`/`setComponentVisible`)
 - [x] Owning docs updated (`docs/controllers/HudController.md`, controller README, GamePlayState HUD notes)
 - [x] Tests updated in the same change (`HudControllerTests`; move combat HUD coverage off UIManager-only helpers)
@@ -159,7 +159,7 @@ Acceptance checks:
 - [x] GamePlayState pause hides action HUD through the controller; resume restores it without listing `hud_*` ids
 - [x] Harvest in progress shows a progress widget; cancel/complete hides it
 - [x] Target frame still auto-expires; hotbar still optional when `initializeHotbarUI()` is not called
-- [x] Demo states still compile and run their existing HUD subset without driving new HudController surface
+- [x] Remaining tooling states (AIDemo/EventDemo) compile without a new HudController surface; HUD-demo states were removed
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `hud_controller_tests`, plus any moved UIManager combat-HUD cases
 - [x] Slice reviewed (`cpp-review-specialist`) before commit
@@ -280,7 +280,7 @@ Acceptance checks:
 
 Status: Partial — implementation landed and targeted tests passed; slice review remaining.
 
-Landed: exclusive load window (`setGlobalPause(true)`; EventManager remains the gameplay and lifecycle bus with deferred drain on for WorldLoaded; GameEngine skip drain); `m_structuralMutex`; harvestable destroy before WRM `removeWorld`; `spawnNpc` + `WorldHarvestInit`; `behaviorType`/`homeRole` comments; monster/animal auto-register. GameEngine drain-skip is wired in `processBackgroundTasks` (no full-engine pause test).
+Landed: exclusive load window (`setGlobalPause(true)`; EventManager remains the gameplay and lifecycle bus with deferred drain on for WorldLoaded; GameEngine skip drain); `m_structuralMutex`; harvestable destroy before WRM `removeWorld`; `spawnNpc` + `WorldHarvestInit`; `behaviorType`/`homeRole` comments; monster/animal auto-register. GameEngine drain-skip is wired in `processBackgroundTasks` and covered by `TestGameEngineSkipsDestructionDrainWhileGloballyPaused`.
 
 ## Slice 4: Environment-driven AI
 

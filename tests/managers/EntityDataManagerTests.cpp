@@ -6,6 +6,7 @@
 #define BOOST_TEST_MODULE EntityDataManagerTests
 #include <boost/test/unit_test.hpp>
 
+#include "core/GameEngine.hpp"
 #include "core/ThreadSystem.hpp"
 #include "entities/resources/EquipmentResources.hpp"
 #include "ai/BehaviorConfig.hpp"
@@ -427,6 +428,36 @@ BOOST_FIXTURE_TEST_SUITE(DestructionQueueTests, EntityDataManagerTestFixture)
 // Direct drain is a legal caller (with unloadWorld and prepareForStateTransition).
 // GameEngine::processBackgroundTasks skips processDestructionQueue while
 // globally paused so LoadingState's load worker can own structural create.
+
+BOOST_AUTO_TEST_CASE(TestGameEngineSkipsDestructionDrainWhileGloballyPaused) {
+    EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
+    BOOST_REQUIRE(edm->isValidHandle(handle));
+
+    edm->destroyEntity(handle);
+    BOOST_REQUIRE(edm->isValidHandle(handle));
+
+    // LoadingState holds GameEngine paused with EventManager unpaused so the
+    // load worker can create entities without a concurrent frame-end freeSlot.
+    struct RestoreEngineUnpaused {
+        ~RestoreEngineUnpaused() {
+            GameEngine::Instance().setGlobalPause(false);
+        }
+    } restore;
+
+    GameEngine::Instance().setGlobalPause(true);
+    EventManager::Instance().setGlobalPause(false);
+    BOOST_REQUIRE(GameEngine::Instance().isGloballyPaused());
+    BOOST_REQUIRE(!EventManager::Instance().isGloballyPaused());
+
+    GameEngine::Instance().processBackgroundTasks();
+    BOOST_CHECK(edm->isValidHandle(handle));
+    BOOST_CHECK_EQUAL(edm->getEntityCount(), 1);
+
+    GameEngine::Instance().setGlobalPause(false);
+    GameEngine::Instance().processBackgroundTasks();
+    BOOST_CHECK(!edm->isValidHandle(handle));
+    BOOST_CHECK_EQUAL(edm->getEntityCount(), 0);
+}
 
 BOOST_AUTO_TEST_CASE(TestDestroyEntity) {
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");

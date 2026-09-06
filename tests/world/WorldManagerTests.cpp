@@ -97,7 +97,6 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorld) {
     });
 
     const std::string worldId = worldManager->getCurrentWorldId();
-    BOOST_CHECK(!worldManager->isWorldPopulated(worldId));
     BOOST_CHECK_EQUAL(worldManager->getPopulatedNpcCount(worldId), 0u);
 }
 

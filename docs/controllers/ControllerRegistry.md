@@ -128,6 +128,7 @@ public:
         m_controllers.add<WeatherController>();
         m_controllers.add<DayNightController>();
         m_controllers.add<CombatController>(mp_player);
+        m_controllers.add<HudController>(mp_player);
 
         // Subscribe all to events
         m_controllers.subscribeAll();
@@ -142,10 +143,16 @@ public:
     }
 
     void pause() override {
+        if (auto* hud = m_controllers.get<HudController>()) {
+            hud->setVisible(false);
+        }
         m_controllers.suspendAll();
     }
 
     void resume() override {
+        if (auto* hud = m_controllers.get<HudController>()) {
+            hud->setVisible(true);
+        }
         m_controllers.resumeAll();
     }
 
@@ -159,22 +166,23 @@ public:
 ### Accessing Controllers
 
 ```cpp
+void GamePlayState::update(float dt) {
+    m_controllers.updateAll(dt);
+    if (auto* hud = m_controllers.get<HudController>()) {
+        hud->setHarvestProgress(harvestCtrl.isHarvesting(), harvestCtrl.getProgress());
+    }
+}
+
 void GamePlayState::render() {
-    // Get controller for queries
     auto* weather = m_controllers.get<WeatherController>();
     if (weather) {
         auto currentWeather = weather->getCurrentWeather();
         renderWeatherEffects(currentWeather);
     }
-
-    // Check if controller exists
-    if (auto* hud = m_controllers.get<HudController>()) {
-        if (hud->hasActiveTarget()) {
-            renderTargetFrame(hud->getTargetLabel(), hud->getTargetHealth());
-        }
-    }
 }
 ```
+
+`HudController` owns action-HUD widgets. Pause/resume uses `setVisible()`; production states do not query target getters to push UI.
 
 ### Controller with Constructor Arguments
 
