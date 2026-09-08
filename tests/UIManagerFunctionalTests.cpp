@@ -614,7 +614,7 @@ BOOST_AUTO_TEST_CASE(TestCreateAtlasImage) {
     BOOST_CHECK_EQUAL(newRect.width, updatedRect.width);
     BOOST_CHECK_EQUAL(newRect.height, updatedRect.height);
 
-    ui.setTexture("atlas_image", "");
+    ui.setImageSource("atlas_image", TextureSource{});
     BOOST_CHECK(ui.getTexture("atlas_image").empty());
 
     ui.setComponentVisible("image_parent", false);

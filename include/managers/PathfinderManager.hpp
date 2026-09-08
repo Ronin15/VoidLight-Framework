@@ -122,7 +122,9 @@ public:
 
     /**
      * @brief Prepares PathfinderManager for state transition
-     * Clears transient data while keeping the manager initialized
+     * Clears transient data and drops the pathfinding grid while keeping
+     * the manager initialized. Loading waits for the new world's
+     * StaticCollidersReady rebuild before isGridReady() is true again.
      */
     void prepareForStateTransition();
 
@@ -146,35 +148,12 @@ public:
 
     /**
      * @brief Checks if the pathfinding grid is ready for use
-     * @return true if grid exists and no pending rebuilds, false otherwise
+     * @return true if a current-world grid exists and rebuild futures are done.
+     *         False after unload/transition until StaticCollidersReady rebuild.
      */
     bool isGridReady() const;
 
     // ===== Pathfinding Request Interface =====
-
-    /**
-     * @brief Request a path asynchronously (ULTRA-HIGH-PERFORMANCE)
-     * @param entityId The entity requesting the path
-     * @param start Starting position in world coordinates
-     * @param goal Goal position in world coordinates
-     * @param priority PathPriority level for request scheduling
-     * @param callback Callback when path is ready (called from background thread)
-     * @return Request ID for tracking (0 if failed)
-     *
-     * This method completes in <0.001ms with zero blocking operations:
-     * - Lock-free request queue enqueue only
-     * - No mutex locks, no hash operations, no complex math
-     * - All pathfinding computation happens on background thread
-     * - Cache lookups and A* computation fully asynchronous
-     * - Designed for 10K+ requests per second throughput
-     */
-    uint64_t requestPath(
-        EntityID entityId,
-        const Vector2D& start,
-        const Vector2D& goal,
-        Priority priority = Priority::Normal,
-        std::function<void(EntityID, const std::vector<Vector2D>&)> callback = nullptr
-    );
 
     /**
      * @brief Gets the current size of the request queue
@@ -193,9 +172,9 @@ public:
     /**
      * @brief Request a path asynchronously with result written to EDM
      *
-     * Same async performance as requestPath() but writes result directly to
-     * EntityDataManager::PathData instead of invoking a callback.
-     * Eliminates shared_from_this() and lambda allocation overhead.
+     * Production pathfinding API. Worker threads compute the path and enqueue a
+     * completion payload; call commitCompletedPaths() on the main thread to apply
+     * the result to EntityDataManager::PathData.
      *
      * @param edmIndex Entity's EDM index (result written to EDM::getPathData(edmIndex))
      * @param start Starting position in world coordinates
@@ -361,6 +340,17 @@ public:
 
 private:
     using PathCallback = std::function<void(EntityID, const std::vector<Vector2D>&)>;
+
+    // Internal cache-fill request used by pre-warm. Not the production AI API —
+    // callers must use requestPathToEDM() + commitCompletedPaths().
+    uint64_t requestPath(
+        EntityID entityId,
+        const Vector2D& start,
+        const Vector2D& goal,
+        Priority priority = Priority::Normal,
+        PathCallback callback = nullptr
+    );
+
     // Singleton implementation
     PathfinderManager() = default;
     ~PathfinderManager();
@@ -393,7 +383,7 @@ private:
                                 const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
 
     // INTERNAL ONLY: Synchronous pathfinding computation (used by async system)
-    // DO NOT use directly - use requestPath() instead
+    // DO NOT use directly - use requestPathToEDM() instead
     VoidLight::PathfindingResult findPathImmediate(
         const Vector2D& start,
         const Vector2D& goal,
@@ -439,7 +429,7 @@ private:
     // tasks (cacheHits/Misses, completed/failedRequests, processedCount,
     // totalProcessingTimeMs). Cache-line isolated to avoid false sharing with the
     // read-mostly state flags above (m_initialized/m_isShutdown/m_globallyPaused),
-    // which are read every frame in update()/requestPath(). The 7 uint64 atomics
+    // which are read every frame in update()/requestPathToEDM(). The 7 uint64 atomics
     // (56B) + the double atomic (8B) fill exactly one 64B line, so the trailing
     // main-thread bookkeeping below naturally starts on the next line.
     alignas(64) mutable std::atomic<uint64_t> m_enqueuedRequests{0};
@@ -506,7 +496,7 @@ private:
     static constexpr float DIRTY_THRESHOLD_PERCENT = 0.25f; // Full rebuild if >25% of grid is dirty
 
     // DIRECT THREADSYSTEM SUBMISSION (no intermediate buffer needed)
-    // Requests are submitted directly to ThreadSystem in requestPath()
+    // Requests are submitted directly to ThreadSystem in requestPathToEDM()
     // This eliminates the mutex contention that was serializing AI batch threads
 
     // Internal methods - simplified

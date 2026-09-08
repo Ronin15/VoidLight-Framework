@@ -5,11 +5,12 @@
 The behavior system uses a data-oriented pipeline:
 
 1. `AIManager` gathers active EDM indices into `m_activeIndicesBuffer`
-2. a single `getBatchStrategy` call against the full workload chooses batch count/size
-3. each worker batch runs `processBatch` over a contiguous slice of the index buffer
-4. inside `processBatch`, one fused loop runs emotional decay + behavior dispatch + SIMD movement per entity — a `switch` on the per-entity `BehaviorConfigRef::type` calls the direct typed executor (`Behaviors::executeIdle`, `executeWander`, ...) with the variant's dense config and state pool entries
-5. worker code emits command-bus changes and deferred events
-6. the main thread commits transitions and drains deferred event batches
+2. **pre-batch** main-thread command-bus commit (faction, transitions, messages) so workers see this frame's assignments
+3. a single `getBatchStrategy` call against the full workload chooses batch count/size
+4. each worker batch runs `processBatch` over a contiguous slice of the index buffer
+5. inside `processBatch`, one fused loop runs emotional decay + behavior dispatch + SIMD movement per entity — a `switch` on the per-entity `BehaviorConfigRef::type` calls the direct typed executor (`Behaviors::executeIdle`, `executeWander`, ...) with the variant's dense config and state pool entries
+6. worker code emits command-bus changes and deferred events
+7. **post-batch** main-thread commit of remaining command-bus outputs and deferred event drain
 
 ## BehaviorContext
 

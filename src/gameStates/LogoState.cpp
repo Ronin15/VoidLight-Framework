@@ -23,7 +23,7 @@
 
 namespace
 {
-// Constant text keys/strings for recordGPUVertices — hoisted to file scope so
+// Constant text keys/strings for GPU vertex recording — hoisted to file scope so
 // the per-frame render path constructs no temporary std::strings.
 const std::string TITLE_KEY = "logo:title";
 const std::string TITLE_TEXT = "*.:[ VoidLight ]:.*";
@@ -109,8 +109,8 @@ void LogoState::handleInput() {
 }
 
 
-void LogoState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                                  float) {
+void LogoState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
+                                       float) {
   // Check if window dimensions changed
   GameEngine& gameEngine = GameEngine::Instance();
   int currentWidth = gameEngine.getWidthInPixels();
@@ -185,7 +185,9 @@ void LogoState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
 
   // Set vertex count for pool upload
   vertexPool.setWrittenVertexCount(vertexOffset);
+}
 
+void LogoState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
   // Record text vertices to UI vertex pool (rendered to swapchain)
   m_textDrawBatches.clear();
   FontManager& fontMgr = FontManager::Instance();

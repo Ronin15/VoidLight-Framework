@@ -258,16 +258,18 @@ public:
     void unregisterInventory(uint32_t inventoryIndex);
 
     /**
-     * @brief Register a harvestable entity with a world
+     * @brief Register a harvestable with quantity and spatial tracking
      * @param edmIndex EDM entity index for the harvestable
+     * @param position World position
      * @param worldId World to register with
      *
-     * The harvestable's potential yield will be included in world queries.
+     * Updates both the world quantity registry and the spatial index.
+     * Called by EDM::createHarvestable().
      */
-    void registerHarvestable(size_t edmIndex, const WorldId& worldId);
+    void registerHarvestable(size_t edmIndex, const Vector2D& position, const WorldId& worldId);
 
     /**
-     * @brief Unregister a harvestable from its world
+     * @brief Unregister a harvestable from quantity and spatial tracking
      * @param edmIndex EDM entity index
      */
     void unregisterHarvestable(size_t edmIndex);
@@ -289,22 +291,6 @@ public:
      * @param edmIndex EDM entity index
      */
     void unregisterDroppedItem(size_t edmIndex);
-
-    /**
-     * @brief Register a harvestable with spatial tracking
-     * @param edmIndex EDM entity index
-     * @param position World position
-     * @param worldId World to register with
-     *
-     * Note: This is called automatically by EDM::createHarvestable()
-     */
-    void registerHarvestableSpatial(size_t edmIndex, const Vector2D& position, const WorldId& worldId);
-
-    /**
-     * @brief Unregister a harvestable from spatial tracking
-     * @param edmIndex EDM entity index
-     */
-    void unregisterHarvestableSpatial(size_t edmIndex);
 
     // ========================================================================
     // CONTAINER SPATIAL REGISTRATION

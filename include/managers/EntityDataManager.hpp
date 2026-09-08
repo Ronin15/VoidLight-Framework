@@ -507,7 +507,7 @@ public:
      */
     [[nodiscard]] bool
     consumeRequiredAmmoForRangedAttack(EntityHandle handle,
-                                       InventoryResourceChange* outChange);
+                                       InventoryResourceChange& outChange);
 
     [[nodiscard]] float getEffectiveAttackDamage(EntityHandle handle) const;
     [[nodiscard]] float getEffectiveDefense(EntityHandle handle) const;

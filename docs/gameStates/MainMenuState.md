@@ -26,15 +26,17 @@ Exit. Debug shortcuts `A` / `E` jump to AI Demo / Event Demo.
   wires callbacks
 - `update()` runs `UIManager::update(...)` and applies menu focus
 - `handleInput()` routes menu commands through `MenuNavigation`
-- `exit()` calls `UIManager::prepareForStateTransition()`
+- `exit()` only `clearKeyboardSelection()`. Full-screen UI clear is owned by `GameStateManager` after `exit()`. Do not unpause here; destination `enter()` owns pause.
 
 ## GPU Rendering
 
-The state records and renders UI through:
+The state owns a GPU scene (diorama + particles) and UI:
 
 ```cpp
-UIManager::Instance().recordGPUVertices(gpuRenderer);
-UIManager::Instance().renderGPU(gpuRenderer, swapchainPass);
+recordGPUSceneVertices(...);  // diorama, particles
+recordGPUUIVertices(...);     // UIManager
+renderGPUScene(...);
+renderGPUUI(...);
 ```
 
 ## Related Docs

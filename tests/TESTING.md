@@ -526,7 +526,6 @@ Located in `events/EventManagerTest.cpp`, `events/EventTypesTest.cpp`, `events/W
 - WeatherEvent creation and parameter setting
 - SceneChangeEvent functionality
 - NPCSpawnEvent creation, spawn parameters, conditions, and limits
-- EventFactory event creation methods
 - Event sequences and cooldown functionality
 
 **WeatherEventTest.cpp** provides focused weather event testing:

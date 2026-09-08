@@ -15,7 +15,7 @@ class MockGameState : public GameState {
 public:
     explicit MockGameState(GameStateId id, bool enterResult = true)
         : m_id(id), m_enterCalled(false), m_exitCalled(false),
-          m_updateCalled(false), m_renderCalled(false), m_handleInputCalled(false),
+          m_updateCalled(false), m_handleInputCalled(false),
           m_pauseCalled(false), m_resumeCalled(false), m_enterResult(enterResult) {}
 
     bool enter() override {
@@ -28,9 +28,30 @@ public:
         m_lastDeltaTime = deltaTime;
     }
 
-    void recordGPUVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                           [[maybe_unused]] float interpolationAlpha = 1.0f) override {
-        m_renderCalled = true;
+    bool hasGPUScene() const override {
+        return m_hasGPUScene;
+    }
+
+    void recordGPUSceneVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
+                                float interpolationAlpha) override {
+        m_sceneRecordCalled = true;
+        m_lastSceneAlpha = interpolationAlpha;
+    }
+
+    void recordGPUUIVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer) override {
+        m_uiRecordCalled = true;
+    }
+
+    void renderGPUScene([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
+                        [[maybe_unused]] SDL_GPURenderPass* scenePass,
+                        float interpolationAlpha) override {
+        m_sceneRenderCalled = true;
+        m_lastSceneRenderAlpha = interpolationAlpha;
+    }
+
+    void renderGPUUI([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
+                     [[maybe_unused]] SDL_GPURenderPass* swapchainPass) override {
+        m_uiRenderCalled = true;
     }
 
     void handleInput() override {
@@ -54,27 +75,45 @@ public:
         return m_id;
     }
 
+    void setHasGPUScene(bool value) { m_hasGPUScene = value; }
+
     // Test helper methods
     bool wasEnterCalled() const { return m_enterCalled; }
     bool wasExitCalled() const { return m_exitCalled; }
     bool wasUpdateCalled() const { return m_updateCalled; }
-    bool wasRenderCalled() const { return m_renderCalled; }
+    bool wasSceneRecordCalled() const { return m_sceneRecordCalled; }
+    bool wasUIRecordCalled() const { return m_uiRecordCalled; }
+    bool wasSceneRenderCalled() const { return m_sceneRenderCalled; }
+    bool wasUIRenderCalled() const { return m_uiRenderCalled; }
     bool wasHandleInputCalled() const { return m_handleInputCalled; }
     bool wasPauseCalled() const { return m_pauseCalled; }
     bool wasResumeCalled() const { return m_resumeCalled; }
     float getLastDeltaTime() const { return m_lastDeltaTime; }
+    float getLastSceneAlpha() const { return m_lastSceneAlpha; }
+    float getLastSceneRenderAlpha() const { return m_lastSceneRenderAlpha; }
 
     void resetFlags() {
-        m_enterCalled = m_exitCalled = m_updateCalled = m_renderCalled =
+        m_enterCalled = m_exitCalled = m_updateCalled =
+        m_sceneRecordCalled = m_uiRecordCalled =
+        m_sceneRenderCalled = m_uiRenderCalled =
         m_handleInputCalled = m_pauseCalled = m_resumeCalled = false;
+        m_lastSceneAlpha = 0.0f;
+        m_lastSceneRenderAlpha = 0.0f;
     }
 
 private:
     GameStateId m_id;
-    bool m_enterCalled, m_exitCalled, m_updateCalled, m_renderCalled,
+    bool m_enterCalled, m_exitCalled, m_updateCalled,
          m_handleInputCalled, m_pauseCalled, m_resumeCalled;
     bool m_enterResult;
+    bool m_hasGPUScene{false};
+    bool m_sceneRecordCalled{false};
+    bool m_uiRecordCalled{false};
+    bool m_sceneRenderCalled{false};
+    bool m_uiRenderCalled{false};
     float m_lastDeltaTime{0.0f};
+    float m_lastSceneAlpha{0.0f};
+    float m_lastSceneRenderAlpha{0.0f};
 };
 
 struct GameStateManagerFixture {
@@ -304,27 +343,39 @@ BOOST_AUTO_TEST_CASE(TestUpdateEmptyStack) {
 }
 
 BOOST_AUTO_TEST_CASE(TestRender) {
-    auto mockState1 = std::make_unique<MockGameState>(GameStateId::LOGO);
-    auto mockState2 = std::make_unique<MockGameState>(GameStateId::LOADING);
+    auto mockState1 = std::make_unique<MockGameState>(GameStateId::GAME_PLAY);
+    auto mockState2 = std::make_unique<MockGameState>(GameStateId::PAUSE);
+    mockState1->setHasGPUScene(true);
     MockGameState* state1Ptr = mockState1.get();
     MockGameState* state2Ptr = mockState2.get();
 
     manager.addState(std::move(mockState1));
     manager.addState(std::move(mockState2));
 
-    // Push both states to create a stack
-    manager.pushState(GameStateId::LOGO);
-    manager.pushState(GameStateId::LOADING);
+    manager.pushState(GameStateId::GAME_PLAY);
+    manager.pushState(GameStateId::PAUSE);
 
     state1Ptr->resetFlags();
     state2Ptr->resetFlags();
 
-    // GPU vertex recording should only call the top (current) active state
     auto* gpuRenderer = reinterpret_cast<VoidLight::GPURenderer*>(0x1);
-    manager.recordGPUVertices(*gpuRenderer, 1.0f);
+    auto* scenePass = reinterpret_cast<SDL_GPURenderPass*>(0x2);
+    auto* swapchainPass = reinterpret_cast<SDL_GPURenderPass*>(0x3);
+    manager.recordGPUVertices(*gpuRenderer, 0.5f);
+    manager.renderGPUScene(*gpuRenderer, scenePass, 0.5f);
+    manager.renderGPUUI(*gpuRenderer, swapchainPass);
 
-    BOOST_CHECK(!state1Ptr->wasRenderCalled()); // State1 is paused, should not render
-    BOOST_CHECK(state2Ptr->wasRenderCalled());  // State2 is active, should render
+    BOOST_CHECK(state1Ptr->wasSceneRecordCalled());
+    BOOST_CHECK(state1Ptr->wasSceneRenderCalled());
+    BOOST_CHECK(!state1Ptr->wasUIRecordCalled());
+    BOOST_CHECK(!state1Ptr->wasUIRenderCalled());
+    BOOST_CHECK_CLOSE(state1Ptr->getLastSceneAlpha(), 1.0f, 0.001f);
+    BOOST_CHECK_CLOSE(state1Ptr->getLastSceneRenderAlpha(), 1.0f, 0.001f);
+
+    BOOST_CHECK(!state2Ptr->wasSceneRecordCalled());
+    BOOST_CHECK(!state2Ptr->wasSceneRenderCalled());
+    BOOST_CHECK(state2Ptr->wasUIRecordCalled());
+    BOOST_CHECK(state2Ptr->wasUIRenderCalled());
 }
 
 BOOST_AUTO_TEST_CASE(TestRenderEmptyStack) {
@@ -493,7 +544,7 @@ BOOST_AUTO_TEST_CASE(TestStateStackBehavior) {
     BOOST_CHECK(!state2Ptr->wasHandleInputCalled());
     BOOST_CHECK(state3Ptr->wasHandleInputCalled());
 
-    // Only the top state should render (correct behavior for game state management)
+    // Update/input remain top-only. With no scene owner, only top records UI.
     state1Ptr->resetFlags();
     state2Ptr->resetFlags();
     state3Ptr->resetFlags();
@@ -501,9 +552,81 @@ BOOST_AUTO_TEST_CASE(TestStateStackBehavior) {
     auto* gpuRenderer = reinterpret_cast<VoidLight::GPURenderer*>(0x1);
     manager.recordGPUVertices(*gpuRenderer, 1.0f);
 
-    BOOST_CHECK(!state1Ptr->wasRenderCalled());
-    BOOST_CHECK(!state2Ptr->wasRenderCalled());
-    BOOST_CHECK(state3Ptr->wasRenderCalled());
+    BOOST_CHECK(!state1Ptr->wasSceneRecordCalled());
+    BOOST_CHECK(!state1Ptr->wasUIRecordCalled());
+    BOOST_CHECK(!state2Ptr->wasSceneRecordCalled());
+    BOOST_CHECK(!state2Ptr->wasUIRecordCalled());
+    BOOST_CHECK(!state3Ptr->wasSceneRecordCalled());
+    BOOST_CHECK(state3Ptr->wasUIRecordCalled());
+}
+
+BOOST_AUTO_TEST_CASE(TestFullScreenSceneAndUIDispatch) {
+    auto mockState = std::make_unique<MockGameState>(GameStateId::GAME_PLAY);
+    mockState->setHasGPUScene(true);
+    MockGameState* statePtr = mockState.get();
+
+    manager.addState(std::move(mockState));
+    manager.pushState(GameStateId::GAME_PLAY);
+    statePtr->resetFlags();
+
+    auto* gpuRenderer = reinterpret_cast<VoidLight::GPURenderer*>(0x1);
+    auto* scenePass = reinterpret_cast<SDL_GPURenderPass*>(0x2);
+    auto* swapchainPass = reinterpret_cast<SDL_GPURenderPass*>(0x3);
+    manager.recordGPUVertices(*gpuRenderer, 0.25f);
+    manager.renderGPUScene(*gpuRenderer, scenePass, 0.25f);
+    manager.renderGPUUI(*gpuRenderer, swapchainPass);
+
+    BOOST_CHECK(statePtr->wasSceneRecordCalled());
+    BOOST_CHECK(statePtr->wasUIRecordCalled());
+    BOOST_CHECK(statePtr->wasSceneRenderCalled());
+    BOOST_CHECK(statePtr->wasUIRenderCalled());
+    BOOST_CHECK_CLOSE(statePtr->getLastSceneAlpha(), 0.25f, 0.001f);
+    BOOST_CHECK_CLOSE(statePtr->getLastSceneRenderAlpha(), 0.25f, 0.001f);
+}
+
+BOOST_AUTO_TEST_CASE(TestPauseOverGamePlayGPUDispatch) {
+    auto gameState = std::make_unique<MockGameState>(GameStateId::GAME_PLAY);
+    auto pauseState = std::make_unique<MockGameState>(GameStateId::PAUSE);
+    gameState->setHasGPUScene(true);
+    MockGameState* gamePtr = gameState.get();
+    MockGameState* pausePtr = pauseState.get();
+
+    manager.addState(std::move(gameState));
+    manager.addState(std::move(pauseState));
+
+    manager.pushState(GameStateId::GAME_PLAY);
+    manager.pushState(GameStateId::PAUSE);
+
+    gamePtr->resetFlags();
+    pausePtr->resetFlags();
+
+    auto* gpuRenderer = reinterpret_cast<VoidLight::GPURenderer*>(0x1);
+    auto* scenePass = reinterpret_cast<SDL_GPURenderPass*>(0x2);
+    auto* swapchainPass = reinterpret_cast<SDL_GPURenderPass*>(0x3);
+    manager.recordGPUVertices(*gpuRenderer, 0.4f);
+    manager.renderGPUScene(*gpuRenderer, scenePass, 0.4f);
+    manager.renderGPUUI(*gpuRenderer, swapchainPass);
+
+    BOOST_CHECK(gamePtr->wasSceneRecordCalled());
+    BOOST_CHECK(gamePtr->wasSceneRenderCalled());
+    BOOST_CHECK(!gamePtr->wasUIRecordCalled());
+    BOOST_CHECK(!gamePtr->wasUIRenderCalled());
+    BOOST_CHECK_CLOSE(gamePtr->getLastSceneAlpha(), 1.0f, 0.001f);
+    BOOST_CHECK_CLOSE(gamePtr->getLastSceneRenderAlpha(), 1.0f, 0.001f);
+
+    BOOST_CHECK(!pausePtr->wasSceneRecordCalled());
+    BOOST_CHECK(!pausePtr->wasSceneRenderCalled());
+    BOOST_CHECK(pausePtr->wasUIRecordCalled());
+    BOOST_CHECK(pausePtr->wasUIRenderCalled());
+
+    gamePtr->resetFlags();
+    pausePtr->resetFlags();
+    manager.update(0.016f);
+    manager.handleInput();
+    BOOST_CHECK(!gamePtr->wasUpdateCalled());
+    BOOST_CHECK(!gamePtr->wasHandleInputCalled());
+    BOOST_CHECK(pausePtr->wasUpdateCalled());
+    BOOST_CHECK(pausePtr->wasHandleInputCalled());
 }
 
 BOOST_AUTO_TEST_CASE(TestComplexStateTransitions) {

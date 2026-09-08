@@ -391,14 +391,6 @@ public:
                                        const std::string& description = "",
                                        DispatchMode mode = DispatchMode::Deferred) const;
 
-  // ==================== Combat Event Triggers ====================
-
-  /**
-   * @brief Triggers a damage event (stub - define parameters when combat is designed)
-   * @details Pool and dispatch infrastructure ready. Update signature as needed.
-   */
-  bool triggerDamage(DispatchMode mode = DispatchMode::Deferred) const;
-
   // World event triggers
   bool triggerWorldLoaded(const std::string &worldId, int width, int height,
                           DispatchMode mode = DispatchMode::Deferred) const;
@@ -425,12 +417,6 @@ public:
                                   DispatchMode mode = DispatchMode::Deferred) const;
   bool triggerCameraZoomChanged(float newZoom, float oldZoom,
                                 DispatchMode mode = DispatchMode::Deferred) const;
-
-  // Compatibility aliases
-  bool triggerWeatherChange(const std::string &weatherType,
-                            float transitionTime = 5.0f) const;
-  bool triggerNPCSpawn(const std::string &npcType, float x, float y,
-                       const std::string &npcRace = "") const;
 
   /**
    * @brief Dispatches an event directly without registration

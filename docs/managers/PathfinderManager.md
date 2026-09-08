@@ -8,7 +8,7 @@ The PathfinderManager is a high-performance, centralized pathfinding service des
 
 ### Design Patterns
 - **Singleton Pattern**: Thread-safe singleton with proper lifecycle management
-- **Producer-Consumer**: Asynchronous request processing with callback-based results
+- **Producer-Consumer**: `requestPathToEDM` on workers, `commitCompletedPaths` on the main thread (no public callbacks)
 - **Cache-Aside**: Intelligent path caching with automatic invalidation
 - **Event-Driven**: Dynamic obstacle updates from CollisionManager
 
@@ -45,7 +45,7 @@ Request paths that store results directly in EDM:
 
 ```cpp
 // Request path with EDM storage (recommended)
-void requestPathToEDM(uint32_t edmIndex, const Vector2D& goal, Priority priority = Priority::Normal);
+uint64_t requestPathToEDM(size_t edmIndex, const Vector2D& start, const Vector2D& goal, Priority priority = Priority::Normal);
 
 // Usage in AI behavior
 void ChaseBehavior::execute(BehaviorContext& ctx) {
@@ -101,7 +101,7 @@ PathfinderManager respects simulation tiers:
 
 ```cpp
 // PathfinderManager checks tier before expensive computation
-void PathfinderManager::requestPathToEDM(uint32_t edmIndex, const Vector2D& goal, Priority priority) {
+void PathfinderManager::requestPathToEDM(size_t edmIndex, const Vector2D& start, const Vector2D& goal, Priority priority) {
     auto& edm = EntityDataManager::Instance();
     SimulationTier tier = edm.getHotDataByIndex(edmIndex).tier;
 
@@ -142,7 +142,9 @@ Checks if the manager has been properly initialized.
 Shuts down the pathfinder and releases all resources.
 
 #### `void prepareForStateTransition()`
-Prepares for game state transitions by clearing cached paths and pending requests.
+Waits for in-flight grid rebuilds, clears cached paths, and drops the
+pathfinding grid. The manager stays initialized. Loading waits until the new
+world's `StaticCollidersReady` rebuild makes `isGridReady()` true again.
 
 ### Request Management
 
@@ -156,25 +158,15 @@ enum class Priority : int {
 };
 ```
 
-#### `void requestPath(EntityID entityId, const Vector2D& start, const Vector2D& goal, PathCallback callback, Priority priority = Priority::Normal)`
-Asynchronous pathfinding request with callback-based result delivery.
+#### `uint64_t requestPathToEDM(size_t edmIndex, const Vector2D& start, const Vector2D& goal, Priority priority = Priority::Normal)`
+
+Production API. The worker computes the path; `commitCompletedPaths()` on the main thread writes `EDM::PathData`. There is no public callback `requestPath`.
+
 ```cpp
-// Request path with callback
-PathfinderManager::Instance().requestPath(
-    npcId,
-    npc.getPosition(),
-    targetPosition,
-    [npcId](const std::vector<Vector2D>& path, PathfindingResult result) {
-        if (result == PathfindingResult::Success) {
-            // Apply path to NPC
-            NPCManager::Instance().setPath(npcId, path);
-        } else {
-            // Handle pathfinding failure
-            NPCManager::Instance().handlePathfindingFailure(npcId, result);
-        }
-    },
-    PathfinderManager::Priority::High
-);
+PathfinderManager::Instance().requestPathToEDM(
+    edmIndex, start, goal, PathfinderManager::Priority::High);
+// Later on the main thread (AIManager already does this):
+PathfinderManager::Instance().commitCompletedPaths();
 ```
 
 #### `PathfindingResult findPathSync(const Vector2D& start, const Vector2D& goal, std::vector<Vector2D>& outPath, Priority priority = Priority::Normal)`
@@ -255,53 +247,8 @@ GAMEENGINE_INFO("Pathfinding: " + std::to_string(stats.requestsPerSecond) + " re
 ## Integration Examples
 
 ### AI System Integration
-```cpp
-// In AIManager - batch pathfinding requests
-class AIManager {
-private:
-    void updatePathfinding() {
-        for (auto& entity : m_entities) {
-            if (entity.needsNewPath()) {
-                PathfinderManager::Instance().requestPath(
-                    entity.getId(),
-                    entity.getPosition(),
-                    entity.getTargetPosition(),
-                    [this, entityId = entity.getId()](const std::vector<Vector2D>& path, PathfindingResult result) {
-                        handlePathResult(entityId, path, result);
-                    },
-                    getEntityPriority(entity)
-                );
-            }
-        }
-    }
 
-    void handlePathResult(EntityID entityId, const std::vector<Vector2D>& path, PathfindingResult result) {
-        auto entity = findEntity(entityId);
-        if (!entity) return;
-
-        switch (result) {
-            case PathfindingResult::Success:
-                entity->setPath(path);
-                break;
-            case PathfindingResult::NoPathFound:
-                entity->handleNoPath();
-                break;
-            case PathfindingResult::StartBlocked:
-                entity->handleBlockedStart();
-                break;
-            case PathfindingResult::GoalBlocked:
-                entity->findAlternativeGoal();
-                break;
-        }
-    }
-
-    PathfinderManager::Priority getEntityPriority(const AIEntity& entity) {
-        if (entity.isInCombat()) return PathfinderManager::Priority::High;
-        if (entity.isPlayerVisible()) return PathfinderManager::Priority::Normal;
-        return PathfinderManager::Priority::Low;
-    }
-};
-```
+Behaviors call `requestPathToEDM(edmIndex, start, goal, priority)`. `AIManager` commits on the main thread via `commitCompletedPaths()`. Do not use worker callbacks.
 
 ### Collision Integration
 ```cpp
@@ -328,23 +275,8 @@ void createDynamicObstacle(const Vector2D& center, float radius) {
 ```
 
 ### Player Movement Integration
-```cpp
-// High-priority pathfinding for player click-to-move
-void handlePlayerMovement(const Vector2D& clickPosition) {
-    PathfinderManager::Instance().requestPath(
-        playerId,
-        player.getPosition(),
-        clickPosition,
-        [this](const std::vector<Vector2D>& path, PathfindingResult result) {
-            if (result == PathfindingResult::Success) {
-                player.startMovingAlongPath(path);
-            } else {
-                // Show "can't move there" indicator
-                ui.showInvalidMoveIndicator(clickPosition);
-            }
-        },
-        PathfinderManager::Priority::Critical  // Player input is highest priority
-    );
+
+Player click-to-move is not a PathfinderManager callback. NPC/AI movement uses `requestPathToEDM` as above.
 }
 ```
 

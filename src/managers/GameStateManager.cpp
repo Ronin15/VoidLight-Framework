@@ -199,19 +199,46 @@ void GameStateManager::update(float deltaTime) {
   }
 }
 
+std::shared_ptr<GameState> GameStateManager::findGPUSceneOwner() const {
+  for (auto it = m_activeStates.rbegin(); it != m_activeStates.rend(); ++it) {
+    if ((*it)->hasGPUScene()) {
+      return *it;
+    }
+  }
+  return nullptr;
+}
+
 void GameStateManager::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
                                           float interpolationAlpha) {
-  if (!m_activeStates.empty()) {
-    m_activeStates.back()->recordGPUVertices(gpuRenderer, interpolationAlpha);
+  if (m_activeStates.empty()) {
+    return;
   }
+
+  auto sceneOwner = findGPUSceneOwner();
+  auto& topState = m_activeStates.back();
+  const float sceneAlpha =
+      (sceneOwner && sceneOwner != topState) ? 1.0f : interpolationAlpha;
+  if (sceneOwner) {
+    sceneOwner->recordGPUSceneVertices(gpuRenderer, sceneAlpha);
+  }
+  topState->recordGPUUIVertices(gpuRenderer);
 }
 
 void GameStateManager::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
                                         SDL_GPURenderPass* scenePass,
                                         float interpolationAlpha) {
-  if (!m_activeStates.empty()) {
-    m_activeStates.back()->renderGPUScene(gpuRenderer, scenePass, interpolationAlpha);
+  if (m_activeStates.empty()) {
+    return;
   }
+
+  auto sceneOwner = findGPUSceneOwner();
+  if (!sceneOwner) {
+    return;
+  }
+
+  const float sceneAlpha =
+      (sceneOwner != m_activeStates.back()) ? 1.0f : interpolationAlpha;
+  sceneOwner->renderGPUScene(gpuRenderer, scenePass, sceneAlpha);
 }
 
 void GameStateManager::renderGPUUI(VoidLight::GPURenderer& gpuRenderer,

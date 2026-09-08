@@ -70,7 +70,7 @@ public:
     }
 
     ~CombatControllerRuntimeFixture() {
-        UIManager::Instance().cleanupForStateTransition();
+        UIManager::Instance().prepareForStateTransition();
         EntityDataManager::Instance().clean();
         ResourceTemplateManager::Instance().clean();
         EventManager::Instance().clean();

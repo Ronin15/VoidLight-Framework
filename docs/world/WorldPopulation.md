@@ -25,9 +25,12 @@ EntityHandle spawnNpc(const Vector2D& position,
                       const std::string& behaviorOverride = {});
 ```
 
-`createNPCWithRaceClass` always auto-registers `classes.json` suggestedBehavior.
-Empty `behaviorOverride` leaves that assignment. Non-empty override calls
-`assignBehavior` after create (writes `homeRole` and current `behaviorType`).
+`createNPCWithRaceClass` currently auto-registers `classes.json`
+suggestedBehavior via `AIManager::registerEntity`. Empty `behaviorOverride`
+leaves that assignment. Non-empty override calls `assignBehavior` after create
+(writes `homeRole` and current `behaviorType`). `include/managers/AGENTS.md`
+still says EDM is storage-only; spawn assignment has not been peeled out of
+create yet.
 
 Callers: `WorldPopulation` (hostiles pass `"Attack"`; settlement NPCs pass
 empty), GamePlayState debug `R` (`"Attack"`, faction 1, not in the populate

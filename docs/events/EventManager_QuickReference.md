@@ -15,12 +15,18 @@ eventMgr.clean();
 ## Handler API
 
 ```cpp
-uint64_t registerHandlerWithToken(EventTypeId, FastEventHandler);
-void registerHandler(EventTypeId, FastEventHandler);
-void removeHandler(EventTypeId, uint64_t token);
+struct HandlerToken { EventTypeId typeId; uint64_t id; };
+
+HandlerToken registerHandlerWithToken(EventTypeId, FastEventHandler);           // transient
+HandlerToken registerPersistentHandlerWithToken(EventTypeId, FastEventHandler); // init()
+void registerHandler(EventTypeId, FastEventHandler);                            // fire-and-forget
+void registerPersistentHandler(EventTypeId, FastEventHandler);
+bool removeHandler(const HandlerToken& token);
+void clearTransientHandlers();   // state transition
+void clearAllHandlers();         // shutdown only
 ```
 
-Use tokens for GameStates, controllers, and any subscription with explicit teardown.
+Use tokens for GameStates, controllers, and any subscription with explicit teardown. Managers that must survive transitions use the persistent APIs in `init()`.
 
 ## Deferred Queue API
 

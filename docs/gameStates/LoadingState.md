@@ -52,11 +52,16 @@ so the same registered `LoadingState` instance can be reused.
    and `getHeightInPixels()`.
 4. `startAsyncWorldLoad()` enqueues world generation on `ThreadSystem`.
 5. `update()` pushes progress/status into UI components.
-6. once world loading completes, the state waits until
-   `PathfinderManager::isGridReady()` is true.
+6. once world loading completes, wait until `PathfinderManager::isGridReady()`
+   unless the load failed (`m_loadFailed`). A failed load does not wait for a
+   grid that will never be built.
 7. the state transitions to the configured target via
    `mp_stateManager->changeState(m_targetStateId)`.
-8. `exit()` removes loading UI and waits for any still-valid future.
+8. `exit()` removes loading UI and waits for any still-valid future. If the
+   load never handed off to the destination (`changeState` to GamePlay/demo),
+   `exit()` calls `WorldManager::unloadWorld()` only — Loading is not a
+   gameplay owner and does not run the AI-heavy `prepareForStateTransition()`
+   sequence.
 
 If world generation fails, `hasError()` / `getLastError()` expose the failure,
 but the state still attempts to transition to the target state. Target states
@@ -67,13 +72,13 @@ that care about recovery should inspect the loading state during `enter()`.
 `LoadingState` implements:
 
 ```cpp
-void recordGPUVertices(VoidLight::GPURenderer&, float);
+void recordGPUUIVertices(VoidLight::GPURenderer&);
 void renderGPUUI(VoidLight::GPURenderer&, SDL_GPURenderPass*);
-bool supportsGPURendering() const;
 ```
 
-`recordGPUVertices()` lets `UIManager` record title/progress/status geometry.
-`renderGPUUI()` submits that UI during the swapchain UI pass.
+`hasGPUScene()` is false. `recordGPUUIVertices()` lets `UIManager` record
+title/progress/status geometry. `renderGPUUI()` submits that UI during the
+swapchain UI pass.
 
 ## Deferred Transition Pattern
 

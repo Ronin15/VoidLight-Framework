@@ -30,13 +30,12 @@ Responsibilities:
 
 1. gather active EDM indices into `m_activeIndicesBuffer`
 2. cache per-frame player position, world bounds, and game time
-3. ask `WorkerBudgetManager` for a batch strategy against the full active workload
-4. run each contiguous batch through `processBatch(...)`
-5. in the per-entity fused loop, apply emotional decay, switch on `BehaviorConfigRef::type`, call the typed executor, process movement, and consume knockback sidecar state
-6. flush deferred `EventManager::DeferredEvent` batches
-7. drain and commit command-bus outputs on the main thread, including behavior
-   messages/transitions, faction updates, queued ranged projectile spawns, and
-   melee fallback equipment swaps
+3. **pre-batch main-thread commit** of the command bus (faction, melee fallback, queued transitions, messages) — required so workers see this frame's assignments
+4. ask `WorkerBudgetManager` for a batch strategy against the full active workload
+5. run each contiguous batch through `processBatch(...)`
+6. in the per-entity fused loop, apply emotional **decay** (`edm.updateEmotionalDecay`), switch on `BehaviorConfigRef::type`, call the typed executor, process movement, and consume knockback sidecar state. There is no emotional contagion pre-pass.
+7. flush deferred `EventManager::DeferredEvent` batches
+8. **post-batch** main-thread commit of command-bus outputs (ranged spawns, equipment, transitions, messages)
 
 `BehaviorContext` pre-fetches shared state needed by the typed executors, including the EDM knockback sidecar. Worker threads may read/update their entity's behavior state, but structural behavior changes and sidecar removal are committed on the main thread.
 
@@ -109,8 +108,8 @@ behavior logic:
 - EDM stores combat totals, last attacker/target bookkeeping, and memory records
 - behavior executors consume those records and decide fear, aggression, alert,
   flee, guard, or attack responses
-- `AIManager::update()` runs emotional contagion/decay and behavior execution in
-  the normal update path
+- `AIManager::update()` runs emotional decay and behavior execution in the
+  fused batch loop. There is no contagion pre-pass.
 
 Ranged attack behavior queues projectile work through `AICommandBus`. The main
 thread validates the attacker handle/index before spawning projectiles; failed

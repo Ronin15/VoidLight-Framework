@@ -215,8 +215,7 @@ void PauseState::closeMainMenuConfirm() {
   VoidLight::MenuNavigation::reset();
 }
 
-void PauseState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                                    float) {
+void PauseState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
     auto& ui = UIManager::Instance();
     if (!ui.isShutdown()) {
         ui.recordGPUVertices(gpuRenderer);

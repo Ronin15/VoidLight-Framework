@@ -573,8 +573,8 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
   batch.end();
 }
 
-void MainMenuState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                                       float interpolationAlpha) {
+void MainMenuState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
+                                           float interpolationAlpha) {
   // Twilight color grade for the scene (composite shader does
   // mix(scene, scene*tint, alpha) - see res/shaders/composite.frag.glsl).
   // Kept mild so the mood reads as dusk, not full night: the sunset sky/river
@@ -586,8 +586,9 @@ void MainMenuState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
   recordDiorama(gpuRenderer);
   ParticleManager::Instance().recordGPUVertices(gpuRenderer, 0.0f, 0.0f,
                                                 interpolationAlpha);
+}
 
-  // UIManager records its vertices (buttons, panels, text) over the scene.
+void MainMenuState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
   auto& ui = UIManager::Instance();
   if (!ui.isShutdown()) {
     ui.recordGPUVertices(gpuRenderer);

@@ -204,66 +204,20 @@ void createTemporaryAvoidanceZone(const Vector2D& center, float radius, float du
 ## Integration Examples
 
 ### PathfinderManager Integration
+
 ```cpp
-// PathfinderManager handles the PathfindingGrid internally
-PathfinderManager::Instance().requestPath(
-    entityId,
-    startPosition,
-    goalPosition,
-    [](const std::vector<Vector2D>& path, PathfindingResult result) {
-        if (result == PathfindingResult::SUCCESS) {
-            // Use the computed path
-            entity.setPath(path);
-        } else {
-            // Handle pathfinding failure
-            handlePathfindingError(result);
-        }
-    },
-    PathfinderManager::Priority::Normal
-);
+PathfinderManager::Instance().requestPathToEDM(
+    edmIndex, startPosition, goalPosition, PathfinderManager::Priority::Normal);
+// Main thread:
+PathfinderManager::Instance().commitCompletedPaths();
+// Result is in EDM PathData for that index.
 ```
+
+There is no public callback `requestPath`.
 
 ### AI Behavior Integration
-```cpp
-class PathfindingBehavior : public AIBehavior {
-public:
-    void execute(EntityPtr entity, float deltaTime) override {
-        if (!m_hasPath || m_pathIndex >= m_path.size()) {
-            requestNewPath(entity);
-            return;
-        }
 
-        // Follow current path
-        Vector2D targetWaypoint = m_path[m_pathIndex];
-        Vector2D direction = (targetWaypoint - entity->getPosition()).normalized();
-
-        entity->move(direction * m_speed * deltaTime);
-
-        // Check if reached waypoint
-        if ((entity->getPosition() - targetWaypoint).magnitude() < 16.0f) {
-            m_pathIndex++;
-        }
-    }
-
-private:
-    void requestNewPath(EntityPtr entity) {
-        PathfinderManager::Instance().requestPath(
-            entity->getId(),
-            entity->getPosition(),
-            m_targetPosition,
-            [this](const std::vector<Vector2D>& path, PathfindingResult result) {
-                if (result == PathfindingResult::SUCCESS) {
-                    m_path = path;
-                    m_pathIndex = 0;
-                    m_hasPath = true;
-                } else {
-                    handlePathfindingFailure(result);
-                }
-            }
-        );
-    }
-};
-```
+Wander, Patrol, Flee, Guard, Chase, and Follow call `requestPathToEDM` from the behavior executor. Path progress lives in EDM `PathData`. `AIManager` calls `commitCompletedPaths()` on the main thread. Do not store paths in behavior-local members and do not use worker callbacks.
 
 ### World Integration
 ```cpp
@@ -485,6 +439,11 @@ void handlePathfindingFailure(PathfindingResult result, EntityID entityId) {
 ```
 
 ### Debug Visualization
+
+There is no `renderPathfindingDebug(SDL_Renderer*)` path. Production rendering is GPU-only (`GameEngine` / `GPURenderer`). Path debug, if added, belongs on the GPU scene/UI hooks — do not reintroduce SDL_Renderer.
+
+Historical sketch (do not copy):
+
 ```cpp
 void renderPathfindingDebug(SDL_Renderer* renderer, const Camera& camera) {
     // Render grid

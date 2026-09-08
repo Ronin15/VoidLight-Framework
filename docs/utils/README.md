@@ -9,7 +9,7 @@ This directory contains documentation for core utility classes and helper system
   - Multiple modes: Free, Follow, Fixed
   - Smooth interpolation for target following
   - Discrete zoom levels (pixel-perfect)
-  - World bounds clamping and camera shake
+  - World bounds clamping. Camera-shake offset exists on `Camera` but is not applied (`docs/review-non-issues.md`).
   - Event-driven state changes
 
 ### Debug & Profiling

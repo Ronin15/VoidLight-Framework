@@ -836,8 +836,7 @@ void SettingsMenuState::createControlsUI()
     ui.setComponentVisible("settings_ctrl_reset_btn", false);
 }
 
-void SettingsMenuState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                                           float) {
+void SettingsMenuState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
     auto& ui = UIManager::Instance();
     if (!ui.isShutdown()) {
         ui.recordGPUVertices(gpuRenderer);

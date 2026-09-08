@@ -43,14 +43,15 @@ class GameStateManager {
   void handleInput();
 
   /**
-   * Record vertices for GPU rendering (called before scene pass).
-   * Delegates to active state's recordGPUVertices().
+   * Record vertices before the scene pass.
+   * Scene vertices come from the highest stacked state with hasGPUScene();
+   * UI vertices come from the top state. Overlay scene uses interpolation 1.
    */
   void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer, float interpolationAlpha);
 
   /**
    * Issue GPU draw calls during scene pass.
-   * Delegates to active state's renderGPUScene().
+   * Delegates to the highest stacked state with hasGPUScene().
    */
   void renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
                        SDL_GPURenderPass* scenePass,
@@ -58,7 +59,7 @@ class GameStateManager {
 
   /**
    * Render UI/overlays during swapchain pass.
-   * Delegates to active state's renderGPUUI().
+   * Delegates to the top state's renderGPUUI().
    */
   void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
                     SDL_GPURenderPass* swapchainPass);
@@ -75,6 +76,7 @@ class GameStateManager {
  private:
   // Full-screen replace only (no underlying state left on the stack).
   void clearUIForFullScreenReplace();
+  std::shared_ptr<GameState> findGPUSceneOwner() const;
 
   // All registered states, available for activation
   std::unordered_map<GameStateId, std::shared_ptr<GameState>> m_registeredStates;

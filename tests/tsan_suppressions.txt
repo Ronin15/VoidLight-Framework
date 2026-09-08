@@ -77,7 +77,6 @@ race:VoidLight::PathfindingGrid::findPath
 #   - Adding synchronization would defeat SOA design (false sharing, cache bouncing)
 #   - Flags are caching hints, not correctness-critical data
 # LOCATION: CollisionManager.cpp:2883-2884, CollisionManager.hpp:406,411
-race:CollisionManager::applyBatchedKinematicUpdates
 race:CollisionManager::CollisionStorage::updateCachedAABB
 
 # =============================================================================

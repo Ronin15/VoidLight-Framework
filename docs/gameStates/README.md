@@ -41,7 +41,11 @@ void SomeState::update(float dt) {
 }
 ```
 
-`render()` should draw only. Do not call `ui.update()` from `render()`.
+GPU hooks record/draw only. Do not call `ui.update()` from
+`recordGPUSceneVertices()`, `recordGPUUIVertices()`, `renderGPUScene()`, or
+`renderGPUUI()`. Scene recording belongs in `recordGPUSceneVertices()`;
+UIManager/FPS/status text updates that must precede UI vertex emission belong
+in `recordGPUUIVertices()`.
 
 ### Deferred transitions
 
@@ -69,7 +73,7 @@ Typical manager order when present:
 - `AIManager`
 - `ProjectileManager`
 - `BackgroundSimulationManager`
-- `WorldManager` (unload world before WRM/events)
+- `WorldManager` (`prepareForStateTransition()`, then explicit `unloadWorld()` — unload is not inside prepare)
 - `WorldResourceManager`
 - `EventManager`
 - `CollisionManager`

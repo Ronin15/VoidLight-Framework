@@ -28,6 +28,7 @@ void LoadingState::configure(
   m_loadComplete.store(false, std::memory_order_release);
   m_loadFailed.store(false, std::memory_order_release);
   m_waitingForPathfinding.store(false, std::memory_order_release);
+  m_handedOffToTarget = false;
   setStatusText("Initializing...");
 
   // Clear any previous error
@@ -98,15 +99,13 @@ void LoadingState::update(float) {
         return; // Wait for next frame to check grid readiness
       }
 
-      // Check if pathfinding grid is ready
+      const bool loadFailed = m_loadFailed.load(std::memory_order_acquire);
       const auto &pathfinderManager = PathfinderManager::Instance();
-      if (!pathfinderManager.isGridReady()) {
-        // Grid still building - keep waiting
+      if (!loadFailed && !pathfinderManager.isGridReady()) {
         return;
       }
 
-      // All ready - proceed with transition
-      if (m_loadFailed.load(std::memory_order_acquire)) {
+      if (loadFailed) {
         std::string errorMsg = "World loading failed - transitioning anyway";
         GAMESTATE_ERROR(errorMsg);
 
@@ -124,6 +123,7 @@ void LoadingState::update(float) {
 
       // Transition to target state
       if (mp_stateManager->hasState(m_targetStateId)) {
+        m_handedOffToTarget = true;
         mp_stateManager->changeState(m_targetStateId);
       } else {
         GAMESTATE_ERROR(
@@ -166,7 +166,25 @@ bool LoadingState::exit() {
     }
   }
 
+  if (!m_handedOffToTarget) {
+    unloadAbandonedWorld();
+  }
+  m_handedOffToTarget = false;
+
   return true;
+}
+
+void LoadingState::unloadAbandonedWorld() {
+  auto &worldMgr = WorldManager::Instance();
+  if (!worldMgr.isInitialized() || !worldMgr.hasActiveWorld()) {
+    return;
+  }
+
+  // Loading is not a gameplay owner. Abandoned exit only drops the world it
+  // created and did not hand off. Collision/pathfinder persistent
+  // WorldUnloaded handlers and GameEngine::clean() own the rest.
+  GAMESTATE_INFO("LoadingState abandoned with a live world - unloading");
+  worldMgr.unloadWorld();
 }
 
 
@@ -295,10 +313,7 @@ void LoadingState::cleanupUI() {
   GAMESTATE_INFO("Loading screen UI cleaned up");
 }
 
-void LoadingState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
-                                     float) {
-
-  // Record UI vertices for GPU rendering
+void LoadingState::recordGPUUIVertices(VoidLight::GPURenderer &gpuRenderer) {
   auto &ui = UIManager::Instance();
   ui.recordGPUVertices(gpuRenderer);
 }

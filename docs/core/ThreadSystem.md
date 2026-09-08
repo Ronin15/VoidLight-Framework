@@ -94,7 +94,8 @@ enum class SystemType {
     Pathfinding,
     Event,
     Collision,
-    BackgroundSim
+    BackgroundSim,
+    ProjectileSim
 };
 ```
 

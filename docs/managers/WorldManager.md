@@ -113,7 +113,7 @@ are not in the save.
 
 ## Event Notes
 
-`WorldManager` still triggers world loaded/unloaded events through `EventManager`, but it no longer owns the old `setupEventHandlers()` / `registerEventHandlers()` pattern that previous docs described.
+`WorldManager` still triggers world loaded/unloaded events through `EventManager`. `setupEventHandlers()` still exists as a thin wrapper around `TileRenderer::subscribeToSeasonEvents()` (persistent Time handler). It is not a second public subscribe API; prefer subscribe-from-init / first load.
 
 ## Guidance
 

@@ -25,9 +25,10 @@
  * This is the industry-standard pattern used by Unity, Unreal, and Godot.
  *
  * Usage:
- *   auto* loadingState = dynamic_cast<LoadingState*>(gameStateManager->getState("LoadingState").get());
- *   loadingState->configure("TargetState", worldConfig);
- *   gameStateManager->pushState("LoadingState");
+ *   auto* loadingState = dynamic_cast<LoadingState*>(
+ *       gameStateManager->getState(GameStateId::LOADING).get());
+ *   loadingState->configure(GameStateId::GAME_PLAY, worldConfig);
+ *   gameStateManager->changeState(GameStateId::LOADING);
  */
 class LoadingState : public GameState {
 public:
@@ -50,12 +51,9 @@ public:
     bool exit() override;
     GameStateId getStateId() const override { return GameStateId::LOADING; }
 
-    // GPU rendering support
-    void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                           float interpolationAlpha) override;
+    void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
     void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
                      SDL_GPURenderPass* swapchainPass) override;
-    bool supportsGPURendering() const override { return true; }
 
     /**
      * @brief Get the last error message from failed loading
@@ -95,6 +93,10 @@ private:
     // UI state
     bool m_uiInitialized{false};
 
+    // True only for a successful Loading → destination changeState.
+    // Abandoned exit unloads via WorldManager, not gameplay teardown.
+    bool m_handedOffToTarget{false};
+
     /**
      * @brief Start async world loading on ThreadSystem
      */
@@ -119,6 +121,9 @@ private:
      * @brief Cleanup loading screen UI
      */
     void cleanupUI();
+
+    // WorldManager::unloadWorld() only — not the GamePlay manager sequence.
+    void unloadAbandonedWorld();
 };
 
 #endif // LOADING_STATE_HPP

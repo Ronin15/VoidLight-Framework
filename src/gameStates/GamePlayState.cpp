@@ -60,9 +60,6 @@ bool GamePlayState::enter() {
   // Cache GameEngine reference at function start
   auto &gameEngine = GameEngine::Instance();
 
-  // Resume all game managers (may be paused from menu states)
-  gameEngine.setGlobalPause(false);
-
   // Reset transition flag when entering state
   m_transitioningToLoading = false;
   m_transitioningToGameOver = false;
@@ -75,6 +72,9 @@ bool GamePlayState::enter() {
     m_worldLoaded = true; // Mark as loaded to prevent loop on re-entry
     return true;          // Will transition to loading screen in update()
   }
+
+  // Resume after Loading (or menu) now that this state owns the exclusive window.
+  gameEngine.setGlobalPause(false);
 
   // World is loaded - proceed with normal initialization
   GAMEPLAY_INFO("World already loaded - initializing gameplay");
@@ -1039,8 +1039,8 @@ void GamePlayState::onWeatherChanged(const EventData &data) {
   GAMEPLAY_DEBUG(weatherEvent->getWeatherTypeString());
 }
 
-void GamePlayState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
-                                      float interpolationAlpha) {
+void GamePlayState::recordGPUSceneVertices(VoidLight::GPURenderer &gpuRenderer,
+                                           float interpolationAlpha) {
   // Skip if world not active or GPU scene recorder not initialized
   if (!m_camera || !m_gpuSceneRecorder) {
     return;
@@ -1085,7 +1085,9 @@ void GamePlayState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
 
   // End scene-data recording before UI vertices are recorded
   m_gpuSceneRecorder->endRecording();
+}
 
+void GamePlayState::recordGPUUIVertices(VoidLight::GPURenderer &gpuRenderer) {
   // Update FPS display if visible (must happen BEFORE recording UI vertices)
   auto &ui = UIManager::Instance();
   if (m_fpsVisible) {
@@ -1100,7 +1102,6 @@ void GamePlayState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
     }
   }
 
-  // Record UI vertices (separate from scene)
   ui.recordGPUVertices(gpuRenderer);
 }
 

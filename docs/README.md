@@ -49,7 +49,7 @@ the SDL3_GPU rendering path.
 - [UIConstants Reference](ui/UIConstants.md)
 - [Auto-Sizing System](ui/Auto_Sizing_System.md)
 - [DPI-Aware Font System](ui/DPI_Aware_Font_System.md)
-- [Minimap Implementation](ui/Minimap_Implementation.md)
+- [Minimap Implementation](ui/Minimap_Implementation.md) (superseded plan; Slice 8 owns production minimap)
 
 ## Entities and GameStates
 
@@ -77,12 +77,13 @@ the SDL3_GPU rendering path.
 
 - [Architecture Overview](ARCHITECTURE.md)
 - [Interpolation System](architecture/InterpolationSystem.md)
+- [Architecture snapshots vs live](architecture/README.md)
 - [Implementation slices (workflow and gates)](framework-implementation-slices.md)
 
 ## Performance & Development
 
 - [Power Efficiency](performance/PowerEfficiency.md)
-- [SDL3 macOS Cleanup Issue](issues/SDL3_MACOS_CLEANUP_ISSUE.md)
+- [SDL3 macOS Cleanup Issue](issues/SDL3_MACOS_CLEANUP_ISSUE.md) (platform note, not current architecture)
 - [AGENTS.md](../AGENTS.md)
 
 ## Testing and Validation

@@ -405,7 +405,6 @@ void setCameraViewport(float x, float y, float width, float height);
 // Threading configuration
 void enableThreading(bool enable);
 void setThreadingThreshold(size_t threshold);
-void enableWorkerBudgetThreading(bool enable);
 
 // WorkerBudget-optimized update with queue pressure management
 void updateWithWorkerBudget(float deltaTime, size_t particleCount);
@@ -509,11 +508,6 @@ The ParticleManager integrates with the engine's WorkerBudget system for optimal
 ```cpp
 void optimizeParticleProcessing() {
     auto& pm = ParticleManager::Instance();
-    
-    // Enable WorkerBudget threading
-    pm.enableWorkerBudgetThreading(true);
-    
-    // Set threading threshold (minimum particles for threading)
     pm.setThreadingThreshold(1000);
     
     // The system automatically:
@@ -736,7 +730,6 @@ if (testId == 0) {
 // High-end PC optimization
 #ifdef HIGH_END_PC
     pm.setMaxParticles(15000);  // Higher capacity
-    pm.enableWorkerBudgetThreading(true);  // Full threading
 #endif
 ```
 

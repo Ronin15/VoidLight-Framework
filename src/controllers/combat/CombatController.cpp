@@ -168,7 +168,7 @@ bool CombatController::performAttack(Player *player) {
     }
 
     InventoryResourceChange ammoChange{};
-    if (!edm.consumeRequiredAmmoForRangedAttack(playerHandle, &ammoChange)) {
+    if (!edm.consumeRequiredAmmoForRangedAttack(playerHandle, ammoChange)) {
       if (!equipFirstAvailableMeleeWeapon(*player, edm)) {
         COMBAT_INFO("Player has no compatible ammunition or melee fallback weapon");
         UIManager::Instance().addEventLogEntry(EVENT_LOG, "No ammunition!");

@@ -60,6 +60,12 @@ AIDemoState::~AIDemoState() {
 }
 
 void AIDemoState::handleInput() {
+  // Loading-intent enter() returns before controllers exist. The next frame
+  // still delivers handleInput() before update() transitions to LoadingState.
+  if (!m_initialized) {
+    return;
+  }
+
   // Cache manager references for better performance
   InputManager const &inputMgr = InputManager::Instance();
   AIManager &aiMgr = AIManager::Instance();
@@ -220,27 +226,27 @@ bool AIDemoState::enter() {
   // Cache GameEngine reference at function start
   auto &gameEngine = GameEngine::Instance();
 
-  // Resume all game managers (may be paused from menu states)
-  gameEngine.setGlobalPause(false);
-
   GAMESTATE_INFO("Entering AIDemoState...");
 
   // Reset transition flag when entering state
   m_transitioningToLoading = false;
 
-  // Check if already initialized (resuming after LoadingState)
-  if (m_initialized) {
-    GAMESTATE_INFO("Already initialized - resuming AIDemoState");
-    return true; // Skip all loading logic
-  }
-
   // Check if world needs to be loaded
-  if (!m_worldLoaded) {
+  if (!m_initialized && !m_worldLoaded) {
     GAMESTATE_INFO("World not loaded yet - will transition to LoadingState on "
                    "first update");
     m_needsLoading = true;
     m_worldLoaded = true; // Mark as loaded to prevent loop on re-entry
     return true;          // Will transition to loading screen in update()
+  }
+
+  // Resume after Loading (or menu) now that this state owns the exclusive window.
+  gameEngine.setGlobalPause(false);
+
+  // Check if already initialized (resuming after LoadingState)
+  if (m_initialized) {
+    GAMESTATE_INFO("Already initialized - resuming AIDemoState");
+    return true; // Skip all loading logic
   }
 
   // World is loaded - proceed with normal initialization
@@ -629,8 +635,8 @@ void AIDemoState::updateCamera(float deltaTime) {
   }
 }
 
-void AIDemoState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
-                                    float interpolationAlpha) {
+void AIDemoState::recordGPUSceneVertices(VoidLight::GPURenderer &gpuRenderer,
+                                         float interpolationAlpha) {
   if (!m_camera || !m_gpuSceneRecorder) { return; }
 
   // Begin scene-data recording before the engine-owned scene pass opens
@@ -654,7 +660,10 @@ void AIDemoState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
     m_player->recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
   }
 
-  // Update status text before recording UI vertices
+  m_gpuSceneRecorder->endRecording();
+}
+
+void AIDemoState::recordGPUUIVertices(VoidLight::GPURenderer &gpuRenderer) {
   auto &ui = UIManager::Instance();
   {
     float currentFPS = mp_stateManager->getCurrentFPS();
@@ -676,10 +685,7 @@ void AIDemoState::recordGPUVertices(VoidLight::GPURenderer &gpuRenderer,
     }
   }
 
-  // Record UI vertices
   ui.recordGPUVertices(gpuRenderer);
-
-  m_gpuSceneRecorder->endRecording();
 }
 
 void AIDemoState::renderGPUScene(VoidLight::GPURenderer &gpuRenderer,

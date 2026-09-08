@@ -23,6 +23,7 @@
  * All config is stored in EDM's BehaviorConfigData union.
  */
 
+#include "ai/AICommandBus.hpp"
 #include "ai/BehaviorCommonState.hpp"       // For BehaviorData, PathData
 #include "ai/BehaviorConfig.hpp"
 #include "ai/BehaviorStateData.hpp"
@@ -113,8 +114,8 @@ struct BehaviorContext {
 /**
  * @brief Message IDs for behavior-specific commands
  *
- * These can be queued via queueBehaviorMessage() and processed at the start
- * of each behavior's execute function via processPendingMessages().
+ * Queue via queueBehaviorMessage() (main thread) or deferBehaviorMessage()
+ * (worker threads). AIManager commits them before behavior execute.
  */
 namespace BehaviorMessage {
     // Attack messages
@@ -447,14 +448,13 @@ bool getCachedWorldBounds(float& minX, float& minY, float& maxX, float& maxY);
 // ============================================================================
 
 /**
- * @brief Queue a message for an entity's behavior
+ * @brief Queue a message for an entity's behavior from the main thread
  * @param edmIndex Entity's index in EDM
  * @param messageId BehaviorMessage::* constant
  * @param param Optional parameter (behavior-specific)
  *
- * Enqueues a command for AIManager's main-thread pre-pass commit.
- *
- * @note THREAD SAFETY: Safe from any thread.
+ * Enqueues a command for AIManager's main-thread commit.
+ * Worker-thread code must use deferBehaviorMessage() instead.
  */
 void queueBehaviorMessage(size_t edmIndex, uint8_t messageId, uint8_t param = 0);
 
@@ -483,15 +483,26 @@ void collectDeferredDamageEvents(std::vector<EventManager::DeferredEvent>& out);
 // ============================================================================
 
 /**
- * @brief Defer a behavior message for thread-safe delivery via AICommandBus
+ * @brief Defer a behavior message from a worker thread
  * @param targetEdmIndex Target entity's EDM index
  * @param messageId BehaviorMessage::* constant
  * @param param Optional parameter
  *
- * Safe to call from worker threads during batch processing.
- * Enqueues directly to AICommandBus.
+ * Writes to a thread-local buffer. AIManager collects via
+ * collectDeferredBehaviorMessages() after each batch, then commits on the
+ * main thread. Do not call from the main thread — use queueBehaviorMessage().
  */
 void deferBehaviorMessage(size_t targetEdmIndex, uint8_t messageId, uint8_t param = 0);
+
+/**
+ * @brief Collect deferred behavior messages from the calling thread's TLS buffer
+ * @param[out] out Destination vector (appended, buffer cleared)
+ *
+ * Call after processBatch so worker-produced messages reach AICommandBus
+ * on the main thread.
+ */
+void collectDeferredBehaviorMessages(
+    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& out);
 
 } // namespace Behaviors
 

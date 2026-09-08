@@ -135,8 +135,8 @@ struct BehaviorConfigRef {
 };
 
 // EDM holds one pair per variant (Idle, Wander, Chase, Patrol, Flee, Follow, Guard, Attack).
-// Config and state pools share the same index by invariant (managed lockstep by
-// reassignBehaviorConfig / clearBehaviorConfig).
+// Config and state pools share the same index by invariant (AIManager commit
+// uses reassignBehaviorConfig / clearBehaviorConfig as storage primitives).
 std::vector<WanderBehaviorConfig> m_wanderConfigs;
 std::vector<WanderStateData>      m_wanderStates;
 std::vector<size_t>               m_wanderOwners;   // owner edmIndex per slot
@@ -287,7 +287,7 @@ void initBehaviorData(size_t index, BehaviorType type);
 void clearBehaviorData(size_t index);
 ```
 
-Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index, and `reassignBehaviorConfig(...)` / `clearBehaviorConfig(...)` for structural changes. `BehaviorData` is shared cross-behavior state only.
+Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index. Gameplay assignment is `AIManager::assignBehavior` / `Behaviors::switchBehavior`; `reassignBehaviorConfig` / `clearBehaviorConfig` are EDM storage primitives used on the AIManager commit path, not a public switch API. `BehaviorData` is shared cross-behavior state only.
 
 ### Knockback Sidecar
 

@@ -90,7 +90,7 @@ void PathfinderManager::update() {
 
     commitCompletedPaths();
 
-    // Requests are submitted directly to ThreadSystem in requestPath() - no processing needed here
+    // Requests are submitted directly to ThreadSystem in requestPathToEDM() - no processing needed here
 
     VOIDLIGHT_DEBUG_ONLY(
         // Interval stats logging - zero overhead in release (entire block compiles out)
@@ -185,17 +185,15 @@ void PathfinderManager::prepareForStateTransition() {
     // Reset collision version tracking
     m_lastCollisionVersion.store(0);
 
-    // Keep grid instance but invalidate any cached data within it
-    // Grid will be rebuilt when needed by new state
-    if (getGridSnapshot()) {
-        // Clear any temporary weight fields that might be state-specific
-        clearWeightFields();
-    }
+    // Drop the previous world's grid. Loading waits for StaticCollidersReady
+    // to rebuild against the new world; keeping the old grid made isGridReady()
+    // true immediately and let Loading accept stale navigation data.
+    setGrid(nullptr);
 
     // Event handlers are persistent (registered via registerPersistentHandler
     // in subscribeToEvents). No re-subscription needed across state transitions.
 
-    PATHFIND_INFO("PathfinderManager state transition complete - cleared transient data, kept manager initialized");
+    PATHFIND_INFO("PathfinderManager state transition complete - dropped grid, kept manager initialized");
 }
 
 void PathfinderManager::commitCompletedPaths() {
@@ -1678,10 +1676,12 @@ void PathfinderManager::onStaticCollidersReady() {
 }
 
 void PathfinderManager::onWorldUnloaded() {
-    PATHFIND_INFO("Responding to WorldUnloadedEvent");
+    PATHFIND_INFO("World unloaded - dropping pathfinding grid");
 
-    // Cache and pending requests already cleared by prepareForStateTransition()
-    // This event handler serves as confirmation that world cleanup completed
+    // Join in-flight rebuilds so they cannot restore the old world's grid
+    // after this drop. Cache/pending are cleared by prepareForStateTransition().
+    waitForGridRebuildCompletion();
+    setGrid(nullptr);
 }
 
 void PathfinderManager::onTileChanged(int x, int y) {

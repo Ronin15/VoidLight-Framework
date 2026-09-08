@@ -324,16 +324,6 @@ void EventManager::removeHandlers(EventTypeId typeId) {
 
 // ==================== Trigger Methods ====================
 
-bool EventManager::triggerWeatherChange(const std::string &weatherType,
-                                        float transitionTime) const {
-  return changeWeather(weatherType, transitionTime);
-}
-
-bool EventManager::triggerNPCSpawn(const std::string &npcType, float x,
-                                   float y, const std::string &npcRace) const {
-  return spawnNPC(npcType, x, y, 1, 0.0f, npcRace);
-}
-
 bool EventManager::changeWeather(const std::string &weatherType,
                                  float transitionTime, DispatchMode mode) const {
   std::shared_ptr<WeatherEvent> weatherEvent = m_weatherPool.acquire();
@@ -501,23 +491,6 @@ bool EventManager::triggerCollisionObstacleChanged(
 
   return dispatchEvent(EventTypeId::CollisionObstacleChanged, eventData, mode,
                        "triggerCollisionObstacleChanged");
-}
-
-// ==================== Combat Triggers ====================
-
-bool EventManager::triggerDamage(DispatchMode mode) const {
-  // TODO: Add parameters and configure event when combat is designed
-  auto damageEvent = m_damagePool.acquire();
-  if (!damageEvent) {
-    damageEvent = std::make_shared<DamageEvent>();
-  }
-
-  EventData eventData;
-  eventData.typeId = EventTypeId::Combat;
-  eventData.setActive(true);
-  eventData.event = damageEvent;
-
-  return dispatchEvent(EventTypeId::Combat, eventData, mode, "triggerDamage");
 }
 
 // World triggers

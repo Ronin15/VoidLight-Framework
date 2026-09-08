@@ -1,5 +1,7 @@
 # SDL3 macOS Gamepad Cleanup Issue
 
+**Platform note**, not a runtime architecture contract. Keep as a macOS shutdown caveat.
+
 ## Overview
 
 SDL3 on macOS has a critical cleanup issue when gamepads are present during application shutdown. The issue manifests as a "trace trap" (SIGTRAP) crash during SDL_Quit() when gamepad controllers are connected, specifically with PS4 controllers and potentially other HID devices.

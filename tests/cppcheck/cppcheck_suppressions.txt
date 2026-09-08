@@ -251,7 +251,6 @@ unusedFunction:*/ResourceTemplateManager.cpp:717
 unusedFunction:*/ResourceFactory.cpp:180
 unusedFunction:*/UIManager.cpp:2627
 unusedFunction:*/GamePlayState.cpp:470
-unusedFunction:*/EventFactory.cpp:263
 
 # Performance suggestions that may be intentionally ignored for readability
 useStlAlgorithm:*/InventoryComponent.cpp:746

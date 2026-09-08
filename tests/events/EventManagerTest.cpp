@@ -666,7 +666,10 @@ BOOST_FIXTURE_TEST_CASE(TriggerDamage_DispatchesToHandlers, EventManagerFixture)
         if (data.event) combatHandlerCalled.store(true);
       });
 
-  bool ok = EventManager::Instance().triggerDamage(EventManager::DispatchMode::Immediate);
+  auto damageEvent = EventManager::Instance().acquireDamageEvent();
+  BOOST_REQUIRE(damageEvent);
+  bool ok = EventManager::Instance().dispatchEvent(
+      damageEvent, EventManager::DispatchMode::Immediate);
   BOOST_CHECK(ok);
   BOOST_CHECK(combatHandlerCalled.load());
 
@@ -887,8 +890,14 @@ BOOST_FIXTURE_TEST_CASE(EventPoolRecycling_DamageEvents, EventManagerFixture) {
         else secondDamage = data.event;
       });
 
-  EventManager::Instance().triggerDamage(EventManager::DispatchMode::Immediate);
-  EventManager::Instance().triggerDamage(EventManager::DispatchMode::Immediate);
+  auto firstEvent = EventManager::Instance().acquireDamageEvent();
+  BOOST_REQUIRE(firstEvent);
+  BOOST_REQUIRE(EventManager::Instance().dispatchEvent(
+      firstEvent, EventManager::DispatchMode::Immediate));
+  auto secondEvent = EventManager::Instance().acquireDamageEvent();
+  BOOST_REQUIRE(secondEvent);
+  BOOST_REQUIRE(EventManager::Instance().dispatchEvent(
+      secondEvent, EventManager::DispatchMode::Immediate));
 
   BOOST_CHECK(firstDamage != nullptr);
   BOOST_CHECK(secondDamage != nullptr);
@@ -952,7 +961,10 @@ BOOST_FIXTURE_TEST_CASE(DeferredQueueOverflow_IsCappedAtMaxDispatchQueue, EventM
 
   constexpr size_t queueCap = 8192;
   for (size_t i = 0; i < queueCap + 25; ++i) {
-    EventManager::Instance().triggerDamage(EventManager::DispatchMode::Deferred);
+    auto damageEvent = EventManager::Instance().acquireDamageEvent();
+    BOOST_REQUIRE(damageEvent);
+    EventManager::Instance().dispatchEvent(
+        damageEvent, EventManager::DispatchMode::Deferred);
   }
 
   BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), queueCap);

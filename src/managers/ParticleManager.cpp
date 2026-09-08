@@ -832,16 +832,8 @@ void ParticleManager::update(float deltaTime) {
     ParticleThreadingInfo threadingInfo;
 
     if (useThreading) {
-      // Use WorkerBudget system if enabled, otherwise fall back to legacy
-      // threading Timing captured inside updateParticlesThreaded (after
-      // strategy, around actual work)
-      if (m_useWorkerBudget.load(std::memory_order_acquire)) {
-        updateWithWorkerBudget(deltaTime, traversedCount, activeCount,
-                               threadingInfo);
-      } else {
-        updateParticlesThreaded(deltaTime, traversedCount, activeCount,
-                                threadingInfo);
-      }
+      updateWithWorkerBudget(deltaTime, traversedCount, activeCount,
+                             threadingInfo);
     } else {
       // Single-threaded — timing feeds threshold learning
       auto singleStart = std::chrono::steady_clock::now();
@@ -2814,40 +2806,6 @@ void ParticleManager::setGlobalVisibility(bool visible) {
 
 void ParticleManager::setMaxParticles(size_t maxParticles) {
   m_storage.capacity.store(maxParticles, std::memory_order_release);
-}
-
-void ParticleManager::enableWorkerBudgetThreading(bool enable) {
-  /**
-   * Enable or disable WorkerBudget-aware threading for ParticleManager.
-   *
-   * WorkerBudget integration provides several benefits:
-   * - Fair resource allocation with other engine subsystems (AI, Events, etc.)
-   * - Dynamic thread allocation based on workload and system pressure
-   * - Automatic scaling from single-threaded to multi-threaded operation
-   * - Queue pressure monitoring to prevent ThreadSystem overload
-   *
-   * When enabled, ParticleManager will:
-   * 1. Calculate its allocated thread budget using
-   * VoidLight::calculateWorkerBudget()
-   * 2. Use budget.getOptimalWorkerCount() to determine threads needed for
-   * current workload
-   * 3. Submit particle update batches via ThreadSystem::enqueueTaskWithResult()
-   * 4. Adjust batch sizes based on ThreadSystem queue pressure
-   *
-   * @param enable True to enable WorkerBudget threading, false for legacy
-   * threading
-   */
-  m_useWorkerBudget.store(enable, std::memory_order_release);
-
-  // When enabled, ensure main threading is also enabled
-  VOIDLIGHT_DEBUG_ONLY(
-  if (enable) {
-    m_useThreading.store(true, std::memory_order_release);
-  }
-  )
-
-  PARTICLE_INFO(std::format("WorkerBudget threading {}",
-                            enable ? "enabled" : "disabled"));
 }
 
 void ParticleManager::updateWithWorkerBudget(

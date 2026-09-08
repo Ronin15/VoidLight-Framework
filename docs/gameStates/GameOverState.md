@@ -4,29 +4,29 @@
 
 ## Overview
 
-`GameOverState` is the dedicated player-death screen. It pauses gameplay globally and builds a simple overlay UI.
+Player-death screen. GamePlay routes here with `changeState(GAME_OVER)`, which **exits GamePlay and unloads the world**. Retry is a new run through Loading, not a paused overlay over a live world.
 
 ## Behavior
 
-- enables global pause on entry
-- creates overlay, title, message, and two centered buttons
-- supports `Retry` and `Main Menu`
-- supports keyboard shortcuts:
-  - `R` -> retry gameplay
-  - `M` -> return to main menu
+- `enter()` calls `GameEngine::setGlobalPause(true)` and builds overlay / title / Retry / Main Menu
+- Retry and `R` return to `m_returnState` (defaults to `GAME_PLAY`; callers may `setReturnState`)
+- Main Menu and `M` use `changeState(MAIN_MENU)`
+- Keyboard/controller focus uses `MenuNavigation`
 
-## Rendering
+## GPU
 
-Renderer path:
+There is no `render()` / SDL renderer path.
 
-- `update()` calls `UIManager::update(0.0f)`
-- `render()` calls `UIManager::render(...)`
-
-GPU path:
-
-- `recordGPUVertices(...)` records UI vertices
-- `renderGPUUI(...)` renders UI during the swapchain pass
+- `recordGPUUIVertices` records UI through `UIManager`
+- `renderGPUUI` draws UI on the swapchain pass
+- No world scene (`hasGPUScene() == false`); the scene target is cleared
 
 ## Exit
 
-`exit()` uses `UIManager::prepareForStateTransition()` so the overlay is removed before the next state enters.
+`exit()` only `clearKeyboardSelection()`. It does **not** call `UIManager::prepareForStateTransition()`. Full-screen replace is owned by `GameStateManager` after `exit()` (stack empty). Overlay widgets must not full-wipe UI from this state.
+
+## Related docs
+
+- [GamePlayState](GamePlayState.md)
+- [GameStateManager](../managers/GameStateManager.md)
+- [ARCHITECTURE](../ARCHITECTURE.md)

@@ -516,7 +516,6 @@ void EntityDataManager::freeSlot(size_t index) {
             // Unregister from WorldResourceManager (EDM index, not typeIndex)
             if (WorldResourceManager::Instance().isInitialized()) {
                 WorldResourceManager::Instance().unregisterHarvestable(index);
-                WorldResourceManager::Instance().unregisterHarvestableSpatial(index);
             }
             break;
         case EntityKind::AreaEffect:
@@ -1526,8 +1525,7 @@ EntityHandle EntityDataManager::createHarvestable(const Vector2D& position,
     auto& wrm = WorldResourceManager::Instance();
     const std::string& targetWorld = worldId.empty() ? wrm.getActiveWorld() : worldId;
     if (!targetWorld.empty()) {
-        wrm.registerHarvestable(index, targetWorld);
-        wrm.registerHarvestableSpatial(index, position, targetWorld);
+        wrm.registerHarvestable(index, position, targetWorld);
     } else {
         ENTITY_WARN("createHarvestable: No active world set, harvestable not registered with WRM");
     }
@@ -2016,7 +2014,6 @@ void EntityDataManager::destroyStaticResource(EntityHandle handle) {
             m_freeItemSlots.push_back(m_staticHotData[index].typeLocalIndex);
             break;
         case EntityKind::Harvestable:
-            wrm.unregisterHarvestableSpatial(index);
             wrm.unregisterHarvestable(index);
             m_freeHarvestableSlots.push_back(m_staticHotData[index].typeLocalIndex);
             break;
@@ -2533,11 +2530,9 @@ EntityDataManager::findCompatibleAmmo(uint32_t inventoryIndex,
 }
 
 bool EntityDataManager::consumeRequiredAmmoForRangedAttack(
-    EntityHandle handle, InventoryResourceChange* outChange)
+    EntityHandle handle, InventoryResourceChange& outChange)
 {
-    if (outChange) {
-        *outChange = InventoryResourceChange{};
-    }
+    outChange = InventoryResourceChange{};
     if (!handle.isValid() || !handle.hasHealth()) {
         return false;
     }
@@ -2582,10 +2577,8 @@ bool EntityDataManager::consumeRequiredAmmoForRangedAttack(
     if (!removeFromInventory(charData.inventoryIndex, ammoHandle, 1)) {
         return false;
     }
-    if (outChange) {
-        *outChange = InventoryResourceChange{ammoHandle, oldQuantity,
-                                             oldQuantity - 1};
-    }
+    outChange = InventoryResourceChange{ammoHandle, oldQuantity,
+                                        oldQuantity - 1};
     return true;
 }
 
@@ -3947,10 +3940,9 @@ void EntityDataManager::clearMemoryData(size_t index) {
     data.clear();
 }
 
-// Thread Safety Note: This function is primarily called from the main thread
-// via recordCombatEvent() from CombatController. If called from worker threads
-// during AI batch processing, ensure proper synchronization or that each index
-// is only accessed by one thread.
+// Thread Safety Note: Combat recording is EventManager::commitPreparedCombatEvent
+// on the main thread. If addMemory is used from a worker, each index must be
+// owned by one thread.
 void EntityDataManager::addMemory(size_t index, const MemoryEntry& entry, bool useOverflow) {
     if (index >= m_memoryData.size()) {
         return;

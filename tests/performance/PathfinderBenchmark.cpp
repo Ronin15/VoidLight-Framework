@@ -149,6 +149,42 @@ private:
     }
 };
 
+namespace {
+
+size_t createBenchmarkNpc() {
+    EntityHandle handle = EntityDataManager::Instance().createNPCWithRaceClass(
+        Vector2D(64.0f, 64.0f), "Human", "Guard");
+    BOOST_REQUIRE(handle.isValid());
+    const size_t idx = EntityDataManager::Instance().getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+    return idx;
+}
+
+bool waitForBenchmarkPath(size_t edmIndex, std::vector<Vector2D>& outPath,
+                          high_resolution_clock::time_point& doneAt) {
+    auto& pm = PathfinderManager::Instance();
+    auto& edm = EntityDataManager::Instance();
+    while (true) {
+        pm.update();
+        pm.commitCompletedPaths();
+        auto& pd = edm.getPathData(edmIndex);
+        if (pd.pathRequestPending.load(std::memory_order_acquire) == 0) {
+            doneAt = high_resolution_clock::now();
+            outPath.clear();
+            if (pd.hasPath) {
+                outPath.reserve(pd.pathLength);
+                for (uint16_t w = 0; w < pd.pathLength; ++w) {
+                    outPath.push_back(edm.getWaypoint(edmIndex, w));
+                }
+            }
+            return pd.hasPath;
+        }
+        std::this_thread::yield();
+    }
+}
+
+} // namespace
+
 BOOST_FIXTURE_TEST_SUITE(PathfinderBenchmarkSuite, PathfinderBenchmarkFixture)
 
 BOOST_AUTO_TEST_CASE(BenchmarkImmediatePathfinding) {
@@ -181,37 +217,20 @@ BOOST_AUTO_TEST_CASE(BenchmarkImmediatePathfinding) {
             Vector2D goal(coordDist(rng) * VoidLight::TILE_SIZE, coordDist(rng) * VoidLight::TILE_SIZE);
 
             std::vector<Vector2D> path;
-            std::atomic<bool> pathReady{false};
-            bool pathSuccess = false;
-            high_resolution_clock::time_point callbackTimestamp;
+            high_resolution_clock::time_point doneAt;
+            const size_t npc = createBenchmarkNpc();
 
             auto requestStart = high_resolution_clock::now();
-            PathfinderManager::Instance().requestPath(
-                static_cast<EntityID>(i + 10000), start, goal,
-                PathfinderManager::Priority::High,
-                [&](EntityID, const std::vector<Vector2D>& resultPath) {
-                    callbackTimestamp = high_resolution_clock::now(); // Timestamp in callback
-                    path = resultPath;
-                    pathSuccess = !resultPath.empty();
-                    pathReady.store(true, std::memory_order_release);
-                }
-            );
+            BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
+                npc, start, goal, PathfinderManager::Priority::High), 0U);
             auto requestQueued = high_resolution_clock::now();
 
-            // Measure queuing latency (request submission overhead)
             double queuingLatencyUs = duration_cast<nanoseconds>(requestQueued - requestStart).count() / 1000.0;
             queuingLatencies.push_back(queuingLatencyUs);
 
-            // Wait for ThreadSystem to deliver the callback.
-            // PathfinderManager fires callback-based requests directly from the worker
-            // (PathfinderManager.cpp:342, "Fire callback directly (ThreadSystem completion
-            // mechanism)") — no main-thread commit needed. Just yield until the atomic flips.
-            while (!pathReady.load(std::memory_order_acquire)) {
-                std::this_thread::yield();
-            }
+            const bool pathSuccess = waitForBenchmarkPath(npc, path, doneAt);
 
-            // Measure total completion time (from request to callback)
-            double completionTimeMs = duration_cast<microseconds>(callbackTimestamp - requestStart).count() / 1000.0;
+            double completionTimeMs = duration_cast<microseconds>(doneAt - requestStart).count() / 1000.0;
             completionTimes.push_back(completionTimeMs);
 
             if (pathSuccess) {
@@ -265,76 +284,66 @@ BOOST_AUTO_TEST_CASE(BenchmarkAsyncPathfinding) {
     std::uniform_int_distribution<int> coordDist(5, 195);
 
     for (int batchSize : batchSizes) {
-        std::vector<uint64_t> requestIds;
-        requestIds.reserve(batchSize);
-
-        // Track completion via atomic counter
-        std::atomic<int> completedCount{0};
-        std::vector<high_resolution_clock::time_point> completionTimestamps(batchSize);
+        std::vector<size_t> npcs;
+        npcs.reserve(static_cast<size_t>(batchSize));
+        for (int i = 0; i < batchSize; ++i) {
+            npcs.push_back(createBenchmarkNpc());
+        }
 
         auto requestStart = high_resolution_clock::now();
-
-        // Submit batch of async requests
         for (int i = 0; i < batchSize; ++i) {
             Vector2D start(coordDist(rng) * VoidLight::TILE_SIZE, coordDist(rng) * VoidLight::TILE_SIZE);
             Vector2D goal(coordDist(rng) * VoidLight::TILE_SIZE, coordDist(rng) * VoidLight::TILE_SIZE);
-
-            uint64_t requestId = PathfinderManager::Instance().requestPath(
-                static_cast<EntityID>(2000 + i),
-                start,
-                goal,
-                PathfinderManager::Priority::Normal,
-                [&completedCount, &completionTimestamps, i](EntityID, const std::vector<Vector2D>&) {
-                    completionTimestamps[i] = high_resolution_clock::now();
-                    completedCount.fetch_add(1, std::memory_order_release);
-                }
-            );
-
-            requestIds.push_back(requestId);
+            PathfinderManager::Instance().requestPathToEDM(
+                npcs[static_cast<size_t>(i)], start, goal,
+                PathfinderManager::Priority::Normal);
         }
-
         auto requestEnd = high_resolution_clock::now();
         double requestTimeMs = duration_cast<microseconds>(requestEnd - requestStart).count() / 1000.0;
 
-        // Wait for all requests to actually complete (verify via atomic counter)
         auto processingStart = high_resolution_clock::now();
-
-        while (completedCount.load(std::memory_order_acquire) < batchSize) {
-            PathfinderManager::Instance().update(); // Process buffered requests
+        auto& edm = EntityDataManager::Instance();
+        int completedCount = 0;
+        while (true) {
+            PathfinderManager::Instance().update();
+            PathfinderManager::Instance().commitCompletedPaths();
+            completedCount = 0;
+            bool allDone = true;
+            for (size_t idx : npcs) {
+                const auto& pd = edm.getPathData(idx);
+                if (pd.pathRequestPending.load(std::memory_order_acquire) != 0) {
+                    allDone = false;
+                    break;
+                }
+                ++completedCount;
+            }
+            if (allDone) {
+                break;
+            }
             std::this_thread::sleep_for(std::chrono::microseconds(100));
-
-            // Timeout safety (10 seconds max)
             auto elapsed = duration_cast<seconds>(high_resolution_clock::now() - processingStart).count();
             if (elapsed > 10) {
                 std::cout << "WARNING: Timeout waiting for batch completion ("
-                          << completedCount.load() << "/" << batchSize << " completed)\n";
+                          << completedCount << "/" << batchSize << " completed)\n";
                 break;
             }
         }
 
         auto processingEnd = high_resolution_clock::now();
         double processingTimeMs = duration_cast<microseconds>(processingEnd - processingStart).count() / 1000.0;
-
-        // Calculate actual completion time from last callback timestamp
-        high_resolution_clock::time_point lastCompletion = processingStart;
-        for (const auto& timestamp : completionTimestamps) {
-            if (timestamp > lastCompletion) {
-                lastCompletion = timestamp;
-            }
-        }
-        double actualCompletionMs = duration_cast<microseconds>(lastCompletion - requestEnd).count() / 1000.0;
+        double actualCompletionMs = processingTimeMs;
 
         std::cout << "Batch size " << batchSize << ":\n";
-        std::cout << "  Completed: " << completedCount.load() << "/" << batchSize << "\n";
+        std::cout << "  Completed: " << completedCount << "/" << batchSize << "\n";
         std::cout << "  Request submission: " << std::setprecision(3) << requestTimeMs << "ms\n";
         std::cout << "  Request rate: " << std::setprecision(0)
                   << (batchSize / (requestTimeMs / 1000.0)) << " requests/sec\n";
         std::cout << "  Actual completion time: " << std::setprecision(3) << actualCompletionMs << "ms\n";
         std::cout << "  Processing time (including polling): " << processingTimeMs << "ms\n";
 
-        if (completedCount.load() > 0 && actualCompletionMs > 0.0) {
+        if (completedCount > 0 && actualCompletionMs > 0.0) {
             std::cout << "  Throughput: " << std::setprecision(0)
-                      << (completedCount.load() / (actualCompletionMs / 1000.0)) << " paths/sec\n";
+                      << (completedCount / (actualCompletionMs / 1000.0)) << " paths/sec\n";
         }
         std::cout << "\n";
     }
@@ -368,35 +377,20 @@ BOOST_AUTO_TEST_CASE(BenchmarkPathLengthScaling) {
 
         for (int test = 0; test < testsPerPath; ++test) {
             std::vector<Vector2D> path;
-            std::atomic<bool> pathReady{false};
-            bool pathSuccess = false;
-            high_resolution_clock::time_point callbackTimestamp;
+            high_resolution_clock::time_point doneAt;
+            const size_t npc = createBenchmarkNpc();
 
             auto requestStart = high_resolution_clock::now();
-            PathfinderManager::Instance().requestPath(
-                static_cast<EntityID>(test + 20000), start, goal,
-                PathfinderManager::Priority::High,
-                [&](EntityID, const std::vector<Vector2D>& resultPath) {
-                    callbackTimestamp = high_resolution_clock::now(); // Timestamp in callback
-                    path = resultPath;
-                    pathSuccess = !resultPath.empty();
-                    pathReady.store(true, std::memory_order_release);
-                }
-            );
+            BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
+                npc, start, goal, PathfinderManager::Priority::High), 0U);
             auto requestQueued = high_resolution_clock::now();
 
-            // Measure queuing latency
             double queuingLatencyUs = duration_cast<nanoseconds>(requestQueued - requestStart).count() / 1000.0;
             queuingLatencies.push_back(queuingLatencyUs);
 
-            // Wait for async pathfinding to complete
-            while (!pathReady.load(std::memory_order_acquire)) {
-                PathfinderManager::Instance().update(); // Process buffered requests
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-            }
+            const bool pathSuccess = waitForBenchmarkPath(npc, path, doneAt);
 
-            // Measure total completion time (from request to callback)
-            double completionTimeMs = duration_cast<microseconds>(callbackTimestamp - requestStart).count() / 1000.0;
+            double completionTimeMs = duration_cast<microseconds>(doneAt - requestStart).count() / 1000.0;
             completionTimes.push_back(completionTimeMs);
             pathLengths.push_back(path.size());
 
@@ -446,58 +440,33 @@ BOOST_AUTO_TEST_CASE(BenchmarkCachePerformance) {
 
     // First run - populate cache
     auto firstRunStart = high_resolution_clock::now();
-    int entityIdCounter = 30000;
+    const size_t cacheNpc = createBenchmarkNpc();
     for (const auto& [start, goal] : uniquePaths) {
         std::vector<Vector2D> path;
-        std::atomic<bool> pathReady{false};
-        high_resolution_clock::time_point callbackTimestamp;
+        high_resolution_clock::time_point doneAt;
 
         auto requestStart = high_resolution_clock::now();
-        PathfinderManager::Instance().requestPath(
-            static_cast<EntityID>(entityIdCounter++), start, goal,
-            PathfinderManager::Priority::High,
-            [&](EntityID, const std::vector<Vector2D>& resultPath) {
-                callbackTimestamp = high_resolution_clock::now(); // Timestamp in callback
-                path = resultPath;
-                pathReady.store(true, std::memory_order_release);
-            }
-        );
+        BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
+            cacheNpc, start, goal, PathfinderManager::Priority::High), 0U);
+        waitForBenchmarkPath(cacheNpc, path, doneAt);
 
-        while (!pathReady.load(std::memory_order_acquire)) {
-            PathfinderManager::Instance().update(); // Process buffered requests
-            std::this_thread::sleep_for(std::chrono::microseconds(100));
-        }
-
-        double pathTimeMs = duration_cast<microseconds>(callbackTimestamp - requestStart).count() / 1000.0;
+        double pathTimeMs = duration_cast<microseconds>(doneAt - requestStart).count() / 1000.0;
         firstRunTimes.push_back(pathTimeMs);
     }
     auto firstRunEnd = high_resolution_clock::now();
 
-    // Cached runs - should be faster
     auto cachedRunStart = high_resolution_clock::now();
     for (int repeat = 0; repeat < repeatsPerPath; ++repeat) {
         for (const auto& [start, goal] : uniquePaths) {
             std::vector<Vector2D> path;
-            std::atomic<bool> pathReady{false};
-            high_resolution_clock::time_point callbackTimestamp;
+            high_resolution_clock::time_point doneAt;
 
             auto requestStart = high_resolution_clock::now();
-            PathfinderManager::Instance().requestPath(
-                static_cast<EntityID>(entityIdCounter++), start, goal,
-                PathfinderManager::Priority::High,
-                [&](EntityID, const std::vector<Vector2D>& resultPath) {
-                    callbackTimestamp = high_resolution_clock::now(); // Timestamp in callback
-                    path = resultPath;
-                    pathReady.store(true, std::memory_order_release);
-                }
-            );
+            BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
+                cacheNpc, start, goal, PathfinderManager::Priority::High), 0U);
+            waitForBenchmarkPath(cacheNpc, path, doneAt);
 
-            while (!pathReady.load(std::memory_order_acquire)) {
-                PathfinderManager::Instance().update(); // Process buffered requests
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-            }
-
-            double pathTimeMs = duration_cast<microseconds>(callbackTimestamp - requestStart).count() / 1000.0;
+            double pathTimeMs = duration_cast<microseconds>(doneAt - requestStart).count() / 1000.0;
             cachedRunTimes.push_back(pathTimeMs);
         }
     }

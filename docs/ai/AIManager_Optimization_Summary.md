@@ -10,8 +10,9 @@ does not own per-entity `AIBehavior` instances, cloned behavior objects, or an
 `EntityDataManager`, executes typed behavior functions in batches, and commits
 structural outputs on the main thread.
 
-This page intentionally avoids fixed performance claims. Use the benchmark and
-profiling scripts for measurements on the active build and machine.
+This page is a summary, not the source of truth. Durable contracts live in
+[AIManager.md](AIManager.md) and `AGENTS.md`. Use benchmark and profiling
+scripts for measurements on the active build and machine.
 
 ## Model
 

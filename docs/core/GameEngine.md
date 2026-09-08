@@ -26,7 +26,7 @@ engine.present();
 ts.endFrame();
 ```
 
-`render()` performs scene/UI rendering. `present()` completes the frame. GameStates must not call `SDL_RenderPresent()` or `SDL_RenderClear()` directly.
+`render()` performs scene/UI recording and pass work. `present()` calls `GPURenderer::endFrame()` (submit). GameStates must not `endFrame`, submit command buffers, acquire the swapchain, clear the GPU frame, or present.
 
 ## Display Refresh Propagation
 

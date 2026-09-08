@@ -34,12 +34,9 @@ public:
     // state's own code could otherwise re-derive the caller's identity.
     void setReturnState(GameStateId state) { m_returnState = state; }
 
-    // GPU rendering support
-    void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                           float interpolationAlpha) override;
+    void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
     void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
                      SDL_GPURenderPass* swapchainPass) override;
-    bool supportsGPURendering() const override { return true; }
 
 private:
     /**

@@ -20,12 +20,9 @@ class PauseState : public GameState {
   bool exit() override;
   GameStateId getStateId() const override { return GameStateId::PAUSE; }
 
-  // GPU rendering support
-  void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                         float interpolationAlpha) override;
+  void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
   void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
                    SDL_GPURenderPass* swapchainPass) override;
-  bool supportsGPURendering() const override { return true; }
 
  private:
   static constexpr std::array<std::string_view, 3> kNavOrder{

@@ -50,16 +50,16 @@ Typical frame shape:
 
 ```text
 beginFrame
-state.recordGPUVertices()
-beginScenePass         (internally acquires the swapchain texture on first use)
-state.renderGPUScene()
+gsm.recordGPUVertices()   // scene from highest hasGPUScene(); UI from top
+beginScenePass            // internally acquires the swapchain texture on first use
+gsm.renderGPUScene()      // highest hasGPUScene() state; overlay uses alpha 1
 beginSwapchainPass
-renderComposite         (scene texture -> swapchain, zoom applied here)
-state.renderGPUUI()
-endFrame                (called from GameEngine::present(), separate from render())
+renderComposite           // scene texture -> swapchain, zoom applied here
+gsm.renderGPUUI()         // top state
+endFrame                  // called from GameEngine::present(), separate from render()
 ```
 
-States provide `recordGPUVertices()`/`renderGPUScene()`/`renderGPUUI()` hooks, but frame lifetime, swapchain acquisition, compositing, and presentation remain engine/GPURenderer-owned.
+`GameStateManager` records/renders the scene from the highest stacked state with `hasGPUScene()` (GamePlay under Pause/Settings) and UI from the top state. Overlay scene uses interpolation alpha 1 so the frozen world is re-recorded, not a `LOADOP_LOAD`. Frame lifetime, swapchain acquisition, compositing, and presentation remain engine/GPURenderer-owned. The scene pass still `LOADOP_CLEAR`s.
 
 ## GameState Flow
 
@@ -112,9 +112,10 @@ Full-screen `enter()` may still defensively wipe-first; that is optional belt-an
 AI/world-heavy states follow this pattern in `exit()` (state drives; managers serve):
 
 1. destroy state-owned NPCs and unregister state-owned handlers
-2. call `prepareForStateTransition()` on active managers in dependency order — this is also where world unload (`WorldManager::unloadWorld()`) and EntityDataManager teardown happen, mid-sequence
-3. clear controllers / cameras / player handles (full-screen UI is cleared by `GameStateManager` after `exit()`, using `UIManager` as a service)
-4. reset remaining cached state (init flags, etc.)
+2. call `prepareForStateTransition()` on active managers in dependency order (AI, Projectile, BSM, World, WRM, Event, Collision, Pathfinder, EDM, WorkerBudget, Particle)
+3. unload the world with an explicit `WorldManager::unloadWorld()` after World `prepareForStateTransition()` — not inside it — so harvestable/NPC destroy still has EDM and WRM available
+4. clear controllers / cameras / player handles (full-screen UI is cleared by `GameStateManager` after `exit()`, using `UIManager` as a service)
+5. reset remaining cached state (init flags, etc.)
 
 This matters because deferred events, AI command commits, and WRM spatial indices all participate in runtime state now. Order: world/entity teardown in `exit()` → transition UI clear (if full-screen) → destination `enter()` — see `GamePlayState::exit()`.
 

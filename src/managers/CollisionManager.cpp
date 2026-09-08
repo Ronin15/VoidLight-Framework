@@ -125,22 +125,9 @@ void CollisionManager::prepareForStateTransition() {
     return;
   }
 
-  /* IMPORTANT: Clear ALL collision bodies during state transitions
-   *
-   * Previous logic tried to be "smart" by keeping static bodies when a world
-   * was active, expecting WorldUnloadedEvent to clean them up. This was broken
-   * because WorldUnloadedEvent is deferred and state cleanup can clear pending
-   * deferred events before delivery.
-   *
-   * Result: Static bodies from old world persisted into new world, causing:
-   * - Duplicate/stale collision bodies
-   * - Spatial hash corruption
-   * - Collision detection failures
-   *
-   * Solution: Always clear ALL bodies. The world will be unloaded immediately
-   * after state transition anyway, and new state will rebuild static bodies
-   * when it loads its world.
-   */
+  /* Always clear ALL collision bodies on transition. WorldUnloaded is Immediate;
+   * this prepare call is still the teardown owner. New world rebuilds statics
+   * from WorldLoaded / StaticCollidersReady. */
   size_t soaBodyCount = m_storage.size();
   COLLISION_INFO(std::format("STORAGE LIFECYCLE: prepareForStateTransition() "
                              "clearing {} SOA bodies (dynamic + static)",
@@ -2260,14 +2247,9 @@ void CollisionManager::update(float) {
     m_staticHashDirty = false;
   }
 
-  // MOVEMENT INTEGRATION: Removed redundant loop (was lines 1846-1871)
-  // AIManager now handles all position updates via updateKinematicBatch() and
-  // applyBatchedKinematicUpdates() which directly set hot.position to the final
-  // integrated position. CollisionManager's job is ONLY to:
-  //   1. Detect collisions using positions updated by AIManager
-  //   2. Resolve collisions (push bodies apart via resolve())
-  // This eliminates 28k+ unnecessary iterations per frame and fixes
-  // double-integration bug.
+  // MOVEMENT INTEGRATION: AIManager writes the final integrated position to
+  // EDM. CollisionManager only detects collisions at those positions and
+  // resolves overlaps.
 
   // Track culling metrics
   auto cullingStart = clock::now();
@@ -2978,67 +2960,6 @@ void CollisionManager::updatePerformanceMetrics(
         d01, d12, d23, d34, triggerDetectionEntities, eventOnlyOverlaps));
   }
   ) // VOIDLIGHT_STATS_ONLY
-}
-
-// Helper: Apply a single kinematic update to EDM and cached AABB
-void CollisionManager::applyKinematicUpdate(const KinematicUpdate& kinematicUpdate) {
-  auto it = m_storage.entityToIndex.find(kinematicUpdate.id);
-  if (it == m_storage.entityToIndex.end() || it->second >= m_storage.size()) {
-    return;
-  }
-
-  size_t index = it->second;
-  auto& hot = m_storage.hotData[index];
-
-  if (static_cast<BodyType>(hot.bodyType) != BodyType::KINEMATIC ||
-      hot.edmIndex == SIZE_MAX) {
-    return;
-  }
-
-  // Update EDM - it owns position/velocity
-  auto& edm = EntityDataManager::Instance();
-  auto& transform = edm.getTransformByIndex(hot.edmIndex);
-  transform.position = kinematicUpdate.position;
-  transform.velocity = kinematicUpdate.velocity;
-
-  // Update cached AABB immediately for spatial queries
-  const auto& edmHot = edm.getHotDataByIndex(hot.edmIndex);
-  float px = kinematicUpdate.position.getX();
-  float py = kinematicUpdate.position.getY();
-  float hw = edmHot.halfWidth;
-  float hh = edmHot.halfHeight;
-
-  hot.aabbMinX = px - hw;
-  hot.aabbMinY = py - hh;
-  hot.aabbMaxX = px + hw;
-  hot.aabbMaxY = py + hh;
-  hot.active = true;
-}
-
-void CollisionManager::updateKinematicBatch(
-    const std::vector<KinematicUpdate>& updates) {
-  for (const auto& kinUpdate : updates) {
-    applyKinematicUpdate(kinUpdate);
-  }
-}
-
-void CollisionManager::applyBatchedKinematicUpdates(
-    const std::vector<std::vector<KinematicUpdate>>& batchUpdates) {
-  // PER-BATCH COLLISION UPDATES: Zero contention approach
-  // Each AI batch has its own buffer, we merge them here with no mutex needed.
-  for (const auto& batch : batchUpdates) {
-    for (const auto& kinUpdate : batch) {
-      applyKinematicUpdate(kinUpdate);
-    }
-  }
-}
-
-void CollisionManager::applyKinematicUpdates(
-    const std::vector<KinematicUpdate>& updates) {
-  // Apply updates directly - no wrapper allocation needed
-  for (const auto& kinUpdate : updates) {
-    applyKinematicUpdate(kinUpdate);
-  }
 }
 
 // ========== SOA BODY MANAGEMENT METHODS ==========

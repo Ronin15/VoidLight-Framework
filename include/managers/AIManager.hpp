@@ -242,18 +242,6 @@ public:
   // Thread-safe assignment tracking (atomic counter only)
   size_t getTotalAssignmentCount() const;
 
-  /**
-   * @brief Get direct access to PathfinderManager for optimal pathfinding
-   * performance
-   * @return Reference to PathfinderManager instance
-   * @details Provides access to centralized pathfinding service for all AI
-   * entities
-   *
-   * All pathfinding functionality has been moved to PathfinderManager.
-   * Use PathfinderManager::Instance() to access pathfinding services.
-   */
-  PathfinderManager &getPathfinderManager() const;
-
 private:
   AIManager() = default;
   ~AIManager();
@@ -318,12 +306,14 @@ private:
 
   // Pre-allocated per-batch event buffers (avoids per-frame allocation in threaded path)
   std::vector<std::vector<EventManager::DeferredEvent>> m_batchEventBuffers;
+  std::vector<std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>> m_batchMessageBuffers;
 
   // Reusable buffer for collecting damage events from batch futures
   std::vector<EventManager::DeferredEvent> m_allDamageEvents;
 
   // Reusable buffer for single-threaded path deferred events (avoids per-call allocation)
   std::vector<EventManager::DeferredEvent> m_singleBatchEvents;
+  std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> m_singleBatchMessages;
 
   // Per-batch knockback-expiry queues. Workers enqueue edmIdx when framesRemaining
   // hits zero; main thread drains after futures join. Keeps SparseSidecar::remove()
@@ -367,7 +357,8 @@ private:
 
   // Process batch of Active tier entities using EDM indices directly.
   // Runs emotional decay and behavior dispatch in a single fused pass.
-  // Collects deferred events from this batch's thread-local buffer into outEvents.
+  // Collects deferred events and behavior messages from this batch's
+  // thread-local buffers into outEvents / outMessages.
   void processBatch(const std::vector<size_t>& activeIndices,
                     size_t start, size_t end,
                     float deltaTime,
@@ -376,7 +367,8 @@ private:
                     const Vector2D& playerVel, bool playerValid,
                     float gameTime,
                     std::vector<EventManager::DeferredEvent>& outEvents,
-                    std::vector<uint32_t>& outKnockbackClears);
+                    std::vector<uint32_t>& outKnockbackClears,
+                    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages);
 
   // Shutdown state
   bool m_isShutdown{false};

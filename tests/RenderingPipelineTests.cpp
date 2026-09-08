@@ -268,7 +268,7 @@ BOOST_AUTO_TEST_CASE(TestLoadingStateAsyncPattern) {
 BOOST_AUTO_TEST_CASE(TestLoadingStateRenderPattern) {
     const std::string loadingStateFile = sourcePath("src/gameStates/LoadingState.cpp");
 
-    BOOST_CHECK(fileContainsPattern(loadingStateFile, "LoadingState::recordGPUVertices"));
+    BOOST_CHECK(fileContainsPattern(loadingStateFile, "LoadingState::recordGPUUIVertices"));
     BOOST_CHECK(fileContainsPattern(loadingStateFile, "LoadingState::renderGPUUI"));
     BOOST_CHECK(fileContainsPattern(loadingStateFile, "UIManager::Instance()"));
     BOOST_CHECK(!fileContainsPattern(loadingStateFile, "SDL_RenderPresent"));
@@ -308,11 +308,13 @@ BOOST_AUTO_TEST_CASE(TestGameEngineCallsGameStateManager) {
 BOOST_AUTO_TEST_CASE(TestGameStateManagerCallsGameState) {
     const std::string gsmFile = sourcePath("src/managers/GameStateManager.cpp");
 
-    bool callsRecord = fileContainsPattern(gsmFile, "->recordGPUVertices(");
+    bool callsSceneRecord = fileContainsPattern(gsmFile, "->recordGPUSceneVertices(");
+    bool callsUIRecord = fileContainsPattern(gsmFile, "->recordGPUUIVertices(");
     bool callsScene = fileContainsPattern(gsmFile, "->renderGPUScene(");
     bool callsUI = fileContainsPattern(gsmFile, "->renderGPUUI(");
 
-    BOOST_CHECK_MESSAGE(callsRecord, "GameStateManager must call GameState::recordGPUVertices()");
+    BOOST_CHECK_MESSAGE(callsSceneRecord, "GameStateManager must call GameState::recordGPUSceneVertices()");
+    BOOST_CHECK_MESSAGE(callsUIRecord, "GameStateManager must call GameState::recordGPUUIVertices()");
     BOOST_CHECK_MESSAGE(callsScene, "GameStateManager must call GameState::renderGPUScene()");
     BOOST_CHECK_MESSAGE(callsUI, "GameStateManager must call GameState::renderGPUUI()");
 }
@@ -349,7 +351,8 @@ BOOST_AUTO_TEST_CASE(TestCompleteRenderingFlow) {
 
     bool foundStateRender = false;
     for (const auto& file : gameStateFiles) {
-        if (fileContainsPattern(file, "::recordGPUVertices(") ||
+        if (fileContainsPattern(file, "::recordGPUSceneVertices(") ||
+            fileContainsPattern(file, "::recordGPUUIVertices(") ||
             fileContainsPattern(file, "::renderGPUScene(") ||
             fileContainsPattern(file, "::renderGPUUI(")) {
             foundStateRender = true;

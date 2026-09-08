@@ -5,7 +5,7 @@
 Analysis of SDL3 VoidLight-Framework's current capabilities and recommendations for supporting emergent gameplay systems.
 
 **Date**: January 2026
-**Status**: Analysis Complete
+**Status**: Analysis Complete — not a runtime contract. Durable architecture lives in `AGENTS.md` and subsystem docs.
 
 ---
 

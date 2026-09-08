@@ -465,4 +465,21 @@ BOOST_AUTO_TEST_CASE(StaleCompletionFilteringStressLoop) {
     }
 }
 
+BOOST_AUTO_TEST_CASE(TestGridDroppedOnPrepareForStateTransition) {
+    auto& pm = PathfinderManager::Instance();
+    auto& cm = CollisionManager::Instance();
+
+    BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
+                          "Expected active world for grid rebuild");
+    cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
+    pm.rebuildGrid(false);
+
+    BOOST_REQUIRE_MESSAGE(waitForGridReady(pm),
+                          "Expected grid rebuild to complete before transition");
+    BOOST_REQUIRE(pm.isGridReady());
+
+    pm.prepareForStateTransition();
+    BOOST_CHECK(!pm.isGridReady());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

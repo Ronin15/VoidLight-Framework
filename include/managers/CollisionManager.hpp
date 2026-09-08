@@ -58,25 +58,10 @@ public:
      * State transition cleanup can discard or outrun deferred WorldUnloadedEvent delivery.
      * Collision storage must not depend on later world-event timing.
      *
-     * Previous "smart" logic tried to keep static bodies when a world was active, expecting
-     * WorldUnloadedEvent to clean them up. This was BROKEN because:
-     * 1. WorldUnloadedEvent is deferred
-     * 2. State cleanup can clear pending deferred events before delivery
-     * 3. Static bodies from old world persist into new world
-     *
-     * CONSEQUENCES OF NOT CLEARING ALL BODIES:
-     * - Duplicate/stale collision bodies across state transitions
-     * - Spatial hash corruption (bodies from multiple worlds in same hash)
-     * - Collision detection failures (entities colliding with phantom geometry)
-     * - Memory leaks (bodies never cleaned up)
-     *
-     * CORRECT BEHAVIOR:
-     * Always clear ALL bodies. The world will be unloaded immediately after state transition,
-     * and the new state will rebuild static bodies when it loads its world via WorldLoadedEvent.
-     *
-     * @note This is called automatically by GameStateManager before state transitions
-     * @note Persistent manager event handlers stay registered across transitions
-     * @see GameStateManager::changeState()
+     * Always clear ALL bodies on transition. WorldUnloaded is Immediate, but
+     * bodies are owned by this prepare call, not by the unload handler.
+     * AI-heavy states call this from exit(); GameStateManager does not.
+     * Persistent world handlers stay registered.
      */
     void prepareForStateTransition();
 
@@ -110,24 +95,6 @@ public:
 
     // Tick: run collision detection/resolution only (no movement integration)
     void update(float dt);
-
-
-    // Batch updates for performance optimization (AI entities)
-    struct KinematicUpdate {
-        EntityID id;
-        Vector2D position;
-        Vector2D velocity;
-
-        KinematicUpdate(EntityID entityId, const Vector2D& pos, const Vector2D& vel = Vector2D(0, 0))
-            : id(entityId), position(pos), velocity(vel) {}
-    };
-    void updateKinematicBatch(const std::vector<KinematicUpdate>& updates);
-
-    // Per-batch collision updates (zero contention - each AI batch has its own buffer)
-    void applyBatchedKinematicUpdates(const std::vector<std::vector<KinematicUpdate>>& batchUpdates);
-
-    // Single-vector overload for non-batched updates (convenience wrapper)
-    void applyKinematicUpdates(const std::vector<KinematicUpdate>& updates);
 
     // Convenience methods for triggers
     // Routes through EDM::createTrigger() for single source of truth
@@ -289,12 +256,6 @@ private:
 
     // Internal helper methods for SOA buffer management
     void prepareCollisionPools(size_t bodyCount, size_t threadCount);
-
-    // Apply pending kinematic updates from async AI threads (called at start of update)
-    void applyPendingKinematicUpdates();
-
-    // Helper: Apply a single kinematic update to EDM and cached AABB
-    void applyKinematicUpdate(const KinematicUpdate& kinematicUpdate);
 
     // Spatial hash optimization methods
     void rebuildStaticSpatialHash();

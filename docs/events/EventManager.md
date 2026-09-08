@@ -56,17 +56,33 @@ eventMgr.clean();
 
 ### Handler Registration
 
+Two lifetimes. Token overloads are the real teardown API (`HandlerToken { typeId, id }`). `removeHandler` takes the token only — not `(EventTypeId, uint64_t)`.
+
 ```cpp
+// Manager infrastructure — register in init(), survives transitions.
+auto persistent = eventMgr.registerPersistentHandlerWithToken(
+    EventTypeId::World,
+    [](const EventData& data) { /* ... */ });
+
+// State / controller subscriptions — register in enter(), cleared on transition.
 auto token = eventMgr.registerHandlerWithToken(
     EventTypeId::ResourceChange,
     [](const EventData& data) {
         // Inspect data.event here
     });
 
-eventMgr.removeHandler(EventTypeId::ResourceChange, token);
+eventMgr.removeHandler(token);   // works for persistent and transient
 ```
 
-Use `registerHandlerWithToken()` for state-owned subscriptions. `ControllerBase` and GameStates should store and remove tokens during teardown.
+| API | Lifetime | Who |
+|-----|----------|-----|
+| `registerPersistentHandler[WithToken]` | Survives `prepareForStateTransition()` / `clearTransientHandlers()` | Managers in `init()` (Collision/Pathfinder world events, AI combat, TileRenderer season, …) |
+| `registerHandler[WithToken]` | Transient — `clearTransientHandlers()` | GameStates and controllers in `enter()` |
+| `clearTransientHandlers()` | Called from `EventManager::prepareForStateTransition()` | State teardown |
+| `clearAllHandlers()` | Persistent **and** transient | Shutdown only (`clean()`). Do not use on transitions. |
+| `removeHandlers(EventTypeId)` | Wipes **both** lifetimes for that type | Shutdown-grade; not a transition API |
+
+Do **not** unsubscribe and re-subscribe persistent manager handlers across transitions. Non-token `registerHandler` is fire-and-forget (tests/benchmarks).
 
 ### Deferred Batch Enqueue
 
@@ -145,6 +161,8 @@ EventManager::Instance().spawnMerchant(
 
 Immediate combat events follow the same processing order synchronously. Deferred combat events may use WorkerBudget-guided parallel preparation before their main-thread commit step.
 
+Production combat traffic uses `acquireDamageEvent()`, then `configure(...)`, then `dispatchEvent(...)`. There is no no-arg `triggerDamage` stub.
+
 ## Common Patterns
 
 ### State-scoped subscription
@@ -159,7 +177,7 @@ void SomeState::registerEventHandlers() {
 
 void SomeState::unregisterEventHandlers() {
     auto& eventMgr = EventManager::Instance();
-    eventMgr.removeHandler(EventTypeId::ResourceChange, m_resourceToken);
+    eventMgr.removeHandler(m_resourceToken);
 }
 ```
 
@@ -195,5 +213,4 @@ This prevents stale handler callbacks from firing during shutdown.
 
 - [EventManager Quick Reference](EventManager_QuickReference.md)
 - [EventManager Advanced](EventManager_Advanced.md)
-- [EventFactory](EventFactory.md)
 - [AI Execution Pipeline](../ai/BehaviorExecutionPipeline.md)

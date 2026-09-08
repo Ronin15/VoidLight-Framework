@@ -15,12 +15,15 @@
 #include "core/GameEngine.hpp"
 #include "core/ThreadSystem.hpp"
 #include "managers/CollisionManager.hpp"
+#include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameStateManager.hpp"
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
+#include "managers/WorldResourceManager.hpp"
 
 namespace {
 
@@ -177,6 +180,66 @@ BOOST_AUTO_TEST_CASE(TestEnterFailsWhenUnconfigured) {
     LoadingState loadingState;
 
     BOOST_CHECK(!loadingState.enter());
+}
+
+BOOST_AUTO_TEST_CASE(TestAbandonedExitUnloadsWorld) {
+    TestMainMenuState::reset();
+
+    BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
+    BOOST_REQUIRE(EventManager::Instance().init());
+    BOOST_REQUIRE(GameTimeManager::Instance().init());
+    BOOST_REQUIRE(UIManager::Instance().init());
+    BOOST_REQUIRE(EntityDataManager::Instance().init());
+    BOOST_REQUIRE(WorldResourceManager::Instance().init());
+    BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+    BOOST_REQUIRE(PathfinderManager::Instance().init());
+    BOOST_REQUIRE(WorldManager::Instance().init());
+
+    VoidLight::WorldGenerationConfig config{};
+    config.width = 4;
+    config.height = 4;
+    config.seed = 2026;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.3f;
+    config.mountainLevel = 0.7f;
+
+    GameStateManager stateManager;
+    auto loadingState = std::make_unique<LoadingState>();
+    auto* loadingStatePtr = loadingState.get();
+    stateManager.addState(std::move(loadingState));
+    stateManager.addState(std::make_unique<TestMainMenuState>());
+
+    loadingStatePtr->configure(GameStateId::MAIN_MENU, config);
+    stateManager.pushState(GameStateId::LOADING);
+
+    bool worldLoaded = false;
+    for (int i = 0; i < 200 && !worldLoaded; ++i) {
+        EventManager::Instance().update();
+        worldLoaded = WorldManager::Instance().hasActiveWorld();
+        if (!worldLoaded) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    BOOST_REQUIRE(worldLoaded);
+    BOOST_CHECK(!TestMainMenuState::entered());
+
+    stateManager.clearAllStates();
+    BOOST_CHECK(!WorldManager::Instance().hasActiveWorld());
+    BOOST_CHECK(!TestMainMenuState::entered());
+
+    WorldManager::Instance().clean();
+    PathfinderManager::Instance().clean();
+    CollisionManager::Instance().clean();
+    ResourceTemplateManager::Instance().clean();
+    WorldResourceManager::Instance().clean();
+    EntityDataManager::Instance().clean();
+    GameEngine::Instance().setGlobalPause(false);
+    GameTimeManager::Instance().setGlobalPause(false);
+    UIManager::Instance().prepareForStateTransition();
+    EventManager::Instance().clean();
 }
 
 BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {

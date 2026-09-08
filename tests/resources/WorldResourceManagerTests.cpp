@@ -328,7 +328,7 @@ BOOST_AUTO_TEST_CASE(TestHarvestableRegistration) {
   BOOST_REQUIRE(edmIndex != SIZE_MAX);
 
   // Register with world
-  worldManager->registerHarvestable(edmIndex, worldId);
+  worldManager->registerHarvestable(edmIndex, pos, worldId);
   BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(worldId), 1);
 
   // Query harvestable total (should return yieldMax for non-depleted)
@@ -361,7 +361,7 @@ BOOST_AUTO_TEST_CASE(TestCombinedInventoryAndHarvestableQuery) {
       pos, oreHandle, 5, 10, 60.0f);
   BOOST_REQUIRE(harvHandle.isValid());
   size_t harvIndex = entityDataManager->getIndex(harvHandle);
-  worldManager->registerHarvestable(harvIndex, worldId);
+  worldManager->registerHarvestable(harvIndex, pos, worldId);
 
   // Query inventory total only
   auto invTotal = worldManager->queryInventoryTotal(worldId, oreHandle);

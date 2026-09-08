@@ -24,11 +24,9 @@ class GameOverState : public GameState {
   // this value.
   void setReturnState(GameStateId state) { m_returnState = state; }
 
-  void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                         float interpolationAlpha) override;
+  void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
   void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
                    SDL_GPURenderPass* swapchainPass) override;
-  bool supportsGPURendering() const override { return true; }
 
  private:
   // Retry destination — set via setReturnState() by the state that routed

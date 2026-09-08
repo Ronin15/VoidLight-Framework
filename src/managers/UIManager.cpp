@@ -163,7 +163,7 @@ void UIManager::clean() {
   }
   
   // Perform comprehensive cleanup to clear all cached textures
-  cleanupForStateTransition();
+  prepareForStateTransition();
   
   // Mark as shutdown
   m_isShutdown = true;
@@ -675,14 +675,6 @@ void UIManager::setText(const std::string &id, const std::string &text) {
   }
 }
 
-void UIManager::setTexture(const std::string &id,
-                           const std::string &textureID) {
-  auto component = getComponent(id);
-  if (component) {
-    component->m_textureID = textureID;
-  }
-}
-
 void UIManager::setImageSource(const std::string &id,
                                const TextureSource &source) {
   auto component = getComponent(id);
@@ -1163,16 +1155,6 @@ void UIManager::addListItemWithAutoScroll(const std::string &listID,
 
     // Trigger auto-sizing to accommodate new content
     calculateOptimalSize(component);
-  }
-}
-
-void UIManager::clearListItems(const std::string &listID) {
-
-  auto component = getComponent(listID);
-  if (component && component->m_type == UIComponentType::LIST) {
-    component->m_listItems.clear();
-    component->m_listItemsDirty = true;
-    component->m_selectedIndex = -1;
   }
 }
 
@@ -1841,7 +1823,7 @@ void UIManager::resetToDefaultTheme() {
   m_currentThemeMode = "dark";
 }
 
-void UIManager::cleanupForStateTransition() {
+void UIManager::prepareForStateTransition() {
   // Comprehensive cleanup for safe state transitions
 
   // Clear all UI components (reset binding count since we're clearing everything)
@@ -1894,11 +1876,6 @@ void UIManager::cleanupForStateTransition() {
   // persist across state transitions. Only init() and onWindowResize() modify it.
 
   UI_INFO("UIManager prepared for state transition");
-}
-
-void UIManager::prepareForStateTransition() {
-  // Simplified public interface that delegates to the comprehensive cleanup
-  cleanupForStateTransition();
 }
 
 void UIManager::applyThemeToComponent(const std::string &id,

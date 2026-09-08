@@ -349,6 +349,16 @@ void AIManager::update(float deltaTime) {
     // Apply worker-computed path completions before behavior reads PathData.
     PathfinderManager::Instance().commitCompletedPaths();
 
+    // Drain main-thread TLS (tests and any main-thread defer) into the bus
+    // before the pre-pass commit so messages queued before this update apply
+    // in the same frame's behavior execute.
+    m_singleBatchMessages.clear();
+    Behaviors::collectDeferredBehaviorMessages(m_singleBatchMessages);
+    for (const auto& msg : m_singleBatchMessages) {
+      VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
+          msg.targetHandle, msg.targetEdmIndex, msg.messageId, msg.param);
+    }
+
     // Commit queued cross-thread commands before reading per-entity behavior state.
     // Order matters: faction changes keep indices coherent before scans;
     // equipment swaps update current combat stats before attack configs are read;
@@ -465,16 +475,22 @@ void AIManager::update(float deltaTime) {
         // + behavior dispatch fused into the same loop inside processBatch.
         m_singleBatchEvents.clear();
         m_singleBatchKnockbackClears.clear();
+        m_singleBatchMessages.clear();
         processBatch(m_activeIndicesBuffer, 0, entityCount, deltaTime,
                      worldWidth, worldHeight, cachedPlayerHandle,
                      cachedPlayerPosition, cachedPlayerVelocity,
                      cachedPlayerValid, cachedGameTime,
                      m_singleBatchEvents,
-                     m_singleBatchKnockbackClears);
+                     m_singleBatchKnockbackClears,
+                     m_singleBatchMessages);
         if (!m_singleBatchEvents.empty()) {
             m_allDamageEvents.insert(m_allDamageEvents.end(),
                 std::make_move_iterator(m_singleBatchEvents.begin()),
                 std::make_move_iterator(m_singleBatchEvents.end()));
+        }
+        for (const auto& msg : m_singleBatchMessages) {
+            VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
+                msg.targetHandle, msg.targetEdmIndex, msg.messageId, msg.param);
         }
         totalBatchCount = 1;
     } else {
@@ -493,11 +509,15 @@ void AIManager::update(float deltaTime) {
         if (m_batchEventBuffers.size() < totalBatchCount) {
             m_batchEventBuffers.resize(totalBatchCount);
         }
+        if (m_batchMessageBuffers.size() < totalBatchCount) {
+            m_batchMessageBuffers.resize(totalBatchCount);
+        }
         if (m_batchKnockbackClears.size() < totalBatchCount) {
             m_batchKnockbackClears.resize(totalBatchCount);
         }
         for (size_t i = 0; i < totalBatchCount; ++i) {
             m_batchEventBuffers[i].clear();
+            m_batchMessageBuffers[i].clear();
             m_batchKnockbackClears[i].clear();
         }
 
@@ -517,7 +537,8 @@ void AIManager::update(float deltaTime) {
                                  cachedPlayerPosition, cachedPlayerVelocity,
                                  cachedPlayerValid, cachedGameTime,
                                  m_batchEventBuffers[i],
-                                 m_batchKnockbackClears[i]);
+                                 m_batchKnockbackClears[i],
+                                 m_batchMessageBuffers[i]);
                 },
                 VoidLight::TaskPriority::High, "AI_Batch"));
         }
@@ -533,6 +554,10 @@ void AIManager::update(float deltaTime) {
                 m_allDamageEvents.insert(m_allDamageEvents.end(),
                     std::make_move_iterator(m_batchEventBuffers[i].begin()),
                     std::make_move_iterator(m_batchEventBuffers[i].end()));
+            }
+            for (const auto& msg : m_batchMessageBuffers[i]) {
+                VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
+                    msg.targetHandle, msg.targetEdmIndex, msg.messageId, msg.param);
             }
         }
     }
@@ -1401,7 +1426,7 @@ void AIManager::commitQueuedRangedAttacks() {
 
     InventoryResourceChange ammoChange{};
     if (!edm.consumeRequiredAmmoForRangedAttack(cmd.attackerHandle,
-                                                &ammoChange)) {
+                                                ammoChange)) {
       const bool equippedFallback =
           equipFirstAvailableMeleeWeapon(edm, cmd.attackerHandle);
       VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
@@ -1654,7 +1679,8 @@ void AIManager::processBatch(
                              const Vector2D &playerVel, bool playerValid,
                              float gameTime,
                              std::vector<EventManager::DeferredEvent> &outEvents,
-                             std::vector<uint32_t> &outKnockbackClears) {
+                             std::vector<uint32_t> &outKnockbackClears,
+                             std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> &outMessages) {
   // Process batch of Active tier entities using EDM indices directly.
   // Emotional decay and behavior dispatch are fused into a single pass so Debug
   // builds touch each entity's hot data once per frame.
@@ -1961,6 +1987,7 @@ void AIManager::processBatch(
 
   // Collect deferred events from this batch's thread-local buffers into caller's vector
   Behaviors::collectDeferredDamageEvents(outEvents);
+  Behaviors::collectDeferredBehaviorMessages(outMessages);
 }
 
 int AIManager::getEntityPriority(EntityHandle handle) const {
@@ -1992,8 +2019,4 @@ AIManager::~AIManager() {
   if (!m_isShutdown) {
     clean();
   }
-}
-
-PathfinderManager &AIManager::getPathfinderManager() const {
-  return PathfinderManager::Instance();
 }

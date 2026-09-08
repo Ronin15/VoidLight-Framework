@@ -41,16 +41,9 @@ Entities in the Background tier receive reduced simulation:
 
 **What Background Entities Do**:
 ```cpp
-// Simplified Background tier update
-void BackgroundSimulationManager::processBackgroundEntity(size_t edmIndex, float dt) {
-    auto& edm = EntityDataManager::Instance();
-    auto& transform = edm.getTransformByIndex(edmIndex);
-
-    // Simple position integration (no AI, no collision)
-    transform.position += transform.velocity * dt;
-
-    // Optional: Apply simple world bounds clamping
-}
+// Simplified Background tier update (simulateNPC)
+void BackgroundSimulationManager::simulateNPC(float dt, size_t index);
+// Position integration + 0.98 velocity decay at 10 Hz. No AI, no collision.
 ```
 
 ### Hibernated Tier

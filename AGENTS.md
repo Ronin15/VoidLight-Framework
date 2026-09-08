@@ -166,13 +166,13 @@ See `tests/TESTING.md` for broader test documentation.
 
 ### EDM, AI, and Controllers
 
-- `EntityDataManager` is storage only. AI decision logic belongs in `Behaviors::` and `BehaviorExecutors`.
+- `EntityDataManager` is storage only for AI *decision* math. `createNPCWithRaceClass` still auto-registers `classes.json` suggestedBehavior via `AIManager::registerEntity`; do not add more policy there.
 - `EDM::recordCombatEvent()` records stats and memory only; emotion math belongs outside EDM in AI/behavior code.
 - Witnessed combat/death memories are behavior-consumed state; EDM stores memory records only.
 - `AIManager::update()` commits command-bus changes and caches world/player data on the main thread before worker batches; behavior execution and emotional decay run in the AI batch path.
 - Cross-frame state such as paths and timers belongs in EDM, not local temporaries.
 - Controllers must never mutate AI behavior state directly in EDM.
-- Use `Behaviors::queueBehaviorMessage()` from the main thread and `Behaviors::deferBehaviorMessage()` from worker threads.
+- Use `Behaviors::queueBehaviorMessage()` from the main thread and `Behaviors::deferBehaviorMessage()` from worker threads. Worker defer writes a thread-local buffer; `AIManager` collects it after each batch (same pattern as `collectDeferredDamageEvents`).
 - `Behaviors::switchBehavior()` enqueues behavior transitions. `AIManager::commitQueuedBehaviorTransitions()` clears behavior data before `init()`; set new behavior state after the transition commit, not before.
 - EDM render data stores atlas coordinates and frame metadata, not texture ownership. Resolve manager-owned GPU textures at render submission and call `.get()` only at the final GPU API boundary.
 
@@ -192,7 +192,7 @@ See `tests/TESTING.md` for broader test documentation.
 ### Rendering, UI, and GameState
 
 - Exactly one present per frame. `GameEngine::render()` performs scene and UI rendering; `GameEngine::present()` performs the actual present. Never clear, end, submit command buffers, or present inside a game state.
-- GPU flow is `beginFrame()`, state `recordGPUVertices()`, scene pass, composite to swapchain, UI pass, then `endFrame()` from `GameEngine::present()`. States implement `recordGPUVertices()`, `renderGPUScene()`, and `renderGPUUI()`.
+- GPU flow is `beginFrame()`, `GameStateManager::recordGPUVertices()` (scene from highest `hasGPUScene()`, UI from stack top), scene pass, composite to swapchain, UI pass, then `endFrame()` from `GameEngine::present()`. States implement `recordGPUSceneVertices()` / `recordGPUUIVertices()`, `renderGPUScene()`, and `renderGPUUI()`.
 - GPU scene textures stay at viewport dimensions. Zoom and sub-pixel offset belong in the composite shader, not tile scaling.
 - GPU atlas interpretation is authoritative for atlas-backed EDM render data.
 - For SDL3 GPU UI text, use `TTF_GetGPUTextDrawData()` only. Do not add UV flips, half-texel offsets, or shader hacks. Snap integer UI text placement to whole pixels before emitting vertices.

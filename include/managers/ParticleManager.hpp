@@ -132,30 +132,6 @@ struct ParticleEmitterConfig {
   float bounceDamping{0.8f};   // Collision bounce damping
 };
 
-struct ParticleEffectDefinition;
-
-// Helper methods for enum-based classification system
-ParticleEffectType weatherStringToEnum(const std::string &weatherType,
-                                       float intensity);
-std::string_view effectTypeToString(ParticleEffectType type);
-
-// Built-in effect creation helpers
-ParticleEffectDefinition createRainEffect();
-ParticleEffectDefinition createHeavyRainEffect();
-ParticleEffectDefinition createSnowEffect();
-ParticleEffectDefinition createHeavySnowEffect();
-ParticleEffectDefinition createFogEffect();
-ParticleEffectDefinition createCloudyEffect();
-ParticleEffectDefinition createFireEffect();
-ParticleEffectDefinition createSmokeEffect();
-ParticleEffectDefinition createSparksEffect();
-ParticleEffectDefinition createMagicEffect();
-ParticleEffectDefinition createWindyEffect();
-ParticleEffectDefinition createWindyDustEffect();
-ParticleEffectDefinition createWindyStormEffect();
-ParticleEffectDefinition createAmbientDustEffect();
-ParticleEffectDefinition createAmbientFireflyEffect();
-
 struct UnifiedParticle {
   // All particle data in one structure - no synchronization issues
   Vector2D position;
@@ -535,46 +511,6 @@ public:
   )
 
   /**
-   * @brief Enables WorkerBudget-aware threading with intelligent resource
-   * allocation
-   * @param enable Whether to enable WorkerBudget integration
-   *
-   * WorkerBudget integration provides coordinated thread allocation across all
-   * engine subsystems (AI, Particles, Events, etc.) following the engine's
-   * architectural patterns. When enabled:
-   *
-   * - Uses VoidLight::calculateWorkerBudget() for fair thread distribution
-   * - Dynamically adjusts worker count based on workload and system pressure
-   * - Submits tasks via ThreadSystem::enqueueTaskWithResult() for proper
-   * scheduling
-   * - Monitors ThreadSystem queue pressure to prevent resource contention
-   * - Automatically falls back to single-threaded mode when appropriate
-   *
-   * This is the recommended threading mode for production use as it ensures
-   * the particle system cooperates well with other engine subsystems.
-   */
-  void enableWorkerBudgetThreading(bool enable);
-
-  /**
-   * @brief Updates particles using WorkerBudget-optimized batch processing
-   * @param deltaTime Time elapsed since last update
-   * @param traversedParticleCount Current sparse particle storage span
-   * @param activeParticleCount Current number of active particles used for WorkerBudget scheduling
-   * @param outThreadingInfo Output structure populated with threading decision details
-   *
-   * This method provides the WorkerBudget-aware update path, which:
-   * - Calculates optimal thread allocation using WorkerBudget system
-   * - Adjusts batch sizes based on ThreadSystem queue pressure
-   * - Falls back to single-threaded mode when WorkerBudget is disabled
-   * - Respects the threading threshold for efficient resource usage
-   *
-   * Called automatically by update() when WorkerBudget threading is enabled.
-   */
-  void updateWithWorkerBudget(float deltaTime, size_t traversedParticleCount,
-                              size_t activeParticleCount,
-                              ParticleThreadingInfo& outThreadingInfo);
-
-  /**
    * @brief Gets current performance statistics
    * @return Performance statistics structure
    */
@@ -838,13 +774,11 @@ private:
   std::atomic<bool> m_globallyPaused{false};
   std::atomic<bool> m_globallyVisible{true};
   VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
-  std::atomic<bool> m_useWorkerBudget{true};
   // Threading threshold now managed by WorkerBudget adaptive system
 
   // Active particle count — fetch_add/fetch_sub'd from concurrent updateParticleRange()
   // worker batches (ThreadSystem). Cache-line isolated to avoid false sharing with the
-  // read-mostly flags above (m_globallyPaused/m_globallyVisible/m_useThreading), which
-  // are read every frame in update().
+  // read-mostly flags above (m_globallyPaused/m_globallyVisible).
   alignas(64) std::atomic<size_t> m_activeCount{0};
 
   // Camera and culling
@@ -988,6 +922,9 @@ private:
   // precondition: caller holds m_effectsMutex (unique_lock)
   void compactInactiveEffectInstances();
   void updateEffectInstances(float deltaTime);
+  void updateWithWorkerBudget(float deltaTime, size_t traversedParticleCount,
+                              size_t activeParticleCount,
+                              ParticleThreadingInfo& outThreadingInfo);
   void updateParticlesThreaded(float deltaTime, size_t traversedParticleCount,
                                size_t activeParticleCount,
                                ParticleThreadingInfo& outThreadingInfo);

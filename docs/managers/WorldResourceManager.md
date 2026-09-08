@@ -50,15 +50,12 @@ clearSpatialDataForWorld(worldId);
 registerInventory(inventoryIndex, worldId);
 unregisterInventory(inventoryIndex);
 
-registerHarvestable(edmIndex, worldId);
+registerHarvestable(edmIndex, position, worldId);
 unregisterHarvestable(edmIndex);
 copyHarvestableIndices(worldId, out);  // snapshot static EDM indices; does not destroy
 
 registerDroppedItem(edmIndex, position, worldId);
 unregisterDroppedItem(edmIndex);
-
-registerHarvestableSpatial(edmIndex, position, worldId);
-unregisterHarvestableSpatial(edmIndex);
 
 registerContainerSpatial(edmIndex, position, worldId);
 unregisterContainerSpatial(edmIndex);
@@ -106,4 +103,4 @@ WRM should be described as a fast lookup/indexing layer:
 
 ## State Transition Notes
 
-Gameplay and AI-heavy states should call `prepareForStateTransition()` before destroying entities and world state. This aligns with the repository-wide teardown order documented in `AGENTS.md`.
+AI-heavy `exit()` unloads the world **before** WRM `prepareForStateTransition()` (GamePlay: destroy NPCs → AI/projectile/BSM/World prepare → `unloadWorld()` → then WRM prepare). WRM is an index; it is not cleared “before world teardown.” See `AGENTS.md` and `GamePlayState::exit()`.

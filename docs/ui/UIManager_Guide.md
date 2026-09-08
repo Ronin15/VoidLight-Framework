@@ -21,7 +21,7 @@ void SomeState::update(float dt) {
     ui.update(dt);
 }
 
-void SomeState::recordGPUVertices(VoidLight::GPURenderer& gpu, float) {
+void SomeState::recordGPUUIVertices(VoidLight::GPURenderer& gpu) {
     UIManager::Instance().recordGPUVertices(gpu);
 }
 

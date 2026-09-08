@@ -35,15 +35,15 @@ public:
   void resume() override;
   GameStateId getStateId() const override { return GameStateId::GAME_PLAY; }
 
-  // GPU rendering support
-  void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                         float interpolationAlpha) override;
+  bool hasGPUScene() const override { return true; }
+  void recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
+                              float interpolationAlpha) override;
+  void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
   void renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
                       SDL_GPURenderPass* scenePass,
                       float interpolationAlpha) override;
   void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
                    SDL_GPURenderPass* swapchainPass) override;
-  bool supportsGPURendering() const override { return true; }
 
 private:
   bool m_transitioningToLoading{

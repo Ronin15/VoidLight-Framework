@@ -44,7 +44,7 @@ This keeps `CollisionManager` agnostic of higher-layer managers while preserving
   - waits for any pending batch work to complete
   - destroys all active projectiles
   - clears transient state (destroy queues, futures, buffers) while preserving capacity
-  - keeps its collision handler registered (it is a persistent `EventManager` handler)
+  - keeps the CollisionManager projectile hit sink registered (`setProjectileHitSink` in `init()`, cleared in `clean()`). Hits are not EventManager collision handlers.
 
 ## Related Docs
 

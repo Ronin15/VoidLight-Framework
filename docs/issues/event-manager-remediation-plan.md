@@ -16,7 +16,7 @@ This plan intentionally separates:
 - **Handler fixes**: making subscribers conform to that contract
 - **Performance restoration**: reintroducing parallelism only where it is proven safe
 
-## Current Problems
+## Historical problems (resolved — do not copy into new work)
 
 ### 1. Deferred dispatch contract is underspecified
 

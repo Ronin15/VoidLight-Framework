@@ -1,6 +1,8 @@
 # EntityStateManager
 
-**Code:** `include/managers/EntityStateManager.hpp`, `src/managers/EntityStateManager.cpp`
+**Code:** `include/entities/EntityStateManager.hpp`, `src/entities/EntityStateManager.cpp`
+
+This is an entity utility, not a domain manager. The page lives under `docs/managers/` for historical layout only.
 
 ## Overview
 

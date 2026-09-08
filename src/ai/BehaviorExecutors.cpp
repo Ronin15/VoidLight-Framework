@@ -279,6 +279,11 @@ void queueBehaviorMessage(size_t edmIndex, uint8_t messageId, uint8_t param) {
         edm.getHandle(edmIndex), edmIndex, messageId, param);
 }
 
+namespace {
+thread_local std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>
+    t_deferredBehaviorMessages;
+} // namespace
+
 void clearPendingMessages(size_t edmIndex) {
     auto& edm = EntityDataManager::Instance();
     VoidLight::AICommandBus::Instance().clearBehaviorMessages(
@@ -330,8 +335,16 @@ bool getCachedWorldBounds(float& minX, float& minY, float& maxX, float& maxY) {
 
 void deferBehaviorMessage(size_t targetEdmIndex, uint8_t messageId, uint8_t param) {
     auto& edm = EntityDataManager::Instance();
-    VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
-        edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param);
+    t_deferredBehaviorMessages.push_back({
+        edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param, 0});
+}
+
+void collectDeferredBehaviorMessages(
+    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& out) {
+    out.insert(out.end(),
+               std::make_move_iterator(t_deferredBehaviorMessages.begin()),
+               std::make_move_iterator(t_deferredBehaviorMessages.end()));
+    t_deferredBehaviorMessages.clear();
 }
 
 } // namespace Behaviors

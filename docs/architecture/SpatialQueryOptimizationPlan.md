@@ -5,7 +5,7 @@
 
 # Spatial Query Optimization Plan
 
-**Status:** Design Phase - Future Implementation
+**Status:** Design Phase — Future Implementation. Not current architecture. Do not implement from this document unless a numbered slice adopts it.
 **Created:** 2025-11-16
 **Expected Benefit:** 15-25% reduction in spatial query overhead
 **Risk Level:** Medium (requires refactoring AIManager and CollisionManager)

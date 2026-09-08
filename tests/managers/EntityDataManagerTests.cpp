@@ -1602,7 +1602,7 @@ BOOST_AUTO_TEST_CASE(TestRangedWeaponConsumesCompatibleAmmunition) {
     BOOST_CHECK_CLOSE(edm->getCharacterData(player).projectileSpeed, 300.0f, 0.001f);
 
     InventoryResourceChange ammoChange{};
-    BOOST_CHECK(edm->consumeRequiredAmmoForRangedAttack(player, &ammoChange));
+    BOOST_CHECK(edm->consumeRequiredAmmoForRangedAttack(player, ammoChange));
     BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, arrows), 1);
     BOOST_CHECK(ammoChange.resourceHandle == arrows);
     BOOST_CHECK_EQUAL(ammoChange.oldQuantity, 2);
@@ -1624,7 +1624,7 @@ BOOST_AUTO_TEST_CASE(TestRangedWeaponWithoutAmmoDoesNotConsumeInventory) {
 
     BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
     InventoryResourceChange ammoChange{};
-    BOOST_CHECK(!edm->consumeRequiredAmmoForRangedAttack(player, &ammoChange));
+    BOOST_CHECK(!edm->consumeRequiredAmmoForRangedAttack(player, ammoChange));
 
     BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
                       CharacterData::CombatStyle::Ranged);

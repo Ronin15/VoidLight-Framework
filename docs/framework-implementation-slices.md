@@ -385,7 +385,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `social_controller_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slice 2. Scheduled after Slice 4.
+Status: Partial — stance table, `setStance` / `worsenStance`, and combat/theft writes are in production (`AIManager.cpp`, `SocialController.cpp`). Remaining: Hostile engagement without `faction == 1` hardcoding (Guard/Attack still have id checks), territory query, and slice review. Do not treat this slice as unimplemented work.
 
 ## Slice 6: Survival and resource AI
 
@@ -476,7 +476,7 @@ Goal: GamePlayState shows a gameplay minimap: local area, discovery grid, player
 Current foundation:
 
 - Slice 1: `HudController::initializeActionHUD`, `setVisible`, public `hud_*` ids. Session chrome stays on `GamePlayState`. Do not kitchen-sink unrelated widgets into the action HUD.
-- OverlayDemo has demo-only `overlay_demo_minimap_panel`. `docs/ui/Minimap_Implementation.md` is an old widget-in-UIManager plan — do not implement that document’s ownership.
+- OverlayDemo was removed in Slice 1. `docs/ui/Minimap_Implementation.md` is a superseded widget-in-UIManager plan — do not implement that document’s ownership.
 - Slice 2 settlements (query by worldId). Slice 5 faction for optional dot color.
 - `SaveGameManager` (`docs/managers/SaveGameManager.md`) is player-slot binary (`FORGESAVE`); it has **no** world blob today. Discovery that dies on process exit is not this slice’s done state.
 - `TILE_SIZE = 32`. Production world 200×200 tiles.

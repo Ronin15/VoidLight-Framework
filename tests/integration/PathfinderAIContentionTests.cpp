@@ -11,9 +11,13 @@
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/WorldManager.hpp"
+#include "managers/WorldResourceManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Vector2D.hpp"
+#include "world/WorldData.hpp"
 #include <chrono>
 #include <thread>
 #include <atomic>
@@ -54,12 +58,35 @@ BOOST_AUTO_TEST_SUITE(PathfinderAIContentionTestSuite)
 
 struct ContentionFixture {
     ContentionFixture() {
-        BOOST_REQUIRE(EntityDataManager::Instance().init());
         BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+        BOOST_REQUIRE(EntityDataManager::Instance().init());
+        BOOST_REQUIRE(WorldManager::Instance().init());
         BOOST_REQUIRE(CollisionManager::Instance().init());
         BOOST_REQUIRE(PathfinderManager::Instance().init());
         PathfinderManager::Instance().resetStats();
         BOOST_REQUIRE(AIManager::Instance().init());
+
+        WorldGenerationConfig worldConfig{};
+        worldConfig.width = 20;
+        worldConfig.height = 20;
+        worldConfig.seed = 20260305;
+        worldConfig.elevationFrequency = 0.1f;
+        worldConfig.humidityFrequency = 0.1f;
+        worldConfig.waterLevel = 0.3f;
+        worldConfig.mountainLevel = 0.7f;
+        BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
+        EventManager::Instance().update();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        EventManager::Instance().update();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+        while (std::chrono::steady_clock::now() < deadline &&
+               !PathfinderManager::Instance().isGridReady()) {
+            PathfinderManager::Instance().update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        BOOST_REQUIRE(PathfinderManager::Instance().isGridReady());
     }
 
     ~ContentionFixture() {
@@ -72,8 +99,11 @@ struct ContentionFixture {
         AIManager::Instance().clean();
         PathfinderManager::Instance().clean();
         CollisionManager::Instance().clean();
-        EventManager::Instance().clean();
+        WorldManager::Instance().clean();
         EntityDataManager::Instance().clean();
+        ResourceTemplateManager::Instance().clean();
+        WorldResourceManager::Instance().clean();
+        EventManager::Instance().clean();
     }
 
     void createIdleNPCs(size_t count) {
@@ -90,6 +120,33 @@ struct ContentionFixture {
     }
 
     std::vector<EntityHandle> m_handles;
+
+    void requestPathsOnNpcs(const Vector2D& startBase, const Vector2D& goalBase, float startStep) {
+        auto& edm = EntityDataManager::Instance();
+        auto& pm = PathfinderManager::Instance();
+        for (size_t i = 0; i < m_handles.size(); ++i) {
+            const size_t idx = edm.getIndex(m_handles[i]);
+            BOOST_REQUIRE(idx != SIZE_MAX);
+            Vector2D start(startBase.getX() + static_cast<float>(i) * startStep, startBase.getY());
+            Vector2D goal(goalBase.getX() + static_cast<float>(i) * startStep, goalBase.getY());
+            BOOST_CHECK_GT(pm.requestPathToEDM(
+                idx, start, goal, PathfinderManager::Priority::Normal), 0U);
+        }
+    }
+
+    bool allNpcPathsCommitted() const {
+        auto& edm = EntityDataManager::Instance();
+        for (const auto& handle : m_handles) {
+            const size_t idx = edm.getIndex(handle);
+            if (idx == SIZE_MAX || !edm.hasPathData(idx)) {
+                return false;
+            }
+            if (edm.getPathData(idx).pathRequestPending.load(std::memory_order_acquire) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 BOOST_AUTO_TEST_CASE(TestWorkerBudgetAllocation) {
@@ -112,125 +169,70 @@ BOOST_AUTO_TEST_CASE(TestWorkerBudgetAllocation) {
 
 BOOST_FIXTURE_TEST_CASE(TestSimultaneousAIAndPathfindingLoad, ContentionFixture) {
     createIdleNPCs(32);
-
-    const size_t pathRequests = 100;
-    std::atomic<size_t> pathsCompleted{0};
-
-    for (size_t i = 0; i < pathRequests; ++i) {
-        Vector2D start(200.0f + i * 5.0f, 200.0f);
-        Vector2D goal(800.0f + i * 5.0f, 800.0f);
-
-        PathfinderManager::Instance().requestPath(
-            static_cast<EntityID>(2000 + i),
-            start,
-            goal,
-            PathfinderManager::Priority::Normal,
-            [&pathsCompleted](EntityID, const std::vector<Vector2D>&) {
-                pathsCompleted.fetch_add(1, std::memory_order_relaxed);
-            }
-        );
-    }
+    requestPathsOnNpcs(Vector2D(200.0f, 200.0f), Vector2D(400.0f, 400.0f), 5.0f);
 
     const int numFrames = 10;
-
     for (int frame = 0; frame < numFrames; ++frame) {
         AIManager::Instance().update(0.016f);
         PathfinderManager::Instance().update();
+        PathfinderManager::Instance().commitCompletedPaths();
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
-    for (int i = 0; i < 40 && pathsCompleted.load() < pathRequests; ++i) {
+    for (int i = 0; i < 40 && !allNpcPathsCommitted(); ++i) {
         AIManager::Instance().update(0.016f);
         PathfinderManager::Instance().update();
+        PathfinderManager::Instance().commitCompletedPaths();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    BOOST_TEST_MESSAGE("Completed: " << pathsCompleted.load() << " / " << pathRequests);
-
-    BOOST_CHECK_EQUAL(pathsCompleted.load(), pathRequests);
+    BOOST_CHECK(allNpcPathsCommitted());
     BOOST_CHECK(AIManager::Instance().isInitialized());
     BOOST_CHECK(PathfinderManager::Instance().isInitialized());
 }
 
 BOOST_FIXTURE_TEST_CASE(TestNoWorkerStarvation, ContentionFixture) {
     createIdleNPCs(64);
-
-    const size_t burstRequests = 200;
-    std::atomic<size_t> pathsCompleted{0};
-
-    for (size_t i = 0; i < burstRequests; ++i) {
-        Vector2D start(100.0f, 100.0f + i);
-        Vector2D goal(500.0f, 500.0f + i);
-
-        PathfinderManager::Instance().requestPath(
-            static_cast<EntityID>(3000 + i),
-            start,
-            goal,
-            PathfinderManager::Priority::Normal,
-            [&pathsCompleted](EntityID, const std::vector<Vector2D>&) {
-                pathsCompleted.fetch_add(1, std::memory_order_relaxed);
-            }
-        );
-    }
+    requestPathsOnNpcs(Vector2D(100.0f, 100.0f), Vector2D(300.0f, 300.0f), 1.0f);
 
     const int stressFrames = 15;
-
     for (int frame = 0; frame < stressFrames; ++frame) {
         AIManager::Instance().update(0.016f);
         PathfinderManager::Instance().update();
+        PathfinderManager::Instance().commitCompletedPaths();
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
-    for (int i = 0; i < 60 && pathsCompleted.load() < burstRequests; ++i) {
+    for (int i = 0; i < 60 && !allNpcPathsCommitted(); ++i) {
         AIManager::Instance().update(0.016f);
         PathfinderManager::Instance().update();
+        PathfinderManager::Instance().commitCompletedPaths();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    BOOST_TEST_MESSAGE("Completed: " << pathsCompleted.load() << " / " << burstRequests);
-
-    BOOST_CHECK_EQUAL(pathsCompleted.load(), burstRequests);
+    BOOST_CHECK(allNpcPathsCommitted());
     BOOST_CHECK(AIManager::Instance().isInitialized());
 }
 
 BOOST_FIXTURE_TEST_CASE(TestQueuePressureCoordination, ContentionFixture) {
     createIdleNPCs(48);
-
-    const size_t pathRequests = 150;
-    std::atomic<size_t> pathsCompleted{0};
-
-    for (size_t i = 0; i < pathRequests; ++i) {
-        Vector2D start(150.0f, 150.0f + i * 2.0f);
-        Vector2D goal(600.0f, 600.0f + i * 2.0f);
-
-        PathfinderManager::Instance().requestPath(
-            static_cast<EntityID>(4000 + i),
-            start,
-            goal,
-            PathfinderManager::Priority::Normal,
-            [&pathsCompleted](EntityID, const std::vector<Vector2D>&) {
-                pathsCompleted.fetch_add(1, std::memory_order_relaxed);
-            }
-        );
-    }
+    requestPathsOnNpcs(Vector2D(150.0f, 150.0f), Vector2D(350.0f, 350.0f), 2.0f);
 
     for (int frame = 0; frame < 10; ++frame) {
         AIManager::Instance().update(0.016f);
         PathfinderManager::Instance().update();
+        PathfinderManager::Instance().commitCompletedPaths();
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
-    for (int i = 0; i < 50 && pathsCompleted.load() < pathRequests; ++i) {
+    for (int i = 0; i < 50 && !allNpcPathsCommitted(); ++i) {
         AIManager::Instance().update(0.016f);
         PathfinderManager::Instance().update();
+        PathfinderManager::Instance().commitCompletedPaths();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    BOOST_TEST_MESSAGE("Completed: " << pathsCompleted.load() << " / " << pathRequests);
-
-    BOOST_CHECK_EQUAL(pathsCompleted.load(), pathRequests);
-    const auto stats = PathfinderManager::Instance().getStats();
-    BOOST_CHECK_EQUAL(stats.totalRequests, static_cast<uint64_t>(pathRequests));
+    BOOST_CHECK(allNpcPathsCommitted());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

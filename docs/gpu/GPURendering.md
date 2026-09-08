@@ -4,7 +4,7 @@
 
 ## Overview
 
-The SDL3 GPU path is built around `GPURenderer` and a two-pass scene-plus-swapchain flow. Swapchain acquisition is explicit instead of hidden inside a monolithic frame begin.
+The SDL3 GPU path is built around `GPURenderer` and a two-pass scene-plus-swapchain flow. `GameEngine::render()` never calls `acquireSwapchainTexture()` itself; `GPURenderer::beginScenePass()` acquires on first use. See [ARCHITECTURE.md](../ARCHITECTURE.md) for the engine-owned pass order.
 
 ## Platform Shader Targets
 
@@ -22,32 +22,27 @@ Build-time shader tool requirements follow the same split:
 
 ## Frame Contract
 
-```cpp
-bool beginFrame();
-bool acquireSwapchainTexture();
-SDL_GPURenderPass* beginScenePass();
-SDL_GPURenderPass* beginSwapchainPass();
-void endFrame();
+Engine-visible sequence (`GameEngine::render` / `present`):
+
+```text
+beginFrame
+GSM.recordGPUVertices()  // scene: highest hasGPUScene(); UI: stack top
+beginScenePass           // acquires the swapchain texture on first use
+GSM.renderGPUScene()     // highest hasGPUScene()
+beginSwapchainPass
+renderComposite          // scene texture -> swapchain; zoom / sub-pixel here
+GSM.renderGPUUI()        // stack top
+endFrame                 // GameEngine::present()
 ```
 
-If `acquireSwapchainTexture()` fails, the engine can skip the presentable frame cleanly.
+`acquireSwapchainTexture()` is internal to `beginScenePass()`. If acquisition fails, that frame is skipped cleanly. States never `endFrame`, submit, or present.
 
 ## Pass Layout
 
-1. `beginFrame()`
-   - acquire command buffer
-   - map upload buffers
-   - begin copy/upload work
-2. `acquireSwapchainTexture()`
-   - acquire the current swapchain texture
-3. `beginScenePass()`
-   - render world content to the intermediate scene texture
-4. `beginSwapchainPass()`
-   - composite the scene texture
-   - render UI directly to the swapchain
-5. `endFrame()`
-   - close the active pass
-   - submit the command buffer
+1. `beginFrame()` — command buffer, map upload buffers, copy/upload work
+2. `beginScenePass()` — acquire swapchain, upload vertex pools, render world to the scene texture (`LOADOP_CLEAR`)
+3. `beginSwapchainPass()` — composite scene texture, then UI on the swapchain
+4. `endFrame()` — close the pass, submit (from `GameEngine::present()`)
 
 ## Important Branch Details
 
@@ -62,12 +57,13 @@ If `acquireSwapchainTexture()` fails, the engine can skip the presentable frame 
 
 ## GameState Integration
 
-GPU-capable states usually provide:
+GPU-capable states provide scene and/or UI hooks. `GameStateManager` records/renders **scene** from the highest stack state with `hasGPUScene()`, and **UI** from the top overlay:
 
 ```cpp
-recordGPUVertices(...)
+recordGPUSceneVertices(...)   // world / diorama
+recordGPUUIVertices(...)      // UIManager (and UI-only states)
 renderGPUScene(...)
 renderGPUUI(...)
 ```
 
-GameStates record and issue scene/UI work, but `GameEngine` and `GPURenderer` still own frame lifetime, swapchain lifetime, and presentation.
+GameStates record and issue scene/UI work, but `GameEngine` and `GPURenderer` still own frame lifetime, swapchain lifetime, and presentation. Overlay pause keeps the underneath world's scene; it does not skip `LOADOP_CLEAR` or present from the state.

@@ -94,9 +94,7 @@ bool GameOverState::exit() {
 }
 
 
-void GameOverState::recordGPUVertices(
-    VoidLight::GPURenderer& gpuRenderer,
-    float) {
+void GameOverState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
   auto& ui = UIManager::Instance();
   if (!ui.isShutdown()) {
     ui.recordGPUVertices(gpuRenderer);

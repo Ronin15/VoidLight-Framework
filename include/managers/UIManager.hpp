@@ -370,7 +370,6 @@ public:
 
   // Component property setters
   void setText(const std::string &id, const std::string &text);
-  void setTexture(const std::string &id, const std::string &textureID);
   void setImageSource(const std::string &id, const TextureSource &source);
   void setImageSourceRect(const std::string &id, const UIRect &sourceRect);
   void clearImageSourceRect(const std::string &id);
@@ -448,7 +447,6 @@ public:
   void setListMaxItems(const std::string &listID, int maxItems);
   void addListItemWithAutoScroll(const std::string &listID,
                                  const std::string &item);
-  void clearListItems(const std::string &listID);
 
   // Event log specific methods
   // Event log management
@@ -508,9 +506,6 @@ public:
   // Component cleanup utilities
   void removeComponentsWithPrefix(const std::string &prefix);
   void resetToDefaultTheme();
-  void cleanupForStateTransition();
-
-  // Simplified state transition method
   void prepareForStateTransition();
 
   // Auto-sizing core methods

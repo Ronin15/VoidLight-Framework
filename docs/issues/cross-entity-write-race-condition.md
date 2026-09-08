@@ -1,6 +1,6 @@
 # Cross-Entity Write Race Condition in AttackBehavior
 
-**Status:** Resolved — verified against current code 2026-07-03
+**Status:** Resolved — verified against current code 2026-07-03. Historical; do not treat the “Problem” section as current AttackBehavior behavior.
 **Priority:** Medium (rare in practice, but architecturally incorrect)
 **File:** `src/ai/behaviors/AttackBehavior.cpp` (line numbers in this doc below are stale; `applyDamageToTarget()` is currently ~line 239)
 
