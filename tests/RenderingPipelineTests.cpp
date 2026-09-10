@@ -394,6 +394,25 @@ BOOST_AUTO_TEST_CASE(TestGPUVertexRecordingPrecedesScenePassAndSwapchainIsAcquir
     BOOST_REQUIRE(acquirePos != std::string::npos);
     BOOST_REQUIRE(beginRenderPassPos != std::string::npos);
     BOOST_CHECK_LT(acquirePos, beginRenderPassPos);
+
+    BOOST_CHECK_MESSAGE(
+        functionContainsPattern(gameEngineFile, "void GameEngine::refreshWindowMetrics",
+                                "gpuRenderer.updateViewport"),
+        "Window/display metrics refresh should pre-size GPURenderer before the next record");
+    BOOST_CHECK_MESSAGE(
+        fileContainsPattern(gameEngineFile, "SDL_EVENT_WINDOW_ENTER_FULLSCREEN"),
+        "Fullscreen enter should refresh window metrics, not only WINDOW_RESIZED");
+    BOOST_CHECK_MESSAGE(
+        fileContainsPattern(gameEngineFile, "SDL_EVENT_WINDOW_LEAVE_FULLSCREEN"),
+        "Fullscreen leave should refresh window metrics, not only WINDOW_RESIZED");
+    BOOST_CHECK_MESSAGE(
+        functionContainsPattern(gameEngineFile, "void GameEngine::toggleFullscreen",
+                                "refreshWindowMetrics"),
+        "toggleFullscreen should refresh metrics immediately, not wait for WINDOW_RESIZED");
+    BOOST_CHECK_MESSAGE(
+        fileContainsPattern(sourcePath("src/gameStates/MainMenuState.cpp"),
+                            "setCompositeParams(1.0f, 0.0f, 0.0f)"),
+        "Main menu scene record must reset identity composite so leftover GamePlay zoom cannot crop the background");
 }
 
 BOOST_AUTO_TEST_CASE(TestGamePlayStateGPUResourceDrawOrderMatchesSDLPath) {

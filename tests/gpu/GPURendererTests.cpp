@@ -491,11 +491,23 @@ BOOST_FIXTURE_TEST_CASE(ViewportDimensionsValid, RendererTestFixture) {
 BOOST_FIXTURE_TEST_CASE(UpdateViewport, RendererTestFixture) {
     SKIP_IF_NO_GPU();
     BOOST_REQUIRE(rendererInitialized);
+    BOOST_CHECK(renderer->isInitialized());
 
     renderer->updateViewport(1920, 1080);
 
     BOOST_CHECK_EQUAL(renderer->getViewportWidth(), 1920u);
     BOOST_CHECK_EQUAL(renderer->getViewportHeight(), 1080u);
+}
+
+BOOST_FIXTURE_TEST_CASE(UpdateViewportAppliesWhileFrameActive, RendererTestFixture) {
+    SKIP_IF_NO_GPU();
+    BOOST_REQUIRE(rendererInitialized);
+
+    BOOST_REQUIRE(renderer->beginFrame());
+    renderer->updateViewport(1600, 900);
+    BOOST_CHECK_EQUAL(renderer->getViewportWidth(), 1600u);
+    BOOST_CHECK_EQUAL(renderer->getViewportHeight(), 900u);
+    renderer->endFrame();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

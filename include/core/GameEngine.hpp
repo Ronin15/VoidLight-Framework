@@ -322,10 +322,10 @@ public:
 
 private:
   /**
-   * @brief Handles window resize events from SDL
-   * @param event The SDL window resize event
-   * @details Updates window dimensions, renderer logical presentation,
-   *          reloads fonts, and notifies UIManager for repositioning.
+   * @brief Handles window resize and fullscreen enter/leave events from SDL
+   * @param event The SDL window event
+   * @details Updates window dimensions, GPU scene-texture viewport, fonts,
+   *          and UIManager layout.
    */
   void onWindowResize(const SDL_Event& event);
 

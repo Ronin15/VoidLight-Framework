@@ -878,6 +878,29 @@ BOOST_AUTO_TEST_CASE(TestIdleReengagesHostilePlayerInRange) {
     BOOST_CHECK(edm.getBehaviorConfigRef(idleIdx).type == BehaviorType::Attack);
 }
 
+BOOST_AUTO_TEST_CASE(TestChaseReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto chaseNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle chaseHandle = chaseNpc->getHandle();
+    const size_t chaseIdx = edm.getIndex(chaseHandle);
+    BOOST_REQUIRE(chaseIdx != SIZE_MAX);
+
+    edm.setFaction(chaseHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(chaseHandle, "Chase");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, chaseNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(chaseIdx).type == BehaviorType::Attack);
+}
+
 BOOST_AUTO_TEST_CASE(TestAttackBehaviorRespectsAuthoredRangeWhenClosing) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();

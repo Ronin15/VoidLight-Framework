@@ -69,5 +69,5 @@ Use:
 - variant-specific state lives in the matching dense state pool, not in `BehaviorData`
 - per-frame locals must not be used for path/state that should survive updates
 - behavior switching is `Behaviors::switchBehavior()` (enqueue) then `AIManager::commitQueuedBehaviorTransitions()` (clears, then `Behaviors::init`). Do not call `reassignBehaviorConfig` from gameplay/controllers.
-- Attack, Guard, and help-call scans consult the `AIManager` directed stance table; Idle / Wander / Patrol call `tryEngageHostileInRange` after recent-attack / fear checks
+- Attack, Guard, and help-call scans consult the `AIManager` directed stance table; Idle / Wander / Patrol / Chase (no current target) call `tryEngageHostileInRange` after recent-attack / fear checks
 - `Behaviors::getRelationshipLevel` remains per-NPC memory and is unchanged by faction stance

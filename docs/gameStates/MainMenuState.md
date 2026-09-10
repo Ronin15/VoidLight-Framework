@@ -33,11 +33,15 @@ Exit. Debug shortcuts `A` / `E` jump to AI Demo / Event Demo.
 The state owns a GPU scene (diorama + particles) and UI:
 
 ```cpp
-recordGPUSceneVertices(...);  // diorama, particles
+recordGPUSceneVertices(...);  // identity composite, diorama, particles
 recordGPUUIVertices(...);     // UIManager
 renderGPUScene(...);
 renderGPUUI(...);
 ```
+
+`recordGPUSceneVertices` sets composite zoom to 1 and sub-pixel offset to 0 so
+leftover GamePlay camera zoom does not crop the menu background. Diorama layout
+uses the scene-texture pixel size, not a possibly-stale `GameEngine` window size.
 
 ## Related Docs
 

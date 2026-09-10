@@ -400,8 +400,10 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
               atlasTex->width, atlasTex->height,
               static_cast<float>(sceneTexture->getHeight()));
 
-  const float screenW = static_cast<float>(GameEngine::Instance().getWidthInPixels());
-  const float screenH = static_cast<float>(GameEngine::Instance().getHeightInPixels());
+  // Layout in scene-texture pixels. GameEngine size can lag a fullscreen
+  // switch until metrics refresh; the texture is what gets composited.
+  const float screenW = static_cast<float>(sceneTexture->getWidth());
+  const float screenH = static_cast<float>(sceneTexture->getHeight());
 
   // Aspect-preserving placement helper (dst height derived from source ratio),
   // with a twilight tint applied via the sprite shader's per-vertex color.
@@ -575,6 +577,11 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
 
 void MainMenuState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
                                            float interpolationAlpha) {
+  // Menu is a screen-space diorama, not a camera scene. Reset leftover
+  // GamePlay zoom/sub-pixel so the background fills the swapchain after
+  // windowed → fullscreen → return-to-menu.
+  gpuRenderer.setCompositeParams(1.0f, 0.0f, 0.0f);
+
   // Twilight color grade for the scene (composite shader does
   // mix(scene, scene*tint, alpha) - see res/shaders/composite.frag.glsl).
   // Kept mild so the mood reads as dusk, not full night: the sunset sky/river

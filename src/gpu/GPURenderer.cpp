@@ -9,6 +9,7 @@
 #include "managers/TextureManager.hpp"
 #include "core/Logger.hpp"
 #include "utils/FrameProfiler.hpp"
+#include <algorithm>
 #include <cstring>
 #include <format>
 
@@ -36,11 +37,13 @@ bool GPURenderer::init() {
     m_device = gpuDevice.get();
     m_window = gpuDevice.getWindow();
 
-    // Get window size for viewport (logical size - matches swapchain)
+    // Viewport/scene texture must match swapchain pixels, not logical window size.
     int w = 0, h = 0;
-    SDL_GetWindowSize(m_window, &w, &h);
-    m_viewportWidth = static_cast<uint32_t>(w);
-    m_viewportHeight = static_cast<uint32_t>(h);
+    if (!SDL_GetWindowSizeInPixels(m_window, &w, &h) || w <= 0 || h <= 0) {
+        SDL_GetWindowSize(m_window, &w, &h);
+    }
+    m_viewportWidth = static_cast<uint32_t>(std::max(w, 1));
+    m_viewportHeight = static_cast<uint32_t>(std::max(h, 1));
 
     // Initialize shader manager
     if (!GPUShaderManager::Instance().init(m_device)) {
@@ -301,13 +304,10 @@ bool GPURenderer::acquireSwapchainTexture() {
         return false;
     }
 
-    // Sync the viewport/scene-texture to the swapchain dimensions. NOTE: this
-    // runs from beginScenePass(), which is AFTER GameStateManager::recordGPUVertices()
-    // in GameEngine::render(). On a resize frame the scene was therefore recorded
-    // against the previous viewport size while renderRecordedScene builds its ortho
-    // from the new scene-texture size, producing a one-frame shift. This is accepted:
-    // moving the swapchain acquisition before recording would restructure the frame
-    // lifecycle (acquisition must run on the active command buffer).
+    // Swapchain is authoritative at pass time. GameEngine::refreshWindowMetrics
+    // pre-sizes the scene texture before record so a fullscreen toggle is not
+    // stuck on the previous windowed size. If SDL pixels and the swapchain still
+    // disagree this frame, sync here (after record, before BeginGPURenderPass).
     if (m_swapchainWidth != m_viewportWidth || m_swapchainHeight != m_viewportHeight) {
         GAMEENGINE_INFO(std::format("Swapchain size changed: {}x{} -> {}x{}",
                                     m_viewportWidth, m_viewportHeight,
@@ -510,6 +510,10 @@ SDL_GPUGraphicsPipeline* GPURenderer::getCompositePipeline() const {
 }
 
 void GPURenderer::updateViewport(uint32_t width, uint32_t height) {
+    if (!m_initialized) {
+        return;
+    }
+
     if (width == 0 || height == 0) {
         GAMEENGINE_WARN(std::format("GPURenderer::updateViewport ignored invalid size: {}x{}", width, height));
         return;

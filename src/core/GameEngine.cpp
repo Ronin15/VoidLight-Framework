@@ -1009,6 +1009,8 @@ void GameEngine::handleEvents() {
     case SDL_EVENT_WINDOW_RESIZED:
     case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
     case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
+    case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+    case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
       onWindowResize(event);
       break;
     case SDL_EVENT_WINDOW_MINIMIZED:
@@ -1456,9 +1458,10 @@ void GameEngine::toggleFullscreen() {
   GAMEENGINE_INFO(std::format("Fullscreen mode {}",
                               m_isFullscreen ? "enabled" : "disabled"));
 
-  // Note: SDL will automatically trigger SDL_EVENT_WINDOW_RESIZED
-  // which will be handled by InputManager::onWindowResize()
-  // This ensures fonts and UI are properly updated for the new display mode
+  // Do not wait for a later WINDOW_RESIZED: Wayland/Hyprland may emit
+  // ENTER/LEAVE_FULLSCREEN (or delay PIXEL_SIZE_CHANGED) after the mode
+  // switch. Refresh metrics now so the next record uses the new pixel size.
+  refreshWindowMetrics(m_isFullscreen ? "Fullscreen enabled" : "Fullscreen disabled");
 }
 
 void GameEngine::setFullscreen(bool enabled) {
@@ -1554,6 +1557,12 @@ void GameEngine::onWindowResize(const SDL_Event &event) {
     break;
   case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
     eventName = "Window display scale changed";
+    break;
+  case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+    eventName = "Entered fullscreen";
+    break;
+  case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+    eventName = "Left fullscreen";
     break;
   default:
     break;
@@ -1656,6 +1665,15 @@ void GameEngine::refreshWindowMetrics(std::string_view reason) {
   setSizeInPixels(pixelWidth, pixelHeight);
   setDPIScale(fontDPIScale);
   updateDisplayRefreshRate();
+
+  // Scene vertices are recorded before swapchain acquire. Recreate the scene
+  // texture now (handleEvents is before beginFrame) so the next record matches
+  // the new pixel size instead of the previous windowed viewport.
+  auto& gpuRenderer = VoidLight::GPURenderer::Instance();
+  if (gpuRenderer.isInitialized() && pixelWidth > 0 && pixelHeight > 0) {
+    gpuRenderer.updateViewport(static_cast<uint32_t>(pixelWidth),
+                               static_cast<uint32_t>(pixelHeight));
+  }
 
   if (mp_backgroundSimManager) {
     mp_backgroundSimManager->configureForScreenSize(pixelWidth, pixelHeight);

@@ -64,7 +64,10 @@ Window/display changes feed back into:
 
 - display refresh propagation to `TimestepManager`
 - cached logical window size plus pixel-space viewport/UI updates
-- swapchain-authoritative GPU viewport sizing
+- `GPURenderer::updateViewport` to the new pixel size **before** the next
+  scene record (fullscreen toggle also refreshes immediately; SDL
+  `ENTER_FULLSCREEN` / `LEAVE_FULLSCREEN` are handled, not only `RESIZED`)
+- swapchain-authoritative GPU viewport sizing as a fallback on acquire
 - font DPI refresh on platforms where logical and pixel sizes differ
 
 `setVSyncEnabled(...)` only switches the runtime swapchain present mode. It does

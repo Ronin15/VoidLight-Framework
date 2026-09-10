@@ -180,6 +180,9 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
     }
 
     if (!targetValid) {
+        if (tryEngageHostileInRange(ctx)) {
+            return;
+        }
         if (chase.isChasing) {
             ctx.transform.velocity = Vector2D(0, 0);
             chase.isChasing = false;

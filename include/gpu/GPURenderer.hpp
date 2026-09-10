@@ -37,6 +37,8 @@ public:
      */
     [[nodiscard]] bool init();
 
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
     /**
      * Shutdown and release all resources.
      */

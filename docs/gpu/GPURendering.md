@@ -37,6 +37,13 @@ endFrame                 // GameEngine::present()
 
 `acquireSwapchainTexture()` is internal to `beginScenePass()`. If acquisition fails, that frame is skipped cleanly. States never `endFrame`, submit, or present.
 
+`GameEngine::refreshWindowMetrics` calls `GPURenderer::updateViewport` with the
+new pixel size during `handleEvents` (before `beginFrame`) so the next scene
+record is not stuck on the previous windowed texture. `beginScenePass` still
+syncs to the acquired swapchain if those sizes differ — swapchain remains
+authoritative at pass time. Menu states that are not camera scenes must set
+`setCompositeParams(1, 0, 0)` when recording.
+
 ## Pass Layout
 
 1. `beginFrame()` — command buffer, map upload buffers, copy/upload work

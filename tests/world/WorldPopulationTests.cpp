@@ -7,6 +7,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "ai/BehaviorConfig.hpp"
+#include "ai/FactionStance.hpp"
 #include "core/ThreadSystem.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -157,6 +158,7 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
         if (npc.faction == 1)
         {
             BOOST_CHECK_EQUAL(npc.homeRole, static_cast<uint8_t>(BehaviorType::Chase));
+            BOOST_CHECK(AIManager::Instance().getStance(1, 0) == FactionStance::Neutral);
             ++hostileCount;
         }
     }

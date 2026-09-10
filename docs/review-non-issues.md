@@ -102,11 +102,12 @@ References are by symbol/function (not line numbers) so they survive edits.
 - **Camera shake computed but never applied** (`Camera::update` sets `m_shakeOffset`, but
   `getRenderOffset`/`getViewRect` never read it; no `Camera::shake()` callers) — wiring this
   into the render-offset pipeline is feature work, not a bug fix.
-- **GPURenderer one-frame viewport/scene-texture mismatch on resize** — the scene records
-  against the old viewport while the swapchain is acquired (and viewport synced) in
-  `beginScenePass` after recording; self-corrects next frame. A real fix means restructuring
-  the frame lifecycle (acquire before record), which is out of scope. Comment corrected to
-  state the actual order.
+- **GPURenderer record-before-acquire frame order** — scene vertices are still recorded
+  before `beginScenePass` acquires the swapchain (acquisition needs the active command
+  buffer). `GameEngine::refreshWindowMetrics` now pre-sizes `GPURenderer::updateViewport`
+  from window pixels during `handleEvents`, and acquire still syncs if swapchain size
+  differs. Residual: one frame of old texture if SDL pixels and the swapchain both lag
+  (e.g. delayed Wayland fullscreen). Do not reorder acquire before record.
 - **WorldResourceManager stale spatial-index entries** — dead EDM indices are filtered from
   query *output* (`isAlive()`) but not erased from the index, and entries are fully cleared
   at state transition. Opportunistic erase during a query is impossible under the `shared_lock`

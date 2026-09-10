@@ -282,13 +282,11 @@ void SettingsMenuState::applySettings() {
     settings.set("graphics", "fps_limit", m_tempSettings.fpsLimit);
     settings.set("graphics", "show_fps", m_tempSettings.showFps);
 
-    // Apply fullscreen setting immediately
-    // SDL will automatically fire SDL_EVENT_WINDOW_RESIZED which triggers
-    // InputManager::onWindowResize() → UIManager::onWindowResize()
-    // This ensures clean, single-path UI repositioning
+    // Apply fullscreen immediately. GameEngine::setFullscreen refreshes
+    // window metrics (UI + GPU viewport) without waiting on WINDOW_RESIZED.
     if (gameEngine.isFullscreen() != m_tempSettings.fullscreen) {
         gameEngine.setFullscreen(m_tempSettings.fullscreen);
-        GAMESTATE_INFO("Fullscreen setting applied - UI will update via SDL resize event");
+        GAMESTATE_INFO("Fullscreen setting applied via GameEngine::setFullscreen");
     }
 
     // Audio
