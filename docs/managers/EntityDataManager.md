@@ -451,7 +451,7 @@ transform.velocity = Vector2D(50, 0);
 
 auto& character = edm.getCharacterData(npc);
 character.health = 80.0f;
-character.faction = 1;  // Enemy
+character.faction = 1;  // Faction id (collision group 1); agro is AIManager stance
 ```
 
 ### Batch Processing (AI/Collision)

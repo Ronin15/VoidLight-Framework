@@ -32,10 +32,12 @@ leaves that assignment. Non-empty override calls `assignBehavior` after create
 still says EDM is storage-only; spawn assignment has not been peeled out of
 create yet.
 
-Callers: `WorldPopulation` (hostiles pass `"Attack"`; settlement NPCs pass
-empty), GamePlayState debug `R` (`"Attack"`, faction 1, not in the populate
-registry), `NPCSpawnEvent::execute`, and demo village setup that previously
-created then assigned.
+Callers: `WorldPopulation` (wilderness Warriors pass faction 1 and empty
+behavior override so `classes.json` Chase is home role; settlement NPCs pass
+empty), GamePlayState debug `R` (faction 1, no Attack override, then
+`setStance` mutual Hostile; not in the populate registry),
+`NPCSpawnEvent::execute`, and demo village setup that previously created then
+assigned.
 
 `EventManager::spawnMerchant` stays event sugar; populate does not go through
 deferred MerchantSpawn.

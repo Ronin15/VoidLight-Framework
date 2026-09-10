@@ -78,7 +78,7 @@ Prefer EDM indices in behavior code to avoid repeated handle-to-index lookups.
 
 ## Faction Stance
 
-`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table. This table is the only engagement authority for Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, and it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player).
+`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table. This table is the only engagement authority for Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, and it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player). `CharacterData.faction` is a faction id. `EntityDataManager::applyFactionCollision` maps id 1 to `Layer_Enemy` as a physics group, not agro.
 
 Defaults after `resetFactionStances()`:
 

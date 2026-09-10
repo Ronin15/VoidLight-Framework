@@ -845,7 +845,7 @@ public:
     /**
      * @brief Set the faction of a character and update collision layers
      * @param handle Entity handle
-     * @param newFaction New faction value (0=Friendly, 1=Enemy, 2=Neutral)
+     * @param newFaction Faction id (0-15). Updates collision grouping only; agro is AIManager stance.
      */
     void setFaction(EntityHandle handle, uint8_t newFaction);
 

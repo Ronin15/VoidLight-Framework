@@ -26,7 +26,7 @@ When the world is ready, `enter()`:
 - registers controllers through `ControllerRegistry`
 - creates event log, time label, and FPS label (session chrome)
 - initializes inventory UI, then `HudController::initializeActionHUD()` and `initializeHotbarUI()`
-- world already arrives inhabited from `WorldManager::loadNewWorld` (settlement NPCs + sparse hostiles); debug `R` still spawns a hostile Warrior via `spawnNpc` (not in the populate registry)
+- world already arrives inhabited from `WorldManager::loadNewWorld` (settlement NPCs + sparse wilderness Warriors, faction 1, Chase home role); debug `R` spawns a faction-1 Warrior via `spawnNpc` and sets mutual Hostile stance (not in the populate registry)
 - subscribes state-owned time/weather/harvest handlers
 
 Pause/resume toggles session chrome (`event_log`, `time_label`, `fps`) directly

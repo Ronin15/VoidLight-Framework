@@ -154,9 +154,9 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
         {
             ++wanderCount;
         }
-        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Attack))
+        if (npc.faction == 1)
         {
-            BOOST_CHECK_EQUAL(npc.faction, 1);
+            BOOST_CHECK_EQUAL(npc.homeRole, static_cast<uint8_t>(BehaviorType::Chase));
             ++hostileCount;
         }
     }

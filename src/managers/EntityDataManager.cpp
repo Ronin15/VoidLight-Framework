@@ -596,23 +596,22 @@ EntityHandle EntityDataManager::createNPC(const Vector2D& position,
     // Allocate character data first (needed for faction-based collision setup)
     uint32_t charIndex = allocateCharacterSlot();
     m_characterData[charIndex].stateFlags = 0;
-    // faction defaults to 0 (Friendly) in CharacterData
+    // faction defaults to 0 in CharacterData (id, not agro)
 
     // All NPCs get an inventory (20 slots, not world-tracked)
     uint32_t invIdx = createInventory(20, false);
     m_characterData[charIndex].inventoryIndex = invIdx;
 
-    // Initialize collision data based on faction
-    // Friendly/Neutral NPCs: Layer_Default, don't collide with other NPCs
-    // Enemy NPCs: Layer_Enemy, can collide with other enemies
+    // Collision grouping by faction id: id 1 uses Layer_Enemy (can collide with
+    // other id-1 bodies). Not agro — engagement is AIManager stance.
     uint8_t faction = m_characterData[charIndex].faction;
-    if (faction == 1) {  // Enemy
+    if (faction == 1) {
         hot.collisionLayers = VoidLight::CollisionLayer::Layer_Enemy;
         hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
                             VoidLight::CollisionLayer::Layer_Environment |
                             VoidLight::CollisionLayer::Layer_Projectile |
                             VoidLight::CollisionLayer::Layer_Enemy;
-    } else {  // Friendly (0) or Neutral (2)
+    } else {
         hot.collisionLayers = VoidLight::CollisionLayer::Layer_Default;
         hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
                             VoidLight::CollisionLayer::Layer_Environment |
@@ -1001,13 +1000,14 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
 
 void EntityDataManager::applyFactionCollision(size_t index, uint8_t faction) {
     auto& hot = m_hotData[index];
-    if (faction == 1) {  // Enemy
+    // Id 1 is the Layer_Enemy collision group. Agro is AIManager stance.
+    if (faction == 1) {
         hot.collisionLayers = VoidLight::CollisionLayer::Layer_Enemy;
         hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
                             VoidLight::CollisionLayer::Layer_Environment |
                             VoidLight::CollisionLayer::Layer_Projectile |
                             VoidLight::CollisionLayer::Layer_Enemy;
-    } else {  // Friendly (0) or Neutral (2)
+    } else {
         hot.collisionLayers = VoidLight::CollisionLayer::Layer_Default;
         hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
                             VoidLight::CollisionLayer::Layer_Environment |

@@ -687,15 +687,26 @@ void GamePlayState::handleInput() {
   }
 
   VOIDLIGHT_DEBUG_ONLY(
-  // Debug: R to spawn a hostile Warrior NPC near player (test hook).
-  // Not registered in WorldManager's populate registry.
+  // Debug: R spawns a faction-1 Warrior and marks mutual Hostile stance
+  // so Attack/Chase may acquire the player. Not in the populate registry.
   if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
     Vector2D playerPos = mp_Player->getPosition();
     Vector2D spawnPos = playerPos + Vector2D(150.0f, 0.0f);
     EntityHandle npc = VoidLight::spawnNpc(spawnPos, "Human", "Warrior",
-                                           Sex::Unknown, 1, "Attack");
+                                           Sex::Unknown, 1);
     if (!npc.isValid()) {
       GAMESTATE_WARN("Failed to spawn debug Warrior");
+    } else {
+      auto& edm = EntityDataManager::Instance();
+      const EntityHandle playerHandle = mp_Player->getHandle();
+      const size_t playerIdx = edm.getIndex(playerHandle);
+      uint8_t playerFaction = 0;
+      if (playerIdx != SIZE_MAX) {
+        playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
+      }
+      auto& aiMgr = AIManager::Instance();
+      aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+      aiMgr.setStance(playerFaction, 1, FactionStance::Hostile);
     }
   }
 

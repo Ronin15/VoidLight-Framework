@@ -76,8 +76,9 @@ not a `GamePlayState` tile loop.
 
 - Per overworld settlement: 1 merchant, 2 guards, 4 villagers. Empty
   `behaviorOverride` keeps `classes.json` suggestedBehavior (Idle/Guard/Wander).
-- Sparse forest/haunted hostiles (Human/Warrior, faction 1) pass `"Attack"` to
-  `spawnNpc`. Do not change Warrior `suggestedBehavior` in JSON.
+- Sparse forest/haunted wilderness (Human/Warrior, faction 1) pass empty
+  `behaviorOverride` so class Chase is home role. They are not Hostile until
+  combat/theft writes stance. Do not change Warrior `suggestedBehavior` in JSON.
 - Total populated NPCs are capped at 256 per `worldId`.
 - Default simulation tier is Active; `BackgroundSimulationManager` retier
   after the player exists. Populate does not assign tiers from camera/player.
@@ -96,7 +97,8 @@ not a `GamePlayState` tile loop.
   `findSettlementAtTile`, and `findSettlementAtPixel` for the current world
   (same current-world rule as `getTileCopyAt`).
 - Debug `R` Warriors spawned from `GamePlayState` via `spawnNpc` are not
-  registered in the populated-NPC map.
+  registered in the populated-NPC map. `R` sets mutual Hostile stance with
+  the player so the spawn is a combat hook.
 
 Do not dump later-slice policy into WorldManager (environment/stance/forage/
 decision → AI/EDM; discovery → WorldData + SaveGameManager + HUD; background

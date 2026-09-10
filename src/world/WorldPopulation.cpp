@@ -202,7 +202,7 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
         }
     }
 
-    uint32_t hostilesSpawned = 0;
+    uint32_t hostilesSpawned = 0;  // Wilderness faction-1 warriors (not agro by default)
     for (int blockY = 0; blockY < height; blockY += HOSTILE_BLOCK_TILES)
     {
         for (int blockX = 0; blockX < width; blockX += HOSTILE_BLOCK_TILES)
@@ -230,8 +230,7 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
                     {
                         continue;
                     }
-                    if (trySpawnNpc(outHandles, used, width, x, y, "Human", "Warrior", 1,
-                                    "Attack"))
+                    if (trySpawnNpc(outHandles, used, width, x, y, "Human", "Warrior", 1))
                     {
                         ++hostilesSpawned;
                         spawned = true;
@@ -243,7 +242,7 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
     }
 
     WORLD_MANAGER_DEBUG(std::format(
-        "WorldPopulation: spawned {} NPCs ({} hostiles) for world {}",
+        "WorldPopulation: spawned {} NPCs ({} wilderness) for world {}",
         outHandles.size(), hostilesSpawned, world.worldId));
 }
 

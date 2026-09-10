@@ -240,7 +240,7 @@ struct CharacterData {
     uint8_t subtypeId{0};      // classId / variantId / roleId
 
     // Faction and AI
-    uint8_t faction{0};        // 0=Friendly, 1=Enemy, 2=Neutral
+    uint8_t faction{0};        // Faction id (0-15). Engagement is AIManager stance, not this id.
     // AIManager-written mirror of the current BehaviorType (assign + transition
     // commit). Production AI reads BehaviorConfig.type; do not treat this as home.
     uint8_t behaviorType{0};
@@ -646,7 +646,7 @@ struct MonsterTypeInfo {
     // Size
     float sizeMultiplier{1.0f};
 
-    // Monsters are enemies by default
+    // Default faction id 1 (Layer_Enemy collision group). Agro is stance.
     uint8_t defaultFaction{1};
 };
 

@@ -101,8 +101,10 @@ Status: Not started
 ## Slice Records
 
 Implement from these sections, not from chat notes. Implement only the open
-slice's scope. Slices 1–2 are implemented (Slice 1 visual confirm leftover).
-Slice 3 is next. Do not implement Slices 4–9 until the prior slice is done.
+slice's scope. Slices 1–3 are implemented (Slice 1 visual confirm leftover;
+Slice 3 reviewed). Slice 5 **core** (stance table) is landed; remainder stays
+on Slice 5. **Slice 4 is next.** Do not pull Slices 6–9 forward. Do not
+rebuild the stance table.
 
 Scheduled order (do not skip ahead). Data deps may be narrower than schedule
 order; do not pull a later slice forward unless this file is updated first.
@@ -183,7 +185,7 @@ Current foundation:
 - `GamePlayState::enter()` currently calls `spawnMerchant("GeneralMerchant", …)` after HUD init. Debug `R` (`VOIDLIGHT_DEBUG_ONLY`) spawns a hostile Warrior — keep it.
 - `GamePlayState::exit()` already calls `AIManager::destroyAllNPCsForStateTransition()` then `unloadWorld()`. `WorldManager::prepareForStateTransition()` does **not** unload the world.
 - Player is created in `GamePlayState::enter()`, after load. `BackgroundSimulationManager::update()` already retier from the player/camera every 120 frames (`updateSimulationTiers`).
-- Classes: Guard (`suggestedBehavior` Guard, faction 0), Villager (Wander, 0), GeneralMerchant (Idle, merchant), Warrior (Chase/Attack, faction 1).
+- Classes: Guard (`suggestedBehavior` Guard, faction 0), Villager (Wander, 0), GeneralMerchant (Idle, merchant), Warrior (Chase, faction 1).
 - Tests: `tests/world/WorldManagerTests.cpp`. Village placement requires world ≥ 26×26.
 
 Architecture notes:
@@ -198,7 +200,7 @@ Architecture notes:
   - 2× `Human` / `Guard`, `"Guard"`, on distinct `isTopLeftOfBuilding` tiles in the radius (fall back to walkable tiles near center if fewer buildings).
   - 4× `Human` / `Villager`, `"Wander"`, walkable tiles inside the radius.
 - After `assignBehavior`, write the assigned `BehaviorType` as **home role** (new `uint8_t` on `CharacterData` or `NPCMemoryData` — design picks). `CharacterData.behaviorType` stays the current behavior. Slice 7 reads home role; do not leave it unset.
-- Forest and haunted tiles **outside** every settlement radius: sparse hostiles. `Human` / `Warrior`, faction override 1, `"Attack"`. One candidate per 64×64 tile block that contains forest/haunted land; skip if inside any settlement radius; cap 32 hostiles per world.
+- Forest and haunted tiles **outside** every settlement radius: sparse wilderness. `Human` / `Warrior`, faction override 1, empty behavior override (class Chase). One candidate per 64×64 tile block that contains forest/haunted land; skip if inside any settlement radius; cap 32 per world. Not Hostile until stance writes.
 - Cap total populated NPCs at 256 per `worldId` (named constant). Production 200×200 is ~5 villages → 5×7 + hostiles, well under the cap.
 - Do **not** set simulation tiers from player position at populate (player does not exist yet). Leave default `Active`; `BackgroundSimulationManager` retier after GamePlayState is running.
 - Populate is idempotent: if `worldId` is already registered as populated, skip. `unloadWorldLocked` clears that registration and destroys those handles. Pause/resume never calls `loadNewWorld`.
@@ -211,7 +213,7 @@ Checklist:
 - [x] `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
 - [x] `SettlementRecord` + `WorldData::settlements`; generator persists village centers (id, biome, faction 0, buildingCount, radius 12)
 - [x] Populate after `initializeWorldResources()`; destroy+clear on `unloadWorldLocked`; skip if already populated
-- [x] Per-settlement 1 merchant Idle + 2 Guard + 4 Villager Wander; sparse forest/haunted Warriors (faction 1, Attack); walkable spawn; cap 256
+- [x] Per-settlement 1 merchant Idle + 2 Guard + 4 Villager Wander; sparse forest/haunted Warriors (faction 1, Chase home role); walkable spawn; cap 256
 - [x] Home role stored at assign time
 - [x] `GamePlayState` bootstrap merchant removed
 - [x] Settlement query on the current world (`getSettlements`, `findSettlementAtTile` / `findSettlementAtPixel`); populate registry keyed by `worldId`
@@ -251,7 +253,7 @@ Architecture notes:
 - **Drain gate:** `processBackgroundTasks` skips `processDestructionQueue` when `GameEngine::isGloballyPaused()`. `processDestructionQueue` also takes the create/structural mutex so a missed pause is a lock, not a data race. Rename `m_creationMutex` to `m_structuralMutex` if that is a local mechanical rename; do not add a second lock order.
 - **One drain function, three legal callers (B1):** frame-end (skipped in window), public `unloadWorld` (main/test after locks dropped), `prepareForStateTransition`. Worker/`unloadWorldLocked`/`clearPopulatedNpcs`/`destroyAllNPCsForStateTransition` only enqueue (plus static harvestable destroy on unload).
 - **Unload harvestables:** before `WRM::removeWorld`, snapshot that world's harvestable EDM indices and `destroyEntity` each (static immediate). Add a narrow WRM copy/query API if needed; do not have WRM call EDM destroy. Tests: unload without EDM transition leaves zero harvestables for the old worldId.
-- **One spawn helper (C1):** `VoidLight::spawnNpc(pos, race, class, sex, factionOverride, behaviorOverride)` in `include/world/NpcSpawn.hpp` + `src/world/NpcSpawn.cpp`. Factory still auto-assigns suggestedBehavior. Helper assigns override only when non-empty / different. WorldPopulation, debug `R`, `NPCSpawnEvent::execute`, and demos that already create+assign should call it. `spawnMerchant` stays event sugar over the helper. Do **not** populate through deferred MerchantSpawn. Hostile placer passes `"Attack"` override; do not change Warrior `suggestedBehavior` in JSON (class default stays class data). Debug `R` is not registered in `m_populatedNpcsByWorldId`.
+- **One spawn helper (C1):** `VoidLight::spawnNpc(pos, race, class, sex, factionOverride, behaviorOverride)` in `include/world/NpcSpawn.hpp` + `src/world/NpcSpawn.cpp`. Factory still auto-assigns suggestedBehavior. Helper assigns override only when non-empty / different. WorldPopulation, debug `R`, `NPCSpawnEvent::execute`, and demos that already create+assign should call it. `spawnMerchant` stays event sugar over the helper. Do **not** populate through deferred MerchantSpawn. Wilderness placer passes faction 1 and empty override (Chase from JSON). Debug `R` is not registered in `m_populatedNpcsByWorldId`; it sets mutual Hostile stance instead of an Attack override.
 - **`createMonster` / `createAnimal`:** same auto-register contract as NPCs (they already load `suggestedBehavior`). Do not leave a third AI-register story.
 - **`behaviorType`:** AIManager-written mirror of current type (assign + transition commit). Production AI reads `BehaviorConfig.type`. `homeRole` is home (assign only). Comment both fields.
 - **WorldManager coordinator (D1):** extract `WorldHarvestInit` beside `WorldPopulation`. Registry + settlement queries stay on WorldManager. Delete dead `Tile::harvestableIndex`. Delete `WorldManager::update` “weather effects” comment. Do not dump Slices 4–9 into WorldManager (environment/stance/forage/decision → AI/EDM; discovery → WorldData + SaveGameManager + HUD; background tick → BSM). TileRenderer header split is residual if it balloons.
@@ -276,9 +278,9 @@ Acceptance checks:
 - [x] Pause/resume still does not populate; debug `R` still works and is not in the populate registry
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `world_manager_tests`, `world_population_tests`, `entity_data_manager_tests`, plus event spawn coverage
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Partial — implementation landed and targeted tests passed; slice review remaining.
+Status: Complete — exclusive load window, structural mutex, harvestable unload destroy, `spawnNpc`, `WorldHarvestInit`. Review: no High/Medium production findings. Residual: factory drops `m_structuralMutex` after `createNPC` before `registerEntity` (production relies on pause + drain skip).
 
 Landed: exclusive load window (`setGlobalPause(true)`; EventManager remains the gameplay and lifecycle bus with deferred drain on for WorldLoaded; GameEngine skip drain); `m_structuralMutex`; harvestable destroy before WRM `removeWorld`; `spawnNpc` + `WorldHarvestInit`; `behaviorType`/`homeRole` comments; monster/animal auto-register. GameEngine drain-skip is wired in `processBackgroundTasks` and covered by `TestGameEngineSkipsDestructionDrainWhileGloballyPaused`.
 
@@ -339,7 +341,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests` and/or `ai_manager_edm_integration_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slice 2. Scheduled after Slice 3.
+Status: Not started. Depends on Slice 2. **Next implementation slice** (after Slice 3 close).
 
 ## Slice 5: Faction stance and territory
 
@@ -347,12 +349,12 @@ Goal: Attack, help, and flee-to-allies use a 16×16 stance table on `AIManager` 
 
 Current foundation:
 
-- `CharacterData.faction`: 0 Friendly, 1 Enemy, 2 Neutral (`include/managers/EntityDataTypes.hpp`). `createNPCWithRaceClass` already applies `defaultFaction` from `classes.json` or `factionOverride`.
-- `AIManager::MAX_FACTIONS = 16`; `m_factionEdmIndices`; `scanFactionInRadius()`; `setFaction()` / `onEntityFactionChanged()`.
-- Guard `callForHelp` is same-faction id (`src/ai/behaviors/GuardBehavior.cpp` still has `faction == 1` for player hostility). Attack filters `faction == 0` in at least one path (`src/ai/behaviors/AttackBehavior.cpp`).
+- `CharacterData.faction` is a faction id (0–15). Engagement is the `AIManager` stance table, not Friend/Enemy/Neutral labels. `createNPCWithRaceClass` applies `defaultFaction` from `classes.json` or `factionOverride`.
+- `AIManager::MAX_FACTIONS = 16`; directed `m_factionStances`; `m_factionEdmIndices`; `scanFactionInRadius()` / `scanAlliedInRadius()`; `setFaction()` / `onEntityFactionChanged()`.
+- Attack/Guard/help/Idle re-engage consult Hostile/Allied stance. Combat `DamageEvent` handler and SocialController theft/gift write the table.
 - `SocialController` gifts/theft/alerts; `Behaviors::getRelationshipLevel(npc, subject)` is per-NPC memory (`include/ai/BehaviorExecutors.hpp`).
-- Collision layers from faction 0/1/2 in `EntityDataManager::applyFactionCollision`.
-- Slice 2 `SettlementRecord.faction` + point-in-radius query.
+- Collision: `applyFactionCollision` still maps **id 1 → Layer_Enemy** (physics grouping, not agro). Remap-from-stance is a remainder below.
+- Slice 2 `SettlementRecord.faction` + point-in-radius query (territory consumer not wired).
 
 Architecture notes:
 
@@ -361,31 +363,31 @@ Architecture notes:
 - Territory: query Slice 2 settlements (`center + radiusTiles * TILE_SIZE`) for faction at a point. No new spatial hash.
 - Player standing: compact per-faction scores on the player’s EDM character/memory sidecar, updated from the same main-thread commits. Keep `getRelationshipLevel(npc, subject)` for individuals.
 - Event: reuse combat/social events if they already carry enough; otherwise add `EventTypeId` (next unused; bump `COUNT`) for stance-changed so the GamePlayState event log can print a line. Do not scrape the table from UI.
-- Collision: keep 0/1/2 player-facing layers unless stance vs player requires a mapping update in `applyFactionCollision` — do that in EDM, not a new system.
+- Collision: keep id-1 → Layer_Enemy grouping this slice unless a remainder remaps from stance vs player — do that from main-thread `setStance` into EDM, not a new system and not EDM calling AIManager.
 - Files: `include/managers/AIManager.hpp`, `src/managers/AIManager.cpp`, Guard/Attack/Flee, `src/controllers/social/SocialController.cpp`, `include/managers/EntityDataTypes.hpp` if player standing is EDM, `docs/ai/AIManager.md`, `docs/controllers/SocialController.md`, `tests/BehaviorFunctionalityTest.cpp`, `tests/controllers/SocialControllerTests.cpp`.
 - Out of scope: diplomacy UI, minimap colors, scripted wars.
 
 Checklist:
 
-- [ ] Stance table on `AIManager`; help/attack/flee consume it (no `faction == 1` hostility)
+- [x] Stance table on `AIManager`; help/attack/flee consume it (no `faction == 1` hostility)
 - [ ] Settlement default faction + point-in-settlement query
-- [ ] Main-thread stance updates from lethal combat, theft, gift
+- [x] Main-thread stance updates from combat, theft, gift
 - [ ] Player faction standing layered on existing memory APIs
 - [ ] Event log can observe settlement/faction hostility change
-- [ ] Owning docs updated
-- [ ] Tests updated in the same change (hostile NPCs engage, same-stance help, theft worsens stance, `getRelationshipLevel` unchanged)
+- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`)
+- [x] Tests updated in the same change (hostile NPCs engage, same-stance help, theft worsens stance, `getRelationshipLevel` still moves)
 
 Acceptance checks:
 
-- [ ] Hostile-faction NPCs engage without `faction == 1` hardcoding
-- [ ] Same-stance guards still propagate alerts; other stances do not
-- [ ] Killing/theft can worsen stance; it is test-observable
-- [ ] Per-NPC relationship APIs still pass
+- [x] Hostile-faction NPCs engage without `faction == 1` hardcoding
+- [x] Same-stance guards still propagate alerts; other stances do not
+- [x] Killing/theft can worsen stance; it is test-observable
+- [x] Per-NPC relationship APIs still pass
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `social_controller_tests`
 - [ ] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Partial — stance table, `setStance` / `worsenStance`, and combat/theft writes are in production (`AIManager.cpp`, `SocialController.cpp`). Remaining: Hostile engagement without `faction == 1` hardcoding (Guard/Attack still have id checks), territory query, and slice review. Do not treat this slice as unimplemented work.
+Status: Partial — **core landed** (16×16 table, Neutral defaults except self Allied, Attack/Guard/help consume stance, combat/theft/gift write it). Remainder: settlement territory query, player standing scores beside the table, StanceChanged event log, optional collision remap from stance, slice review of remainder. Do not rebuild the table.
 
 ## Slice 6: Survival and resource AI
 
