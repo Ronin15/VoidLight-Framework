@@ -887,6 +887,7 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceDefaultsSameAlliedOthersNeutral) {
     auto& aiMgr = AIManager::Instance();
 
     for (uint8_t from = 0; from < AIManager::MAX_FACTIONS; ++from) {
+        BOOST_CHECK(!aiMgr.factionRowHasHostile(from));
         for (uint8_t toward = 0; toward < AIManager::MAX_FACTIONS; ++toward) {
             if (from == toward) {
                 BOOST_CHECK(aiMgr.getStance(from, toward) == FactionStance::Allied);
@@ -899,6 +900,7 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceDefaultsSameAlliedOthersNeutral) {
             }
         }
     }
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(AIManager::MAX_FACTIONS));
 }
 
 BOOST_AUTO_TEST_CASE(TestFactionStanceSetGetAndBounds) {
@@ -909,26 +911,45 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceSetGetAndBounds) {
     BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
     BOOST_CHECK(aiMgr.isHostileTo(0, 1));
     BOOST_CHECK(!aiMgr.isHostileTo(1, 0));
+    BOOST_CHECK(aiMgr.factionRowHasHostile(0));
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(1));
+
+    aiMgr.setStance(0, 1, FactionStance::Neutral);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
+
+    aiMgr.setStance(0, 1, FactionStance::Hostile);
+    aiMgr.setStance(0, 2, FactionStance::Hostile);
+    BOOST_CHECK(aiMgr.factionRowHasHostile(0));
+    aiMgr.improveStance(0, 1);
+    BOOST_CHECK(aiMgr.factionRowHasHostile(0));
+    aiMgr.improveStance(0, 2);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
 
     aiMgr.setStance(0, 0, FactionStance::Hostile);
     BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
 
     BOOST_CHECK(aiMgr.getStance(AIManager::MAX_FACTIONS, 0) == FactionStance::Neutral);
     BOOST_CHECK(aiMgr.getStance(0, AIManager::MAX_FACTIONS) == FactionStance::Neutral);
     BOOST_CHECK(!aiMgr.isHostileTo(AIManager::MAX_FACTIONS, 1));
     BOOST_CHECK(!aiMgr.isAlliedTo(AIManager::MAX_FACTIONS, 1));
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(AIManager::MAX_FACTIONS));
 
     aiMgr.setStance(AIManager::MAX_FACTIONS, 1, FactionStance::Hostile);
     BOOST_CHECK(aiMgr.getStance(AIManager::MAX_FACTIONS, 1) == FactionStance::Neutral);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(AIManager::MAX_FACTIONS));
 
     aiMgr.worsenStance(2, 3);
     BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Hostile);
+    BOOST_CHECK(aiMgr.factionRowHasHostile(2));
     aiMgr.improveStance(2, 3);
     BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Neutral);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
     aiMgr.improveStance(2, 3);
     BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Allied);
     aiMgr.worsenStance(2, 2);
     BOOST_CHECK(aiMgr.getStance(2, 2) == FactionStance::Allied);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
 }
 
 BOOST_AUTO_TEST_CASE(TestFactionStanceResetsOnPrepareForStateTransition) {
@@ -940,6 +961,7 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceResetsOnPrepareForStateTransition) {
 
     BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
     BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
 }
 
 BOOST_AUTO_TEST_CASE(TestFactionStanceResetsOnResetBehaviors) {
@@ -951,6 +973,7 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceResetsOnResetBehaviors) {
 
     BOOST_CHECK(aiMgr.getStance(4, 5) == FactionStance::Neutral);
     BOOST_CHECK(aiMgr.getStance(4, 4) == FactionStance::Allied);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(4));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

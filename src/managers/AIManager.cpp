@@ -24,7 +24,7 @@
 #include <format>
 #include <unordered_map>
 
-static_assert(AIManager::MAX_FACTIONS == 16,
+static_assert(AIManager::MAX_FACTIONS == kFactionStanceRowSize,
               "BehaviorContext factionStanceRow size must match AIManager::MAX_FACTIONS");
 
 // Use SIMD abstraction layer
@@ -1182,6 +1182,16 @@ FactionStance AIManager::getStance(uint8_t fromFaction, uint8_t towardFaction) c
   return m_factionStances[fromFaction][towardFaction];
 }
 
+void AIManager::refreshFactionHasHostile(uint8_t faction) {
+  m_factionHasHostile[faction] = false;
+  for (FactionStance stance : m_factionStances[faction]) {
+    if (stance == FactionStance::Hostile) {
+      m_factionHasHostile[faction] = true;
+      return;
+    }
+  }
+}
+
 void AIManager::setStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance stance) {
   if (fromFaction >= MAX_FACTIONS || towardFaction >= MAX_FACTIONS) {
     return;
@@ -1190,6 +1200,7 @@ void AIManager::setStance(uint8_t fromFaction, uint8_t towardFaction, FactionSta
     return;
   }
   m_factionStances[fromFaction][towardFaction] = stance;
+  refreshFactionHasHostile(fromFaction);
 }
 
 bool AIManager::isHostileTo(uint8_t fromFaction, uint8_t towardFaction) const {
@@ -1213,6 +1224,7 @@ void AIManager::worsenStance(uint8_t fromFaction, uint8_t towardFaction) {
   } else if (cell == FactionStance::Neutral) {
     cell = FactionStance::Hostile;
   }
+  refreshFactionHasHostile(fromFaction);
 }
 
 void AIManager::improveStance(uint8_t fromFaction, uint8_t towardFaction) {
@@ -1228,6 +1240,7 @@ void AIManager::improveStance(uint8_t fromFaction, uint8_t towardFaction) {
   } else if (cell == FactionStance::Neutral) {
     cell = FactionStance::Allied;
   }
+  refreshFactionHasHostile(fromFaction);
 }
 
 void AIManager::resetFactionStances() {
@@ -1235,6 +1248,14 @@ void AIManager::resetFactionStances() {
     m_factionStances[faction].fill(FactionStance::Neutral);
     m_factionStances[faction][faction] = FactionStance::Allied;
   }
+  m_factionHasHostile.fill(false);
+}
+
+bool AIManager::factionRowHasHostile(uint8_t faction) const {
+  if (faction >= MAX_FACTIONS) {
+    return false;
+  }
+  return m_factionHasHostile[faction];
 }
 
 void AIManager::scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center,
@@ -1853,18 +1874,9 @@ void AIManager::processBatch(
     // Store previous position for interpolation
     transform.previousPosition = transform.position;
 
-    std::array<FactionStance, 16> stanceRow;
-    stanceRow.fill(FactionStance::Neutral);
-    bool hasHostileInRow = false;
-    if (characterData.faction < MAX_FACTIONS) {
-      stanceRow = m_factionStances[characterData.faction];
-      for (FactionStance stance : stanceRow) {
-        if (stance == FactionStance::Hostile) {
-          hasHostileInRow = true;
-          break;
-        }
-      }
-    }
+    const bool factionInRange = characterData.faction < MAX_FACTIONS;
+    const auto& stanceRow = factionInRange ? m_factionStances[characterData.faction] : kNeutralFactionStanceRow;
+    const bool hasHostileInRow = factionInRange && m_factionHasHostile[characterData.faction];
 
     BehaviorContext ctx(
         transform, edmHotData, m_storage.handles[storageIdx].getId(), edmIdx,

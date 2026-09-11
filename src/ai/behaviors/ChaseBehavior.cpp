@@ -180,7 +180,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
     }
 
     if (!targetValid) {
-        if (tryEngageHostileInRange(ctx)) {
+        if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
             return;
         }
         if (chase.isChasing) {

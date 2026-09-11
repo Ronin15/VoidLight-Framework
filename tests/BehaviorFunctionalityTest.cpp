@@ -28,14 +28,6 @@
 #include <thread>
 #include <chrono>
 
-namespace {
-std::array<FactionStance, 16> makeNeutralStanceRow() {
-    std::array<FactionStance, 16> row;
-    row.fill(FactionStance::Neutral);
-    return row;
-}
-} // namespace
-
 // Test helper for data-driven NPCs (NPCs are purely data, no Entity class)
 class TestNPC {
 public:
@@ -901,6 +893,100 @@ BOOST_AUTO_TEST_CASE(TestChaseReengagesHostilePlayerInRange) {
     BOOST_CHECK(edm.getBehaviorConfigRef(chaseIdx).type == BehaviorType::Attack);
 }
 
+BOOST_AUTO_TEST_CASE(TestWanderReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto wanderNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle wanderHandle = wanderNpc->getHandle();
+    const size_t wanderIdx = edm.getIndex(wanderHandle);
+    BOOST_REQUIRE(wanderIdx != SIZE_MAX);
+
+    edm.setFaction(wanderHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(wanderHandle, "Wander");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, wanderNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(wanderIdx).type == BehaviorType::Attack);
+}
+
+BOOST_AUTO_TEST_CASE(TestPatrolReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto patrolNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle patrolHandle = patrolNpc->getHandle();
+    const size_t patrolIdx = edm.getIndex(patrolHandle);
+    BOOST_REQUIRE(patrolIdx != SIZE_MAX);
+
+    edm.setFaction(patrolHandle, 1);
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(patrolHandle, "Patrol");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, patrolNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(patrolIdx).type == BehaviorType::Attack);
+}
+
+BOOST_AUTO_TEST_CASE(TestWanderDoesNotEngageNeutralOtherFactionInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto wanderNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle wanderHandle = wanderNpc->getHandle();
+    const size_t wanderIdx = edm.getIndex(wanderHandle);
+    BOOST_REQUIRE(wanderIdx != SIZE_MAX);
+
+    edm.setFaction(wanderHandle, 1);
+    aiMgr.assignBehavior(wanderHandle, "Wander");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, wanderNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(wanderIdx).type == BehaviorType::Wander);
+}
+
+BOOST_AUTO_TEST_CASE(TestBehaviorContextStanceRowIsNonOwningRef) {
+    auto& edm = EntityDataManager::Instance();
+
+    auto npc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Idle");
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+
+    std::array<FactionStance, kFactionStanceRowSize> stanceRow = kNeutralFactionStanceRow;
+    BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+                        idx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+                        Vector2D(0, 0), false, edm.getBehaviorData(idx),
+                        &edm.getPathData(idx), memoryData,
+                        edm.getCharacterDataByIndex(idx),
+                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                        stanceRow, 0, false,
+                        edm.knockbackSidecar());
+
+    BOOST_CHECK(!Behaviors::isHostileTowardFaction(ctx, 3));
+    stanceRow[3] = FactionStance::Hostile;
+    BOOST_CHECK(Behaviors::isHostileTowardFaction(ctx, 3));
+}
+
 BOOST_AUTO_TEST_CASE(TestAttackBehaviorRespectsAuthoredRangeWhenClosing) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
@@ -1016,7 +1102,7 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackUsesFullWeaponReach) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        makeNeutralStanceRow(), 0, false,
+                        kNeutralFactionStanceRow, 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
@@ -1066,7 +1152,7 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackPressuresInsideReachBeforeWeaponReady) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        makeNeutralStanceRow(), 0, false,
+                        kNeutralFactionStanceRow, 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
@@ -1112,7 +1198,7 @@ BOOST_AUTO_TEST_CASE(TestAttackBehaviorSynchronizesCurrentAttackMode) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        makeNeutralStanceRow(), 0, false,
+                        kNeutralFactionStanceRow, 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
@@ -1172,7 +1258,7 @@ BOOST_AUTO_TEST_CASE(TestRangedAttackWithoutAmmoResetsForRepositioning) {
                         &edm.getPathData(attackerIdx), memoryData,
                         edm.getCharacterDataByIndex(attackerIdx),
                         0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        makeNeutralStanceRow(), 0, false,
+                        kNeutralFactionStanceRow, 0, false,
                         edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);

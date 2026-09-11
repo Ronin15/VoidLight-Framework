@@ -71,10 +71,10 @@ struct BehaviorContext {
     // for systems that need absolute time (e.g., MemoryEntry timestamps).
     float gameTime{0.0f};
 
-    // Copy of AIManager's directed stance row for this entity's faction. Size is 16 to
-    // avoid including AIManager.hpp here (that header already includes behavior headers).
-    // FactionStance{} is Allied — ctor fills Neutral before copying the provided row.
-    std::array<FactionStance, 16> factionStanceRow;
+    // Const-ref to AIManager's directed stance row for this entity's faction, or
+    // kNeutralFactionStanceRow when the faction is out of range. FactionStance{}
+    // is Allied — never default-construct a local row and never pass a temporary.
+    const std::array<FactionStance, kFactionStanceRowSize>& factionStanceRow;
     uint8_t playerFaction{0};
     bool hasHostileInRow{false};
 
@@ -91,7 +91,7 @@ struct BehaviorContext {
                     const CharacterData& cData,
                     float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
                     float gTime,
-                    const std::array<FactionStance, 16>& stanceRow,
+                    const std::array<FactionStance, kFactionStanceRowSize>& stanceRow,
                     uint8_t pFaction,
                     bool hostileInRow,
                     SparseSidecar<KnockbackData>& kbSidecar)
@@ -100,10 +100,9 @@ struct BehaviorContext {
           sharedState(bData), pathData(pData), memoryData(mData), characterData(cData),
           worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY),
           worldBoundsValid(wBoundsValid), gameTime(gTime),
+          factionStanceRow(stanceRow),
           playerFaction(pFaction), hasHostileInRow(hostileInRow),
           knockback(kbSidecar) {
-        factionStanceRow.fill(FactionStance::Neutral);
-        factionStanceRow = stanceRow;
     }
 };
 

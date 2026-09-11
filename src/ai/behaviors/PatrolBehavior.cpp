@@ -126,7 +126,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
-    if (tryEngageHostileInRange(ctx)) {
+    if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
         return;
     }
 

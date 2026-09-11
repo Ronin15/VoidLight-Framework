@@ -191,7 +191,7 @@ public:
                            std::vector<size_t>& outEdmIndices,
                            bool excludePlayer = true) const;
 
-  static constexpr uint8_t MAX_FACTIONS = 16;
+  static constexpr uint8_t MAX_FACTIONS = kFactionStanceRowSize;
 
   /**
    * @brief Directed stance of fromFaction toward towardFaction.
@@ -210,6 +210,11 @@ public:
   void improveStance(uint8_t fromFaction, uint8_t towardFaction);
   /** Fill Neutral, then set the diagonal to Allied. Main-thread lifecycle reset. */
   void resetFactionStances();
+  /**
+   * @brief True if fromFaction's row contains any Hostile cell.
+   * Out-of-range factions return false.
+   */
+  [[nodiscard]] bool factionRowHasHostile(uint8_t faction) const;
   /**
    * @brief Scan entities whose faction is Allied from fromFaction's row.
    * Uses incrementally maintained faction indices. Safe for worker reads.
@@ -329,8 +334,10 @@ private:
   uint8_t m_cachedPlayerFaction{0};
 
   // Directed 16×16 Allied/Neutral/Hostile table. Main-thread writes only;
-  // workers read a copied row on BehaviorContext or scanAlliedInRadius.
+  // workers bind a const-ref to the matching row (or kNeutralFactionStanceRow)
+  // plus m_factionHasHostile[faction] — no per-entity copy or scan.
   std::array<std::array<FactionStance, MAX_FACTIONS>, MAX_FACTIONS> m_factionStances{};
+  std::array<bool, MAX_FACTIONS> m_factionHasHostile{};
   EventManager::HandlerToken m_combatHandlerToken{};
   bool m_combatHandlerRegistered{false};
 
@@ -349,6 +356,7 @@ private:
 
   void addToIndices(size_t edmIndex, BehaviorType behaviorType);
   void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
+  void refreshFactionHasHostile(uint8_t faction);
   void commitQueuedFactionChanges();
   void commitQueuedRangedAttacks();
   void commitQueuedMeleeFallbackEquips();

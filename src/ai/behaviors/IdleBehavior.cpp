@@ -191,7 +191,7 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
-    if (tryEngageHostileInRange(ctx)) {
+    if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
         return;
     }
 

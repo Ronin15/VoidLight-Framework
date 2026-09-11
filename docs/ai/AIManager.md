@@ -85,12 +85,13 @@ Defaults after `resetFactionStances()`:
 - `stance[i][i] = Allied`
 - every other pair = Neutral
 
-Public APIs (main-thread writes; workers read a copied `BehaviorContext` row or `scanAlliedInRadius`):
+Public APIs (main-thread writes; workers bind a const-ref `BehaviorContext` row plus a per-faction hostile flag, or `scanAlliedInRadius`):
 
 - `getStance` / `setStance` / `isHostileTo` / `isAlliedTo`
 - `worsenStance` (Allied → Neutral → Hostile)
 - `improveStance` (Hostile → Neutral → Allied)
 - `resetFactionStances()`
+- `factionRowHasHostile()` — out-of-range returns false
 
 Out-of-range gets return Neutral / false. Out-of-range or diagonal sets/worsen/improve are no-ops so the diagonal stays Allied.
 
