@@ -180,7 +180,7 @@ struct GuardStateData
     float currentHeading{0.0f};
     float roamTimer{0.0f};
     float escalationMultiplier{1.0f};  // Suspicion-based threshold multiplier
-    float cachedDetectionRange{0.0f};  // Cached detection range (recomputed on mode change)
+    float cachedDetectionRange{0.0f};  // Mode-only detection range; env scale applied at the check
     float hostileTimer{0.0f};          // Time spent at alert level HOSTILE (3) for ALARM escalation
     float patrolThrottleTimer{0.0f};   // Throttle timer for PatrolBehavior update interval
     uint32_t currentPatrolIndex{0};

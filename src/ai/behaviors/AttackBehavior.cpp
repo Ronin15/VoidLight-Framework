@@ -838,6 +838,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
+    const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;
 
     processAttackMessages(shared, attack, config);
     attack.attackMode = config.attackMode;
@@ -1040,7 +1041,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         }
         markTacticalRetreatEncounter(attack, ctx.memoryData);
         applyTacticalResetMovement(ctx, attack, combat, entityPos, targetPos,
-                                   shared.moveSpeed);
+                                   envSpeed);
         return;
     }
 
@@ -1048,10 +1049,10 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         if (attack.stateChangeTimer <= config.recoveryTime) {
             if (attackMode == AttackMode::HIT_AND_RUN) {
                 applyHitAndRunPositioning(ctx, entityPos, targetPos, attack,
-                                          config, shared.moveSpeed);
+                                          config, envSpeed);
             } else {
                 applyPressureMovement(ctx, attack, combat, entityPos, targetPos,
-                                      shared.moveSpeed * 0.65f);
+                                      envSpeed * 0.65f);
             }
             return;
         }
@@ -1064,7 +1065,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         Vector2D toTarget = normalizeDir(targetPos - entityPos);
         const float desiredStopDistance = std::max(combat.desiredRange, combat.minimumRange + 8.0f);
         Vector2D approachPos = targetPos - toTarget * desiredStopDistance;
-        moveToPosition(ctx, approachPos, shared.moveSpeed);
+        moveToPosition(ctx, approachPos, envSpeed);
         return;
     }
 
@@ -1073,13 +1074,13 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
     bool modeHandled = false;
     switch (attackMode) {
         case AttackMode::RANGED:
-            modeHandled = applyRangedPositioning(ctx, entityPos, targetPos, attack, config, shared.moveSpeed);
+            modeHandled = applyRangedPositioning(ctx, entityPos, targetPos, attack, config, envSpeed);
             break;
         case AttackMode::CHARGE:
-            modeHandled = applyChargePositioning(ctx, entityPos, targetPos, attack, config, shared.moveSpeed);
+            modeHandled = applyChargePositioning(ctx, entityPos, targetPos, attack, config, envSpeed);
             break;
         case AttackMode::HIT_AND_RUN:
-            modeHandled = applyHitAndRunPositioning(ctx, entityPos, targetPos, attack, config, shared.moveSpeed);
+            modeHandled = applyHitAndRunPositioning(ctx, entityPos, targetPos, attack, config, envSpeed);
             break;
         default:
             break;
@@ -1089,7 +1090,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         return;
     }
 
-    applyPressureMovement(ctx, attack, combat, entityPos, targetPos, shared.moveSpeed);
+    applyPressureMovement(ctx, attack, combat, entityPos, targetPos, envSpeed);
 }
 
 void collectDeferredDamageEvents(std::vector<EventManager::DeferredEvent>& out) {

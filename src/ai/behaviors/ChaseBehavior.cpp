@@ -203,7 +203,8 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         switchBehavior(ctx.edmIndex, BehaviorType::Attack);
         return;
     }
-    float maxRangeSquared = config.maxChaseRange * config.maxChaseRange;
+    const float effectiveMaxRange = config.maxChaseRange * ctx.envSnapshot.detectionScale;
+    float maxRangeSquared = effectiveMaxRange * effectiveMaxRange;
     float minRangeSquared = config.minChaseRange * config.minChaseRange;
 
     updateCooldowns(chase, ctx.deltaTime);

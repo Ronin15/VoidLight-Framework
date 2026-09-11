@@ -291,7 +291,7 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
     }
 
     if (ctx.playerValid && Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
-        float detectionRange = guard.cachedDetectionRange;
+        float detectionRange = guard.cachedDetectionRange * ctx.envSnapshot.detectionScale;
         float distSq = Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
         if (distSq <= detectionRange * detectionRange) {
             isEnemyFaction = true;
@@ -410,7 +410,7 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
         pathData.pathRequestCooldown -= ctx.deltaTime;
     }
 
-    // Cache detection range — recompute only on mode change
+    // Cache is mode-only; environment detectionScale is applied at the check.
     if (guard.currentMode != guard.lastCachedMode) {
         guard.cachedDetectionRange = DEFAULT_THREAT_DETECTION_RANGE * getModeAlertRadius(guard.currentMode, config);
         guard.lastCachedMode = guard.currentMode;

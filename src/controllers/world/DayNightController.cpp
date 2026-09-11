@@ -138,25 +138,6 @@ TimePeriodVisuals DayNightController::getCurrentVisuals() const
     return TimePeriodVisuals::getForPeriod(m_currentPeriod);
 }
 
-TimePeriod DayNightController::hourToTimePeriod(float hour)
-{
-    // Time periods matching GameTimeManager::getTimeOfDayName() logic:
-    // Morning: 5:00 - 8:00
-    // Day:     8:00 - 17:00
-    // Evening: 17:00 - 21:00
-    // Night:   21:00 - 5:00
-
-    if (hour >= 5.0f && hour < 8.0f) {
-        return TimePeriod::Morning;
-    } else if (hour >= 8.0f && hour < 17.0f) {
-        return TimePeriod::Day;
-    } else if (hour >= 17.0f && hour < 21.0f) {
-        return TimePeriod::Evening;
-    } else {
-        return TimePeriod::Night;
-    }
-}
-
 void DayNightController::update(float deltaTime)
 {
     // Exponential smoothing for natural-feeling transitions

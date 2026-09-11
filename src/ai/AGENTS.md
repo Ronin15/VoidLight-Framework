@@ -20,7 +20,8 @@ wins.
   executor code. EDM stores behavior, path, character, and memory data.
 - Use `BehaviorContext` data that `AIManager` cached for the frame. Do not
   bypass the context with worker-side world/player queries unless the
-  current subsystem pattern explicitly supports it.
+  current subsystem pattern explicitly supports it. Do not call
+  `GameTimeManager` or `WeatherController` from behavior executors.
 - Behavior transitions go through `Behaviors::switchBehavior()` and the
   command-bus commit path. Initialize new behavior state after transition
   commit, not before.

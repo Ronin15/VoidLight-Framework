@@ -25,11 +25,13 @@
 #include "ai/AICommandBus.hpp"
 #include "ai/BehaviorExecutors.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/WeatherEvent.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
 #include <atomic>
@@ -96,6 +98,7 @@ private:
 // Test fixture that initializes all required managers
 struct AIManagerEDMFixture {
     AIManagerEDMFixture() {
+        BOOST_REQUIRE(GameTimeManager::Instance().init());
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
         BOOST_REQUIRE(CollisionManager::Instance().init());
@@ -974,6 +977,95 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceResetsOnResetBehaviors) {
     BOOST_CHECK(aiMgr.getStance(4, 5) == FactionStance::Neutral);
     BOOST_CHECK(aiMgr.getStance(4, 4) == FactionStance::Allied);
     BOOST_CHECK(!aiMgr.factionRowHasHostile(4));
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+namespace {
+
+void dispatchStormyVisibilityOne() {
+    auto weather = std::make_shared<WeatherEvent>("test_storm", WeatherType::Clear);
+    weather->setWeatherType(WeatherType::Stormy);
+    WeatherParams params = weather->getWeatherParams();
+    params.visibility = 1.0f;
+    params.intensity = 1.0f;
+    weather->setWeatherParams(params);
+    EventManager::Instance().dispatchEvent(weather, EventManager::DispatchMode::Immediate);
+}
+
+} // namespace
+
+BOOST_FIXTURE_TEST_SUITE(EnvironmentSnapshotTests, AIManagerEDMFixture)
+
+BOOST_AUTO_TEST_CASE(TestWeatherHandlerFillsSnapshotBeforeBatch) {
+    auto& aiMgr = AIManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    aiMgr.assignBehavior(entity->getHandle(), "Wander");
+    dispatchStormyVisibilityOne();
+
+    aiMgr.update(0.016f);
+
+    const auto& snap = aiMgr.getEnvironmentSnapshot();
+    BOOST_CHECK_CLOSE(snap.moveSpeedScale, 0.75f, 0.01);
+    BOOST_CHECK_CLOSE(snap.detectionScale, 0.55f, 0.01);
+}
+
+BOOST_AUTO_TEST_CASE(TestNightSnapshotFromGameHour) {
+    auto& aiMgr = AIManager::Instance();
+    GameTimeManager::Instance().setGameHour(22.0f);
+
+    auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    aiMgr.assignBehavior(entity->getHandle(), "Wander");
+
+    aiMgr.update(0.016f);
+
+    const auto& snap = aiMgr.getEnvironmentSnapshot();
+    BOOST_CHECK_CLOSE(snap.detectionScale, 0.55f, 0.01);
+    BOOST_CHECK_CLOSE(snap.moveSpeedScale, 0.90f, 0.01);
+}
+
+BOOST_AUTO_TEST_CASE(TestPrepareForStateTransitionResetsWeatherKeepsHandler) {
+    auto& aiMgr = AIManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    aiMgr.assignBehavior(entity->getHandle(), "Wander");
+    dispatchStormyVisibilityOne();
+    aiMgr.update(0.016f);
+    BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().moveSpeedScale, 0.75f, 0.01);
+
+    aiMgr.prepareForStateTransition();
+    const auto& resetSnap = aiMgr.getEnvironmentSnapshot();
+    BOOST_CHECK_CLOSE(resetSnap.detectionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(resetSnap.moveSpeedScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(resetSnap.cautionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(resetSnap.visibility, 1.0f, 0.01);
+
+    dispatchStormyVisibilityOne();
+    auto entityAfter = AITestNPC::create(Vector2D(200.0f, 200.0f));
+    aiMgr.assignBehavior(entityAfter->getHandle(), "Wander");
+    aiMgr.update(0.016f);
+    BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().moveSpeedScale, 0.75f, 0.01);
+    BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().detectionScale, 0.55f, 0.01);
+}
+
+BOOST_AUTO_TEST_CASE(TestChangeWeatherStormyIsNotCustom) {
+    auto& aiMgr = AIManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    aiMgr.assignBehavior(entity->getHandle(), "Wander");
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Stormy", 1.0f, EventManager::DispatchMode::Immediate));
+
+    aiMgr.update(0.016f);
+
+    const auto& snap = aiMgr.getEnvironmentSnapshot();
+    BOOST_CHECK_CLOSE(snap.moveSpeedScale, 0.75f, 0.01);
+    BOOST_CHECK_CLOSE(snap.detectionScale, 0.55f, 0.01);
+    BOOST_CHECK_CLOSE(snap.cautionScale, 1.40f, 0.01);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

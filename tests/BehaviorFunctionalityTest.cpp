@@ -17,12 +17,18 @@
 #include "managers/ResourceTemplateManager.hpp"
 #include "ai/AICommandBus.hpp"
 #include "ai/BehaviorExecutors.hpp"
+#include "ai/EnvironmentModifiers.hpp"
 #include "core/ThreadSystem.hpp"
 #include "entities/Player.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/TimeEvent.hpp"
+#include "events/WeatherEvent.hpp"
 #include "world/WorldData.hpp"
 #include <array>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <vector>
 #include <thread>
@@ -845,6 +851,45 @@ BOOST_AUTO_TEST_CASE(TestGuardDetectsHostilePlayer) {
     if (ref.type == BehaviorType::Guard) {
         BOOST_CHECK_GE(static_cast<int>(edm.getGuardState(ref.index).currentAlertLevel), 3);
     }
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDetectsPlayerAtNoonNotAtNight) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& gameTime = GameTimeManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerEntity->getHandle())).faction;
+    constexpr float kDetectionGapPx = 160.0f;
+
+    gameTime.setGameHour(12.0f);
+    auto noonGuard = TestNPC::create(playerPos.getX() + kDetectionGapPx, playerPos.getY());
+    const EntityHandle noonHandle = noonGuard->getHandle();
+    const size_t noonIdx = edm.getIndex(noonHandle);
+    BOOST_REQUIRE(noonIdx != SIZE_MAX);
+    edm.setFaction(noonHandle, 1);
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(noonHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, noonGuard->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(noonIdx).lastTarget == playerEntity->getHandle());
+
+    gameTime.setGameHour(22.0f);
+    auto nightGuard = TestNPC::create(playerPos.getX() + kDetectionGapPx, playerPos.getY());
+    const EntityHandle nightHandle = nightGuard->getHandle();
+    const size_t nightIdx = edm.getIndex(nightHandle);
+    BOOST_REQUIRE(nightIdx != SIZE_MAX);
+    edm.setFaction(nightHandle, 1);
+    aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+    aiMgr.assignBehavior(nightHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, nightGuard->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(nightIdx).lastTarget != playerEntity->getHandle());
 }
 
 BOOST_AUTO_TEST_CASE(TestIdleReengagesHostilePlayerInRange) {
@@ -2874,6 +2919,279 @@ BOOST_AUTO_TEST_CASE(TestSpecialAttackReadyAfterRecovery) {
     BOOST_CHECK(edm.getAttackState(edm.getBehaviorConfigRef(entityIdx).index).specialAttackReady == true);
     BOOST_TEST_MESSAGE("specialAttackReady set to true after recovery transition");
     aiMgr.unassignBehavior(entityHandle);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(EnvironmentModifierTests, BehaviorTestFixture)
+
+BOOST_AUTO_TEST_CASE(TestEnvironmentModifierTableCombinesAndClamps) {
+    const auto identity = combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear, 1.0f);
+    BOOST_CHECK_CLOSE(identity.detectionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(identity.moveSpeedScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(identity.cautionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(identity.visibility, 1.0f, 0.01);
+
+    const auto nightClear = combineEnvironmentScales(TimePeriod::Night, WeatherType::Clear, 1.0f);
+    BOOST_CHECK_CLOSE(nightClear.detectionScale, 0.55f, 0.01);
+
+    const auto nightStormy = combineEnvironmentScales(TimePeriod::Night, WeatherType::Stormy, 1.0f);
+    BOOST_CHECK_CLOSE(nightStormy.detectionScale, 0.3025f, 0.01);
+
+    const auto foggyNight = combineEnvironmentScales(TimePeriod::Night, WeatherType::Foggy, 1.0f);
+    BOOST_CHECK_CLOSE(foggyNight.detectionScale, 0.25f, 0.01);
+
+    const auto customDay = combineEnvironmentScales(TimePeriod::Day, WeatherType::Custom, 1.0f);
+    BOOST_CHECK_CLOSE(customDay.detectionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(customDay.moveSpeedScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(customDay.cautionScale, 1.0f, 0.01);
+
+    const auto lowVis = combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear, 0.2f);
+    BOOST_CHECK_CLOSE(lowVis.detectionScale, 0.2f, 0.01);
+
+    WeatherEvent clearEvent("clear", WeatherType::Clear);
+    BOOST_CHECK_EQUAL(clearEvent.getWeatherParams().intensity, 0.0f);
+    const auto intensityIgnored =
+        combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear, 1.0f);
+    BOOST_CHECK_CLOSE(intensityIgnored.detectionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(intensityIgnored.moveSpeedScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(intensityIgnored.cautionScale, 1.0f, 0.01);
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDetectsAtIdentityNotAtNightScale) {
+    auto& edm = EntityDataManager::Instance();
+    auto guard = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = guard->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Guard");
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Guard);
+
+    auto config = edm.getGuardConfig(ref.index);
+    auto& state = edm.getGuardState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+    memoryData.lastAttacker = EntityHandle{};
+    memoryData.lastTarget = EntityHandle{};
+
+    const EntityHandle playerHandle = playerEntity->getHandle();
+    const Vector2D playerPos = playerEntity->getPosition();
+    hotData.transform.position = Vector2D(playerPos.getX() + 160.0f, playerPos.getY());
+
+    std::array<FactionStance, kFactionStanceRowSize> stanceRow = kNeutralFactionStanceRow;
+    const uint8_t playerFaction =
+        edm.getCharacterDataByIndex(edm.getIndex(playerHandle)).faction;
+    BOOST_REQUIRE(playerFaction < kFactionStanceRowSize);
+    stanceRow[playerFaction] = FactionStance::Hostile;
+
+    auto detectWithScale = [&](float detectionScale) {
+        memoryData.lastTarget = EntityHandle{};
+        state.currentAlertLevel = 0;
+        state.threatSightingTimer = 2.0f;
+        state.lastCachedMode = 255;
+        EnvironmentSnapshot env{};
+        env.detectionScale = detectionScale;
+        BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+                            idx, 0.016f, playerHandle, playerPos,
+                            Vector2D(0, 0), true, edm.getBehaviorData(idx),
+                            &edm.getPathData(idx), memoryData,
+                            edm.getCharacterDataByIndex(idx),
+                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                            stanceRow, playerFaction, true,
+                            edm.knockbackSidecar(), env);
+        Behaviors::executeGuard(ctx, config, state);
+        return memoryData.lastTarget == playerHandle;
+    };
+
+    BOOST_CHECK(detectWithScale(1.0f));
+    BOOST_CHECK(!detectWithScale(0.55f));
+}
+
+BOOST_AUTO_TEST_CASE(TestWanderSlowerInStormThanClear) {
+    auto& edm = EntityDataManager::Instance();
+    auto npc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Wander");
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Wander);
+
+    const auto config = edm.getWanderConfig(ref.index);
+    auto& state = edm.getWanderState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+
+    auto runWander = [&](const EnvironmentSnapshot& env) {
+        state.startDelay = 0.0f;
+        state.movementStarted = false;
+        state.movementUpdateTimer = 0.0f;
+        state.directionChangeTimer = 0.0f;
+        hotData.transform.velocity = Vector2D(0, 0);
+        BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+                            idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
+                            Vector2D(0, 0), false, edm.getBehaviorData(idx),
+                            &edm.getPathData(idx), memoryData,
+                            edm.getCharacterDataByIndex(idx),
+                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                            kNeutralFactionStanceRow, 0, false,
+                            edm.knockbackSidecar(), env);
+        Behaviors::executeWander(ctx, config, state);
+        return npc->getVelocity().length();
+    };
+
+    const float clearSpeed = runWander(EnvironmentSnapshot{});
+    EnvironmentSnapshot storm{};
+    storm.moveSpeedScale = 0.75f;
+    const float stormSpeed = runWander(storm);
+
+    BOOST_CHECK_GT(clearSpeed, 0.0f);
+    BOOST_CHECK_CLOSE(stormSpeed, clearSpeed * 0.75f, 1.0);
+}
+
+BOOST_AUTO_TEST_CASE(TestPatrolDwellAndFleeSafeDistanceUseCaution) {
+    auto& edm = EntityDataManager::Instance();
+
+    auto patrolNpc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle patrolHandle = patrolNpc->getHandle();
+    const size_t patrolIdx = edm.getIndex(patrolHandle);
+    BOOST_REQUIRE(patrolIdx != SIZE_MAX);
+    AIManager::Instance().assignBehavior(patrolHandle, "Patrol");
+    const auto patrolRef = edm.getBehaviorConfigRef(patrolIdx);
+    BOOST_REQUIRE(patrolRef.type == BehaviorType::Patrol);
+
+    auto patrolConfig = edm.getPatrolConfig(patrolRef.index);
+    patrolConfig.updateInterval = 0.0f;
+    auto& patrolState = edm.getPatrolState(patrolRef.index);
+    auto& patrolHot = edm.getHotDataByIndex(patrolIdx);
+    auto& patrolMem = edm.getMemoryData(patrolIdx);
+    patrolMem.setValid(true);
+    patrolHot.transform.position = patrolState.patrolTargets[0];
+    const uint32_t startIndex = patrolState.currentPatrolIndex;
+
+    auto dwellWithCaution = [&](float cautionScale) {
+        patrolState.patrolMoveTimer = 0.90f;
+        patrolState.patrolThrottleTimer = 0.0f;
+        patrolState.currentPatrolIndex = startIndex;
+        EnvironmentSnapshot env{};
+        env.cautionScale = cautionScale;
+        BehaviorContext ctx(patrolHot.transform, patrolHot, patrolHandle.getId(),
+                            patrolIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+                            Vector2D(0, 0), false, edm.getBehaviorData(patrolIdx),
+                            &edm.getPathData(patrolIdx), patrolMem,
+                            edm.getCharacterDataByIndex(patrolIdx),
+                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                            kNeutralFactionStanceRow, 0, false,
+                            edm.knockbackSidecar(), env);
+        Behaviors::executePatrol(ctx, patrolConfig, patrolState);
+        return patrolState.currentPatrolIndex;
+    };
+
+    BOOST_CHECK_EQUAL(dwellWithCaution(1.40f), startIndex);
+    BOOST_CHECK_NE(dwellWithCaution(1.0f), startIndex);
+
+    auto fleeNpc = TestNPC::create(300.0f, 300.0f);
+    auto threatNpc = TestNPC::create(750.0f, 300.0f);
+    const EntityHandle fleeHandle = fleeNpc->getHandle();
+    const EntityHandle threatHandle = threatNpc->getHandle();
+    const size_t fleeIdx = edm.getIndex(fleeHandle);
+    BOOST_REQUIRE(fleeIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.getIndex(threatHandle) != SIZE_MAX);
+    AIManager::Instance().assignBehavior(fleeHandle, "Flee");
+    const auto fleeRef = edm.getBehaviorConfigRef(fleeIdx);
+    BOOST_REQUIRE(fleeRef.type == BehaviorType::Flee);
+
+    const auto fleeConfig = edm.getFleeConfig(fleeRef.index);
+    auto& fleeState = edm.getFleeState(fleeRef.index);
+    auto& fleeHot = edm.getHotDataByIndex(fleeIdx);
+    auto& fleeMem = edm.getMemoryData(fleeIdx);
+    fleeMem.setValid(true);
+    fleeMem.lastAttacker = threatHandle;
+
+    auto fleeWithCaution = [&](float cautionScale) {
+        fleeState.isFleeing = false;
+        fleeState.isInPanic = false;
+        fleeState.hasValidThreat = false;
+        EnvironmentSnapshot env{};
+        env.cautionScale = cautionScale;
+        BehaviorContext ctx(fleeHot.transform, fleeHot, fleeHandle.getId(),
+                            fleeIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+                            Vector2D(0, 0), false, edm.getBehaviorData(fleeIdx),
+                            &edm.getPathData(fleeIdx), fleeMem,
+                            edm.getCharacterDataByIndex(fleeIdx),
+                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                            kNeutralFactionStanceRow, 0, false,
+                            edm.knockbackSidecar(), env);
+        Behaviors::executeFlee(ctx, fleeConfig, fleeState);
+        return fleeState.isFleeing;
+    };
+
+    BOOST_CHECK(fleeWithCaution(1.40f));
+    BOOST_CHECK(!fleeWithCaution(1.0f));
+}
+
+BOOST_AUTO_TEST_CASE(TestExecuteDoesNotCallWeatherOrTimeSingletons) {
+    const std::filesystem::path repoRoot =
+        std::filesystem::path(__FILE__).parent_path().parent_path();
+    const std::filesystem::path aiDir = repoRoot / "src" / "ai";
+    BOOST_REQUIRE(std::filesystem::exists(aiDir));
+    const std::filesystem::path workerFiles[] = {
+        aiDir / "BehaviorExecutors.cpp",
+        aiDir / "behaviors",
+    };
+    auto scanCpp = [](const std::filesystem::path& path) {
+        std::ifstream in(path);
+        BOOST_REQUIRE(in);
+        const std::string contents((std::istreambuf_iterator<char>(in)),
+                                   std::istreambuf_iterator<char>());
+        BOOST_CHECK_MESSAGE(
+            contents.find("GameTimeManager.hpp") == std::string::npos,
+            path.filename().string() + " includes GameTimeManager.hpp");
+        BOOST_CHECK_MESSAGE(
+            contents.find("WeatherController.hpp") == std::string::npos,
+            path.filename().string() + " includes WeatherController.hpp");
+    };
+    scanCpp(workerFiles[0]);
+    BOOST_REQUIRE(std::filesystem::exists(workerFiles[1]));
+    for (const auto& entry : std::filesystem::directory_iterator(workerFiles[1])) {
+        if (entry.path().extension() == ".cpp") {
+            scanCpp(entry.path());
+        }
+    }
+
+    auto& edm = EntityDataManager::Instance();
+    auto npc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+    AIManager::Instance().assignBehavior(handle, "Wander");
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Wander);
+
+    auto& state = edm.getWanderState(ref.index);
+    state.startDelay = 0.0f;
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+    EnvironmentSnapshot env{};
+    env.moveSpeedScale = 0.5f;
+    BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+                        idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
+                        Vector2D(0, 0), false, edm.getBehaviorData(idx),
+                        &edm.getPathData(idx), memoryData,
+                        edm.getCharacterDataByIndex(idx),
+                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+                        kNeutralFactionStanceRow, 0, false,
+                        edm.knockbackSidecar(), env);
+    Behaviors::executeWander(ctx, edm.getWanderConfig(ref.index), state);
+    BOOST_CHECK_GT(npc->getVelocity().length(), 0.0f);
+    BOOST_CHECK_CLOSE(npc->getVelocity().length(),
+                      edm.getBehaviorData(idx).moveSpeed * 0.5f, 1.0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

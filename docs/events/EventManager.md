@@ -139,6 +139,8 @@ Key event types:
 - theft/social flows emit normal event traffic instead of bespoke controller-only state
 - `ResourceChangeEvent` is reused heavily by inventory, harvesting, and UI sync paths
 
+`changeWeather(name)` always constructs or acquires a `WeatherEvent` then calls `setWeatherType(name)`. Pool-miss no longer uses the custom-string constructor, so `"Stormy"` hits `WeatherType::Stormy` rather than `Custom`.
+
 Merchant spawning should use the event helper:
 
 ```cpp

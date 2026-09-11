@@ -14,6 +14,12 @@ conflict, this file wins.
 - Use stable identifiers and indices only where the caller can prove
   freshness. Preserve generation checks for handles that can outlive
   entity slot reuse.
+- `AIManager` owns the per-frame `EnvironmentSnapshot` and a persistent
+  `EventTypeId::Weather` handler registered from `init()`. Time of day
+  comes from `hourToTimePeriod(GameTimeManager::getGameHour())`. Do not
+  register this handler from GamePlayState. Reset cached weather and the
+  snapshot on `prepareForStateTransition()` / `clean()`; keep the handler
+  across transitions. `getEnvironmentSnapshot()` is main-thread only.
 - World populate: settlement queries (`getSettlements`,
   `findSettlementAt*`) are current-world, like `getTileCopyAt`. The
   populate registry is `worldId`-keyed (`isWorldPopulated`,

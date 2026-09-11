@@ -12,6 +12,8 @@
 #include "core/WorkerBudget.hpp"
 #include "entities/resources/EquipmentResources.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/TimeEvent.hpp"
+#include "events/WeatherEvent.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
@@ -211,6 +213,23 @@ bool AIManager::init() {
       AI_WARN("EventManager not initialized, skipping combat stance handler");
     }
 
+    if (eventMgr.isInitialized() && !m_weatherHandlerRegistered) {
+      m_weatherHandlerToken = eventMgr.registerPersistentHandlerWithToken(
+          EventTypeId::Weather, [this](const EventData& data) {
+            if (!data.isActive() || !data.event) {
+              return;
+            }
+            const auto* weatherEvent =
+                static_cast<const WeatherEvent*>(data.event.get());
+            m_lastWeatherType = static_cast<uint8_t>(weatherEvent->getWeatherType());
+            m_lastWeatherIntensity = weatherEvent->getWeatherParams().intensity;
+            m_lastWeatherVisibility = weatherEvent->getWeatherParams().visibility;
+          });
+      m_weatherHandlerRegistered = true;
+    } else if (!eventMgr.isInitialized()) {
+      AI_WARN("EventManager not initialized, skipping weather environment handler");
+    }
+
     m_initialized.store(true, std::memory_order_release);
     m_globallyPaused.store(false, std::memory_order_release);
     m_isShutdown = false;
@@ -252,6 +271,15 @@ void AIManager::clean() {
   }
   m_combatHandlerRegistered = false;
   m_combatHandlerToken = {};
+  if (m_weatherHandlerRegistered && EventManager::Instance().isInitialized()) {
+    EventManager::Instance().removeHandler(m_weatherHandlerToken);
+  }
+  m_weatherHandlerRegistered = false;
+  m_weatherHandlerToken = {};
+  m_lastWeatherType = 0;
+  m_lastWeatherIntensity = 1.0f;
+  m_lastWeatherVisibility = 1.0f;
+  m_environmentSnapshot = {};
   resetFactionStances();
 
   {
@@ -315,6 +343,10 @@ void AIManager::prepareForStateTransition() {
   }
 
   resetFactionStances();
+  m_lastWeatherType = 0;
+  m_lastWeatherIntensity = 1.0f;
+  m_lastWeatherVisibility = 1.0f;
+  m_environmentSnapshot = {};
 
   // Reset all counters and stats
   m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
@@ -439,6 +471,11 @@ void AIManager::update(float deltaTime) {
 
     // Cache game time ONCE per frame for combat timing comparisons
     float cachedGameTime = GameTimeManager::Instance().getTotalGameTimeSeconds();
+    m_environmentSnapshot = combineEnvironmentScales(
+        hourToTimePeriod(GameTimeManager::Instance().getGameHour()),
+        static_cast<WeatherType>(m_lastWeatherType),
+        m_lastWeatherVisibility);
+    const EnvironmentSnapshot cachedEnvSnapshot = m_environmentSnapshot;
 
     // WorkerBudget manager — used per-type bucket below.
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
@@ -479,7 +516,7 @@ void AIManager::update(float deltaTime) {
         processBatch(m_activeIndicesBuffer, 0, entityCount, deltaTime,
                      worldWidth, worldHeight, cachedPlayerHandle,
                      cachedPlayerPosition, cachedPlayerVelocity,
-                     cachedPlayerValid, cachedGameTime,
+                     cachedPlayerValid, cachedGameTime, cachedEnvSnapshot,
                      m_singleBatchEvents,
                      m_singleBatchKnockbackClears,
                      m_singleBatchMessages);
@@ -531,11 +568,11 @@ void AIManager::update(float deltaTime) {
             m_batchFutures.push_back(threadSystem.enqueueTaskWithResult(
                 [this, i, bStart, bEnd, deltaTime, worldWidth, worldHeight,
                  cachedPlayerHandle, cachedPlayerPosition, cachedPlayerVelocity,
-                 cachedPlayerValid, cachedGameTime]() {
+                 cachedPlayerValid, cachedGameTime, cachedEnvSnapshot]() {
                     processBatch(m_activeIndicesBuffer, bStart, bEnd, deltaTime,
                                  worldWidth, worldHeight, cachedPlayerHandle,
                                  cachedPlayerPosition, cachedPlayerVelocity,
-                                 cachedPlayerValid, cachedGameTime,
+                                 cachedPlayerValid, cachedGameTime, cachedEnvSnapshot,
                                  m_batchEventBuffers[i],
                                  m_batchKnockbackClears[i],
                                  m_batchMessageBuffers[i]);
@@ -1699,6 +1736,7 @@ void AIManager::processBatch(
                              const Vector2D &playerPos,
                              const Vector2D &playerVel, bool playerValid,
                              float gameTime,
+                             EnvironmentSnapshot envSnapshot,
                              std::vector<EventManager::DeferredEvent> &outEvents,
                              std::vector<uint32_t> &outKnockbackClears,
                              std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> &outMessages) {
@@ -1884,7 +1922,7 @@ void AIManager::processBatch(
         behaviorData, pathData, memoryData, characterData,
         0.0f, 0.0f, worldWidth, worldHeight, true, gameTime,
         stanceRow, m_cachedPlayerFaction, hasHostileInRow,
-        edm.knockbackSidecar());
+        edm.knockbackSidecar(), envSnapshot);
 
     switch (ref.type) {
       case BehaviorType::Idle:

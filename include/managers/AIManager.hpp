@@ -21,6 +21,7 @@
 
 #include "ai/BehaviorConfig.hpp"
 #include "ai/AICommandBus.hpp"
+#include "ai/EnvironmentModifiers.hpp"
 #include "ai/FactionStance.hpp"
 #include "core/Logger.hpp"
 #include "entities/EntityHandle.hpp"
@@ -227,6 +228,14 @@ public:
   void setGlobalPause(bool paused);
   bool isGloballyPaused() const;
 
+  /**
+   * @brief Per-frame environment scales filled on the main thread in update().
+   * @details Main thread only. Workers read the by-value copy on BehaviorContext.
+   */
+  [[nodiscard]] const EnvironmentSnapshot& getEnvironmentSnapshot() const {
+    return m_environmentSnapshot;
+  }
+
   // Priority from EDM CharacterData
   int getEntityPriority(EntityHandle handle) const;
   float getUpdateRangeMultiplier(int priority) const;
@@ -340,6 +349,12 @@ private:
   std::array<bool, MAX_FACTIONS> m_factionHasHostile{};
   EventManager::HandlerToken m_combatHandlerToken{};
   bool m_combatHandlerRegistered{false};
+  EventManager::HandlerToken m_weatherHandlerToken{};
+  bool m_weatherHandlerRegistered{false};
+  uint8_t m_lastWeatherType{0};
+  float m_lastWeatherIntensity{1.0f};
+  float m_lastWeatherVisibility{1.0f};
+  EnvironmentSnapshot m_environmentSnapshot{};
 
   // Incrementally maintained behavior/faction indices for O(G)/O(F) radius scans.
   // Modified only on main thread (under m_entitiesMutex write lock in assignBehavior etc.),
@@ -374,6 +389,7 @@ private:
                     EntityHandle playerHandle, const Vector2D& playerPos,
                     const Vector2D& playerVel, bool playerValid,
                     float gameTime,
+                    EnvironmentSnapshot envSnapshot,
                     std::vector<EventManager::DeferredEvent>& outEvents,
                     std::vector<uint32_t>& outKnockbackClears,
                     std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages);

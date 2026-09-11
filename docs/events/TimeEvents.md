@@ -34,6 +34,19 @@ enum class TimeEventType {
 };
 ```
 
+## TimePeriod bounds
+
+`hourToTimePeriod(float hour)` in `include/events/TimeEvent.hpp` is the single owner of Morning/Day/Evening/Night bounds:
+
+| Period  | Hours        |
+|---------|--------------|
+| Morning | `[5, 8)`     |
+| Day     | `[8, 17)`    |
+| Evening | `[17, 21)`   |
+| Night   | otherwise    |
+
+`GameTimeManager::getTimeOfDayName()` and `DayNightController` call this function. AI environment scales use the live game hour through the same helper, not `TimePeriodChangedEvent`.
+
 ## Event Details
 
 ### HourChangedEvent

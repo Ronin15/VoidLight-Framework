@@ -27,6 +27,7 @@
 #include "ai/BehaviorCommonState.hpp"       // For BehaviorData, PathData
 #include "ai/BehaviorConfig.hpp"
 #include "ai/BehaviorStateData.hpp"
+#include "ai/EnvironmentModifiers.hpp"
 #include "ai/FactionStance.hpp"
 #include "managers/EntityDataTypes.hpp"     // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
 #include "managers/EventManager.hpp"        // For EventManager::DeferredEvent
@@ -82,8 +83,11 @@ struct BehaviorContext {
     // presence check without touching EntityDataManager::Instance().
     // Reference (not pointer) because a BehaviorContext is always constructed with the
     // process-wide sidecar — null has no meaning here and AGENTS.md forbids nullable accessors.
-    // Declared last so the initializer list order matches declaration order.
     SparseSidecar<KnockbackData>& knockback;
+
+    // Frame-cached environment scales from AIManager (main thread). Copied by
+    // value into processBatch; workers must not call GameTimeManager or WeatherController.
+    EnvironmentSnapshot envSnapshot{};
 
     BehaviorContext(TransformData& t, EntityHotData& h, EntityHandle::IDType id, size_t idx, float dt,
                     EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
@@ -94,7 +98,8 @@ struct BehaviorContext {
                     const std::array<FactionStance, kFactionStanceRowSize>& stanceRow,
                     uint8_t pFaction,
                     bool hostileInRow,
-                    SparseSidecar<KnockbackData>& kbSidecar)
+                    SparseSidecar<KnockbackData>& kbSidecar,
+                    EnvironmentSnapshot env = {})
         : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt),
           playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid),
           sharedState(bData), pathData(pData), memoryData(mData), characterData(cData),
@@ -102,7 +107,8 @@ struct BehaviorContext {
           worldBoundsValid(wBoundsValid), gameTime(gTime),
           factionStanceRow(stanceRow),
           playerFaction(pFaction), hasHostileInRow(hostileInRow),
-          knockback(kbSidecar) {
+          knockback(kbSidecar),
+          envSnapshot(env) {
     }
 };
 
@@ -391,7 +397,8 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx);
 [[nodiscard]] bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction);
 [[nodiscard]] bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction);
 /**
- * @brief Switch to Attack if a Hostile faction member is within HOSTILE_ENGAGE_RANGE.
+ * @brief Switch to Attack if a Hostile faction member is within
+ *        HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale.
  * @return true if a transition was queued
  */
 bool tryEngageHostileInRange(BehaviorContext& ctx);

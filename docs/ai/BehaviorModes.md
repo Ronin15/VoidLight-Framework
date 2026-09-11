@@ -8,21 +8,27 @@ This page catalogs the behavior families and the configuration style. Modes are 
   - modes include stationary, subtle sway, occasional turn, light fidget
 - `Wander`
   - broad roaming presets such as small, large, and event-area wandering
+  - movement speed uses `envSnapshot.moveSpeedScale`; direction-change interval uses `cautionScale`
 - `Chase`
   - pursuit settings for line-of-sight, catch radius, and path refresh
+  - `maxChaseRange` is multiplied by `envSnapshot.detectionScale` at the check; chase movement is not scaled
 - `Patrol`
   - waypoint or route-driven guard movement
+  - movement speed uses `moveSpeedScale`; waypoint dwell uses `cautionScale`
 - `Guard`
   - alert, suspicious, and defensive area control
   - player auto-detect and lastAttacker/lastTarget/memory threat classification consult `AIManager` faction stance (`Hostile`), not `faction == 1`
   - help / alarm / all-clear scans use `scanAlliedInRadius` (Allied row, including same faction)
+  - `cachedDetectionRange` is mode-only; player detection multiplies it by `envSnapshot.detectionScale` at the check. lastAttacker/lastTarget/memory are not scaled. Guard movement is not scaled.
 - `Attack`
   - melee/ranged aggression settings plus target engagement rules
   - auto-acquire and player fallback require directed `Hostile` stance; lastTarget / lastAttacker / explicitTarget stay alive-only (unfiltered by stance)
   - AOE friendly-fire skip is Allied, not raw faction id
+  - movement uses `moveSpeedScale`; `tryAcquireTarget` / help-call radius are not scaled
 - `Flee`
   - panic/retreat behavior with recovery thresholds
   - distress broadcast filters allies by Allied stance rather than `faction != myFaction`
+  - movement uses `moveSpeedScale`; `safeDistance` and the 1.2× exit radius use `cautionScale`
 - `Follow`
   - formation or distance-preserving follower behavior
 

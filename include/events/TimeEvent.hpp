@@ -24,6 +24,24 @@ enum class TimePeriod : uint8_t
 };
 
 /**
+ * @brief Map a game hour (0-23.999) to Morning/Day/Evening/Night.
+ * Single owner of period bounds: Morning [5,8), Day [8,17), Evening [17,21), else Night.
+ */
+[[nodiscard]] inline TimePeriod hourToTimePeriod(float hour)
+{
+    if (hour >= 5.0f && hour < 8.0f) {
+        return TimePeriod::Morning;
+    }
+    if (hour >= 8.0f && hour < 17.0f) {
+        return TimePeriod::Day;
+    }
+    if (hour >= 17.0f && hour < 21.0f) {
+        return TimePeriod::Evening;
+    }
+    return TimePeriod::Night;
+}
+
+/**
  * @brief Event types for time-related changes
  */
 enum class TimeEventType

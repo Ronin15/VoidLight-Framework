@@ -92,6 +92,8 @@ GameTimeManager tracks time using a configurable time scale that converts real-t
 
 ### Time of Day Periods
 
+Bounds are owned by free `hourToTimePeriod()` in `include/events/TimeEvent.hpp`. `getTimeOfDayName()` switches on that enum.
+
 | Period  | Hours       | Description |
 |---------|-------------|-------------|
 | Morning | 5:00 - 8:00 | Dawn, warming light |
@@ -349,7 +351,7 @@ float getTotalGameTimeSeconds() const;          // Cumulative
 float getTimeScale() const;
 bool isDaytime() const;
 bool isNighttime() const;
-const char* getTimeOfDayName() const;           // "Morning"/"Day"/"Evening"/"Night"
+std::string_view getTimeOfDayName() const;      // "Morning"/"Day"/"Evening"/"Night" via hourToTimePeriod
 std::string_view formatCurrentTime(bool use24Hour = true);  // "14:30" or "2:30 PM"
 ```
 

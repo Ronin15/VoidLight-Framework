@@ -325,23 +325,23 @@ Architecture notes:
 
 Checklist:
 
-- [ ] Environment snapshot cached in `AIManager::update()` before batches; exposed on `BehaviorContext`
-- [ ] Modifier table (time × weather) with the values above
-- [ ] Persistent Weather handler on `AIManager`; time from `getGameHour()`
-- [ ] Guard/Chase/Wander/Patrol/Flee/Attack consume the scales
-- [ ] Owning docs updated
-- [ ] Tests updated in the same change (night vs noon detection, storm vs clear speed, workers do not call weather/time singletons)
+- [x] Environment snapshot cached in `AIManager::update()` before batches; exposed on `BehaviorContext`
+- [x] Modifier table (time × weather) with the values above
+- [x] Persistent Weather handler on `AIManager`; time from `getGameHour()`
+- [x] Guard/Chase/Wander/Patrol/Flee/Attack consume the scales
+- [x] Owning docs updated
+- [x] Tests updated in the same change (night vs noon detection, storm vs clear speed, workers do not call weather/time singletons)
 
 Acceptance checks:
 
-- [ ] Same NPC detects the player at shorter range at night / in heavy weather than at clear noon
-- [ ] Move-speed/caution change under storm modifiers
-- [ ] Worker batches do not call `WeatherController` / `GameTimeManager`
-- [ ] `ninja -C build` passes
-- [ ] Targeted Boost.Test: `behavior_functionality_tests` and/or `ai_manager_edm_integration_tests`
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Same NPC detects the player at shorter range at night / in heavy weather than at clear noon
+- [x] Move-speed/caution change under storm modifiers
+- [x] Worker batches do not call `WeatherController` / `GameTimeManager`
+- [x] `ninja -C build` passes
+- [x] Targeted Boost.Test: `behavior_functionality_tests` and/or `ai_manager_edm_integration_tests`
+- [x] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Not started. Depends on Slice 2. **Next implementation slice** (after Slice 3 close).
+Status: Implemented and reviewed. Slice-complete gate passed (`ninja -C build`, `behavior_functionality_tests`, `ai_manager_edm_integration_tests`). Shelter is out of scope. Review: no High; Medium (detection untested) dismissed — `TestGuardDetectsPlayerAtNoonNotAtNight` plus `TestGuardDetectsAtIdentityNotAtNightScale`; Low comment/scan follow-ups landed.
 
 ## Slice 5: Faction stance and territory
 

@@ -326,11 +326,10 @@ void EventManager::removeHandlers(EventTypeId typeId) {
 
 bool EventManager::changeWeather(const std::string &weatherType,
                                  float transitionTime, DispatchMode mode) const {
-  std::shared_ptr<WeatherEvent> weatherEvent = m_weatherPool.acquire();
+  auto weatherEvent = m_weatherPool.acquire();
   if (!weatherEvent)
-    weatherEvent = std::make_shared<WeatherEvent>("trigger_weather", weatherType);
-  else
-    weatherEvent->setWeatherType(weatherType);
+    weatherEvent = std::make_shared<WeatherEvent>("trigger_weather", WeatherType::Clear);
+  weatherEvent->setWeatherType(weatherType);
 
   WeatherParams params = weatherEvent->getWeatherParams();
   params.transitionTime = transitionTime;

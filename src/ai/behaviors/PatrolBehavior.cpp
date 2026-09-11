@@ -84,6 +84,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
+    const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;
 
     // Process pending behavior messages
     for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
@@ -144,7 +145,8 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
     Vector2D currentWaypoint = patrol.patrolTargets[patrol.currentPatrolIndex % 4];
     if (isAtWaypoint(currentPos, currentWaypoint, config.waypointReachedRadius)) {
         patrol.patrolMoveTimer += elapsed;
-        if (patrol.patrolMoveTimer >= config.waypointCooldown) {
+        if (patrol.patrolMoveTimer >= applyCautionScale(config.waypointCooldown,
+                                                        ctx.envSnapshot.cautionScale)) {
             patrol.currentPatrolIndex = (patrol.currentPatrolIndex + 1) % 4;
             patrol.patrolMoveTimer = 0.0f;
             patrol.currentPatrolTarget = patrol.patrolTargets[patrol.currentPatrolIndex];
@@ -187,17 +189,17 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
 
             if (dist > 0.001f) {
                 Vector2D direction = toWaypoint / dist;
-                ctx.transform.velocity = direction * shared.moveSpeed;
+                ctx.transform.velocity = direction * envSpeed;
             }
         } else {
             // Direct movement fallback
             Vector2D direction = (currentWaypoint - currentPos).normalized();
-            ctx.transform.velocity = direction * shared.moveSpeed;
+            ctx.transform.velocity = direction * envSpeed;
         }
     } else {
         // No pathData - direct movement
         Vector2D direction = (currentWaypoint - currentPos).normalized();
-        ctx.transform.velocity = direction * shared.moveSpeed;
+        ctx.transform.velocity = direction * envSpeed;
     }
 
     // Cautious movement when suspicious
@@ -207,7 +209,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
 
     // Stall detection — uses shared separationTimer (persists across frames)
     float speedSq = ctx.transform.velocity.lengthSquared();
-    float stallThreshold = shared.moveSpeed * config.stallSpeedMultiplier;
+    float stallThreshold = envSpeed * config.stallSpeedMultiplier;
     if (speedSq < stallThreshold * stallThreshold) {
         shared.separationTimer += config.updateInterval;
         if (shared.separationTimer > config.advanceWaypointDelay) {

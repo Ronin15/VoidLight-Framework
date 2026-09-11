@@ -6,7 +6,7 @@
 
 ## Overview
 
-Tracks Morning / Day / Evening / Night from `HourChangedEvent`, dispatches `TimePeriodChangedEvent` on period change, and interpolates GPU ambient lighting each frame.
+Tracks Morning / Day / Evening / Night from `HourChangedEvent`, dispatches `TimePeriodChangedEvent` on period change, and interpolates GPU ambient lighting each frame. Period bounds come from free `hourToTimePeriod()` in `include/events/TimeEvent.hpp` (not a controller-local copy).
 
 `update(dt)` is required every frame. DayNight is **not** `IUpdatable`; `updateAll()` will not tick it. GamePlay calls `m_controllers.get<DayNightController>()->update(deltaTime)` explicitly.
 

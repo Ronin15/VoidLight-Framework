@@ -202,8 +202,8 @@ bool tryFollowPathToGoal(BehaviorContext& ctx, const VoidLight::FleeStateData& f
 
 void updatePanicFlee(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
                      const Vector2D& threatPos,
-                     const VoidLight::FleeBehaviorConfig& config) {
-    auto& shared = ctx.sharedState;
+                     const VoidLight::FleeBehaviorConfig& config,
+                     float envSpeed) {
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.directionChangeTimer > 0.2f || flee.fleeDirection.length() < 0.001f) {
@@ -219,12 +219,13 @@ void updatePanicFlee(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
     }
 
     float speedModifier = calculateFleeSpeedModifier(flee, config);
-    ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    ctx.transform.velocity = flee.fleeDirection * envSpeed * config.baseFleeSpeedMultiplier * speedModifier;
 }
 
 void updateStrategicRetreat(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
                             const Vector2D& threatPos,
-                            const VoidLight::FleeBehaviorConfig& config) {
+                            const VoidLight::FleeBehaviorConfig& config,
+                            float envSpeed) {
     auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
@@ -251,15 +252,15 @@ void updateStrategicRetreat(BehaviorContext& ctx, VoidLight::FleeStateData& flee
         currentPos + flee.fleeDirection * retreatDistance, 100.0f);
 
     float speedModifier = calculateFleeSpeedModifier(flee, config) * config.strategicSpeedMultiplier;
-    if (!tryFollowPathToGoal(ctx, flee, dest, shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
-        ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    if (!tryFollowPathToGoal(ctx, flee, dest, envSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
+        ctx.transform.velocity = flee.fleeDirection * envSpeed * config.baseFleeSpeedMultiplier * speedModifier;
     }
 }
 
 void updateEvasiveManeuver(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
                            const Vector2D& threatPos,
-                           const VoidLight::FleeBehaviorConfig& config) {
-    auto& shared = ctx.sharedState;
+                           const VoidLight::FleeBehaviorConfig& config,
+                           float envSpeed) {
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.zigzagTimer > config.zigzagInterval) {
@@ -280,12 +281,13 @@ void updateEvasiveManeuver(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
     flee.fleeDirection = normalizeVector(zigzagDir);
 
     float speedModifier = calculateFleeSpeedModifier(flee, config);
-    ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    ctx.transform.velocity = flee.fleeDirection * envSpeed * config.baseFleeSpeedMultiplier * speedModifier;
 }
 
 void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
                      const Vector2D& threatPos,
-                     const VoidLight::FleeBehaviorConfig& config) {
+                     const VoidLight::FleeBehaviorConfig& config,
+                     float envSpeed) {
     auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
@@ -312,8 +314,8 @@ void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
         currentPos + flee.fleeDirection * coverDistance, 100.0f);
 
     float speedModifier = calculateFleeSpeedModifier(flee, config);
-    if (!tryFollowPathToGoal(ctx, flee, dest, shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
-        ctx.transform.velocity = flee.fleeDirection * shared.moveSpeed * config.baseFleeSpeedMultiplier * speedModifier;
+    if (!tryFollowPathToGoal(ctx, flee, dest, envSpeed * config.baseFleeSpeedMultiplier * speedModifier, config)) {
+        ctx.transform.velocity = flee.fleeDirection * envSpeed * config.baseFleeSpeedMultiplier * speedModifier;
     }
 }
 
@@ -358,6 +360,7 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
 
     auto& shared = ctx.sharedState;
     auto& pathData = *ctx.pathData;
+    const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;
 
     // Process any pending messages before main logic
     processFleeMessages(shared, flee, config);
@@ -415,7 +418,8 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
     }
 
     float distanceToThreatSquared = (ctx.transform.position - threatPos).lengthSquared();
-    float detectionRangeSquared = config.safeDistance * config.safeDistance;
+    const float effectiveSafe = applyCautionScale(config.safeDistance, ctx.envSnapshot.cautionScale);
+    float detectionRangeSquared = effectiveSafe * effectiveSafe;
     bool threatInRange = (distanceToThreatSquared <= detectionRangeSquared);
 
     if (threatInRange) {
@@ -429,7 +433,7 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
         flee.hasValidThreat = true;
         flee.lastThreatPosition = threatPos;
     } else if (flee.isFleeing) {
-        float exitDistance = config.safeDistance * 1.2f;
+        float exitDistance = effectiveSafe * 1.2f;
         float safeDistanceSquared = exitDistance * exitDistance;
         if (distanceToThreatSquared >= safeDistanceSquared) {
             flee.isFleeing = false;
@@ -468,16 +472,16 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
         }
 
         if (flee.isInPanic) {
-            updatePanicFlee(ctx, flee, threatPos, config);
+            updatePanicFlee(ctx, flee, threatPos, config, envSpeed);
         } else {
             int nearbyCount = shared.cachedNearbyCount;
 
             if (nearbyCount > 3) {
-                updateEvasiveManeuver(ctx, flee, threatPos, config);
+                updateEvasiveManeuver(ctx, flee, threatPos, config, envSpeed);
             } else if (nearbyCount > 1) {
-                updateSeekCover(ctx, flee, threatPos, config);
+                updateSeekCover(ctx, flee, threatPos, config, envSpeed);
             } else {
-                updateStrategicRetreat(ctx, flee, threatPos, config);
+                updateStrategicRetreat(ctx, flee, threatPos, config, envSpeed);
             }
         }
         updateStamina(flee, ctx.deltaTime, true, config);

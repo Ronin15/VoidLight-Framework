@@ -456,14 +456,13 @@ bool GameTimeManager::isNighttime() const
 
 std::string_view GameTimeManager::getTimeOfDayName() const
 {
-    if (m_currentHour >= 5.0f && m_currentHour < 8.0f)
-        return "Morning";
-    else if (m_currentHour >= 8.0f && m_currentHour < 17.0f)
-        return "Day";
-    else if (m_currentHour >= 17.0f && m_currentHour < 21.0f)
-        return "Evening";
-    else
-        return "Night";
+    switch (hourToTimePeriod(m_currentHour)) {
+        case TimePeriod::Morning: return "Morning";
+        case TimePeriod::Day:     return "Day";
+        case TimePeriod::Evening: return "Evening";
+        case TimePeriod::Night:   return "Night";
+    }
+    return "Day";
 }
 
 int GameTimeManager::getCurrentSeason(int daysPerSeason) const

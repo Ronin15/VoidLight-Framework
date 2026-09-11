@@ -217,7 +217,8 @@ bool tryEngageHostileInRange(BehaviorContext& ctx) {
         return false;
     }
 
-    const float rangeSq = HOSTILE_ENGAGE_RANGE * HOSTILE_ENGAGE_RANGE;
+    const float engageRange = HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale;
+    const float rangeSq = engageRange * engageRange;
     if (ctx.playerValid && ctx.playerHandle.isValid() &&
         isHostileTowardFaction(ctx, ctx.playerFaction)) {
         const float distSq =
@@ -231,7 +232,7 @@ bool tryEngageHostileInRange(BehaviorContext& ctx) {
 
     thread_local std::vector<size_t> s_hostileScanBuffer;
     AIManager::Instance().scanActiveIndicesInRadius(
-        ctx.transform.position, HOSTILE_ENGAGE_RANGE, s_hostileScanBuffer, true);
+        ctx.transform.position, engageRange, s_hostileScanBuffer, true);
 
     auto& edm = EntityDataManager::Instance();
     for (size_t idx : s_hostileScanBuffer) {

@@ -29,7 +29,7 @@ Responsibilities:
 ### Update Pipeline
 
 1. gather active EDM indices into `m_activeIndicesBuffer`
-2. cache per-frame player position, world bounds, and game time
+2. cache per-frame player position, world bounds, game time, and `EnvironmentSnapshot`
 3. **pre-batch main-thread commit** of the command bus (faction, melee fallback, queued transitions, messages) — required so workers see this frame's assignments
 4. ask `WorkerBudgetManager` for a batch strategy against the full active workload
 5. run each contiguous batch through `processBatch(...)`
@@ -37,7 +37,7 @@ Responsibilities:
 7. flush deferred `EventManager::DeferredEvent` batches
 8. **post-batch** main-thread commit of command-bus outputs (ranged spawns, equipment, transitions, messages)
 
-`BehaviorContext` pre-fetches shared state needed by the typed executors, including the EDM knockback sidecar. Worker threads may read/update their entity's behavior state, but structural behavior changes and sidecar removal are committed on the main thread.
+`BehaviorContext` pre-fetches shared state needed by the typed executors, including the EDM knockback sidecar and a by-value `envSnapshot`. Worker threads may read/update their entity's behavior state, but structural behavior changes and sidecar removal are committed on the main thread. Workers must not call `GameTimeManager`, `WeatherController`, or `AIManager::getEnvironmentSnapshot()`.
 
 ## Behavior Assignment
 
@@ -98,6 +98,14 @@ Out-of-range gets return Neutral / false. Out-of-range or diagonal sets/worsen/i
 `resetFactionStances()` runs from `init()`, `prepareForStateTransition()`, `clean()`, and `resetBehaviors()`.
 
 A persistent `EventTypeId::Combat` handler (registered in `init()` when `EventManager` is already initialized) writes mutual Hostile after a committed `DamageEvent` with `damage > 0` and different in-range factions. Same-faction hits do not write the table. The handler is not unregistered on state transition; `clean()` removes it.
+
+## Environment Snapshot
+
+`AIManager` owns `m_environmentSnapshot` (`visibility`, `detectionScale`, `moveSpeedScale`, `cautionScale`). `update()` fills it on the main thread from `hourToTimePeriod(GameTimeManager::getGameHour())` and the last `EventTypeId::Weather` payload, then copies it by value into `processBatch` (same as `gameTime`). Public `getEnvironmentSnapshot()` is main-thread only; there is no setter.
+
+A persistent `EventTypeId::Weather` handler (also registered in `init()`, not from `GamePlayState`) stores last weather type, intensity, and visibility. Intensity is stored and ignored by combine. Default until the first event is Clear / intensity 1 / visibility 1. `prepareForStateTransition()` and `clean()` reset cached weather and the snapshot to identity. The handler stays registered across transitions and is removed only in `clean()`.
+
+Combine is `timeScale * weatherScale`, each output clamped to `[0.25, 1.5]`, then `detectionScale *= clamp(visibility, 0, 1)` with no second clamp. `Custom` weather uses Clear scales. Tables live in `src/ai/EnvironmentModifiers.cpp`.
 
 ## Combat and Memory Integration
 

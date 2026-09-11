@@ -95,13 +95,6 @@ private:
     void transitionToPeriod(TimePeriod newPeriod);
 
     /**
-     * @brief Determine time period from hour
-     * @param hour Current game hour (0-23.999)
-     * @return Corresponding TimePeriod
-     */
-    static TimePeriod hourToTimePeriod(float hour);
-
-    /**
      * @brief Update GPU renderer with current lighting values
      */
     void updateGPULighting();

@@ -22,8 +22,9 @@ The behavior system uses a data-oriented pipeline:
 - pre-fetched `BehaviorData`, `PathData`, `NPCMemoryData`, and `CharacterData`
 - cached world bounds
 - cached game time
+- cached `envSnapshot` (visibility, detectionScale, moveSpeedScale, cautionScale)
 
-The goal is to avoid repeated singleton lookups and scattered map access during the hot loop.
+The goal is to avoid repeated singleton lookups and scattered map access during the hot loop. `AIManager::update()` fills `envSnapshot` on the main thread; worker batches read the by-value copy and must not call `GameTimeManager` or `WeatherController`.
 
 ## Dispatch and Initialization
 

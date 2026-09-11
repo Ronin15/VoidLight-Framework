@@ -23,7 +23,10 @@ adds API and data-contract rules for AI headers. On conflict, this file wins.
   actually shared across behaviors.
 - `BehaviorContext` is the batch-time contract between `AIManager` and
   behavior executors. Keep it explicit about cached frame data, EDM refs,
-  optional state, and thread-safety expectations.
+  optional state, and thread-safety expectations. It carries a by-value
+  `EnvironmentSnapshot` filled on the main thread; executors read
+  `ctx.envSnapshot` and must not call `GameTimeManager` or
+  `WeatherController`.
 - AI command-bus payloads must include enough identity to reject stale
   commands after entity reuse. Preserve deterministic arbitration fields
   where they exist.
