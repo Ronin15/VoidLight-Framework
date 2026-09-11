@@ -173,7 +173,7 @@ Landed (do not rebuild): `HudController::initializeActionHUD()`, `setVisible(boo
 
 ## Slice 2: World population (living settlements)
 
-Goal: Loading a world populates it with NPCs from persisted settlement records. Overworld villages get a merchant, guards, and villagers; forest/haunted tiles outside settlements get sparse hostiles. Unload does not leave those NPCs behind. Reload after unload does not duplicate them. Pause/resume does not respawn. `GamePlayState` does not loop tiles and `createNPC`. HUD, trade, and combat work against these NPCs. The populate/clear API is keyed by `worldId` so a later dungeon world can pass different records without a new owner.
+Goal: Loading a world populates it with NPCs from persisted settlement records. Overworld villages get a merchant, guards, and villagers; forest/haunted tiles outside settlements get sparse wilderness Warriors. Unload does not leave those NPCs behind. Reload after unload does not duplicate them. Pause/resume does not respawn. `GamePlayState` does not loop tiles and `createNPC`. HUD, trade, and combat work against these NPCs. The populate/clear API is keyed by `worldId` so a later dungeon world can pass different records without a new owner.
 
 Current foundation:
 
@@ -201,7 +201,7 @@ Architecture notes:
   - 4× `Human` / `Villager`, `"Wander"`, walkable tiles inside the radius.
 - After `assignBehavior`, write the assigned `BehaviorType` as **home role** (new `uint8_t` on `CharacterData` or `NPCMemoryData` — design picks). `CharacterData.behaviorType` stays the current behavior. Slice 7 reads home role; do not leave it unset.
 - Forest and haunted tiles **outside** every settlement radius: sparse wilderness. `Human` / `Warrior`, faction override 1, empty behavior override (class Chase). One candidate per 64×64 tile block that contains forest/haunted land; skip if inside any settlement radius; cap 32 per world. Not Hostile until stance writes.
-- Cap total populated NPCs at 256 per `worldId` (named constant). Production 200×200 is ~5 villages → 5×7 + hostiles, well under the cap.
+- Cap total populated NPCs at 256 per `worldId` (named constant). Production 200×200 is ~5 villages → 5×7 + wilderness, well under the cap.
 - Do **not** set simulation tiers from player position at populate (player does not exist yet). Leave default `Active`; `BackgroundSimulationManager` retier after GamePlayState is running.
 - Populate is idempotent: if `worldId` is already registered as populated, skip. `unloadWorldLocked` clears that registration and destroys those handles. Pause/resume never calls `loadNewWorld`.
 - Remove the `GamePlayState` bootstrap `spawnMerchant`. Debug `R` stays.

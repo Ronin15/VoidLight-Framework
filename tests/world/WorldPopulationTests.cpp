@@ -134,7 +134,7 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
     size_t idleCount = 0;
     size_t guardCount = 0;
     size_t wanderCount = 0;
-    size_t hostileCount = 0;
+    size_t wildernessCount = 0;
     for (const auto& npc : npcs)
     {
         BOOST_CHECK_EQUAL(npc.behaviorType, npc.homeRole);
@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
         {
             BOOST_CHECK_EQUAL(npc.homeRole, static_cast<uint8_t>(BehaviorType::Chase));
             BOOST_CHECK(AIManager::Instance().getStance(1, 0) == FactionStance::Neutral);
-            ++hostileCount;
+            ++wildernessCount;
         }
     }
 
@@ -167,7 +167,7 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
     BOOST_CHECK_EQUAL(idleCount, settlements.size());
     BOOST_CHECK_EQUAL(guardCount, 2 * settlements.size());
     BOOST_CHECK_EQUAL(wanderCount, 4 * settlements.size());
-    BOOST_CHECK_LE(hostileCount, WorldPopulation::MAX_HOSTILES_PER_WORLD);
+    BOOST_CHECK_LE(wildernessCount, WorldPopulation::MAX_WILDERNESS_NPCS_PER_WORLD);
 }
 
 BOOST_AUTO_TEST_CASE(TestUnloadThenReloadReplacesPopulatedNpcs)

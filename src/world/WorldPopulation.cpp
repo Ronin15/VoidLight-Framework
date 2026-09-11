@@ -202,19 +202,19 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
         }
     }
 
-    uint32_t hostilesSpawned = 0;  // Wilderness faction-1 warriors (not agro by default)
-    for (int blockY = 0; blockY < height; blockY += HOSTILE_BLOCK_TILES)
+    uint32_t wildernessSpawned = 0;
+    for (int blockY = 0; blockY < height; blockY += WILDERNESS_BLOCK_TILES)
     {
-        for (int blockX = 0; blockX < width; blockX += HOSTILE_BLOCK_TILES)
+        for (int blockX = 0; blockX < width; blockX += WILDERNESS_BLOCK_TILES)
         {
-            if (hostilesSpawned >= MAX_HOSTILES_PER_WORLD ||
+            if (wildernessSpawned >= MAX_WILDERNESS_NPCS_PER_WORLD ||
                 outHandles.size() >= MAX_POPULATED_NPCS_PER_WORLD)
             {
                 return;
             }
 
-            const int blockMaxY = std::min(blockY + HOSTILE_BLOCK_TILES, height);
-            const int blockMaxX = std::min(blockX + HOSTILE_BLOCK_TILES, width);
+            const int blockMaxY = std::min(blockY + WILDERNESS_BLOCK_TILES, height);
+            const int blockMaxX = std::min(blockX + WILDERNESS_BLOCK_TILES, width);
             bool spawned = false;
             for (int y = blockY; y < blockMaxY && !spawned; ++y)
             {
@@ -232,7 +232,7 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
                     }
                     if (trySpawnNpc(outHandles, used, width, x, y, "Human", "Warrior", 1))
                     {
-                        ++hostilesSpawned;
+                        ++wildernessSpawned;
                         spawned = true;
                         break;
                     }
@@ -243,7 +243,7 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
 
     WORLD_MANAGER_DEBUG(std::format(
         "WorldPopulation: spawned {} NPCs ({} wilderness) for world {}",
-        outHandles.size(), hostilesSpawned, world.worldId));
+        outHandles.size(), wildernessSpawned, world.worldId));
 }
 
 }
