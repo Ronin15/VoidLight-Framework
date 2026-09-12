@@ -33,9 +33,10 @@ still says EDM is storage-only; spawn assignment has not been peeled out of
 create yet.
 
 Callers: `WorldPopulation` (wilderness Warriors pass faction 1 and empty
-behavior override so `classes.json` Chase is home role; settlement NPCs pass
-empty), GamePlayState debug `R` (faction 1, no Attack override, then
-`setStance` mutual Hostile; not in the populate registry),
+behavior override so `classes.json` Chase is home role; settlement merchants,
+guards, and villagers pass `settlement.faction` — `0xFF` remains the
+class-default sentinel on `spawnNpc`), GamePlayState debug `R` (faction 1, no
+Attack override, then `setStance` mutual Hostile; not in the populate registry),
 `NPCSpawnEvent::execute`, and demo village setup that previously created then
 assigned.
 

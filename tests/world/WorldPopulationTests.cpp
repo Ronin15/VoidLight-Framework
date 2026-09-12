@@ -351,4 +351,64 @@ BOOST_AUTO_TEST_CASE(TestClearPopulatedNpcsKeepsWorld)
     BOOST_CHECK(collectNpcs().empty());
 }
 
+BOOST_AUTO_TEST_CASE(TestPopulateUsesSettlementFaction)
+{
+    WorldData world;
+    world.worldId = "settlement-faction";
+    constexpr int kSize = 16;
+    world.grid.assign(static_cast<size_t>(kSize), std::vector<Tile>(static_cast<size_t>(kSize)));
+
+    SettlementRecord record;
+    record.id = 1;
+    record.centerTileX = 8;
+    record.centerTileY = 8;
+    record.radiusTiles = 5;
+    record.faction = 3;
+    world.settlements.push_back(record);
+
+    std::vector<EntityHandle> handles;
+    WorldPopulation::populate(world, handles);
+    BOOST_REQUIRE(!handles.empty());
+
+    auto& edm = EntityDataManager::Instance();
+    for (const EntityHandle& handle : handles)
+    {
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE_NE(idx, SIZE_MAX);
+        BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(idx).faction, record.faction);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(TestQueryTerritoryAtVillageCenter)
+{
+    auto& worldMgr = WorldManager::Instance();
+    BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
+
+    const auto settlements = worldMgr.getSettlements();
+    BOOST_REQUIRE(!settlements.empty());
+    const SettlementRecord& record = settlements.front();
+
+    const float centerPixelX =
+        (static_cast<float>(record.centerTileX) + 0.5f) * TILE_SIZE;
+    const float centerPixelY =
+        (static_cast<float>(record.centerTileY) + 0.5f) * TILE_SIZE;
+    const auto atCenter =
+        AIManager::Instance().queryTerritoryAtPixel(centerPixelX, centerPixelY);
+    BOOST_REQUIRE(atCenter.has_value());
+    BOOST_CHECK_EQUAL(atCenter->settlementId, record.id);
+    BOOST_CHECK_EQUAL(atCenter->faction, record.faction);
+
+    const auto atTile = AIManager::Instance().queryTerritoryAtTile(
+        record.centerTileX, record.centerTileY);
+    BOOST_REQUIRE(atTile.has_value());
+    BOOST_CHECK_EQUAL(atTile->settlementId, record.id);
+    BOOST_CHECK_EQUAL(atTile->faction, record.faction);
+
+    const float outsidePixelX =
+        centerPixelX + static_cast<float>(record.radiusTiles + 1) * TILE_SIZE;
+    BOOST_CHECK(!AIManager::Instance()
+                     .queryTerritoryAtPixel(outsidePixelX, centerPixelY)
+                     .has_value());
+}
+
 BOOST_AUTO_TEST_SUITE_END()

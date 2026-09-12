@@ -394,6 +394,9 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx);
  */
 [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle, EntityHandle subjectHandle);
 
+/** Player-only faction standing. 0 if missing/invalid. Not mixed into getRelationshipLevel. */
+[[nodiscard]] int8_t getPlayerFactionStanding(EntityHandle playerHandle, uint8_t faction);
+
 [[nodiscard]] bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction);
 [[nodiscard]] bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction);
 /**

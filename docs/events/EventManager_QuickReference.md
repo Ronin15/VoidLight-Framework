@@ -54,7 +54,7 @@ Runtime notes:
 Weather, SceneChange, NPCSpawn, ParticleEffect,
 ResourceChange, World, Camera, Harvest, Collision,
 WorldTrigger, CollisionObstacleChanged, Custom,
-Time, Combat, Entity, BehaviorMessage, MerchantSpawn
+Time, Combat, Entity, BehaviorMessage, MerchantSpawn, StanceChanged
 ```
 
 ## Current Usage Rules
@@ -67,4 +67,5 @@ Time, Combat, Entity, BehaviorMessage, MerchantSpawn
 - Use `CollisionObstacleChanged` for world obstacle changes and the projectile
   hit sink for projectile collisions.
 - Use `EventManager::spawnMerchant(...)` for merchant-focused NPC spawning; it dispatches `EventTypeId::MerchantSpawn`.
+- `EventTypeId::StanceChanged` / `StanceChangedEvent` is produced by `AIManager` after a real stance-cell mutation (Immediate). `GamePlayState` logs it when from or toward is the player faction.
 - Use `drainAllDeferredEvents()` only in tests or controlled synchronization points.

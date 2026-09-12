@@ -30,6 +30,7 @@
 #include <array>
 #include <atomic>
 #include <future>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -211,6 +212,16 @@ public:
   void improveStance(uint8_t fromFaction, uint8_t towardFaction);
   /** Fill Neutral, then set the diagonal to Allied. Main-thread lifecycle reset. */
   void resetFactionStances();
+
+  static constexpr int8_t PLAYER_STANDING_MIN = -100;
+  static constexpr int8_t PLAYER_STANDING_MAX = 100;
+  static constexpr int8_t PLAYER_STANDING_COMBAT_DELTA = -10;
+  static constexpr int8_t PLAYER_STANDING_THEFT_DELTA = -25;
+  static constexpr int8_t PLAYER_STANDING_GIFT_DELTA = 15;
+
+  void adjustPlayerStanding(EntityHandle playerHandle, uint8_t towardFaction, int8_t delta);
+  [[nodiscard]] int8_t getPlayerStanding(EntityHandle playerHandle, uint8_t faction) const;
+
   /**
    * @brief True if fromFaction's row contains any Hostile cell.
    * Out-of-range factions return false.
@@ -235,6 +246,18 @@ public:
   [[nodiscard]] const EnvironmentSnapshot& getEnvironmentSnapshot() const {
     return m_environmentSnapshot;
   }
+
+  /**
+   * @brief Current-world settlement at a world-space pixel. Main thread only.
+   * @details First matching settlement wins. Wilderness is not a faction.
+   *          Workers must not call this (it queries WorldManager).
+   */
+  struct TerritoryQueryResult {
+    uint32_t settlementId{0}; // SettlementRecord.id, 1-based
+    uint8_t faction{0};
+  };
+  [[nodiscard]] std::optional<TerritoryQueryResult> queryTerritoryAtPixel(float worldX, float worldY) const;
+  [[nodiscard]] std::optional<TerritoryQueryResult> queryTerritoryAtTile(int tileX, int tileY) const;
 
   // Priority from EDM CharacterData
   int getEntityPriority(EntityHandle handle) const;
@@ -372,6 +395,12 @@ private:
   void addToIndices(size_t edmIndex, BehaviorType behaviorType);
   void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
   void refreshFactionHasHostile(uint8_t faction);
+  void commitDirectedStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance newStance);
+  void emitStanceChanged(uint8_t fromFaction, uint8_t towardFaction,
+                         FactionStance oldStance, FactionStance newStance);
+  [[nodiscard]] uint8_t collisionPlayerFaction() const;
+  void syncNpcCollisionFromStance(size_t edmIndex);
+  void syncFactionCollisionTowardPlayer(uint8_t faction);
   void commitQueuedFactionChanges();
   void commitQueuedRangedAttacks();
   void commitQueuedMeleeFallbackEquips();

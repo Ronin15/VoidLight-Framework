@@ -41,6 +41,7 @@ float getCurrentSellPrice() const;
 std::string getCurrentTradeRelationshipDescription() const;
 float getCurrentTradePriceModifier() const;
 float getRelationshipLevel(EntityHandle npcHandle) const;
+int8_t getPlayerFactionStanding(uint8_t faction) const;
 float getPriceModifier(EntityHandle npcHandle) const;
 bool willRefuseTrade(EntityHandle npcHandle) const;
 std::string getRelationshipDescription(EntityHandle npcHandle) const;
@@ -62,8 +63,8 @@ void alertNearbyGuards(const Vector2D& location, EntityHandle criminal);
 - Trade UI is created through `UIManager`; price display and selection highlights are controller-managed.
 - Buying and selling update inventory, gold, and relationship/memory state.
 - Theft reporting records negative interaction state, fires event traffic, and alerts nearby guards.
-- After the existing memory write, `reportTheft` calls `AIManager::worsenStance(victimFaction, thiefFaction)` only (directed; does not write the reverse cell).
-- `recordGift` calls `AIManager::improveStance(npcFaction, playerFaction)` only. Both writes run on the main thread; no new events.
+- After the existing memory write, `reportTheft` calls `AIManager::worsenStance(victimFaction, thiefFaction)` only (directed; does not write the reverse cell). If the thief is the player handle, it also applies `PLAYER_STANDING_THEFT_DELTA` toward the victim faction even when factions are equal (diagonal stance is a no-op; standing still drops). Differing-faction theft emits `StanceChanged` from the stance write.
+- `recordGift` calls `AIManager::improveStance(npcFaction, playerFaction)` and `adjustPlayerStanding(player, npcFaction, PLAYER_STANDING_GIFT_DELTA)` even when factions are equal. Both writes run on the main thread.
 
 ## GamePlayState Integration
 

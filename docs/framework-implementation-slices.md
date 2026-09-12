@@ -21,6 +21,11 @@ and subsystem docs.
 - If a dependent system does not exist yet, label the work as foundation and
   leave the checklist incomplete.
 - Implement only the open slice's scope. No unrelated refactors.
+- A numbered slice is not done with optional leftovers. Every in-scope
+  architecture note is a Checklist item. If a piece cannot land in this slice,
+  add a later `## Slice N` section with Goal / Checklist / Acceptance **before**
+  calling the current slice done. The only residual allowed to stay `[ ]` after
+  slice-complete is interactive visual/GPU confirmation.
 
 ## Gates (do not mix these)
 
@@ -101,10 +106,11 @@ Status: Not started
 ## Slice Records
 
 Implement from these sections, not from chat notes. Implement only the open
-slice's scope. Slices 1–3 are implemented (Slice 1 visual confirm leftover;
-Slice 3 reviewed). Slice 5 **core** (stance table) is landed; remainder stays
-on Slice 5. **Slice 4 is next.** Do not pull Slices 6–9 forward. Do not
-rebuild the stance table.
+slice's scope. Slices 1–4 are implemented (Slice 1 visual confirm leftover;
+Slice 3 reviewed). Slice 5 **core** (stance table) is landed; this change
+finishes Slice 5 remainder (territory, standing, StanceChanged, collision
+remap). Slices 6–9 stay scheduled after 5. Do not pull Slices 6–9 forward. Do
+not rebuild the stance table.
 
 Scheduled order (do not skip ahead). Data deps may be narrower than schedule
 order; do not pull a later slice forward unless this file is updated first.
@@ -353,8 +359,8 @@ Current foundation:
 - `AIManager::MAX_FACTIONS = 16`; directed `m_factionStances`; `m_factionEdmIndices`; `scanFactionInRadius()` / `scanAlliedInRadius()`; `setFaction()` / `onEntityFactionChanged()`.
 - Attack/Guard/help/Idle re-engage consult Hostile/Allied stance. Combat `DamageEvent` handler and SocialController theft/gift write the table.
 - `SocialController` gifts/theft/alerts; `Behaviors::getRelationshipLevel(npc, subject)` is per-NPC memory (`include/ai/BehaviorExecutors.hpp`).
-- Collision: `applyFactionCollision` still maps **id 1 → Layer_Enemy** (physics grouping, not agro). Remap-from-stance is a remainder below.
-- Slice 2 `SettlementRecord.faction` + point-in-radius query (territory consumer not wired).
+- Collision: NPC `Layer_Enemy` grouping follows directed Hostile toward the player faction. EDM `setNpcCollisionAsEnemy` is a storage setter; AIManager syncs from stance. Do not map `faction == 1` to Enemy.
+- Slice 2 `SettlementRecord.faction` + point-in-radius query; AIManager consumes it (`queryTerritoryAtPixel` / `queryTerritoryAtTile`).
 
 Architecture notes:
 
@@ -363,19 +369,20 @@ Architecture notes:
 - Territory: query Slice 2 settlements (`center + radiusTiles * TILE_SIZE`) for faction at a point. No new spatial hash.
 - Player standing: compact per-faction scores on the player’s EDM character/memory sidecar, updated from the same main-thread commits. Keep `getRelationshipLevel(npc, subject)` for individuals.
 - Event: reuse combat/social events if they already carry enough; otherwise add `EventTypeId` (next unused; bump `COUNT`) for stance-changed so the GamePlayState event log can print a line. Do not scrape the table from UI.
-- Collision: keep id-1 → Layer_Enemy grouping this slice unless a remainder remaps from stance vs player — do that from main-thread `setStance` into EDM, not a new system and not EDM calling AIManager.
+- Collision: remap from directed Hostile toward the player faction. Main-thread `setStance` / faction-index commit into EDM `setNpcCollisionAsEnemy`. Not a new system and not EDM calling AIManager.
 - Files: `include/managers/AIManager.hpp`, `src/managers/AIManager.cpp`, Guard/Attack/Flee, `src/controllers/social/SocialController.cpp`, `include/managers/EntityDataTypes.hpp` if player standing is EDM, `docs/ai/AIManager.md`, `docs/controllers/SocialController.md`, `tests/BehaviorFunctionalityTest.cpp`, `tests/controllers/SocialControllerTests.cpp`.
 - Out of scope: diplomacy UI, minimap colors, scripted wars.
 
 Checklist:
 
 - [x] Stance table on `AIManager`; help/attack/flee consume it (no `faction == 1` hostility)
-- [ ] Settlement default faction + point-in-settlement query
+- [x] Settlement default faction (`settlement.faction`; wilderness Warriors stay 1) + AIManager territory query
 - [x] Main-thread stance updates from combat, theft, gift
-- [ ] Player faction standing layered on existing memory APIs
-- [ ] Event log can observe settlement/faction hostility change
-- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`)
-- [x] Tests updated in the same change (hostile NPCs engage, same-stance help, theft worsens stance, `getRelationshipLevel` still moves)
+- [x] Player faction standing sidecar (EDM storage; AIManager policy; not mixed into `getRelationshipLevel`)
+- [x] StanceChanged event + GamePlayState event log
+- [x] Collision remap from directed Hostile toward the player faction (not `faction == 1`)
+- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`, `docs/events/EventManager.md`, `docs/managers/EntityDataManager.md`, `docs/world/WorldPopulation.md`, `include/managers/AGENTS.md`)
+- [x] Tests updated in the same change (populate faction, territory query, standing theft/gift/combat, StanceChanged payload, collision remap)
 
 Acceptance checks:
 
@@ -383,11 +390,11 @@ Acceptance checks:
 - [x] Same-stance guards still propagate alerts; other stances do not
 - [x] Killing/theft can worsen stance; it is test-observable
 - [x] Per-NPC relationship APIs still pass
-- [ ] `ninja -C build` passes
-- [ ] Targeted Boost.Test: `behavior_functionality_tests`, `social_controller_tests`
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] `ninja -C build` passes
+- [x] Targeted Boost.Test: `behavior_functionality_tests`, `social_controller_tests`, `world_population_tests`, `ai_manager_edm_integration_tests`, `event_types_tests`
+- [x] Slice reviewed (`cpp-review-specialist`) before commit
 
-Status: Partial — **core landed** (16×16 table, Neutral defaults except self Allied, Attack/Guard/help consume stance, combat/theft/gift write it). Remainder: settlement territory query, player standing scores beside the table, StanceChanged event log, optional collision remap from stance, slice review of remainder. Do not rebuild the table.
+Status: Remainder implemented and reviewed. Collision remap is in this slice (not optional). Review Mediums (same-faction gift standing test; standing sidecar destroy/reuse/`resetFactionStances` lifetime) and Lows (collision sync APIs private; GamePlayState token init) addressed. Do not rebuild the table.
 
 ## Slice 6: Survival and resource AI
 

@@ -651,6 +651,12 @@ void SocialController::reportTheft(EntityHandle thief,
     }
     AIManager::Instance().worsenStance(victimFaction, thiefFaction);
 
+    auto player = mp_player.lock();
+    if (player && thief == player->getHandle()) {
+        AIManager::Instance().adjustPlayerStanding(
+            thief, victimFaction, AIManager::PLAYER_STANDING_THEFT_DELTA);
+    }
+
     Vector2D theftLocation = edm.getHotDataByIndex(victimIdx).transform.position;
 
     auto theftEvent = std::make_shared<TheftEvent>(
@@ -704,6 +710,12 @@ float SocialController::getRelationshipLevel(EntityHandle npcHandle) const {
     auto player = mp_player.lock();
     EntityHandle playerHandle = player ? player->getHandle() : EntityHandle{};
     return Behaviors::getRelationshipLevel(npcHandle, playerHandle);
+}
+
+int8_t SocialController::getPlayerFactionStanding(uint8_t faction) const {
+    auto player = mp_player.lock();
+    EntityHandle playerHandle = player ? player->getHandle() : EntityHandle{};
+    return Behaviors::getPlayerFactionStanding(playerHandle, faction);
 }
 
 float SocialController::getPriceModifier(EntityHandle npcHandle) const {
@@ -778,6 +790,11 @@ void SocialController::recordGift(EntityHandle npcHandle, float giftValue) {
         }
     }
     AIManager::Instance().improveStance(npcFaction, playerFaction);
+
+    if (player) {
+        AIManager::Instance().adjustPlayerStanding(
+            player->getHandle(), npcFaction, AIManager::PLAYER_STANDING_GIFT_DELTA);
+    }
 }
 
 void SocialController::dispatchResourceChange(EntityHandle ownerHandle,

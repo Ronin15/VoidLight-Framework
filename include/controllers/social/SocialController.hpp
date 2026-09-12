@@ -190,6 +190,9 @@ public:
     /** @brief Relationship score: -1.0 (hostile) to +1.0 (best friend), 0.0 neutral */
     [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle) const;
 
+    /** @brief Player-only faction standing. 0 if missing. Not mixed into getRelationshipLevel. */
+    [[nodiscard]] int8_t getPlayerFactionStanding(uint8_t faction) const;
+
     /** @brief Price multiplier: 0.7 (trusted) to 1.3 (hostile) */
     [[nodiscard]] float getPriceModifier(EntityHandle npcHandle) const;
 

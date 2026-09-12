@@ -89,6 +89,19 @@ struct KnockbackData
 };
 
 /**
+ * @brief Player-only per-faction standing scores. Stored in SparseSidecar.
+ *
+ * NPCMemoryData is locked at 448 B. Standing is not mixed into
+ * Behaviors::getRelationshipLevel (emotions + interaction memories).
+ * 0 = neutral. FACTION_COUNT is asserted against kFactionStanceRowSize in .cpp.
+ */
+struct PlayerFactionStanding {
+    static constexpr uint8_t FACTION_COUNT = 16;
+    std::array<int8_t, FACTION_COUNT> scores{};
+};
+static_assert(sizeof(PlayerFactionStanding) == 16);
+
+/**
  * @brief Hot data accessed every frame (64 bytes, one cache line)
  *
  * Packed for sequential access during batch processing.
@@ -646,7 +659,7 @@ struct MonsterTypeInfo {
     // Size
     float sizeMultiplier{1.0f};
 
-    // Default faction id 1 (Layer_Enemy collision group). Agro is stance.
+    // Default faction id. Collision grouping is stance-vs-player, not this id.
     uint8_t defaultFaction{1};
 };
 

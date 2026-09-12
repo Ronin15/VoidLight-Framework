@@ -832,7 +832,8 @@ BOOST_AUTO_TEST_CASE(TestEventTypeIdEnumValues) {
   BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::Entity), 14);
   BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::BehaviorMessage), 15);
   BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::MerchantSpawn), 16);
-  BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::COUNT), 17);
+  BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::StanceChanged), 17);
+  BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::COUNT), 18);
 }
 
 // Test ResourceChangeEvent

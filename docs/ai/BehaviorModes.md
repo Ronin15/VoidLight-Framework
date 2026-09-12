@@ -76,4 +76,5 @@ Use:
 - per-frame locals must not be used for path/state that should survive updates
 - behavior switching is `Behaviors::switchBehavior()` (enqueue) then `AIManager::commitQueuedBehaviorTransitions()` (clears, then `Behaviors::init`). Do not call `reassignBehaviorConfig` from gameplay/controllers.
 - Attack, Guard, and help-call scans consult the `AIManager` directed stance table; Idle / Wander / Patrol / Chase (no current target) call `tryEngageHostileInRange` after recent-attack / fear checks
-- `Behaviors::getRelationshipLevel` remains per-NPC memory and is unchanged by faction stance
+- `Behaviors::getRelationshipLevel` remains per-NPC memory (emotions + interaction memories) and is unchanged by faction stance or player standing scores
+- `Behaviors::getPlayerFactionStanding(playerHandle, faction)` reads the player-only EDM standing sidecar; do not mix those scores into `getRelationshipLevel`

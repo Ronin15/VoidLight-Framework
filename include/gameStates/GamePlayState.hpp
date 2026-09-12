@@ -117,6 +117,8 @@ private:
   bool m_weatherSubscribed{false};
   EventManager::HandlerToken m_harvestEventToken;
   bool m_harvestSubscribed{false};
+  EventManager::HandlerToken m_stanceChangedEventToken;
+  bool m_stanceChangedSubscribed{false};
   TimePeriod m_currentTimePeriod{TimePeriod::Day};  // Track current period for weather changes
   WeatherType m_lastWeatherType{WeatherType::Clear};  // Track to avoid redundant weather processing
 };

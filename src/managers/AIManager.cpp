@@ -12,6 +12,7 @@
 #include "core/WorkerBudget.hpp"
 #include "entities/resources/EquipmentResources.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "events/TimeEvent.hpp"
 #include "events/WeatherEvent.hpp"
 #include "managers/CollisionManager.hpp"
@@ -20,10 +21,12 @@
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include "managers/WorldManager.hpp"
 #include "utils/SIMDMath.hpp"
 #include <array>
 #include <algorithm>
 #include <format>
+#include <memory>
 #include <unordered_map>
 
 static_assert(AIManager::MAX_FACTIONS == kFactionStanceRowSize,
@@ -205,8 +208,23 @@ bool AIManager::init() {
               return;
             }
 
+            const bool victimTowardAttackerChanged =
+                getStance(victimFaction, attackerFaction) != FactionStance::Hostile;
+            const bool attackerTowardVictimChanged =
+                getStance(attackerFaction, victimFaction) != FactionStance::Hostile;
             setStance(victimFaction, attackerFaction, FactionStance::Hostile);
             setStance(attackerFaction, victimFaction, FactionStance::Hostile);
+
+            const EntityKind attackerKind = edm.getHotDataByIndex(attackerIdx).kind;
+            const EntityKind victimKind = edm.getHotDataByIndex(victimIdx).kind;
+            if (attackerKind == EntityKind::Player && victimTowardAttackerChanged) {
+              adjustPlayerStanding(attackerHandle, victimFaction,
+                                   PLAYER_STANDING_COMBAT_DELTA);
+            }
+            if (victimKind == EntityKind::Player && attackerTowardVictimChanged) {
+              adjustPlayerStanding(victimHandle, attackerFaction,
+                                   PLAYER_STANDING_COMBAT_DELTA);
+            }
           });
       m_combatHandlerRegistered = true;
     } else {
@@ -834,6 +852,7 @@ void AIManager::assignBehavior(EntityHandle handle,
 
   // Add to guard/faction indices for the new behavior
   addToIndices(edmIndex, behaviorType);
+  syncNpcCollisionFromStance(edmIndex);
 
   m_totalAssignmentCount.fetch_add(1, std::memory_order_relaxed);
 }
@@ -911,6 +930,7 @@ void AIManager::assignBehavior(EntityHandle handle,
 
   // Add to guard/faction indices for the new behavior
   addToIndices(edmIndex, config.type);
+  syncNpcCollisionFromStance(edmIndex);
 
   m_totalAssignmentCount.fetch_add(1, std::memory_order_relaxed);
 }
@@ -1032,6 +1052,7 @@ void AIManager::onEntityFactionChanged(size_t edmIndex, uint8_t oldFaction, uint
   auto& edm = EntityDataManager::Instance();
   VoidLight::AICommandBus::Instance().enqueueFactionChange(
       edm.getHandle(edmIndex), edmIndex, oldFaction, newFaction);
+  syncNpcCollisionFromStance(edmIndex);
 }
 
 void AIManager::applySocialInteraction(EntityHandle npcHandle,
@@ -1236,8 +1257,7 @@ void AIManager::setStance(uint8_t fromFaction, uint8_t towardFaction, FactionSta
   if (fromFaction == towardFaction) {
     return;
   }
-  m_factionStances[fromFaction][towardFaction] = stance;
-  refreshFactionHasHostile(fromFaction);
+  commitDirectedStance(fromFaction, towardFaction, stance);
 }
 
 bool AIManager::isHostileTo(uint8_t fromFaction, uint8_t towardFaction) const {
@@ -1255,13 +1275,14 @@ void AIManager::worsenStance(uint8_t fromFaction, uint8_t towardFaction) {
   if (fromFaction == towardFaction) {
     return;
   }
-  FactionStance& cell = m_factionStances[fromFaction][towardFaction];
+  const FactionStance cell = m_factionStances[fromFaction][towardFaction];
+  FactionStance next = cell;
   if (cell == FactionStance::Allied) {
-    cell = FactionStance::Neutral;
+    next = FactionStance::Neutral;
   } else if (cell == FactionStance::Neutral) {
-    cell = FactionStance::Hostile;
+    next = FactionStance::Hostile;
   }
-  refreshFactionHasHostile(fromFaction);
+  commitDirectedStance(fromFaction, towardFaction, next);
 }
 
 void AIManager::improveStance(uint8_t fromFaction, uint8_t towardFaction) {
@@ -1271,13 +1292,14 @@ void AIManager::improveStance(uint8_t fromFaction, uint8_t towardFaction) {
   if (fromFaction == towardFaction) {
     return;
   }
-  FactionStance& cell = m_factionStances[fromFaction][towardFaction];
+  const FactionStance cell = m_factionStances[fromFaction][towardFaction];
+  FactionStance next = cell;
   if (cell == FactionStance::Hostile) {
-    cell = FactionStance::Neutral;
+    next = FactionStance::Neutral;
   } else if (cell == FactionStance::Neutral) {
-    cell = FactionStance::Allied;
+    next = FactionStance::Allied;
   }
-  refreshFactionHasHostile(fromFaction);
+  commitDirectedStance(fromFaction, towardFaction, next);
 }
 
 void AIManager::resetFactionStances() {
@@ -1286,6 +1308,122 @@ void AIManager::resetFactionStances() {
     m_factionStances[faction][faction] = FactionStance::Allied;
   }
   m_factionHasHostile.fill(false);
+}
+
+void AIManager::commitDirectedStance(uint8_t fromFaction, uint8_t towardFaction,
+                                     FactionStance newStance) {
+  FactionStance& cell = m_factionStances[fromFaction][towardFaction];
+  const FactionStance oldStance = cell;
+  if (oldStance == newStance) {
+    return;
+  }
+  cell = newStance;
+  refreshFactionHasHostile(fromFaction);
+  emitStanceChanged(fromFaction, towardFaction, oldStance, newStance);
+  if (towardFaction == collisionPlayerFaction()) {
+    syncFactionCollisionTowardPlayer(fromFaction);
+  }
+}
+
+void AIManager::emitStanceChanged(uint8_t fromFaction, uint8_t towardFaction,
+                                  FactionStance oldStance, FactionStance newStance) {
+  uint32_t settlementId = 0;
+  const auto settlements = WorldManager::Instance().getSettlements();
+  for (const auto& record : settlements) {
+    if (record.faction == fromFaction || record.faction == towardFaction) {
+      settlementId = record.id;
+      break;
+    }
+  }
+
+  auto event = std::make_shared<StanceChangedEvent>(
+      fromFaction, towardFaction, oldStance, newStance, settlementId);
+  EventManager::Instance().dispatchEvent(event, EventManager::DispatchMode::Immediate);
+}
+
+uint8_t AIManager::collisionPlayerFaction() const {
+  return m_playerHandle.isValid() ? m_cachedPlayerFaction : static_cast<uint8_t>(0);
+}
+
+void AIManager::adjustPlayerStanding(EntityHandle playerHandle, uint8_t towardFaction,
+                                     int8_t delta) {
+  if (!playerHandle.isValid() || towardFaction >= MAX_FACTIONS || delta == 0) {
+    return;
+  }
+
+  auto& edm = EntityDataManager::Instance();
+  const size_t idx = edm.getIndex(playerHandle);
+  if (idx == SIZE_MAX) {
+    return;
+  }
+
+  const int8_t current = edm.getPlayerFactionStanding(idx, towardFaction);
+  const int16_t next = std::clamp(
+      static_cast<int16_t>(static_cast<int16_t>(current) + delta),
+      static_cast<int16_t>(PLAYER_STANDING_MIN),
+      static_cast<int16_t>(PLAYER_STANDING_MAX));
+  const int8_t applied = static_cast<int8_t>(next - current);
+  if (applied != 0) {
+    edm.addPlayerFactionStanding(idx, towardFaction, applied);
+  }
+}
+
+int8_t AIManager::getPlayerStanding(EntityHandle playerHandle, uint8_t faction) const {
+  if (!playerHandle.isValid() || faction >= MAX_FACTIONS) {
+    return 0;
+  }
+  auto& edm = EntityDataManager::Instance();
+  const size_t idx = edm.getIndex(playerHandle);
+  if (idx == SIZE_MAX) {
+    return 0;
+  }
+  return edm.getPlayerFactionStanding(idx, faction);
+}
+
+void AIManager::syncNpcCollisionFromStance(size_t edmIndex) {
+  auto& edm = EntityDataManager::Instance();
+  if (edmIndex >= edm.getHotDataArray().size()) {
+    return;
+  }
+
+  const auto& hot = edm.getHotDataByIndex(edmIndex);
+  if (hot.kind != EntityKind::NPC) {
+    return;
+  }
+
+  const uint8_t npcFaction = edm.getCharacterDataByIndex(edmIndex).faction;
+  if (npcFaction >= MAX_FACTIONS) {
+    return;
+  }
+
+  edm.setNpcCollisionAsEnemy(edmIndex, isHostileTo(npcFaction, collisionPlayerFaction()));
+}
+
+void AIManager::syncFactionCollisionTowardPlayer(uint8_t faction) {
+  if (faction >= MAX_FACTIONS) {
+    return;
+  }
+  for (size_t edmIdx : m_factionEdmIndices[faction]) {
+    syncNpcCollisionFromStance(edmIdx);
+  }
+}
+
+std::optional<AIManager::TerritoryQueryResult> AIManager::queryTerritoryAtPixel(
+    float worldX, float worldY) const {
+  const auto settlement = WorldManager::Instance().findSettlementAtPixel(worldX, worldY);
+  if (!settlement.has_value()) {
+    return std::nullopt;
+  }
+  return TerritoryQueryResult{settlement->id, settlement->faction};
+}
+
+std::optional<AIManager::TerritoryQueryResult> AIManager::queryTerritoryAtTile(
+    int tileX, int tileY) const {
+  const auto settlement = WorldManager::Instance().findSettlementAtTile(tileX, tileY);
+  if (!settlement.has_value()) {
+    return std::nullopt;
+  }
+  return TerritoryQueryResult{settlement->id, settlement->faction};
 }
 
 bool AIManager::factionRowHasHostile(uint8_t faction) const {
@@ -1404,6 +1542,7 @@ void AIManager::commitQueuedFactionChanges() {
     if (std::find(targetFaction.begin(), targetFaction.end(), edmIndex) == targetFaction.end()) {
       targetFaction.push_back(edmIndex);
     }
+    syncNpcCollisionFromStance(edmIndex);
   }
 }
 

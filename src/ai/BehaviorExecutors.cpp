@@ -149,6 +149,19 @@ bool shouldRetaliate(const BehaviorContext& ctx) {
     return (bravery > 0.4f && aggression > 0.6f);
 }
 
+int8_t getPlayerFactionStanding(EntityHandle playerHandle, uint8_t faction) {
+    if (!playerHandle.isValid()) {
+        return 0;
+    }
+
+    auto& edm = EntityDataManager::Instance();
+    const size_t idx = edm.getIndex(playerHandle);
+    if (idx == SIZE_MAX) {
+        return 0;
+    }
+    return edm.getPlayerFactionStanding(idx, faction);
+}
+
 float getRelationshipLevel(EntityHandle npcHandle, EntityHandle subjectHandle) {
     if (!npcHandle.isValid()) {
         return 0.0f;

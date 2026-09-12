@@ -20,6 +20,20 @@ conflict, this file wins.
   register this handler from GamePlayState. Reset cached weather and the
   snapshot on `prepareForStateTransition()` / `clean()`; keep the handler
   across transitions. `getEnvironmentSnapshot()` is main-thread only.
+- Territory consume is on `AIManager` (`queryTerritoryAtPixel` /
+  `queryTerritoryAtTile`), main-thread only. It calls existing
+  `WorldManager::findSettlementAt*` — no new WorldManager API. Workers
+  must not call WorldManager. Do not put territory on `BehaviorContext`.
+- Player faction standing is an EDM `SparseSidecar<PlayerFactionStanding>`
+  (storage only). Policy (`adjustPlayerStanding`, clamp, combat/theft/gift
+  deltas) lives on `AIManager`. Do not mix standing scores into
+  `Behaviors::getRelationshipLevel`. Do not clear standing from
+  `resetFactionStances()`.
+- NPC `Layer_Enemy` collision grouping is AIManager policy from directed
+  Hostile toward the player faction (`syncNpcCollisionFromStance` /
+  `syncFactionCollisionTowardPlayer`). EDM exposes
+  `setNpcCollisionAsEnemy` as a storage setter and does not consult
+  faction id or call AIManager.
 - World populate: settlement queries (`getSettlements`,
   `findSettlementAt*`) are current-world, like `getTileCopyAt`. The
   populate registry is `worldId`-keyed (`isWorldPopulated`,
@@ -27,7 +41,9 @@ conflict, this file wins.
   NPCs gone without unloading tiles use `clearPopulatedNpcs`, not
   ad-hoc `destroyEntity` on EDM handles.
 - Harvest spawn policy lives in `WorldHarvestInit`; NPC spawn policy
-  lives in `WorldPopulation` / `spawnNpc`. WorldManager stays the
+  lives in `WorldPopulation` / `spawnNpc`. Settlement merchants/guards/
+  villagers spawn with `settlement.faction`; wilderness Warriors keep
+  faction override 1. WorldManager stays the
   coordinator (load/unload, registry, settlement queries). Do not dump
   environment/stance/forage/decision, discovery, or background-tick
   policy into WorldManager.

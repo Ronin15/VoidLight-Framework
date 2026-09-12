@@ -19,6 +19,7 @@
 #include "managers/CollisionManager.hpp"
 #include "events/EntityEvents.hpp"
 #include "events/ResourceChangeEvent.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameTimeManager.hpp"
@@ -391,14 +392,45 @@ BOOST_AUTO_TEST_CASE(TestTheftWorsensFactionStance) {
     BOOST_REQUIRE(player->getHandle().isValid());
     edm.setFaction(victim, 1);
 
+    int stanceEvents = 0;
+    EventManager::Instance().registerHandler(
+        EventTypeId::StanceChanged, [&stanceEvents](const EventData& data) {
+            if (data.isActive() && data.event) {
+                ++stanceEvents;
+            }
+        });
+
     BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
     const float relationshipBefore = controller.getRelationshipLevel(victim);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
 
     controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
 
     BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Hostile);
     BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
     BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
+                      AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_GT(stanceEvents, 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestSameFactionTheftDropsStandingWithoutStanceChange) {
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle victim = spawnNPC("Guard");
+    BOOST_REQUIRE(player->getHandle().isValid());
+
+    const float relationshipBefore = controller.getRelationshipLevel(victim);
+    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0), 0);
+
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+
+    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
+    BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0),
+                      AIManager::PLAYER_STANDING_THEFT_DELTA);
 }
 
 BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
@@ -412,10 +444,30 @@ BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
 
     BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
     const float relationshipBefore = controller.getRelationshipLevel(npc);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
     BOOST_REQUIRE(controller.tryGift(npc, breadHandle, 1));
     BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Allied);
     BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
     BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
+                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+}
+
+BOOST_AUTO_TEST_CASE(TestSameFactionGiftRaisesStandingWithoutStanceChange) {
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle npc = spawnNPC("Guard");
+    BOOST_REQUIRE(player->addToInventory(breadHandle, 2));
+
+    const float relationshipBefore = controller.getRelationshipLevel(npc);
+    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0), 0);
+    BOOST_REQUIRE(controller.tryGift(npc, breadHandle, 1));
+    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
+    BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0),
+                      AIManager::PLAYER_STANDING_GIFT_DELTA);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

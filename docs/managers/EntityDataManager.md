@@ -67,7 +67,7 @@ struct EntityHotData {
 static_assert(sizeof(EntityHotData) == 64, "One cache line");
 ```
 
-Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state.
+Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state. Player-only faction standing is `SparseSidecar<PlayerFactionStanding>` (16 B, 16 int8 scores). `NPCMemoryData` stays 448 B. Standing dies with the player slot and is not cleared by `AIManager::resetFactionStances()`.
 
 ### TransformData (32 bytes)
 
@@ -302,6 +302,23 @@ SparseSidecar<KnockbackData>& knockbackSidecar() noexcept;
 
 `EventManager` applies knockback when processing `DamageEvent`. `AIManager` and player movement consume and decay it during update. Expired entries are cleared on the main thread after worker batches join.
 
+### Player Faction Standing Sidecar
+
+```cpp
+int8_t getPlayerFactionStanding(size_t edmIndex, uint8_t faction) const; // 0 if missing/oob
+void addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta); // clamp; lazy apply()
+```
+
+Storage only. Clamp/policy constants live on `AIManager`. Types header does not include AIManager.
+
+### NPC Collision Grouping
+
+```cpp
+void setNpcCollisionAsEnemy(size_t index, bool asEnemy);
+```
+
+Storage setter. Does not consult faction id. `asEnemy` uses the existing Enemy vs Default layer/mask branches. Out-of-range index is a no-op. Create NPC/monster/animal defaults to not-Enemy. `setFaction` writes the id only; `AIManager` syncs collision from directed Hostile toward the player faction.
+
 ### Inventory Data
 
 ```cpp
@@ -451,7 +468,7 @@ transform.velocity = Vector2D(50, 0);
 
 auto& character = edm.getCharacterData(npc);
 character.health = 80.0f;
-character.faction = 1;  // Faction id (collision group 1); agro is AIManager stance
+character.faction = 1;  // Faction id; agro is AIManager stance; collision grouping is stance vs player
 ```
 
 ### Batch Processing (AI/Collision)

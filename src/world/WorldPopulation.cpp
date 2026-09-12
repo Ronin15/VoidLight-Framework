@@ -160,7 +160,7 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
         if (findInRings(world, cx, cy, radius, width, height, used, walkablePred, tileX, tileY))
         {
             trySpawnNpc(outHandles, used, width, tileX, tileY, "Human", "GeneralMerchant",
-                        0xFF);
+                        settlement.faction);
         }
 
         for (int guardIndex = 0; guardIndex < 2; ++guardIndex)
@@ -181,7 +181,8 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
                 findInRings(world, cx, cy, radius, width, height, used, walkableInRadiusPred,
                             tileX, tileY))
             {
-                trySpawnNpc(outHandles, used, width, tileX, tileY, "Human", "Guard", 0xFF);
+                trySpawnNpc(outHandles, used, width, tileX, tileY, "Human", "Guard",
+                            settlement.faction);
             }
         }
 
@@ -197,7 +198,8 @@ void WorldPopulation::populate(const WorldData& world, std::vector<EntityHandle>
             };
             if (findInRings(world, cx, cy, radius, width, height, used, villagerPred, tileX, tileY))
             {
-                trySpawnNpc(outHandles, used, width, tileX, tileY, "Human", "Villager", 0xFF);
+                trySpawnNpc(outHandles, used, width, tileX, tileY, "Human", "Villager",
+                            settlement.faction);
             }
         }
     }

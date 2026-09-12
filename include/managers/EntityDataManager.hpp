@@ -805,6 +805,16 @@ public:
     [[nodiscard]] const SparseSidecar<KnockbackData>& knockbackSidecar() const noexcept;
 
     /**
+     * @brief Player-only faction standing. 0 if the sidecar is missing or faction is oob.
+     */
+    [[nodiscard]] int8_t getPlayerFactionStanding(size_t edmIndex, uint8_t faction) const;
+
+    /**
+     * @brief Add delta to player standing for faction. Lazy apply(); clamps to int8_t.
+     */
+    void addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta);
+
+    /**
      * @brief Get read-only span of static hot data (for collision system)
      */
     [[nodiscard]] std::span<const EntityHotData> getStaticHotDataArray() const;
@@ -843,11 +853,18 @@ public:
     void setCharacterInventoryIndex(EntityHandle handle, uint32_t inventoryIndex);
 
     /**
-     * @brief Set the faction of a character and update collision layers
+     * @brief Set the faction id of a character. Collision grouping is AIManager policy.
      * @param handle Entity handle
-     * @param newFaction Faction id (0-15). Updates collision grouping only; agro is AIManager stance.
+     * @param newFaction Faction id (0-15). Does not consult faction id for Layer_Enemy.
      */
     void setFaction(EntityHandle handle, uint8_t newFaction);
+
+    /**
+     * @brief Storage setter for NPC collision grouping. Does not consult faction id.
+     * @param index EDM index. Out of range is a no-op.
+     * @param asEnemy true: Layer_Enemy + mask including Enemy; false: Layer_Default without Enemy.
+     */
+    void setNpcCollisionAsEnemy(size_t index, bool asEnemy);
 
     [[nodiscard]] ItemData& getItemData(EntityHandle handle);
     [[nodiscard]] const ItemData& getItemData(EntityHandle handle) const;
@@ -1348,6 +1365,7 @@ private:
     // resizeSparse() called at every m_hotData growth site (allocateSlot new-slot path).
     // removeAllFor() called from freeSlot() to clean up on entity destruction.
     SparseSidecar<KnockbackData> m_knockback;
+    SparseSidecar<PlayerFactionStanding> m_playerFactionStanding;
 
     // Sidecar coordination hooks — registered once in init(). Each sidecar pushes its
     // three lambdas here so allocateSlot / freeSlot / clearAllEntityStorage dispatch
@@ -1518,8 +1536,6 @@ private:
     void initializeSpeciesRegistry();
     void initializeAnimalRoleRegistry();
 
-    // Helper for faction-based collision layers
-    void applyFactionCollision(size_t index, uint8_t faction);
     bool autoEquipCharacterEquipment(EntityHandle handle);
     void recalculateCharacterEquipmentStats(uint32_t characterIndex);
     [[nodiscard]] VoidLight::ResourceHandle

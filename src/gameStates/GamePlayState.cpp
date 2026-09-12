@@ -20,6 +20,7 @@
 #include "gameStates/PauseState.hpp"
 #include "events/HarvestResourceEvent.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
@@ -44,6 +45,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <string_view>
 
 #include "gpu/GPURenderer.hpp"
 #include "utils/GPUSceneRecorder.hpp"
@@ -52,7 +54,8 @@
 GamePlayState::GamePlayState()
     : m_transitioningToLoading{false}, m_transitioningToGameOver{false},
       mp_Player{nullptr}, m_initialized{false},
-      m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{} {}
+      m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{},
+      m_stanceChangedEventToken{} {}
 
 GamePlayState::~GamePlayState() = default;
 
@@ -545,6 +548,62 @@ void GamePlayState::registerEventHandlers() {
             harvestEvent->getTargetY());
       });
   m_harvestSubscribed = true;
+
+  m_stanceChangedEventToken = eventMgr.registerHandlerWithToken(
+      EventTypeId::StanceChanged, [this](const EventData &data) {
+        if (!data.isActive() || !data.event || !mp_Player) {
+          return;
+        }
+
+        const auto *stanceEvent =
+            dynamic_cast<const StanceChangedEvent *>(data.event.get());
+        if (!stanceEvent) {
+          return;
+        }
+
+        auto &edm = EntityDataManager::Instance();
+        const EntityHandle playerHandle = mp_Player->getHandle();
+        const size_t playerIdx = edm.getIndex(playerHandle);
+        if (playerIdx == SIZE_MAX) {
+          return;
+        }
+
+        const uint8_t playerFaction =
+            edm.getCharacterDataByIndex(playerIdx).faction;
+        if (stanceEvent->getFromFaction() != playerFaction &&
+            stanceEvent->getTowardFaction() != playerFaction) {
+          return;
+        }
+
+        std::string_view stanceName = "Neutral";
+        switch (stanceEvent->getNewStance()) {
+        case FactionStance::Allied:
+          stanceName = "Allied";
+          break;
+        case FactionStance::Neutral:
+          stanceName = "Neutral";
+          break;
+        case FactionStance::Hostile:
+          stanceName = "Hostile";
+          break;
+        }
+
+        if (stanceEvent->getSettlementId() != 0) {
+          UIManager::Instance().addEventLogEntry(
+              "event_log",
+              std::format("Settlement {}: faction {} is now {} toward faction {}",
+                          stanceEvent->getSettlementId(),
+                          stanceEvent->getFromFaction(), stanceName,
+                          stanceEvent->getTowardFaction()));
+        } else {
+          UIManager::Instance().addEventLogEntry(
+              "event_log",
+              std::format("Faction {} is now {} toward faction {}",
+                          stanceEvent->getFromFaction(), stanceName,
+                          stanceEvent->getTowardFaction()));
+        }
+      });
+  m_stanceChangedSubscribed = true;
 }
 
 void GamePlayState::unregisterEventHandlers() {
@@ -563,6 +622,11 @@ void GamePlayState::unregisterEventHandlers() {
   if (m_harvestSubscribed) {
     eventMgr.removeHandler(m_harvestEventToken);
     m_harvestSubscribed = false;
+  }
+
+  if (m_stanceChangedSubscribed) {
+    eventMgr.removeHandler(m_stanceChangedEventToken);
+    m_stanceChangedSubscribed = false;
   }
 }
 

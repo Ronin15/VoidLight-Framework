@@ -21,6 +21,7 @@
 #include "core/ThreadSystem.hpp"
 #include "entities/Player.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "events/TimeEvent.hpp"
 #include "events/WeatherEvent.hpp"
 #include "world/WorldData.hpp"
@@ -766,6 +767,65 @@ BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerAfterDirectCombatHit) {
     }
 
     BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+}
+
+BOOST_AUTO_TEST_CASE(TestPlayerCombatStandingDropsOnceOnHostileTransition) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
+
+    auto realPlayer = std::make_shared<Player>();
+    realPlayer->initializeInventory();
+    const EntityHandle playerHandle = realPlayer->getHandle();
+    BOOST_REQUIRE(playerHandle.isValid());
+    const size_t playerIdx = edm.getIndex(playerHandle);
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.getHotDataByIndex(playerIdx).kind == EntityKind::Player);
+
+    auto victim = TestNPC::create(100.0f, 100.0f);
+    const EntityHandle victimHandle = victim->getHandle();
+    edm.setFaction(victimHandle, 1);
+    const uint8_t playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
+
+    int stanceEvents = 0;
+    eventMgr.registerHandler(EventTypeId::StanceChanged,
+                             [&stanceEvents](const EventData& data) {
+                                 if (data.isActive() && data.event) {
+                                     ++stanceEvents;
+                                 }
+                             });
+
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1), 0);
+
+    auto firstHit = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, victimHandle, 10.0f);
+    eventMgr.dispatchEvent(firstHit, EventManager::DispatchMode::Immediate);
+
+    BOOST_CHECK(aiMgr.isHostileTo(1, playerFaction));
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+                      AIManager::PLAYER_STANDING_COMBAT_DELTA);
+    BOOST_CHECK_EQUAL(stanceEvents, 2);
+
+    const float relationshipAfterFirst =
+        Behaviors::getRelationshipLevel(victimHandle, playerHandle);
+
+    auto secondHit = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, victimHandle, 10.0f);
+    eventMgr.dispatchEvent(secondHit, EventManager::DispatchMode::Immediate);
+
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+                      AIManager::PLAYER_STANDING_COMBAT_DELTA);
+    BOOST_CHECK_EQUAL(stanceEvents, 2);
+
+    aiMgr.adjustPlayerStanding(playerHandle, 1, AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+                      AIManager::PLAYER_STANDING_COMBAT_DELTA +
+                          AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(Behaviors::getRelationshipLevel(victimHandle, playerHandle),
+                      relationshipAfterFirst);
+    BOOST_CHECK_EQUAL(Behaviors::getPlayerFactionStanding(playerHandle, 1),
+                      AIManager::PLAYER_STANDING_COMBAT_DELTA +
+                          AIManager::PLAYER_STANDING_THEFT_DELTA);
 }
 
 BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerAfterFactionMateHit) {

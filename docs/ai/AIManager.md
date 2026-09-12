@@ -78,7 +78,7 @@ Prefer EDM indices in behavior code to avoid repeated handle-to-index lookups.
 
 ## Faction Stance
 
-`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table. This table is the only engagement authority for Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, and it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player). `CharacterData.faction` is a faction id. `EntityDataManager::applyFactionCollision` maps id 1 to `Layer_Enemy` as a physics group, not agro.
+`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table. This table is the only engagement authority for Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, and it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player). `CharacterData.faction` is a faction id. NPC `Layer_Enemy` collision grouping follows directed Hostile toward the player faction (`syncNpcCollisionFromStance` / `syncFactionCollisionTowardPlayer`). EDM stores the layers via `setNpcCollisionAsEnemy`; it does not consult faction id and does not call AIManager.
 
 Defaults after `resetFactionStances()`:
 
@@ -97,7 +97,35 @@ Out-of-range gets return Neutral / false. Out-of-range or diagonal sets/worsen/i
 
 `resetFactionStances()` runs from `init()`, `prepareForStateTransition()`, `clean()`, and `resetBehaviors()`.
 
-A persistent `EventTypeId::Combat` handler (registered in `init()` when `EventManager` is already initialized) writes mutual Hostile after a committed `DamageEvent` with `damage > 0` and different in-range factions. Same-faction hits do not write the table. The handler is not unregistered on state transition; `clean()` removes it.
+A persistent `EventTypeId::Combat` handler (registered in `init()` when `EventManager` is already initialized) writes mutual Hostile after a committed `DamageEvent` with `damage > 0` and different in-range factions. Same-faction hits do not write the table or standing. The first Hostile transition involving the player kind also applies `PLAYER_STANDING_COMBAT_DELTA` toward the other faction; repeat hits while already Hostile do not tick standing. The handler is not unregistered on state transition; `clean()` removes it.
+
+Real cell mutations in `setStance` / `worsenStance` / `improveStance` dispatch `EventTypeId::StanceChanged` immediately (`StanceChangedEvent`: from, toward, old, new, first current-world settlement whose faction equals from or toward, else 0). No-ops (already equal, out of range, diagonal) and `resetFactionStances()` emit nothing. `GamePlayState` owns the transient event-log handler; AIManager does not log.
+
+When the **toward** cell vs the player faction actually changes, AIManager remaps that faction's NPC collision grouping from the new stance.
+
+## Territory Query
+
+Main-thread only, same contract as `getEnvironmentSnapshot()`. Consumes Slice 2 `WorldManager::findSettlementAtPixel` / `findSettlementAtTile` (first match wins). Wilderness is not a faction. Do not put territory on `BehaviorContext`. Do not cache settlements every frame. Workers must not call WorldManager.
+
+```cpp
+struct TerritoryQueryResult {
+    uint32_t settlementId{0}; // SettlementRecord.id, 1-based
+    uint8_t faction{0};
+};
+std::optional<TerritoryQueryResult> queryTerritoryAtPixel(float worldX, float worldY) const;
+std::optional<TerritoryQueryResult> queryTerritoryAtTile(int tileX, int tileY) const;
+```
+
+## Player Faction Standing
+
+Player-only scores live in an EDM `SparseSidecar<PlayerFactionStanding>` (NPCMemoryData stays 448 B). `Behaviors::getRelationshipLevel` remains emotions + interaction memories. Standing is not mixed into that API.
+
+```cpp
+void adjustPlayerStanding(EntityHandle playerHandle, uint8_t towardFaction, int8_t delta);
+int8_t getPlayerStanding(EntityHandle playerHandle, uint8_t faction) const;
+```
+
+Clamped to `[-100, 100]`. Invalid handle / oob faction is a no-op. Combat ticks `-10` only when a stance cell actually changes. Theft ticks `-25` and gift ticks `+15` even when factions are equal (diagonal stance stays Allied). `resetFactionStances()` does not clear standing; the sidecar dies with the player slot.
 
 ## Environment Snapshot
 

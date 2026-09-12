@@ -124,13 +124,14 @@ Current `EventTypeId` values:
 Weather, SceneChange, NPCSpawn, ParticleEffect,
 ResourceChange, World, Camera, Harvest, Collision,
 WorldTrigger, CollisionObstacleChanged, Custom,
-Time, Combat, Entity, BehaviorMessage, MerchantSpawn
+Time, Combat, Entity, BehaviorMessage, MerchantSpawn, StanceChanged
 ```
 
 Key event types:
 
 - `BehaviorMessage` covers inter-entity AI signaling such as `RAISE_ALERT`
 - `MerchantSpawn` covers merchant-focused NPC spawning through `MerchantSpawnEvent`
+- `StanceChanged` (`StanceChangedEvent`) is produced by `AIManager` after a real directed stance-cell mutation (`setStance` / `worsenStance` / `improveStance`). Payload: fromFaction, towardFaction, oldStance, newStance, settlementId (first current-world settlement whose faction equals from or toward, else 0). Immediate dispatch. `resetFactionStances()` emits nothing. `GamePlayState` owns the transient event-log handler.
 - `DamageEvent` under `EventTypeId::Combat` is the hot path for gameplay damage
 - `Collision` is a reserved legacy ID. There is no `CollisionEvent` payload in
   the current event path.

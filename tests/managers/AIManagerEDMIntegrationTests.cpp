@@ -24,7 +24,9 @@
 #include "core/ThreadSystem.hpp"
 #include "ai/AICommandBus.hpp"
 #include "ai/BehaviorExecutors.hpp"
+#include "collisions/CollisionBody.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "events/WeatherEvent.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
@@ -977,6 +979,112 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceResetsOnResetBehaviors) {
     BOOST_CHECK(aiMgr.getStance(4, 5) == FactionStance::Neutral);
     BOOST_CHECK(aiMgr.getStance(4, 4) == FactionStance::Allied);
     BOOST_CHECK(!aiMgr.factionRowHasHostile(4));
+}
+
+BOOST_AUTO_TEST_CASE(TestSetStanceNoOpDoesNotEmitAndRealChangeDoes) {
+    auto& aiMgr = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
+
+    int stanceEvents = 0;
+    uint8_t fromFaction = 255;
+    uint8_t towardFaction = 255;
+    FactionStance oldStance = FactionStance::Allied;
+    FactionStance newStance = FactionStance::Allied;
+    uint32_t settlementId = 99;
+    eventMgr.registerHandler(EventTypeId::StanceChanged,
+                             [&](const EventData& data) {
+                                 const auto* event =
+                                     dynamic_cast<const StanceChangedEvent*>(data.event.get());
+                                 if (!event) {
+                                     return;
+                                 }
+                                 ++stanceEvents;
+                                 fromFaction = event->getFromFaction();
+                                 towardFaction = event->getTowardFaction();
+                                 oldStance = event->getOldStance();
+                                 newStance = event->getNewStance();
+                                 settlementId = event->getSettlementId();
+                             });
+
+    aiMgr.setStance(0, 1, FactionStance::Neutral);
+    BOOST_CHECK_EQUAL(stanceEvents, 0);
+
+    aiMgr.setStance(0, 1, FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(stanceEvents, 1);
+    BOOST_CHECK_EQUAL(fromFaction, 0);
+    BOOST_CHECK_EQUAL(towardFaction, 1);
+    BOOST_CHECK(oldStance == FactionStance::Neutral);
+    BOOST_CHECK(newStance == FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(settlementId, 0u);
+
+    aiMgr.setStance(0, 1, FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(stanceEvents, 1);
+
+    aiMgr.setStance(0, 0, FactionStance::Hostile);
+    aiMgr.setStance(AIManager::MAX_FACTIONS, 1, FactionStance::Hostile);
+    aiMgr.worsenStance(2, 2);
+    BOOST_CHECK_EQUAL(stanceEvents, 1);
+
+    aiMgr.resetFactionStances();
+    BOOST_CHECK_EQUAL(stanceEvents, 1);
+}
+
+BOOST_AUTO_TEST_CASE(TestCollisionRemapFromStanceTowardPlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    EntityHandle warrior = edm.createNPCWithRaceClass(
+        Vector2D(100.0f, 100.0f), "Human", "Warrior");
+    BOOST_REQUIRE(warrior.isValid());
+    const size_t warriorIdx = edm.getIndex(warrior);
+    BOOST_REQUIRE(warriorIdx != SIZE_MAX);
+    BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(warriorIdx).faction, 1);
+
+    const auto& hot = edm.getHotDataByIndex(warriorIdx);
+    BOOST_CHECK_NE(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+
+    aiMgr.setStance(1, 0, FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+
+    aiMgr.improveStance(1, 0);
+    BOOST_CHECK_NE(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+}
+
+BOOST_AUTO_TEST_CASE(TestPlayerFactionStandingSidecarLifetime) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    EntityHandle player = edm.registerPlayer(9001, Vector2D(100.0f, 100.0f));
+    BOOST_REQUIRE(player.isValid());
+    const size_t playerIdx = edm.getIndex(player);
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+
+    aiMgr.adjustPlayerStanding(player, 1, AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(playerIdx, 1),
+                      AIManager::PLAYER_STANDING_THEFT_DELTA);
+
+    edm.destroyEntity(player);
+    edm.processDestructionQueue();
+    BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(playerIdx, 1), 0);
+
+    EntityHandle reused = edm.registerPlayer(9002, Vector2D(120.0f, 120.0f));
+    BOOST_REQUIRE(reused.isValid());
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(reused, 1), 0);
+
+    aiMgr.adjustPlayerStanding(reused, 1, AIManager::PLAYER_STANDING_GIFT_DELTA);
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(reused, 1),
+                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+    aiMgr.resetFactionStances();
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(reused, 1),
+                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+
+    edm.prepareForStateTransition();
+    const size_t reusedIdx = edm.getIndex(reused);
+    if (reusedIdx != SIZE_MAX) {
+        BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(reusedIdx, 1), 0);
+    } else {
+        BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(playerIdx, 1), 0);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

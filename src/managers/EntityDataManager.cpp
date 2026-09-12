@@ -16,6 +16,7 @@
 
 using VoidLight::JsonReader;
 using VoidLight::JsonValue;
+#include "ai/FactionStance.hpp"
 #include <array>
 #include <algorithm>
 #include <cassert>
@@ -26,6 +27,9 @@ using VoidLight::JsonValue;
 #include <optional>
 #include <ranges>
 #include <string_view>
+
+static_assert(PlayerFactionStanding::FACTION_COUNT == kFactionStanceRowSize,
+              "PlayerFactionStanding::FACTION_COUNT must match kFactionStanceRowSize");
 
 namespace {
 
@@ -259,6 +263,13 @@ bool EntityDataManager::init() {
             [this](uint32_t i) { m_knockback.removeAllFor(i); });
         m_sidecarResetHooks.emplace_back(
             [this]() { m_knockback = SparseSidecar<KnockbackData>{}; });
+
+        m_sidecarGrowHooks.emplace_back(
+            [this](size_t n) { m_playerFactionStanding.resizeSparse(n); });
+        m_sidecarPerEntityHooks.emplace_back(
+            [this](uint32_t i) { m_playerFactionStanding.removeAllFor(i); });
+        m_sidecarResetHooks.emplace_back(
+            [this]() { m_playerFactionStanding = SparseSidecar<PlayerFactionStanding>{}; });
 
         m_sidecarGrowHooks.emplace_back(
             [this](size_t n) { m_memoryOverflow.resizeSparse(n); });
@@ -602,21 +613,8 @@ EntityHandle EntityDataManager::createNPC(const Vector2D& position,
     uint32_t invIdx = createInventory(20, false);
     m_characterData[charIndex].inventoryIndex = invIdx;
 
-    // Collision grouping by faction id: id 1 uses Layer_Enemy (can collide with
-    // other id-1 bodies). Not agro — engagement is AIManager stance.
-    uint8_t faction = m_characterData[charIndex].faction;
-    if (faction == 1) {
-        hot.collisionLayers = VoidLight::CollisionLayer::Layer_Enemy;
-        hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
-                            VoidLight::CollisionLayer::Layer_Environment |
-                            VoidLight::CollisionLayer::Layer_Projectile |
-                            VoidLight::CollisionLayer::Layer_Enemy;
-    } else {
-        hot.collisionLayers = VoidLight::CollisionLayer::Layer_Default;
-        hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
-                            VoidLight::CollisionLayer::Layer_Environment |
-                            VoidLight::CollisionLayer::Layer_Projectile;
-    }
+    // Default grouping is Layer_Default. AIManager remaps Enemy from stance vs player.
+    setNpcCollisionAsEnemy(index, false);
     hot.collisionFlags = EntityHotData::COLLISION_ENABLED;
     hot.triggerTag = 0;
     hot.typeLocalIndex = charIndex;
@@ -719,8 +717,7 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
     charData.mass = raceInfo.sizeMultiplier * raceInfo.sizeMultiplier;  // Mass scales with area
     applyClassPersonalityBias(m_memoryData[index], classInfo);
 
-    // Apply faction-based collision layers
-    applyFactionCollision(index, charData.faction);
+    setNpcCollisionAsEnemy(index, false);
 
     // Set up NPCRenderData from race info
     auto& renderData = m_npcRenderData[typeIndex];
@@ -850,7 +847,7 @@ EntityHandle EntityDataManager::createMonster(const Vector2D& position,
     charData.faction = (factionOverride != 0xFF) ? factionOverride : typeInfo.defaultFaction;
     charData.mass = typeInfo.sizeMultiplier * typeInfo.sizeMultiplier;  // Mass scales with area
 
-    applyFactionCollision(index, charData.faction);
+    setNpcCollisionAsEnemy(index, false);
 
     // Set up render data
     auto& renderData = m_npcRenderData[typeIndex];
@@ -955,7 +952,7 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     charData.faction = (factionOverride != 0xFF) ? factionOverride : roleInfo.defaultFaction;
     charData.mass = speciesInfo.sizeMultiplier * speciesInfo.sizeMultiplier;  // Mass scales with area
 
-    applyFactionCollision(index, charData.faction);
+    setNpcCollisionAsEnemy(index, false);
 
     // Set up render data
     auto& renderData = m_npcRenderData[typeIndex];
@@ -998,10 +995,13 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     return handle;
 }
 
-void EntityDataManager::applyFactionCollision(size_t index, uint8_t faction) {
+void EntityDataManager::setNpcCollisionAsEnemy(size_t index, bool asEnemy) {
+    if (index >= m_hotData.size()) {
+        return;
+    }
+
     auto& hot = m_hotData[index];
-    // Id 1 is the Layer_Enemy collision group. Agro is AIManager stance.
-    if (faction == 1) {
+    if (asEnemy) {
         hot.collisionLayers = VoidLight::CollisionLayer::Layer_Enemy;
         hot.collisionMask = VoidLight::CollisionLayer::Layer_Player |
                             VoidLight::CollisionLayer::Layer_Environment |
@@ -1024,7 +1024,6 @@ void EntityDataManager::setFaction(EntityHandle handle, uint8_t newFaction) {
 
     uint8_t oldFaction = charData.faction;
     charData.faction = newFaction;
-    applyFactionCollision(index, newFaction);
     AIManager::Instance().onEntityFactionChanged(index, oldFaction, newFaction);
 }
 
@@ -3456,6 +3455,35 @@ SparseSidecar<KnockbackData>& EntityDataManager::knockbackSidecar() noexcept
 const SparseSidecar<KnockbackData>& EntityDataManager::knockbackSidecar() const noexcept
 {
     return m_knockback;
+}
+
+int8_t EntityDataManager::getPlayerFactionStanding(size_t edmIndex, uint8_t faction) const
+{
+    if (faction >= PlayerFactionStanding::FACTION_COUNT) {
+        return 0;
+    }
+    const PlayerFactionStanding* standing =
+        m_playerFactionStanding.get(static_cast<uint32_t>(edmIndex));
+    if (!standing) {
+        return 0;
+    }
+    return standing->scores[faction];
+}
+
+void EntityDataManager::addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta)
+{
+    if (delta == 0 || faction >= PlayerFactionStanding::FACTION_COUNT ||
+        edmIndex >= m_hotData.size()) {
+        return;
+    }
+
+    PlayerFactionStanding& standing =
+        m_playerFactionStanding.apply(static_cast<uint32_t>(edmIndex));
+    const int16_t next = std::clamp(
+        static_cast<int16_t>(static_cast<int16_t>(standing.scores[faction]) + delta),
+        static_cast<int16_t>(std::numeric_limits<int8_t>::min()),
+        static_cast<int16_t>(std::numeric_limits<int8_t>::max()));
+    standing.scores[faction] = static_cast<int8_t>(next);
 }
 
 size_t EntityDataManager::getStaticIndex(EntityHandle handle) const {
