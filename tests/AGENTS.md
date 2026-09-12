@@ -18,6 +18,17 @@ deeper file wins.
 - Keep tests durable. Avoid pinning helper names, temporary buffers,
   private branch structure, or layout details unless the test is
   explicitly guarding a data-layout or public contract.
+- Tests must match the current production contract. When a production
+  change fails a test, trace whether the assertion is still the right
+  contract. Do not override production state (collision layers/masks,
+  stance, factions, pause flags, event wiring) just to keep a diagnostic
+  green. That hides the real error. Example: Neutral NPCs are
+  `Layer_Default` and do not NPC-NPC pair; do not set `collisionMask =
+  0xFFFF` after `assignBehavior` to inflate `lastPairs`. Assert stance
+  grouping and Environment pairing instead. Wander crowd steering is
+  nearby-entity queries, not CollisionManager pair generation. AI wander
+  clamps to PathfinderManager cached world extents (or 32000px with no
+  world), not CollisionManager wall bodies.
 
 ## Fixtures
 
@@ -57,4 +68,6 @@ deeper file wins.
   for `EventManager` and state-owned handler wiring.
 - Classify a failing test as production bug, test-setup issue, stale
   expectation, environment/tooling issue, or unrelated pre-existing
-  failure.
+  failure. A stale expectation is updated to the live contract, not
+  papered over with a test-only mask or helper that undoes production
+  policy.

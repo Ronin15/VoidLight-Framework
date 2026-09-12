@@ -9,12 +9,12 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <atomic>
 #include <vector>
 #include <random>
 #include <memory>
 
 #include "core/Logger.hpp"
+#include "ai/FactionStance.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -30,19 +30,19 @@
 /**
  * AICollisionIntegrationTests
  *
- * CRITICAL GAP identified in architecture review:
- * NO tests validating that AI entities actually trigger collision queries during movement/pathfinding.
+ * Production collision grouping is stance-owned: Neutral NPCs are
+ * Layer_Default and do not pair with each other. Hostile-toward-player
+ * NPCs are Layer_Default until setStance, then Layer_Enemy and pair with
+ * other Enemy bodies. Default NPCs still collide with Layer_Environment.
+ *
+ * Wander crowd steering uses AIInternal nearby queries, not CollisionManager
+ * pair generation. Do not force collisionMask = 0xFFFF to inflate lastPairs.
  *
  * These tests verify:
- * 1. AI entities navigate around obstacles (not through them)
- * 2. Separation forces trigger collision queries
+ * 1. AI wanderers vs Environment obstacles (production Default mask)
+ * 2. Stance remap: Neutral Guards do not NPC-NPC pair; Hostile Warriors do
  * 3. AI entities stay within world boundaries
  * 4. Performance remains acceptable under load (1000+ entities)
- *
- * Tests validate the integration between:
- * - AIManager (entity movement, pathfinding, separation)
- * - CollisionManager (spatial queries, obstacle detection)
- * - PathfinderManager (pathfinding with collision-aware grids)
  */
 
 // Data-driven test entity helper
@@ -68,40 +68,6 @@ struct TestEntityHelper {
     static EntityID getID(EntityHandle handle) {
         return handle.getId();
     }
-};
-
-// Collision query tracker - monitors CollisionManager spatial queries
-class CollisionQueryTracker {
-public:
-    void reset() {
-        m_totalQueries.store(0);
-        m_queriesPerFrame.clear();
-    }
-
-    void recordQuery() {
-        m_totalQueries.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    void recordFrameEnd(size_t queryCount) {
-        m_queriesPerFrame.push_back(queryCount);
-    }
-
-    size_t getTotalQueries() const {
-        return m_totalQueries.load(std::memory_order_relaxed);
-    }
-
-    double getAverageQueriesPerFrame() const {
-        if (m_queriesPerFrame.empty()) return 0.0;
-        size_t total = 0;
-        for (size_t q : m_queriesPerFrame) {
-            total += q;
-        }
-        return static_cast<double>(total) / m_queriesPerFrame.size();
-    }
-
-private:
-    std::atomic<size_t> m_totalQueries{0};
-    std::vector<size_t> m_queriesPerFrame;
 };
 
 // Global test fixture
@@ -179,25 +145,29 @@ struct AICollisionTestFixture {
         // Clear any previous state
         AIManager::Instance().prepareForStateTransition();
         CollisionManager::Instance().prepareForStateTransition();
+        if (!WorldManager::Instance().getCurrentWorldId().empty()) {
+            WorldManager::Instance().unloadWorld();
+        }
 
         // Set fixed RNG seed for reproducibility
         m_rng.seed(42);
 
         m_entityHandles.clear();
-        m_queryTracker.reset();
     }
 
     ~AICollisionTestFixture() {
         std::cout << "--- Test Teardown ---" << std::endl;
 
         // Clean up entities
+        auto& edm = EntityDataManager::Instance();
         for (auto& handle : m_entityHandles) {
             if (handle.isValid()) {
                 AIManager::Instance().unregisterEntity(handle);
-                AIManager::Instance().unassignBehavior(handle);
+                edm.destroyEntity(handle);
             }
         }
         m_entityHandles.clear();
+        edm.processDestructionQueue();
 
         // Prepare for next test
         AIManager::Instance().prepareForStateTransition();
@@ -207,21 +177,16 @@ struct AICollisionTestFixture {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    // Helper: Create entity with collision body (data-driven)
     EntityHandle createEntity(const Vector2D& pos) {
         EntityHandle handle = TestEntityHelper::createTestEntity(pos);
         m_entityHandles.push_back(handle);
+        return handle;
+    }
 
-        // Set collision layers on EDM hot data
-        auto& edm = EntityDataManager::Instance();
-        size_t idx = edm.getIndex(handle);
-        if (idx != SIZE_MAX) {
-            auto& hot = edm.getHotDataByIndex(idx);
-            hot.collisionLayers = VoidLight::CollisionLayer::Layer_Default;
-            hot.collisionMask = 0xFFFF;
-            hot.setCollisionEnabled(true);
-        }
-
+    EntityHandle createWarrior(const Vector2D& pos) {
+        EntityHandle handle = EntityDataManager::Instance().createNPCWithRaceClass(
+            pos, "Human", "Warrior");
+        m_entityHandles.push_back(handle);
         return handle;
     }
 
@@ -244,6 +209,38 @@ struct AICollisionTestFixture {
             edmIndex
         );
         m_obstacleIds.push_back(edmId);
+    }
+
+    void loadBareWorld(int widthTiles, int heightTiles, int seed) {
+        VoidLight::WorldGenerationConfig worldConfig{};
+        worldConfig.width = widthTiles;
+        worldConfig.height = heightTiles;
+        worldConfig.seed = seed;
+        worldConfig.elevationFrequency = 0.05f;
+        worldConfig.humidityFrequency = 0.05f;
+        worldConfig.waterLevel = 0.3f;
+        worldConfig.mountainLevel = 0.7f;
+        BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
+        auto& worldMgr = WorldManager::Instance();
+        worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
+        EntityDataManager::Instance().processDestructionQueue();
+        EventManager::Instance().update();
+        PathfinderManager::Instance().rebuildGrid();
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+        while (std::chrono::steady_clock::now() < deadline &&
+               !PathfinderManager::Instance().isGridReady()) {
+            PathfinderManager::Instance().update();
+            EventManager::Instance().update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        BOOST_REQUIRE(PathfinderManager::Instance().isGridReady());
+    }
+
+    void tickCollision(int frames, float deltaTime = 0.016f) {
+        for (int i = 0; i < frames; ++i) {
+            CollisionManager::Instance().update(deltaTime);
+        }
     }
 
     // Helper: Update simulation for N frames
@@ -281,7 +278,6 @@ struct AICollisionTestFixture {
     std::mt19937 m_rng;
     std::vector<EntityHandle> m_entityHandles;
     std::vector<EntityID> m_obstacleIds;
-    CollisionQueryTracker m_queryTracker;
 };
 
 BOOST_FIXTURE_TEST_SUITE(AICollisionIntegrationTestSuite, AICollisionTestFixture)
@@ -379,8 +375,6 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
         );
 
         auto entity = createEntity(startPos);
-
-        // Assign Wander behavior using data-oriented API
         AIManager::Instance().assignBehavior(entity, "Wander");
     }
 
@@ -422,102 +416,80 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
 }
 
 /**
- * TEST 2: TestAISeparationForces
+ * TEST 2: TestAIStanceCollisionGrouping
  *
- * Verifies separation behavior triggers collision queries.
- * Tests that entities don't overlap when using separation forces.
+ * Neutral Guards stay Layer_Default and do not generate NPC-NPC pairs.
+ * Hostile-toward-player Warriors remap to Layer_Enemy and do pair.
+ * Wander crowd steering is not CollisionManager pair generation.
  */
-BOOST_AUTO_TEST_CASE(TestAISeparationForces) {
-    std::cout << "\n=== TEST 2: AI Separation Forces ===" << std::endl;
+BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
+    std::cout << "\n=== TEST 2: AI Stance Collision Grouping ===" << std::endl;
 
-    // Create multiple entities in close proximity to trigger separation
-    const int NUM_ENTITIES = 20;
-    // Spawn within culling area (default: -1000 to +1000 when no player)
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& collision = CollisionManager::Instance();
+
+    const int NUM_ENTITIES = 16;
     const Vector2D SPAWN_CENTER(500.0f, 500.0f);
-    const float SPAWN_RADIUS = 100.0f;
+    const float SPAWN_RADIUS = 20.0f;
 
-    for (int i = 0; i < NUM_ENTITIES; ++i) {
-        // Spawn entities in a tight cluster
-        float angle = (i / static_cast<float>(NUM_ENTITIES)) * 2.0f * 3.14159f;
-        Vector2D spawnPos(
-            SPAWN_CENTER.getX() + std::cos(angle) * SPAWN_RADIUS,
-            SPAWN_CENTER.getY() + std::sin(angle) * SPAWN_RADIUS
-        );
+    auto spawnRing = [&](auto createFn) {
+        for (int i = 0; i < NUM_ENTITIES; ++i) {
+            const float angle = (i / static_cast<float>(NUM_ENTITIES)) * 2.0f * 3.14159f;
+            Vector2D spawnPos(
+                SPAWN_CENTER.getX() + std::cos(angle) * SPAWN_RADIUS,
+                SPAWN_CENTER.getY() + std::sin(angle) * SPAWN_RADIUS);
+            EntityHandle handle = createFn(spawnPos);
+            aiMgr.assignBehavior(handle, "Wander");
+        }
+    };
 
-        auto entity = createEntity(spawnPos);
-
-        // Assign Wander behavior using data-oriented API
-        AIManager::Instance().assignBehavior(entity, "Wander");
+    spawnRing([&](const Vector2D& pos) { return createEntity(pos); });
+    for (const auto& handle : m_entityHandles) {
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE_NE(idx, SIZE_MAX);
+        BOOST_CHECK_NE(edm.getHotDataByIndex(idx).collisionLayers,
+                       VoidLight::CollisionLayer::Layer_Enemy);
     }
 
-    // Process collision commands
-
-    std::cout << "Created " << NUM_ENTITIES << " entities in tight cluster" << std::endl;
-
-    // Record initial collision query count
-    size_t initialQueries = CollisionManager::Instance().getPerfStats().lastPairs;
-
-    // Run simulation for 300 frames (5.0 seconds)
-    // Extended duration ensures all entities trigger separation 2+ times
-    // given the 2-4 second staggered decimation interval
-    std::cout << "Running simulation for 300 frames..." << std::endl;
-    updateSimulation(300, 0.016f);
-
-    // Get final collision query count
-    size_t finalQueries = CollisionManager::Instance().getPerfStats().lastPairs;
-    size_t queriesDelta = (finalQueries > initialQueries) ? (finalQueries - initialQueries) : 0;
-
-    std::cout << "Collision pair checks: " << finalQueries << " (delta: " << queriesDelta << ")" << std::endl;
-
-    // VERIFICATION 1: Collision queries should have occurred (separation uses spatial queries)
-    // Note: Spatial queries happen via AIInternal::ApplySeparation → CollisionManager.
-    // Pair counters are debug/benchmark diagnostics; Release builds validate the
-    // release-visible active collision participant contract instead.
-#ifdef DEBUG
-    BOOST_CHECK_GT(finalQueries, 0);
-#else
-    BOOST_CHECK_GE(EntityDataManager::Instance().getActiveIndicesWithCollision().size(),
+    tickCollision(3);
+    BOOST_CHECK_EQUAL(collision.getPerfStats().lastPairs, 0u);
+    BOOST_CHECK_GE(edm.getActiveIndicesWithCollision().size(),
                    static_cast<size_t>(NUM_ENTITIES));
-#endif
 
-    // VERIFICATION 2: Check entity separation (minimum distance maintained)
-    const float MIN_SEPARATION = 20.0f; // Entities should maintain at least 20px separation
-
-    int overlappingPairs = 0;
-    int tooClosePairs = 0;
-
-    for (size_t i = 0; i < m_entityHandles.size(); ++i) {
-        for (size_t j = i + 1; j < m_entityHandles.size(); ++j) {
-            EntityID id1 = m_entityHandles[i].getId();
-            EntityID id2 = m_entityHandles[j].getId();
-
-            Vector2D pos1 = TestEntityHelper::getPosition(m_entityHandles[i]);
-            Vector2D pos2 = TestEntityHelper::getPosition(m_entityHandles[j]);
-
-            float distance = (pos2 - pos1).length();
-
-            // Check for overlaps
-            if (CollisionManager::Instance().overlaps(id1, id2)) {
-                overlappingPairs++;
-            }
-
-            // Check for too-close pairs
-            if (distance < MIN_SEPARATION) {
-                tooClosePairs++;
-            }
+    for (auto& handle : m_entityHandles) {
+        if (handle.isValid()) {
+            aiMgr.unregisterEntity(handle);
+            edm.destroyEntity(handle);
         }
     }
+    edm.processDestructionQueue();
+    m_entityHandles.clear();
 
-    std::cout << "Overlapping pairs: " << overlappingPairs << std::endl;
-    std::cout << "Too-close pairs (< " << MIN_SEPARATION << "px): " << tooClosePairs << std::endl;
+    spawnRing([&](const Vector2D& pos) { return createWarrior(pos); });
+    for (const auto& handle : m_entityHandles) {
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE_NE(idx, SIZE_MAX);
+        BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(idx).faction, 1);
+        BOOST_CHECK_NE(edm.getHotDataByIndex(idx).collisionLayers,
+                       VoidLight::CollisionLayer::Layer_Enemy);
+    }
 
-    // CRITICAL: Separation should prevent most overlaps (allow reasonable tolerance)
-    // Note: Entities spawned in tight cluster may need more frames to fully separate
-    // Tight clustering (20 entities in 100px radius) takes time to fully separate
-    // This validates separation forces are working while being realistic about convergence time
-    // Allow 100% initial overlaps - test validates separation is ACTIVE, not complete
-    int maxAllowedOverlaps = NUM_ENTITIES; // All entities can still have overlaps
-    BOOST_CHECK_LE(overlappingPairs, maxAllowedOverlaps);
+    aiMgr.setStance(1, 0, FactionStance::Hostile);
+    for (const auto& handle : m_entityHandles) {
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE_NE(idx, SIZE_MAX);
+        BOOST_CHECK_EQUAL(edm.getHotDataByIndex(idx).collisionLayers,
+                          VoidLight::CollisionLayer::Layer_Enemy);
+    }
+
+    tickCollision(3);
+#ifdef DEBUG
+    BOOST_CHECK_GT(collision.getPerfStats().lastPairs, 0u);
+#else
+    BOOST_CHECK_GE(edm.getActiveIndicesWithCollision().size(),
+                   static_cast<size_t>(NUM_ENTITIES));
+#endif
 
     std::cout << "=== TEST 2: PASSED ===" << std::endl;
 }
@@ -531,89 +503,37 @@ BOOST_AUTO_TEST_CASE(TestAISeparationForces) {
 BOOST_AUTO_TEST_CASE(TestAIBoundaryAvoidance) {
     std::cout << "\n=== TEST 3: AI Boundary Avoidance ===" << std::endl;
 
-    // Set up world boundaries
-    const float WORLD_MIN_X = 0.0f;
-    const float WORLD_MIN_Y = 0.0f;
-    const float WORLD_MAX_X = 2000.0f;
-    const float WORLD_MAX_Y = 2000.0f;
+    // Wander clamps to PathfinderManager cached world extents, not CollisionManager
+    // wall bodies. With no world loaded, AI falls back to 32000px and walks out
+    // of any hand-placed 2000px box.
+    loadBareWorld(40, 40, 4242);
 
-    CollisionManager::Instance().setWorldBounds(WORLD_MIN_X, WORLD_MIN_Y, WORLD_MAX_X, WORLD_MAX_Y);
+    float worldWidth = 0.0f;
+    float worldHeight = 0.0f;
+    BOOST_REQUIRE(PathfinderManager::Instance().getCachedWorldBounds(worldWidth, worldHeight));
+    BOOST_REQUIRE_GT(worldWidth, 200.0f);
+    BOOST_REQUIRE_GT(worldHeight, 200.0f);
 
-    // Create boundary walls using static collision bodies
-    const float WALL_THICKNESS = 32.0f;
-    EntityID wallIdCounter = 20000;
-
-    // Top wall
-    createObstacle(
-        wallIdCounter++,
-        Vector2D((WORLD_MAX_X - WORLD_MIN_X) / 2.0f, WORLD_MIN_Y),
-        (WORLD_MAX_X - WORLD_MIN_X) / 2.0f,
-        WALL_THICKNESS / 2.0f
-    );
-
-    // Bottom wall
-    createObstacle(
-        wallIdCounter++,
-        Vector2D((WORLD_MAX_X - WORLD_MIN_X) / 2.0f, WORLD_MAX_Y),
-        (WORLD_MAX_X - WORLD_MIN_X) / 2.0f,
-        WALL_THICKNESS / 2.0f
-    );
-
-    // Left wall
-    createObstacle(
-        wallIdCounter++,
-        Vector2D(WORLD_MIN_X, (WORLD_MAX_Y - WORLD_MIN_Y) / 2.0f),
-        WALL_THICKNESS / 2.0f,
-        (WORLD_MAX_Y - WORLD_MIN_Y) / 2.0f
-    );
-
-    // Right wall
-    createObstacle(
-        wallIdCounter++,
-        Vector2D(WORLD_MAX_X, (WORLD_MAX_Y - WORLD_MIN_Y) / 2.0f),
-        WALL_THICKNESS / 2.0f,
-        (WORLD_MAX_Y - WORLD_MIN_Y) / 2.0f
-    );
-
-
-    std::cout << "Created world boundaries (" << WORLD_MAX_X << "x" << WORLD_MAX_Y << ")" << std::endl;
-
-    // Rebuild pathfinding grid with boundaries
-    CollisionManager::Instance().rebuildStaticFromWorld();
-    PathfinderManager::Instance().rebuildGrid();
-
-    // Create entities near boundaries with behaviors that might push them out
     const int NUM_ENTITIES = 15;
-
-    std::uniform_real_distribution<float> posDist(100.0f, WORLD_MAX_X - 100.0f);
+    std::uniform_real_distribution<float> posDist(100.0f, worldWidth - 100.0f);
 
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         Vector2D startPos(posDist(m_rng), posDist(m_rng));
         auto entity = createEntity(startPos);
-
-        // Assign Wander behavior using data-oriented API
         AIManager::Instance().assignBehavior(entity, "Wander");
     }
 
+    std::cout << "Created " << NUM_ENTITIES << " wanderers in "
+              << worldWidth << "x" << worldHeight << " world" << std::endl;
 
-    std::cout << "Created " << NUM_ENTITIES << " entities with large wander areas" << std::endl;
+    updateSimulation(120, 0.016f);
 
-    // Run simulation for 250 frames (4.2 seconds)
-    std::cout << "Running simulation for 250 frames..." << std::endl;
-    updateSimulation(250, 0.016f);
-
-    // VERIFICATION: Check that all entities stayed within bounds (with small tolerance)
-    const float TOLERANCE = 50.0f; // Allow entities near boundary
-
+    const float TOLERANCE = 50.0f;
     int entitiesOutOfBounds = 0;
     for (const auto& handle : m_entityHandles) {
         Vector2D pos = TestEntityHelper::getPosition(handle);
-
-        if (pos.getX() < WORLD_MIN_X - TOLERANCE ||
-            pos.getX() > WORLD_MAX_X + TOLERANCE ||
-            pos.getY() < WORLD_MIN_Y - TOLERANCE ||
-            pos.getY() > WORLD_MAX_Y + TOLERANCE) {
-
+        if (pos.getX() < -TOLERANCE || pos.getX() > worldWidth + TOLERANCE ||
+            pos.getY() < -TOLERANCE || pos.getY() > worldHeight + TOLERANCE) {
             entitiesOutOfBounds++;
             std::cout << "FAILURE: Entity " << handle.getId() << " out of bounds at ("
                       << pos.getX() << ", " << pos.getY() << ")" << std::endl;
@@ -621,8 +541,6 @@ BOOST_AUTO_TEST_CASE(TestAIBoundaryAvoidance) {
     }
 
     std::cout << "Entities out of bounds: " << entitiesOutOfBounds << " / " << NUM_ENTITIES << std::endl;
-
-    // CRITICAL: All entities should stay within bounds (with tolerance)
     BOOST_CHECK_EQUAL(entitiesOutOfBounds, 0);
 
     std::cout << "=== TEST 3: PASSED ===" << std::endl;
@@ -639,17 +557,22 @@ BOOST_AUTO_TEST_CASE(TestAICollisionPerformanceUnderLoad) {
 
     // Create a large number of entities to stress test the system
     const int NUM_ENTITIES = 1000;
-    const float WORLD_SIZE = 5000.0f;
-
-    std::uniform_real_distribution<float> posDist(100.0f, WORLD_SIZE - 100.0f);
+    // Keep the cluster inside BackgroundSimulationManager's default Active
+    // radius (~1650). Scattered 5000px spawns retire most NPCs from collision.
+    const Vector2D CLUSTER_CENTER(500.0f, 500.0f);
+    const float CLUSTER_RADIUS = 400.0f;
+    std::uniform_real_distribution<float> angleDist(0.0f, 6.2831853f);
+    std::uniform_real_distribution<float> radiusDist(0.0f, CLUSTER_RADIUS);
 
     std::cout << "Creating " << NUM_ENTITIES << " entities..." << std::endl;
 
     for (int i = 0; i < NUM_ENTITIES; ++i) {
-        Vector2D startPos(posDist(m_rng), posDist(m_rng));
+        const float angle = angleDist(m_rng);
+        const float radius = radiusDist(m_rng);
+        Vector2D startPos(
+            CLUSTER_CENTER.getX() + std::cos(angle) * radius,
+            CLUSTER_CENTER.getY() + std::sin(angle) * radius);
         auto entity = createEntity(startPos);
-
-        // Assign Wander behavior using data-oriented API
         AIManager::Instance().assignBehavior(entity, "Wander");
     }
 
@@ -670,8 +593,7 @@ BOOST_AUTO_TEST_CASE(TestAICollisionPerformanceUnderLoad) {
         auto frameStart = std::chrono::high_resolution_clock::now();
 
         // Update simulation tiers first (required for collision to find Active entities)
-        Vector2D referencePoint(WORLD_SIZE / 2.0f, WORLD_SIZE / 2.0f);
-        BackgroundSimulationManager::Instance().update(referencePoint, 0.016f);
+        BackgroundSimulationManager::Instance().update(CLUSTER_CENTER, 0.016f);
 
         // Update AI
         AIManager::Instance().update(0.016f);
@@ -717,14 +639,11 @@ BOOST_AUTO_TEST_CASE(TestAICollisionPerformanceUnderLoad) {
     // CRITICAL: Performance must be acceptable
     BOOST_CHECK_LT(avgTime, MAX_FRAME_TIME_MS);
 
-    // Verify collision system is actually working. Pair counters are
-    // debug/benchmark diagnostics; Release builds validate the release-visible
-    // active collision participant contract instead.
-#ifdef DEBUG
-    BOOST_CHECK_GT(collisionStats.lastPairs, 0);
-#else
-    BOOST_CHECK_GT(EntityDataManager::Instance().getActiveIndicesWithCollision().size(), 0u);
-#endif
+    // Nearby Neutral wanderers stay Active collision participants. They do not
+    // NPC-NPC pair, so lastPairs may be 0 with no Environment overlap.
+    BOOST_CHECK_GE(EntityDataManager::Instance().getActiveIndicesWithCollision().size(),
+                   static_cast<size_t>(NUM_ENTITIES));
+    BOOST_CHECK_GT(collisionStats.bodyCount, 0u);
 
     // Verify behaviors are registered
     size_t behaviorCount = AIManager::Instance().getBehaviorCount();
