@@ -146,20 +146,27 @@ struct BehaviorTestFixture {
             EntityDataManager::Instance().processDestructionQueue();
         }
 
-        // EVENT-DRIVEN: Process any deferred events (triggers WorldLoaded task on ThreadSystem)
-        EventManager::Instance().update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        // EVENT-DRIVEN: Process any deferred events from the world load
         EventManager::Instance().update();
 
-        // Set world bounds explicitly for tests (20x20 tiles * 64 pixels/tile = 1280x1280)
+        // Set world bounds explicitly for tests (30x30 tiles * 64 pixels/tile = 1920x1920)
         const float TILE_SIZE = 64.0f;
         float worldPixelWidth = cfg.width * TILE_SIZE;
         float worldPixelHeight = cfg.height * TILE_SIZE;
         CollisionManager::Instance().setWorldBounds(0, 0, worldPixelWidth, worldPixelHeight);
 
-        // Rebuild pathfinding grid (async operation - best effort, not critical for basic tests)
-        PathfinderManager::Instance().rebuildGrid();
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Give grid a chance to build
+        // Wait for the event-driven grid rebuild. The deferred WorldLoaded event
+        // builds collision statics on the main thread, then StaticCollidersReady
+        // rebuilds the grid; a manual rebuildGrid() here would read collision
+        // storage while the statics are still being built.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline &&
+            !PathfinderManager::Instance().isGridReady()) {
+            PathfinderManager::Instance().update();
+            EventManager::Instance().update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        BOOST_REQUIRE(PathfinderManager::Instance().isGridReady());
 
         // NOTE: Behaviors are auto-registered in AIManager::init() - no manual registration needed
 

@@ -223,8 +223,11 @@ struct AICollisionTestFixture {
         auto& worldMgr = WorldManager::Instance();
         worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
         EntityDataManager::Instance().processDestructionQueue();
+        // Wait for the event-driven grid rebuild. The deferred WorldLoaded event
+        // builds collision statics on the main thread, then StaticCollidersReady
+        // rebuilds the grid; a manual rebuildGrid() here would read collision
+        // storage while the statics are still being built.
         EventManager::Instance().update();
-        PathfinderManager::Instance().rebuildGrid();
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
         while (std::chrono::steady_clock::now() < deadline &&

@@ -24,26 +24,33 @@ using namespace VoidLight::Test;
 BOOST_GLOBAL_FIXTURE(GPUGlobalFixture);
 
 /**
- * Test fixture that initializes GPUDevice for resource testing.
+ * Shuts the shared GPUDevice down once at the end of the run. Registered
+ * after GPUGlobalFixture so it tears down first (before the window and SDL).
+ */
+struct ResourceDeviceTeardown {
+    ~ResourceDeviceTeardown() {
+        if (GPUDevice::Instance().isInitialized()) {
+            GPUDevice::Instance().shutdown();
+        }
+    }
+};
+BOOST_GLOBAL_FIXTURE(ResourceDeviceTeardown);
+
+/**
+ * Test fixture that provides an initialized GPUDevice for resource testing.
+ * The device is shared across tests (device lifecycle is covered by
+ * GPUDeviceTests); every resource wrapper here is RAII-released per test.
  */
 struct ResourceTestFixture : public GPUTestFixture {
     ResourceTestFixture() {
         if (!isGPUAvailable()) return;
 
         device = &GPUDevice::Instance();
-        if (device->isInitialized()) {
-            device->shutdown();
-        }
+        if (device->isInitialized()) return;
 
         SDL_Window* window = getTestWindow();
         if (window) {
             BOOST_REQUIRE(device->init(window));
-        }
-    }
-
-    ~ResourceTestFixture() {
-        if (device && device->isInitialized()) {
-            device->shutdown();
         }
     }
 

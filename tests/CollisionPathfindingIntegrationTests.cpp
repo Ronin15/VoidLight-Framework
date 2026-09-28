@@ -56,18 +56,17 @@ struct CollisionPathfindingFixture {
             throw std::runtime_error("Failed to load test world");
         }
 
-        // EVENT-DRIVEN: Process any deferred events (triggers WorldLoaded task on ThreadSystem)
+        // EVENT-DRIVEN: Process deferred world-load events, then wait for the
+        // async grid rebuild (StaticCollidersReady) to complete
         EventManager::Instance().update();
-
-        // Give ThreadSystem time to execute the WorldLoaded task and enqueue the deferred event
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        // Process the deferred WorldLoadedEvent (delivers to PathfinderManager)
-        EventManager::Instance().update();
-
-        // Wait for async grid rebuild to complete
-        // Larger world (50x50) needs more time for grid construction
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline &&
+            !PathfinderManager::Instance().isGridReady()) {
+            PathfinderManager::Instance().update();
+            EventManager::Instance().update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        BOOST_REQUIRE(PathfinderManager::Instance().isGridReady());
 
         // Set up a test world with some static obstacles
         setupTestWorld();
