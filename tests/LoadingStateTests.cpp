@@ -77,7 +77,7 @@ private:
 // TEST SUITE: AsyncLoadingPatternTests
 // ============================================================================
 // Tests that validate LoadingState uses proper async patterns
-// From AGENTS.md: "Use LoadingState plus async ThreadSystem work for loading instead of blocking manual rendering"
+// From CLAUDE.md: "Use LoadingState plus async ThreadSystem work for loading instead of blocking manual rendering"
 
 BOOST_AUTO_TEST_SUITE(AsyncLoadingPatternTests)
 

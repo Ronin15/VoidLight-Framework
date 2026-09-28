@@ -81,6 +81,7 @@ done
 CORE_TEST_SCRIPTS=(
   "$SCRIPT_DIR/run_thread_tests.sh"
   "$SCRIPT_DIR/run_buffer_utilization_tests.sh"
+  "$SCRIPT_DIR/run_worker_budget_tests.sh"
   "$SCRIPT_DIR/run_thread_safe_ai_tests.sh"
   "$SCRIPT_DIR/run_thread_safe_ai_integration_tests.sh"
   "$SCRIPT_DIR/run_ai_optimization_tests.sh"
@@ -98,6 +99,7 @@ CORE_TEST_SCRIPTS=(
   "$SCRIPT_DIR/run_world_manager_tests.sh"
   "$SCRIPT_DIR/run_world_manager_event_integration_tests.sh"
   "$SCRIPT_DIR/run_world_resource_manager_tests.sh"
+  "$SCRIPT_DIR/run_world_population_tests.sh"
   "$SCRIPT_DIR/run_game_time_tests.sh"
   "$SCRIPT_DIR/run_controller_tests.sh"
   "$SCRIPT_DIR/run_collision_tests.sh"
@@ -126,6 +128,7 @@ CORE_TEST_SCRIPTS=(
   "$SCRIPT_DIR/run_crowd_runtime_tests.sh"
   "$SCRIPT_DIR/run_manager_runtime_tests.sh"
   "$SCRIPT_DIR/run_frame_profiler_tests.sh"
+  "$SCRIPT_DIR/run_timestep_manager_tests.sh"
 )
 
 # Performance scaling benchmarks (slow execution)

@@ -69,6 +69,7 @@ echo !MAGENTA!Starting core functionality tests...!NC!
 for %%T in (
     run_thread_tests.bat
     run_buffer_utilization_tests.bat
+    run_worker_budget_tests.bat
     run_thread_safe_ai_tests.bat
     run_thread_safe_ai_integration_tests.bat
     run_ai_optimization_tests.bat
@@ -88,6 +89,7 @@ for %%T in (
     run_world_manager_event_integration_tests.bat
     run_world_manager_tests.bat
     run_world_resource_manager_tests.bat
+    run_world_population_tests.bat
     run_collision_tests.bat
     run_pathfinding_tests.bat
     run_collision_pathfinding_integration_tests.bat
@@ -114,6 +116,7 @@ for %%T in (
     run_crowd_runtime_tests.bat
     run_manager_runtime_tests.bat
     run_frame_profiler_tests.bat
+    run_timestep_manager_tests.bat
 ) do (
     echo.
     echo Running test: %%T

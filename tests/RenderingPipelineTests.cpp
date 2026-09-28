@@ -147,7 +147,7 @@ bool functionContainsPattern(const std::string& filepath,
 // TEST SUITE: GPURenderPipelineComplianceTests
 // ============================================================================
 // Tests that validate GPU render-pass best practices
-// From AGENTS.md: one present/end-frame path through GameEngine
+// From CLAUDE.md: one present/end-frame path through GameEngine
 BOOST_AUTO_TEST_SUITE(GPURenderPipelineComplianceTests)
 
 // ----------------------------------------------------------------------------

@@ -24,6 +24,7 @@
 #include "collisions/CollisionBody.hpp" // CollisionLayer
 #include "collisions/TriggerTag.hpp"    // TriggerType
 #include "entities/Entity.hpp"          // EntityKind, SimulationTier, EntityHandle, AnimationConfig
+#include "entities/Sex.hpp"             // Sex
 #include "utils/ResourceHandle.hpp"     // ResourceHandle
 #include "utils/Vector2D.hpp"
 #include "world/HarvestType.hpp"        // HarvestType
@@ -210,15 +211,6 @@ enum class CreatureCategory : uint8_t {
     NPC = 0,      // Humanoid characters (race + class)
     Monster = 1,  // Hostile creatures (type + variant)
     Animal = 2    // Wildlife (species + role)
-};
-
-/**
- * @brief Biological sex for creatures
- */
-enum class Sex : uint8_t {
-    Male = 0,
-    Female = 1,
-    Unknown = 2   // For creatures where sex is undefined/irrelevant
 };
 
 /**

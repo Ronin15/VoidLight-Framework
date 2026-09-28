@@ -21,6 +21,7 @@ RUN_INVENTORY=false
 RUN_COMBAT=false
 RUN_HUD=false
 RUN_RESOURCERENDER=false
+RUN_PROJECTILERENDER=false
 RUN_SOCIAL=false
 
 for arg in "$@"; do
@@ -43,6 +44,7 @@ for arg in "$@"; do
       echo -e "  --combat          Run only CombatController tests"
       echo -e "  --hud             Run only HudController tests"
       echo -e "  --resourcerender  Run only ResourceRenderController tests"
+      echo -e "  --projectilerender Run only ProjectileRenderController tests"
       echo -e "  --social          Run only SocialController tests"
       echo -e "  --help            Show this help message"
       exit 0
@@ -92,6 +94,11 @@ for arg in "$@"; do
       RUN_RESOURCERENDER=true
       shift
       ;;
+    --projectilerender)
+      RUN_ALL=false
+      RUN_PROJECTILERENDER=true
+      shift
+      ;;
     --social)
       RUN_ALL=false
       RUN_SOCIAL=true
@@ -139,6 +146,10 @@ fi
 
 if [ "$RUN_ALL" = true ] || [ "$RUN_RESOURCERENDER" = true ]; then
   EXECUTABLES+=("resource_render_controller_tests")
+fi
+
+if [ "$RUN_ALL" = true ] || [ "$RUN_PROJECTILERENDER" = true ]; then
+  EXECUTABLES+=("projectile_render_controller_tests")
 fi
 
 if [ "$RUN_ALL" = true ] || [ "$RUN_SOCIAL" = true ]; then

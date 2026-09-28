@@ -24,6 +24,7 @@ set RUN_NPCRENDER=false
 set RUN_INVENTORY=false
 set RUN_COMBAT=false
 set RUN_RESOURCERENDER=false
+set RUN_PROJECTILERENDER=false
 set RUN_SOCIAL=false
 
 :parse_args
@@ -81,6 +82,12 @@ if /i "%~1"=="--resourcerender" (
     shift
     goto parse_args
 )
+if /i "%~1"=="--projectilerender" (
+    set RUN_ALL=false
+    set RUN_PROJECTILERENDER=true
+    shift
+    goto parse_args
+)
 if /i "%~1"=="--social" (
     set RUN_ALL=false
     set RUN_SOCIAL=true
@@ -101,6 +108,7 @@ if /i "%~1"=="--help" (
     echo   --inventory    Run only InventoryController tests
     echo   --combat       Run only CombatController tests
     echo   --resourcerender Run only ResourceRenderController tests
+    echo   --projectilerender Run only ProjectileRenderController tests
     echo   --social       Run only SocialController tests
     echo   --help         Show this help message
     exit /b 0
@@ -125,6 +133,7 @@ if "%RUN_ALL%"=="true" (
     call :run_single_test inventory_controller_tests
     call :run_single_test combat_controller_tests
     call :run_single_test resource_render_controller_tests
+    call :run_single_test projectile_render_controller_tests
     call :run_single_test social_controller_tests
 ) else (
     if "%RUN_REGISTRY%"=="true" call :run_single_test controller_registry_tests
@@ -135,6 +144,7 @@ if "%RUN_ALL%"=="true" (
     if "%RUN_INVENTORY%"=="true" call :run_single_test inventory_controller_tests
     if "%RUN_COMBAT%"=="true" call :run_single_test combat_controller_tests
     if "%RUN_RESOURCERENDER%"=="true" call :run_single_test resource_render_controller_tests
+    if "%RUN_PROJECTILERENDER%"=="true" call :run_single_test projectile_render_controller_tests
     if "%RUN_SOCIAL%"=="true" call :run_single_test social_controller_tests
 )
 
@@ -199,6 +209,7 @@ if !OVERALL_RESULT! neq 0 (
     echo !GREEN!  InventoryController tests!NC!
     echo !GREEN!  CombatController tests!NC!
     echo !GREEN!  ResourceRenderController tests!NC!
+    echo !GREEN!  ProjectileRenderController tests!NC!
     echo !GREEN!  SocialController tests!NC!
     exit /b 0
 )

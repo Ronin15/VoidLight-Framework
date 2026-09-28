@@ -7,8 +7,9 @@
 #define NPC_SPAWN_HPP
 
 #include "entities/EntityHandle.hpp"
-#include "managers/EntityDataTypes.hpp"
+#include "entities/Sex.hpp"
 #include "utils/Vector2D.hpp"
+#include <cstdint>
 #include <string>
 
 namespace VoidLight {

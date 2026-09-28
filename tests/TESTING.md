@@ -138,6 +138,7 @@ Each test suite has dedicated scripts in the `tests/test_scripts/` directory:
 # Core functionality tests (fast execution)
 ./tests/test_scripts/run_thread_tests.sh                # Thread system tests
 ./tests/test_scripts/run_buffer_utilization_tests.sh    # WorkerBudget buffer thread utilization tests
+./tests/test_scripts/run_worker_budget_tests.sh         # WorkerBudget targeted unit tests (reset, accessors, per-system coverage)
 ./tests/test_scripts/run_thread_safe_ai_tests.sh        # Thread-safe AI tests
 ./tests/test_scripts/run_thread_safe_ai_integration_tests.sh  # Thread-safe AI integration tests
 ./tests/test_scripts/run_ai_optimization_tests.sh       # AI optimization tests
@@ -157,6 +158,8 @@ Each test suite has dedicated scripts in the `tests/test_scripts/` directory:
 ./tests/test_scripts/run_ai_manager_edm_integration_tests.sh      # AIManager EDM integration tests
 ./tests/test_scripts/run_collision_manager_edm_integration_tests.sh  # CollisionManager EDM integration tests
 ./tests/test_scripts/run_npc_memory_tests.sh                      # NPC memory system tests
+./tests/test_scripts/run_world_population_tests.sh                # WorldPopulation settlement NPC population tests
+./tests/test_scripts/run_timestep_manager_tests.sh                # TimestepManager fixed-delta and accumulator tests
 
 # Performance scaling benchmarks (slow execution)
 ./tests/test_scripts/run_event_scaling_benchmark.sh     # Event manager scaling benchmark
@@ -194,6 +197,7 @@ Each test suite has dedicated scripts in the `tests/test_scripts/` directory:
 ```
 # Core functionality tests (fast execution)
 tests/test_scripts/run_thread_tests.bat                 # Thread system tests
+tests/test_scripts/run_worker_budget_tests.bat          # WorkerBudget targeted unit tests (reset, accessors, per-system coverage)
 tests/test_scripts/run_thread_safe_ai_tests.bat         # Thread-safe AI tests
 tests/test_scripts/run_thread_safe_ai_integration_tests.bat  # Thread-safe AI integration tests
 tests/test_scripts/run_ai_optimization_tests.bat        # AI optimization tests
@@ -205,13 +209,15 @@ tests/test_scripts/run_collision_tests.bat              # Collision system and s
 tests/test_scripts/run_pathfinding_tests.bat            # Pathfinding algorithm and grid tests
 tests/test_scripts/run_pathfinder_manager_tests.bat     # PathfinderManager EDM integration and lifecycle tests
 tests/test_scripts/run_game_time_tests.bat              # GameTimeManager tests
-tests/test_scripts/run_controller_tests.bat             # Controller tests (Registry, Weather, DayNight)
+tests/test_scripts/run_controller_tests.bat             # Controller tests (Registry, Weather, DayNight, ProjectileRender)
 tests/test_scripts/run_projectile_manager_tests.bat     # ProjectileManager EDM integration and lifecycle tests
 tests/test_scripts/run_entity_state_manager_tests.bat   # Entity state machine tests
 tests/test_scripts/run_entity_data_manager_tests.bat    # EntityDataManager and BackgroundSimulationManager tests
 tests/test_scripts/run_ai_manager_edm_integration_tests.bat      # AIManager EDM integration tests
 tests/test_scripts/run_collision_manager_edm_integration_tests.bat  # CollisionManager EDM integration tests
 tests/test_scripts/run_npc_memory_tests.bat                       # NPC memory system tests
+tests/test_scripts/run_world_population_tests.bat                 # WorldPopulation settlement NPC population tests
+tests/test_scripts/run_timestep_manager_tests.bat                 # TimestepManager fixed-delta and accumulator tests
 
 tests/test_scripts/run_json_reader_tests.bat            # JSON parser validation tests
 
