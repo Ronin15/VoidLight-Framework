@@ -22,6 +22,8 @@
 #include "managers/PathfinderManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
 #include "managers/WorldManager.hpp"
+#include "managers/WorldResourceManager.hpp"
+#include "world/HarvestCommit.hpp"
 #include "utils/SIMDMath.hpp"
 #include <array>
 #include <algorithm>
@@ -283,6 +285,9 @@ void AIManager::clean() {
     m_pendingBehaviorMessages.clear();
     m_pendingMeleeFallbackEquips.clear();
     m_pendingRangedAttacks.clear();
+    m_pendingHarvests.clear();
+    clearHarvestableSnapshot();
+    m_harvestableSnapshotRebuilds = 0;
 
     if (m_combatHandlerRegistered && EventManager::Instance().isInitialized()) {
         EventManager::Instance().removeHandler(m_combatHandlerToken);
@@ -336,6 +341,8 @@ void AIManager::prepareForStateTransition() {
     m_pendingBehaviorMessages.clear();
     m_pendingMeleeFallbackEquips.clear();
     m_pendingRangedAttacks.clear();
+    m_pendingHarvests.clear();
+    clearHarvestableSnapshot();
 
     // Batches always complete within update() — no pending futures to wait for.
 
@@ -495,6 +502,11 @@ void AIManager::update(float deltaTime) {
             m_lastWeatherVisibility);
         const EnvironmentSnapshot cachedEnvSnapshot = m_environmentSnapshot;
 
+        // Harvestable snapshot for Forage workers: rebuilt only when the WRM
+        // version changes, then read-only for the whole batch window.
+        refreshHarvestableSnapshot();
+        const HarvestableSnapshotView cachedHarvestables = harvestableSnapshotView();
+
         // WorkerBudget manager — used per-type bucket below.
         auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
         auto& threadSystem = VoidLight::ThreadSystem::Instance();
@@ -533,6 +545,7 @@ void AIManager::update(float deltaTime) {
                 worldWidth, worldHeight, cachedPlayerHandle,
                 cachedPlayerPosition, cachedPlayerVelocity,
                 cachedPlayerValid, cachedGameTime, cachedEnvSnapshot,
+                cachedHarvestables,
                 m_singleBatchEvents,
                 m_singleBatchKnockbackClears,
                 m_singleBatchMessages);
@@ -583,11 +596,13 @@ void AIManager::update(float deltaTime) {
                 m_batchFutures.push_back(threadSystem.enqueueTaskWithResult(
                     [this, i, bStart, bEnd, deltaTime, worldWidth, worldHeight,
                         cachedPlayerHandle, cachedPlayerPosition, cachedPlayerVelocity,
-                        cachedPlayerValid, cachedGameTime, cachedEnvSnapshot]() {
+                        cachedPlayerValid, cachedGameTime, cachedEnvSnapshot,
+                        cachedHarvestables]() {
                         processBatch(m_activeIndicesBuffer, bStart, bEnd, deltaTime,
                             worldWidth, worldHeight, cachedPlayerHandle,
                             cachedPlayerPosition, cachedPlayerVelocity,
                             cachedPlayerValid, cachedGameTime, cachedEnvSnapshot,
+                            cachedHarvestables,
                             m_batchEventBuffers[i],
                             m_batchKnockbackClears[i],
                             m_batchMessageBuffers[i]);
@@ -648,8 +663,11 @@ void AIManager::update(float deltaTime) {
             entityCount, frameShouldThread, totalBatchCount, totalUpdateTime);
 
         // Commit commands emitted by worker threads during this frame's batches.
+        // Harvests commit before transitions so the post-harvest return to the
+        // forager's origin behavior applies this frame.
         commitQueuedRangedAttacks();
         commitQueuedMeleeFallbackEquips();
+        commitQueuedHarvests();
         commitQueuedBehaviorTransitions();
         commitQueuedBehaviorMessages();
 
@@ -708,7 +726,8 @@ void AIManager::registerDefaultBehaviors() {
         {"Guard", BehaviorType::Guard},
         {"Attack", BehaviorType::Attack},
         {"Flee", BehaviorType::Flee},
-        {"Follow", BehaviorType::Follow}};
+        {"Follow", BehaviorType::Follow},
+        {"Forage", BehaviorType::Forage}};
 
     // Register named preset configs (variants of base behaviors)
     m_presetConfigs["SmallWander"] = VoidLight::BehaviorConfigData::makeWander(
@@ -726,7 +745,7 @@ void AIManager::registerDefaultBehaviors() {
     m_presetConfigs["RangedAttack"] = VoidLight::BehaviorConfigData::makeAttack(
         VoidLight::AttackBehaviorConfig::createRangedConfig());
 
-    AI_INFO("Behavior system ready (8 types + 7 presets)");
+    AI_INFO("Behavior system ready (9 types + 7 presets)");
 }
 
 bool AIManager::hasBehavior(const std::string& name) const {
@@ -844,6 +863,7 @@ void AIManager::assignBehavior(EntityHandle handle,
     auto& charData = edm.getCharacterDataByIndex(edmIndex);
     charData.homeRole = static_cast<uint8_t>(behaviorType);
     charData.behaviorType = static_cast<uint8_t>(behaviorType);
+    syncNeedForRole(edmIndex, behaviorType, true);
 
     // Add to guard/faction indices for the new behavior
     addToIndices(edmIndex, behaviorType);
@@ -922,6 +942,8 @@ void AIManager::assignBehavior(EntityHandle handle,
     auto& charData = edm.getCharacterDataByIndex(edmIndex);
     charData.homeRole = static_cast<uint8_t>(config.type);
     charData.behaviorType = static_cast<uint8_t>(config.type);
+    // Explicit configs (including named presets) are authored intent: no need.
+    syncNeedForRole(edmIndex, config.type, false);
 
     // Add to guard/faction indices for the new behavior
     addToIndices(edmIndex, config.type);
@@ -1644,6 +1666,206 @@ void AIManager::commitQueuedRangedAttacks() {
     }
 }
 
+void AIManager::commitQueuedHarvests() {
+    VoidLight::AICommandBus::Instance().drainHarvests(m_pendingHarvests);
+    if (m_pendingHarvests.empty()) {
+        return;
+    }
+
+    auto& edm = EntityDataManager::Instance();
+    // Per-node arbitration: earliest enqueue wins; later commands on the same
+    // node see it depleted inside HarvestCommit and are rejected.
+    std::sort(m_pendingHarvests.begin(), m_pendingHarvests.end(),
+        [](const auto& lhs, const auto& rhs) {
+            if (lhs.harvestableStaticIndex != rhs.harvestableStaticIndex) {
+                return lhs.harvestableStaticIndex < rhs.harvestableStaticIndex;
+            }
+            return lhs.sequence < rhs.sequence;
+        });
+
+    auto& needSidecar = edm.npcNeedSidecar();
+    for (const auto& cmd : m_pendingHarvests) {
+        if (!cmd.harvesterHandle.isValid()) {
+            continue;
+        }
+        const size_t harvesterIdx = edm.getIndex(cmd.harvesterHandle);
+        if (harvesterIdx == SIZE_MAX || harvesterIdx != cmd.harvesterEdmIndex) {
+            continue;
+        }
+
+        const uint32_t inventoryIndex = edm.getCharacterDataByIndex(harvesterIdx).inventoryIndex;
+        if (inventoryIndex == INVALID_INVENTORY_INDEX) {
+            continue;
+        }
+
+        const size_t nodeIdx = edm.getIndex(cmd.harvestableHandle);
+        if (cmd.harvestableHandle.kind != EntityKind::Harvestable || nodeIdx == SIZE_MAX ||
+            edm.getStaticHandle(nodeIdx) != cmd.harvestableHandle) {
+            continue;
+        }
+
+        const Vector2D harvesterPos = edm.getTransformByIndex(harvesterIdx).position;
+        const Vector2D nodePos = edm.getStaticHotDataByIndex(nodeIdx).transform.position;
+        const float distSq = (nodePos - harvesterPos).lengthSquared();
+        if (distSq > Behaviors::FORAGE_STALL_REACH * Behaviors::FORAGE_STALL_REACH) {
+            continue;
+        }
+
+        const auto yield = VoidLight::HarvestCommit::commit(cmd.harvestableHandle,
+            cmd.harvesterHandle, VoidLight::HarvestCommit::NPC_HARVEST_RESERVE);
+        if (!yield) {
+            continue;
+        }
+
+        const int oldQuantity = edm.getInventoryQuantity(inventoryIndex, yield->resource);
+        if (edm.addToInventory(inventoryIndex, yield->resource, yield->quantity)) {
+            dispatchResourceChange(cmd.harvesterHandle,
+                {yield->resource, oldQuantity, oldQuantity + yield->quantity}, "harvested");
+        } else {
+            AI_DEBUG(std::format("Forager inventory full; discarded {} x{}",
+                yield->resource.toString(), yield->quantity));
+        }
+
+        if (auto* need = needSidecar.get(static_cast<uint32_t>(harvesterIdx))) {
+            need->pressure = 0.0f;
+            need->failCount = 0;
+            need->retryCooldown = 0.0f;
+            Behaviors::switchBehavior(harvesterIdx, need->returnBehavior);
+        }
+    }
+}
+
+void AIManager::refreshHarvestableSnapshot() {
+    auto& wrm = WorldResourceManager::Instance();
+    if (!wrm.isInitialized()) {
+        if (!m_harvestableSnapshot.empty()) {
+            clearHarvestableSnapshot();
+        }
+        return;
+    }
+
+    // Read the version before copying so a concurrent bump forces a later rebuild.
+    const uint64_t version = wrm.getHarvestableVersion();
+    if (version == m_harvestableSnapshotVersion) {
+        return;
+    }
+
+    wrm.copyHarvestableIndices(wrm.getActiveWorld(), m_harvestableIndexScratch);
+    // Registry order is unordered_set order; sort for deterministic scans and so
+    // Forage can validate its target by staticIndex binary search.
+    std::sort(m_harvestableIndexScratch.begin(), m_harvestableIndexScratch.end());
+
+    auto& edm = EntityDataManager::Instance();
+    m_harvestableEntryScratch.clear();
+    m_harvestableEntryScratch.reserve(m_harvestableIndexScratch.size());
+    for (const size_t staticIndex : m_harvestableIndexScratch) {
+        const EntityHandle handle = edm.getStaticHandle(staticIndex);
+        if (!handle.isValid() || handle.kind != EntityKind::Harvestable) {
+            continue;
+        }
+        const auto& hot = edm.getStaticHotDataByIndex(staticIndex);
+        if (edm.getHarvestableData(hot.typeLocalIndex).isDepleted) {
+            continue;
+        }
+        m_harvestableEntryScratch.push_back(
+            {hot.transform.position, handle, static_cast<uint32_t>(staticIndex)});
+    }
+    bucketHarvestableSnapshot();
+    m_harvestableSnapshotVersion = version;
+    ++m_harvestableSnapshotRebuilds;
+}
+
+void AIManager::bucketHarvestableSnapshot() {
+    const size_t count = m_harvestableEntryScratch.size();
+    m_harvestableSnapshot.resize(count);
+    if (count == 0) {
+        m_harvestableCellStarts.clear();
+        m_harvestableGridOrigin = Vector2D(0.0f, 0.0f);
+        m_harvestableGridCols = 0;
+        m_harvestableGridRows = 0;
+        return;
+    }
+
+    float minX = m_harvestableEntryScratch.front().position.getX();
+    float minY = m_harvestableEntryScratch.front().position.getY();
+    float maxX = minX;
+    float maxY = minY;
+    for (const auto& entry : m_harvestableEntryScratch) {
+        minX = std::min(minX, entry.position.getX());
+        minY = std::min(minY, entry.position.getY());
+        maxX = std::max(maxX, entry.position.getX());
+        maxY = std::max(maxY, entry.position.getY());
+    }
+    constexpr float CELL = HarvestableSnapshotView::CELL_SIZE;
+    m_harvestableGridOrigin = Vector2D(minX, minY);
+    m_harvestableGridCols = static_cast<uint32_t>((maxX - minX) / CELL) + 1;
+    m_harvestableGridRows = static_cast<uint32_t>((maxY - minY) / CELL) + 1;
+
+    // Counting sort by cell. Readers compute cells through the same view
+    // helpers, so builder and workers always agree on an entry's cell.
+    const size_t cellCount = static_cast<size_t>(m_harvestableGridCols) * m_harvestableGridRows;
+    m_harvestableCellStarts.assign(cellCount + 1, 0);
+    const HarvestableSnapshotView grid{{}, {}, m_harvestableGridOrigin, m_harvestableGridCols,
+        m_harvestableGridRows};
+    auto cellOf = [&grid](const Vector2D& position) {
+        return static_cast<size_t>(grid.cellRow(position.getY())) * grid.cols +
+            grid.cellColumn(position.getX());
+    };
+    for (const auto& entry : m_harvestableEntryScratch) {
+        ++m_harvestableCellStarts[cellOf(entry.position)];
+    }
+    // Inclusive prefix sum: each slot holds its cell's end offset.
+    for (size_t cell = 1; cell < cellCount; ++cell) {
+        m_harvestableCellStarts[cell] += m_harvestableCellStarts[cell - 1];
+    }
+    m_harvestableCellStarts[cellCount] = static_cast<uint32_t>(count);
+    // Reverse scatter decrements each end offset down to its cell's start and
+    // keeps ascending staticIndex order inside every cell.
+    for (size_t i = count; i-- > 0;) {
+        const auto& entry = m_harvestableEntryScratch[i];
+        m_harvestableSnapshot[--m_harvestableCellStarts[cellOf(entry.position)]] = entry;
+    }
+}
+
+HarvestableSnapshotView AIManager::harvestableSnapshotView() const {
+    return {m_harvestableSnapshot, m_harvestableCellStarts, m_harvestableGridOrigin,
+        m_harvestableGridCols, m_harvestableGridRows};
+}
+
+void AIManager::clearHarvestableSnapshot() {
+    m_harvestableSnapshot.clear();
+    m_harvestableEntryScratch.clear();
+    m_harvestableIndexScratch.clear();
+    m_harvestableCellStarts.clear();
+    m_harvestableGridOrigin = Vector2D(0.0f, 0.0f);
+    m_harvestableGridCols = 0;
+    m_harvestableGridRows = 0;
+    m_harvestableSnapshotVersion = UINT64_MAX;
+}
+
+void AIManager::syncNeedForRole(size_t edmIndex, BehaviorType behaviorType, bool defaultConfig) {
+    auto& edm = EntityDataManager::Instance();
+    // Forage owns its entry (initForage creates it and the executor requires it).
+    if (behaviorType == BehaviorType::Forage) {
+        return;
+    }
+    // Survival need is civilian-only: humanoid NPCs whose home role is Idle or
+    // Wander with the default config. Forage returns through switchBehavior(),
+    // which rebuilds the default config, so preset/custom configs (SmallWander,
+    // authored overrides) never forage and keep their assigned config.
+    const bool eligible = defaultConfig &&
+        (behaviorType == BehaviorType::Idle || behaviorType == BehaviorType::Wander) &&
+        edm.getHotDataByIndex(edmIndex).kind == EntityKind::NPC &&
+        edm.getCharacterDataByIndex(edmIndex).category == CreatureCategory::NPC;
+    if (!eligible) {
+        edm.removeNpcNeed(edmIndex);
+        return;
+    }
+    if (!edm.hasNpcNeed(edmIndex)) {
+        Behaviors::seedNeed(edm.ensureNpcNeed(edmIndex), edm.getHandle(edmIndex).getId());
+    }
+}
+
 void AIManager::commitQueuedBehaviorMessages() {
     VoidLight::AICommandBus::Instance().drainBehaviorMessages(m_pendingBehaviorMessages);
     if (m_pendingBehaviorMessages.empty()) {
@@ -1869,6 +2091,7 @@ void AIManager::processBatch(
     const Vector2D& playerVel, bool playerValid,
     float gameTime,
     EnvironmentSnapshot envSnapshot,
+    HarvestableSnapshotView harvestables,
     std::vector<EventManager::DeferredEvent>& outEvents,
     std::vector<uint32_t>& outKnockbackClears,
     std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages) {
@@ -1877,6 +2100,10 @@ void AIManager::processBatch(
     // builds touch each entity's hot data once per frame.
     size_t batchExecutions = 0;
     auto& edm = EntityDataManager::Instance();
+    auto& knockbackSidecar = edm.knockbackSidecar();
+    // Workers mutate only their own need entry via get(); entries are created on
+    // the main thread (role assignment / Forage init), never inside the batch.
+    auto& needSidecar = edm.npcNeedSidecar();
 
     // No lock needed: m_edmToStorageIndex is read-only during batch window
     // - Behavior assignments happen synchronously via assignBehavior() before
@@ -2030,6 +2257,10 @@ void AIManager::processBatch(
             continue;
         }
 
+        if (auto* need = needSidecar.get(static_cast<uint32_t>(edmIdx))) {
+            Behaviors::tickNeed(*need, deltaTime);
+        }
+
         auto& edmHotData = edm.getHotDataByIndex(edmIdx);
         auto& transform = edmHotData.transform;
         auto& behaviorData = edm.getBehaviorData(edmIdx);
@@ -2054,7 +2285,7 @@ void AIManager::processBatch(
             behaviorData, pathData, memoryData, characterData,
             0.0f, 0.0f, worldWidth, worldHeight, true, gameTime,
             stanceRow, m_cachedPlayerFaction, hasHostileInRow,
-            edm.knockbackSidecar(), envSnapshot);
+            knockbackSidecar, needSidecar, envSnapshot, harvestables);
 
         switch (ref.type) {
             case BehaviorType::Idle:
@@ -2091,6 +2322,9 @@ void AIManager::processBatch(
                 break;
             case BehaviorType::Follow:
                 Behaviors::executeFollow(ctx, edm.getFollowConfig(ref.index), edm.getFollowState(ref.index));
+                break;
+            case BehaviorType::Forage:
+                Behaviors::executeForage(ctx, edm.getForageConfig(ref.index), edm.getForageState(ref.index));
                 break;
             default:
                 break;

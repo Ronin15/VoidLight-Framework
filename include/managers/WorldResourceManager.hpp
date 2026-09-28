@@ -346,6 +346,18 @@ public:
         std::vector<size_t>& outIndices) const;
 
     /**
+     * @brief Count live, non-depleted harvestables near a position in active world
+     * @param center Query center position
+     * @param radius Search radius
+     * @return Number of available harvestables (any resource kind) within radius
+     *
+     * Read-only; allocation-free. Used by HarvestCommit for reserve and
+     * scarcity decisions.
+     */
+    [[nodiscard]] size_t countAvailableHarvestablesInRadius(const Vector2D& center,
+        float radius) const;
+
+    /**
      * @brief Find closest dropped item to position
      * @param center Search center
      * @param radius Maximum distance
@@ -450,6 +462,31 @@ public:
      */
     void copyHarvestableIndices(const WorldId& worldId, std::vector<size_t>& out) const;
 
+    // ========================================================================
+    // HARVESTABLE VERSIONING
+    // ========================================================================
+
+    /**
+     * @brief Monotonic version of harvestable registry/availability state
+     *
+     * Bumped on register/unregister, active-world change, world clear/remove,
+     * state transition, clean, and notifyHarvestableStateChanged(). Never
+     * reset, so cached snapshots keyed on it stay distinguishable.
+     */
+    [[nodiscard]] uint64_t getHarvestableVersion() const noexcept {
+        return m_harvestableVersion.load(std::memory_order_acquire);
+    }
+
+    /**
+     * @brief Signal that a harvestable's availability changed (e.g. depleted)
+     *
+     * Called by HarvestCommit after the EDM depletion write. WRM stores no
+     * availability state; this only bumps the version.
+     */
+    void notifyHarvestableStateChanged() noexcept {
+        m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
+    }
+
 private:
     WorldResourceManager() = default;
     ~WorldResourceManager();
@@ -517,6 +554,9 @@ private:
     // These are updated on register/unregister and when active world changes
     std::atomic<size_t> m_activeWorldItemCount{0};
     std::atomic<size_t> m_activeWorldHarvestableCount{0};
+
+    // Harvestable registry/availability version (see getHarvestableVersion()).
+    std::atomic<uint64_t> m_harvestableVersion{0};
 
     // Helper to recalculate active world counts (called under lock)
     void recalculateActiveWorldCounts();

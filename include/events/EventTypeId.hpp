@@ -28,7 +28,8 @@ enum class EventTypeId : uint8_t {
     BehaviorMessage = 15, // Inter-entity behavior messages (RAISE_ALERT, etc.)
     MerchantSpawn = 16, // Merchant-focused NPC spawning
     StanceChanged = 17, // Directed faction-stance cell mutation
-    COUNT = 18
+    Scarcity = 18, // Harvest depletion left few available nodes nearby
+    COUNT = 19
 };
 
 #endif // EVENT_TYPE_ID_HPP

@@ -50,6 +50,16 @@ void AICommandBus::enqueueRangedAttack(EntityHandle attackerHandle,
         attackRange, projectileSpeed, sequence});
 }
 
+void AICommandBus::enqueueHarvest(EntityHandle harvesterHandle,
+    size_t harvesterEdmIndex,
+    EntityHandle harvestableHandle,
+    uint32_t harvestableStaticIndex) {
+    const uint64_t sequence = m_nextHarvestSequence.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_pendingHarvests.push_back({harvesterHandle, harvesterEdmIndex,
+        harvestableHandle, harvestableStaticIndex, sequence});
+}
+
 void AICommandBus::clearBehaviorMessages(EntityHandle targetHandle, size_t targetEdmIndex) {
     std::lock_guard<std::mutex> lock(m_mutex);
     std::erase_if(m_pendingMessages, [targetHandle, targetEdmIndex](const BehaviorMessageCommand& cmd) {
@@ -64,6 +74,7 @@ void AICommandBus::clearAll() {
     m_pendingFactionChanges.clear();
     m_pendingMeleeFallbackEquips.clear();
     m_pendingRangedAttacks.clear();
+    m_pendingHarvests.clear();
 }
 
 void AICommandBus::drainBehaviorMessages(std::vector<BehaviorMessageCommand>& out) {
@@ -94,6 +105,12 @@ void AICommandBus::drainRangedAttacks(std::vector<RangedAttackCommand>& out) {
     std::lock_guard<std::mutex> lock(m_mutex);
     out.clear();
     out.swap(m_pendingRangedAttacks);
+}
+
+void AICommandBus::drainHarvests(std::vector<HarvestCommand>& out) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    out.clear();
+    out.swap(m_pendingHarvests);
 }
 
 } // namespace VoidLight

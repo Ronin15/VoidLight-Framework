@@ -106,11 +106,10 @@ Status: Not started
 ## Slice Records
 
 Implement from these sections, not from chat notes. Implement only the open
-slice's scope. Slices 1–4 are implemented (Slice 1 visual confirm leftover;
-Slice 3 reviewed). Slice 5 **core** (stance table) is landed; this change
-finishes Slice 5 remainder (territory, standing, StanceChanged, collision
-remap). Slices 6–9 stay scheduled after 5. Do not pull Slices 6–9 forward. Do
-not rebuild the stance table.
+slice's scope. Slices 1–5 are implemented (Slice 1 visual confirm leftover).
+Slice 6 (survival/forage) is implemented and in review. Slices 6.1–9 stay
+scheduled after 6. Do not pull them forward. Do not rebuild the stance table,
+the need sidecar, the harvestable snapshot, or `HarvestCommit`.
 
 Scheduled order (do not skip ahead). Data deps may be narrower than schedule
 order; do not pull a later slice forward unless this file is updated first.
@@ -123,7 +122,8 @@ order; do not pull a later slice forward unless this file is updated first.
 | 4 Environment-driven AI | 2 | 3 |
 | 5 Faction stance | 2 | 4 |
 | 6 Survival / forage | 2, 5 | 5 |
-| 7 Autonomous decision | 2, 4, 5, 6 | 6 |
+| 6.1 Harvestable respawn | 6 | 6 |
+| 7 Autonomous decision | 2, 4, 5, 6 | 6.1 |
 | 8 Production minimap | 2 (5 for faction-colored dots) | 7 |
 | 9 Background-tier simulation | 2, 6 | 8 |
 
@@ -418,25 +418,62 @@ Architecture notes:
 
 Checklist:
 
-- [ ] EDM need/pressure sidecar with slot cleanup
-- [ ] `BehaviorType::Forage` + config/state/executor; `switchBehavior` to/from it; registerDefaultBehaviors
-- [ ] Sampled WRM queries or main-thread snapshot; no per-entity per-frame worker WRM
-- [ ] Depletion uses existing harvestable/EDM/`HarvestResourceEvent` path
-- [ ] Scarcity event; player harvest emits it too
-- [ ] Owning docs updated
-- [ ] Tests updated in the same change (need decay, forage depletes, scarcity on player harvest, no worker WRM spam)
+- [x] EDM need/pressure sidecar with slot cleanup
+- [x] `BehaviorType::Forage` + config/state/executor; `switchBehavior` to/from it; registerDefaultBehaviors
+- [x] Sampled WRM queries or main-thread snapshot; no per-entity per-frame worker WRM
+- [x] Depletion uses existing harvestable/EDM/`HarvestResourceEvent` path
+- [x] Scarcity event; player harvest emits it too
+- [x] Owning docs updated (`docs/ai/BehaviorModes.md`, `docs/ai/AIManager.md`, `docs/ai/BehaviorExecutionPipeline.md`, `docs/ai/BehaviorQuickReference.md`, `docs/managers/WorldResourceManager.md`, `docs/managers/EntityDataManager.md`, `docs/events/EventManager.md`, `docs/events/EventManager_QuickReference.md`, `docs/controllers/HarvestController.md`, `.claude/rules/managers.md`)
+- [x] Tests updated in the same change (need decay, forage depletes, scarcity on player harvest, no worker WRM spam)
 
 Acceptance checks:
 
-- [ ] Need-driven NPCs walk to harvestables and deplete them
-- [ ] Local depletion is observable and changes NPC behavior
-- [ ] Player harvesting the same node participates
-- [ ] Workers do not WRM-query every entity every frame
+- [x] Need-driven NPCs walk to harvestables and deplete them
+- [x] Local depletion is observable and changes NPC behavior
+- [x] Player harvesting the same node participates
+- [x] Workers do not WRM-query every entity every frame
+- [x] `ninja -C build` passes (clean incremental build after the review follow-up; no warnings in changed files)
+- [x] Targeted Boost.Test: `behavior_functionality_tests`, plus harvest tests if the player signal changes
+- [x] Slice reviewed (`game-systems-architect`) before commit
+
+Status: Implemented and reviewed (two rounds). Round 1 Mediums (rejection/stall loop, same-frame need hitch + whole-world scans, preset loss on Forage return) fixed; round 2 found no production defects — follow-up tests pin the 512 px grid against the commit reserve rule across cell boundaries and the need-seed stagger. Slice-complete gate green. Need is an EDM `SparseSidecar<NpcNeedData>` for civilian (`CreatureCategory::NPC`) Idle/Wander roles assigned by base name with the default config (presets and explicit configs carry no need, so Forage's default-config return never discards them); new entries get a deterministic per-entity pressure stagger (up to 30 s) so co-spawned NPCs do not cross the threshold on one frame. Forage entry is decided inside `executeIdle`/`executeWander` with a candidate pre-check and exponential backoff (15 s doubling, 240 s cap); candidates must keep `NPC_HARVEST_RESERVE` other nodes within 512 px of themselves (the commit's own rule), and a Forage episode gives up after 3 rejected commits or far stalls, so neither empty areas nor rejection/stall loops cause Forage churn. The snapshot is grid-bucketed (512 px cells), so scans touch at most 3×3 cells; exit returns to the recorded Idle/Wander origin, not `homeRole` (Slice 7). Workers read an AIManager harvestable snapshot rebuilt only on WRM version change; harvests commit on the main thread through the world-layer `HarvestCommit::commit`, shared with `HarvestController`. `EventTypeId::Scarcity` fires on any depletion leaving fewer than 2 available nodes (any kind) within 512 px; GamePlayState logs player-relevant ones. **Decision (economy protection):** NPC commits enforce an area reserve `NPC_HARVEST_RESERVE = 1` per 512 px, so NPCs never take the last local node; the player may. There is no respawn until Slice 6.1. `BehaviorType::Forage = 8` shifts `Custom`/`COUNT` (raw `uint8_t` saves need remapping). Background-tier NPCs do not tick need (Slice 9).
+
+## Slice 6.1: Harvestable respawn
+
+Goal: Depleted harvestables tick `currentRespawn` and return, with their tile obstacles restored, so Slice 6 foragers and the player can retarget and the NPC area reserve can be revisited.
+
+Current foundation:
+
+- Slice 6 `HarvestCommit::commit` sets `isDepleted` and `currentRespawn = respawnTime` via EDM `markHarvestableDepleted`, then bumps `WorldResourceManager::notifyHarvestableStateChanged()`.
+- `AIManager` rebuilds its worker harvestable snapshot only when the WRM harvestable version changes.
+- `HarvestResourceEvent` updates tiles only through GamePlayState's transient handler (`WorldManager::handleHarvestResource`).
+- `ScarcityEvent` is stateless (one event per qualifying depletion); `NPC_HARVEST_RESERVE = 1` keeps NPCs from stripping an area while nothing respawns.
+
+Architecture notes:
+
+- Respawn tick runs on the main thread and calls `notifyHarvestableStateChanged()` on every restore. Owner is to be decided between the `HarvestCommit`/world layer and WRM scheduling; WRM stays a registry either way.
+- Tile obstacle restore goes through a `WorldManager` coordinator API plus pathfinding grid invalidation; no respawn policy on `WorldManager`.
+- Scarcity recovery uses an edge-triggered area cache with transition and unload cleanup.
+- Out of scope: economy HUD, crafting, Slice 7 selector.
+
+Checklist:
+
+- [ ] Main-thread respawn tick that restores depleted nodes and calls `notifyHarvestableStateChanged()` (owner decided and documented)
+- [ ] Tile obstacle restore via a `WorldManager` coordinator API plus pathfinding grid invalidation
+- [ ] Scarcity recovery (edge-triggered area cache with transition/unload cleanup)
+- [ ] Revisit `NPC_HARVEST_RESERVE`
+- [ ] Owning docs updated
+- [ ] Tests updated in the same change
+
+Acceptance checks:
+
+- [ ] Nodes return after `respawnTime`
+- [ ] Foragers retarget restored nodes
 - [ ] `ninja -C build` passes
-- [ ] Targeted Boost.Test: `behavior_functionality_tests`, plus harvest tests if the player signal changes
+- [ ] Targeted Boost.Test: `world_resource_manager_tests`, `harvest_controller_tests`, `behavior_functionality_tests`
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: Not started. Depends on Slices 2 and 5.
+Status: Not started. Depends on Slice 6.
 
 ## Slice 7: Autonomous decision layer
 
@@ -447,14 +484,18 @@ Current foundation:
 - `Behaviors::switchBehavior` + `AICommandBus`. Idle/Patrol/Guard already contain hardcoded switches (`src/ai/behaviors/*`). `AIManager::commitQueuedBehaviorTransitions()` clears behavior data before `init()`; new state is set after that commit (`CLAUDE.md`).
 - Slice 2 writes home role at populate/assign. Slices 4–6 supply environment, stance, need.
 - `PersonalityTraits` on `NPCMemoryData` (bravery, aggression, composure, loyalty) — written at spawn, read every frame.
+- Slice 6 need: EDM `SparseSidecar<NpcNeedData>` (`pressure`, `retryCooldown`, `failCount`, `returnBehavior`) exists only for civilian Idle/Wander roles assigned by base name with the default config (`AIManager::syncNeedForRole`). `Behaviors::tickNeed` grows pressure in the fused loop; `Behaviors::shouldStartForage(ctx, currentType)` is the hardcoded Forage entry inside `executeIdle`/`executeWander` (threshold `FORAGE_ENTER_THRESHOLD`, candidate pre-check, exponential backoff). Forage exits to `NpcNeedData.returnBehavior` with the default config, not to `homeRole`.
+- Workers read Forage candidates from `BehaviorContext::harvestables` (`HarvestableSnapshotView`, 512 px grid). Forage never touches WRM from workers.
 
 Architecture notes:
 
 - Read home role from the field Slice 2 stored. Populate/debug `R` / tests that `assignBehavior` without going through populate must set home role too (assign path, not only the village helper).
 - Add `Behaviors::selectBehaviorIfNeeded(ctx)` called from the fused loop on stagger `edmIndex % 8 == frameCounter % 8`. Hysteresis: require override score ≥ home score + 0.15 to leave, and home ≥ override + 0.15 to return. Cooldown 2.0 s in shared or per-variant state after a switch.
-- Scores (0–1, then scaled by personality): flee from fear/health; attack from Hostile stance + aggression; forage from need ≥ threshold; else home role. Bravery lowers flee weight; aggression raises attack; loyalty raises home.
+- Scores (0–1, then scaled by personality): flee from fear/health; attack from Hostile stance + aggression; forage from need sidecar `pressure` ≥ `FORAGE_ENTER_THRESHOLD` **and** a candidate from the snapshot view (reuse the Slice 6 candidate/reserve filter and respect `retryCooldown`, so the selector cannot re-enter Forage in empty areas); else home role. Entities without a need entry score forage 0. Bravery lowers flee weight; aggression raises attack; loyalty raises home.
 - Restore home role through `switchBehavior`. Set restored config/state after the transition commit.
 - Do not remove existing in-behavior switches this slice; the selector is the cross-behavior preemption. Follow stays a scripted/assign-only role (not a selector target).
+- Reconcile the two Forage exits: Slice 6 returns to `returnBehavior` with the default config; the selector restores `homeRole`. Decide in design whether the selector owns the Forage exit (and `returnBehavior` becomes a fallback) — do not let both fire in one frame (latest-sequence transition wins).
+- Home-role restore must restore the assigned config (presets/explicit configs), not `getDefaultConfig`, or preset NPCs lose their tuning; `syncNeedForRole` must stay consistent with whatever the restore path assigns.
 - Files: `include/ai/BehaviorExecutors.hpp`, `src/ai/BehaviorExecutors.cpp`, `src/managers/AIManager.cpp` fused loop, home-role field if assign path still needs it, `docs/ai/BehaviorExecutionPipeline.md`, `tests/BehaviorFunctionalityTest.cpp`, `tests/managers/AIManagerEDMIntegrationTests.cpp`.
 - Out of scope: GOAP, HTN, behavior trees, new planner types.
 
@@ -462,7 +503,8 @@ Checklist:
 
 - [ ] Home role set on every `assignBehavior` path that populate uses; debug/test assigns included
 - [ ] Selector in fused loop with stagger 8, hysteresis 0.15, cooldown 2 s
-- [ ] Preemption flee/attack/forage; restore home role post-commit
+- [ ] Preemption flee/attack/forage (forage via Slice 6 need + snapshot candidate filter); restore home role post-commit with its assigned config
+- [ ] Single owner for the Forage exit (selector vs `returnBehavior`), documented
 - [ ] PersonalityTraits scale weights
 - [ ] Owning docs updated
 - [ ] Tests updated in the same change (no flicker, preemption, return-to-role, personality difference)
@@ -476,7 +518,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `ai_manager_edm_integration_tests`
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: Not started. Depends on Slices 2–6.
+Status: Not started. Depends on Slices 2–6; scheduled after 6.1 so the forage motive has respawning nodes to target.
 
 ## Slice 8: Production minimap
 
@@ -522,29 +564,32 @@ Status: Not started. Data depends on Slice 2; faction-colored dots depend on Sli
 
 ## Slice 9: Background-tier simulation
 
-Goal: `BackgroundSimulationManager` at 10 Hz advances patrol waypoint progress and need decay for Background-tier NPCs so returning to an area is not velocity-only freeze. No collision, pathfinding floods, or full `execute*` on that tier.
+Goal: `BackgroundSimulationManager` at 10 Hz advances patrol waypoint progress and need growth for Background-tier NPCs so returning to an area is not velocity-only freeze. No collision, pathfinding floods, or full `execute*` on that tier.
 
 Current foundation:
 
 - `BackgroundSimulationManager::simulateNPC` integrates `position += velocity * dt` with 0.98 velocity decay at 10 Hz (`src/managers/BackgroundSimulationManager.cpp`). `processBatch` already filters by kind/alive. WorkerBudget already applies. `prepareForStateTransition()` exists.
 - Patrol persistent waypoints live in `PatrolStateData` (`patrolTargets[4]`, `currentPatrolIndex`, `patrolMoveTimer`) — not the EDM nav waypoint slot, which pathfinder overwrites (`include/ai/BehaviorStateData.hpp`).
-- Slice 2 population + default Active then BSM retier. Slice 6 need sidecar.
+- Slice 2 population + default Active then BSM retier. Slice 6 need sidecar: `NpcNeedData` in EDM; growth policy is `Behaviors::tickNeed` (pressure **grows** toward 1; it does not decay). Active-tier ticking happens only in the AIManager fused loop, so Background NPCs freeze their need today.
+- Slice 6 Forage state (`ForageStateData`) and the `AICommandBus` harvest channel are Active-tier only; harvest depletion goes through main-thread `HarvestCommit::commit`.
 - Hibernated tier is data-only (no updates). Keep that.
 
 Architecture notes:
 
-- Extend `simulateNPC` (not a new function name unless design requires it) to: (1) if the NPC’s current or home behavior is Patrol and `PatrolStateData` is present, advance `patrolMoveTimer` at 10 Hz and, when dwell expires, wrap `currentPatrolIndex` and set position/velocity toward `patrolTargets[index]` without collision or pathfinder; (2) decay Slice 6 need on the sidecar. Do not call Guard/Attack/Forage executors.
+- Extend `simulateNPC` (not a new function name unless design requires it) to: (1) if the NPC’s current or home behavior is Patrol and `PatrolStateData` is present, advance `patrolMoveTimer` at 10 Hz and, when dwell expires, wrap `currentPatrolIndex` and set position/velocity toward `patrolTargets[index]` without collision or pathfinder; (2) advance Slice 6 need by calling `Behaviors::tickNeed` (do not duplicate the policy in BSM). Do not call Guard/Attack/Forage executors.
+- Background NPCs mid-Forage: do not deplete from the Background tier. Either hold Forage state frozen until the NPC returns to Active (its target is revalidated against the snapshot there), or reset it to `returnBehavior` on retier — decide in design and test it.
 - Clamp the interpolated position to world bounds already cached by other managers; do not query `CollisionManager`.
 - Files: `include/managers/BackgroundSimulationManager.hpp`, `src/managers/BackgroundSimulationManager.cpp`, `docs/managers/BackgroundSimulationManager.md`, `tests/managers/BackgroundSimulationManagerTests.cpp`. Do **not** add background-tick hooks to WorldManager.
 - Out of scope: Hibernated-tier AI, a second simulation manager, stance pulses, spatial-hash rebuilds.
 
 Checklist:
 
-- [ ] Background tick: patrol progress (`PatrolStateData`) + need decay
+- [ ] Background tick: patrol progress (`PatrolStateData`) + need growth via `Behaviors::tickNeed`
+- [ ] Background handling of NPCs in Forage (frozen or reset; no Background-tier depletion)
 - [ ] No collision/pathfinding/full executors on Background
 - [ ] Unload / `prepareForStateTransition()` still clears
 - [ ] Owning docs updated
-- [ ] Tests updated in the same change (off-screen patrol index/need advance vs velocity-only; unload)
+- [ ] Tests updated in the same change (off-screen patrol index/need advance vs velocity-only; Forage on retier; unload)
 
 Acceptance checks:
 

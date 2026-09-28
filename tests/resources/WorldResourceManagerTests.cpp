@@ -729,4 +729,113 @@ BOOST_AUTO_TEST_CASE(TestWorldRemovalClearsRegistrations) {
     worldManager->removeWorld(worldId);
 }
 
+//==============================================================================
+// Harvestable Version and Availability Tests (Slice 6)
+//==============================================================================
+
+BOOST_AUTO_TEST_CASE(VersionBumpsOnRegisterUnregisterClearAndNotify) {
+    const std::string worldId = "version_world";
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    BOOST_REQUIRE(oreHandle.isValid());
+
+    uint64_t version = worldManager->getHarvestableVersion();
+    worldManager->setActiveWorld(worldId);
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    version = worldManager->getHarvestableVersion();
+    EntityHandle harvestable = entityDataManager->createHarvestable(
+        Vector2D(100.0f, 100.0f), oreHandle, 1, 2, 30.0f, worldId);
+    BOOST_REQUIRE(harvestable.isValid());
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    const size_t edmIndex = entityDataManager->getIndex(harvestable);
+    BOOST_REQUIRE(edmIndex != SIZE_MAX);
+
+    version = worldManager->getHarvestableVersion();
+    worldManager->notifyHarvestableStateChanged();
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    version = worldManager->getHarvestableVersion();
+    worldManager->unregisterHarvestable(edmIndex);
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    version = worldManager->getHarvestableVersion();
+    worldManager->registerHarvestable(edmIndex, Vector2D(100.0f, 100.0f), worldId);
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    version = worldManager->getHarvestableVersion();
+    worldManager->clearSpatialDataForWorld(worldId);
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    version = worldManager->getHarvestableVersion();
+    BOOST_REQUIRE(worldManager->removeWorld(worldId));
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    version = worldManager->getHarvestableVersion();
+    worldManager->prepareForStateTransition();
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+
+    // Version is monotonic across clean(): a cached snapshot version never
+    // collides with a fresh registry.
+    version = worldManager->getHarvestableVersion();
+    worldManager->clean();
+    BOOST_CHECK_GT(worldManager->getHarvestableVersion(), version);
+    BOOST_REQUIRE(worldManager->init());
+}
+
+BOOST_AUTO_TEST_CASE(CountAvailableExcludesDepleted) {
+    const std::string worldId = "count_available_world";
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    worldManager->setActiveWorld(worldId);
+    BOOST_REQUIRE(oreHandle.isValid());
+
+    const Vector2D center(1000.0f, 1000.0f);
+    EntityHandle a = entityDataManager->createHarvestable(
+        Vector2D(1000.0f, 1000.0f), oreHandle, 1, 2, 30.0f, worldId);
+    EntityHandle b = entityDataManager->createHarvestable(
+        Vector2D(1100.0f, 1000.0f), oreHandle, 1, 2, 30.0f, worldId);
+    EntityHandle c = entityDataManager->createHarvestable(
+        Vector2D(1000.0f, 1150.0f), oreHandle, 1, 2, 30.0f, worldId);
+    EntityHandle far = entityDataManager->createHarvestable(
+        Vector2D(1500.0f, 1000.0f), oreHandle, 1, 2, 30.0f, worldId);
+    BOOST_REQUIRE(a.isValid());
+    BOOST_REQUIRE(b.isValid());
+    BOOST_REQUIRE(c.isValid());
+    BOOST_REQUIRE(far.isValid());
+
+    BOOST_CHECK_EQUAL(worldManager->countAvailableHarvestablesInRadius(center, 200.0f), 3u);
+
+    const size_t bIndex = entityDataManager->getIndex(b);
+    BOOST_REQUIRE(bIndex != SIZE_MAX);
+    entityDataManager->markHarvestableDepleted(
+        entityDataManager->getStaticHotDataByIndex(bIndex).typeLocalIndex);
+
+    BOOST_CHECK_EQUAL(worldManager->countAvailableHarvestablesInRadius(center, 200.0f), 2u);
+    BOOST_CHECK_EQUAL(worldManager->countAvailableHarvestablesInRadius(center, 600.0f), 3u);
+    BOOST_CHECK_EQUAL(worldManager->countAvailableHarvestablesInRadius(Vector2D(5000.0f, 5000.0f), 200.0f), 0u);
+}
+
+BOOST_AUTO_TEST_CASE(QueryCountIncrementsOnHarvestableQueries) {
+    const std::string worldId = "query_count_world";
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    worldManager->setActiveWorld(worldId);
+    BOOST_REQUIRE(oreHandle.isValid());
+    BOOST_REQUIRE(entityDataManager->createHarvestable(
+                                       Vector2D(64.0f, 64.0f), oreHandle, 1, 2, 30.0f, worldId)
+            .isValid());
+
+    worldManager->resetStats();
+    std::vector<size_t> indices;
+
+    worldManager->copyHarvestableIndices(worldId, indices);
+    BOOST_CHECK_EQUAL(indices.size(), 1u);
+    BOOST_CHECK_EQUAL(worldManager->getStats().queryCount.load(), 1u);
+
+    BOOST_CHECK_EQUAL(worldManager->queryHarvestablesInRadius(Vector2D(64.0f, 64.0f), 32.0f, indices), 1u);
+    BOOST_CHECK_EQUAL(worldManager->getStats().queryCount.load(), 2u);
+
+    BOOST_CHECK_EQUAL(worldManager->countAvailableHarvestablesInRadius(Vector2D(64.0f, 64.0f), 32.0f), 1u);
+    BOOST_CHECK_EQUAL(worldManager->getStats().queryCount.load(), 3u);
+}
+
 BOOST_AUTO_TEST_SUITE_END()

@@ -809,6 +809,7 @@ BOOST_FIXTURE_TEST_CASE(TimeEventBaseClass, EventTypesFixture) {
 #include "events/CollisionObstacleChangedEvent.hpp"
 #include "events/HarvestResourceEvent.hpp"
 #include "events/ResourceChangeEvent.hpp"
+#include "events/ScarcityEvent.hpp"
 #include "events/WorldEvent.hpp"
 #include "events/WorldTriggerEvent.hpp"
 
@@ -833,7 +834,38 @@ BOOST_AUTO_TEST_CASE(TestEventTypeIdEnumValues) {
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::BehaviorMessage), 15);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::MerchantSpawn), 16);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::StanceChanged), 17);
-    BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::COUNT), 18);
+    BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::Scarcity), 18);
+    BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::COUNT), 19);
+}
+
+// Test ScarcityEvent type, payload, and reset
+BOOST_AUTO_TEST_CASE(ScarcityEventBasics) {
+    const Vector2D center(320.0f, 640.0f);
+    const VoidLight::ResourceHandle ore(3, 1);
+    const EntityHandle harvester(42, EntityKind::Player, 1);
+
+    ScarcityEvent event(center, 512.0f, 1, ore, harvester);
+
+    BOOST_CHECK(event.getTypeId() == EventTypeId::Scarcity);
+    BOOST_CHECK_EQUAL(event.getType(), ScarcityEvent::EVENT_TYPE);
+    BOOST_CHECK_EQUAL(event.getTypeName(), "ScarcityEvent");
+    BOOST_CHECK_EQUAL(event.getName(), "Scarcity");
+    BOOST_CHECK(event.checkConditions());
+
+    BOOST_CHECK_EQUAL(event.getCenter().getX(), 320.0f);
+    BOOST_CHECK_EQUAL(event.getCenter().getY(), 640.0f);
+    BOOST_CHECK_EQUAL(event.getRadius(), 512.0f);
+    BOOST_CHECK_EQUAL(event.getAvailableCount(), 1u);
+    BOOST_CHECK(event.getResource() == ore);
+    BOOST_CHECK(event.getHarvester() == harvester);
+
+    event.reset();
+    BOOST_CHECK_EQUAL(event.getCenter().getX(), 0.0f);
+    BOOST_CHECK_EQUAL(event.getCenter().getY(), 0.0f);
+    BOOST_CHECK_EQUAL(event.getRadius(), 0.0f);
+    BOOST_CHECK_EQUAL(event.getAvailableCount(), 0u);
+    BOOST_CHECK(!event.getResource().isValid());
+    BOOST_CHECK(!event.getHarvester().isValid());
 }
 
 // Test ResourceChangeEvent

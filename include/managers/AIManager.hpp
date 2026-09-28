@@ -21,6 +21,7 @@
 
 #include "ai/BehaviorConfig.hpp"
 #include "ai/AICommandBus.hpp"
+#include "ai/BehaviorExecutors.hpp" // HarvestableSnapshotEntry
 #include "ai/EnvironmentModifiers.hpp"
 #include "ai/FactionStance.hpp"
 #include "core/Logger.hpp"
@@ -32,6 +33,7 @@
 #include <future>
 #include <optional>
 #include <shared_mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -259,6 +261,23 @@ public:
     [[nodiscard]] std::optional<TerritoryQueryResult> queryTerritoryAtPixel(float worldX, float worldY) const;
     [[nodiscard]] std::optional<TerritoryQueryResult> queryTerritoryAtTile(int tileX, int tileY) const;
 
+    /**
+   * @brief Available harvestables of the active world, as last snapshotted for workers.
+   * @details Main thread only. Rebuilt in update() only when the WRM harvestable
+   *          version changes; cleared on prepareForStateTransition() / clean().
+   *          Entries are grouped by HarvestableSnapshotView grid cell.
+   */
+    [[nodiscard]] std::span<const HarvestableSnapshotEntry> getHarvestableSnapshot() const {
+        return m_harvestableSnapshot;
+    }
+
+    /**
+   * @brief Number of harvestable snapshot rebuilds since init (diagnostic). Main thread only.
+   */
+    [[nodiscard]] size_t getHarvestableSnapshotRebuildCount() const {
+        return m_harvestableSnapshotRebuilds;
+    }
+
     // Priority from EDM CharacterData
     int getEntityPriority(EntityHandle handle) const;
     float getUpdateRangeMultiplier(int priority) const;
@@ -390,6 +409,20 @@ private:
     std::vector<VoidLight::AICommandBus::FactionChangeCommand> m_pendingFactionChanges;
     std::vector<VoidLight::AICommandBus::EquipmentSwapCommand> m_pendingMeleeFallbackEquips;
     std::vector<VoidLight::AICommandBus::RangedAttackCommand> m_pendingRangedAttacks;
+    std::vector<VoidLight::AICommandBus::HarvestCommand> m_pendingHarvests;
+
+    // Harvestable snapshot for Forage workers. Main-thread rebuild only (before
+    // batches, gated on WRM getHarvestableVersion()); read-only while batches run.
+    // Entries are grid-bucketed (HarvestableSnapshotView) by bucketHarvestableSnapshot().
+    std::vector<HarvestableSnapshotEntry> m_harvestableSnapshot;
+    std::vector<HarvestableSnapshotEntry> m_harvestableEntryScratch;
+    std::vector<size_t> m_harvestableIndexScratch;
+    std::vector<uint32_t> m_harvestableCellStarts;
+    Vector2D m_harvestableGridOrigin{0.0f, 0.0f};
+    uint32_t m_harvestableGridCols{0};
+    uint32_t m_harvestableGridRows{0};
+    uint64_t m_harvestableSnapshotVersion{UINT64_MAX};
+    size_t m_harvestableSnapshotRebuilds{0};
 
     void addToIndices(size_t edmIndex, BehaviorType behaviorType);
     void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
@@ -405,6 +438,12 @@ private:
     void commitQueuedMeleeFallbackEquips();
     void commitQueuedBehaviorMessages();
     void commitQueuedBehaviorTransitions();
+    void commitQueuedHarvests();
+    void refreshHarvestableSnapshot();
+    void bucketHarvestableSnapshot();
+    [[nodiscard]] HarvestableSnapshotView harvestableSnapshotView() const;
+    void clearHarvestableSnapshot();
+    void syncNeedForRole(size_t edmIndex, BehaviorType behaviorType, bool defaultConfig);
 
     // Process batch of Active tier entities using EDM indices directly.
     // Runs emotional decay and behavior dispatch in a single fused pass.
@@ -418,6 +457,7 @@ private:
         const Vector2D& playerVel, bool playerValid,
         float gameTime,
         EnvironmentSnapshot envSnapshot,
+        HarvestableSnapshotView harvestables,
         std::vector<EventManager::DeferredEvent>& outEvents,
         std::vector<uint32_t>& outKnockbackClears,
         std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages);

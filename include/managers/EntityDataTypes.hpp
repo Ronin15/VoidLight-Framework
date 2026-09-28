@@ -101,6 +101,27 @@ struct PlayerFactionStanding {
 static_assert(sizeof(PlayerFactionStanding) == 16);
 
 /**
+ * @brief Survival need state for civilian NPCs. Stored in SparseSidecar<NpcNeedData>.
+ *
+ * Storage only: growth rate, forage threshold, and retry backoff are
+ * Behaviors:: policy. Entries are created on the main thread (AIManager role
+ * assignment, Forage init) and may be removed on the main thread by role
+ * assignment (AIManager::syncNeedForRole), outside AI batches. Forage roles
+ * always keep their entry: syncNeedForRole skips Forage, and reassignment away
+ * from Forage changes the behavior first. The owning entity's worker may
+ * mutate its own entry via SparseSidecar::get().
+ */
+struct NpcNeedData {
+    float pressure{0.0f}; // 4 bytes: need pressure in [0, 1]
+    float retryCooldown{0.0f}; // 4 bytes: seconds before the next forage attempt
+    uint8_t failCount{0}; // 1 byte:  consecutive failed forage attempts (backoff)
+    BehaviorType returnBehavior{BehaviorType::Idle}; // 1 byte: behavior to resume after Forage
+    uint8_t padding0{0};
+    uint8_t padding1{0};
+};
+static_assert(sizeof(NpcNeedData) == 12);
+
+/**
  * @brief Hot data accessed every frame (64 bytes, one cache line)
  *
  * Packed for sequential access during batch processing.

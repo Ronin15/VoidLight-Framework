@@ -194,6 +194,9 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
     if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
         return;
     }
+    if (shouldStartForage(ctx, BehaviorType::Idle)) {
+        return;
+    }
 
     // Execute behavior based on current mode
     switch (static_cast<VoidLight::IdleBehaviorConfig::IdleMode>(config.mode)) {

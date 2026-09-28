@@ -330,6 +330,9 @@ void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& 
     if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
         return;
     }
+    if (shouldStartForage(ctx, BehaviorType::Wander)) {
+        return;
+    }
 
     updateTimers(state, ctx.deltaTime, ctx.pathData);
 

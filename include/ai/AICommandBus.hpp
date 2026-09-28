@@ -58,6 +58,17 @@ public:
         uint64_t sequence{0};
     };
 
+    // Worker-safe: enqueued by Forage executors from AI batches. Committed on the
+    // main thread by AIManager::commitQueuedHarvests() through HarvestCommit, which
+    // re-validates both handles (generation checks) before any depletion.
+    struct HarvestCommand {
+        EntityHandle harvesterHandle{};
+        size_t harvesterEdmIndex{SIZE_MAX};
+        EntityHandle harvestableHandle{};
+        uint32_t harvestableStaticIndex{UINT32_MAX};
+        uint64_t sequence{0}; // Monotonic enqueue sequence for deterministic arbitration
+    };
+
     static AICommandBus& Instance() {
         static AICommandBus instance;
         return instance;
@@ -73,6 +84,8 @@ public:
     void enqueueRangedAttack(EntityHandle attackerHandle, size_t attackerEdmIndex,
         const Vector2D& attackerPos, const Vector2D& targetPos,
         float damage, float attackRange, float projectileSpeed);
+    void enqueueHarvest(EntityHandle harvesterHandle, size_t harvesterEdmIndex,
+        EntityHandle harvestableHandle, uint32_t harvestableStaticIndex);
     void clearBehaviorMessages(EntityHandle targetHandle, size_t targetEdmIndex);
     void clearAll();
 
@@ -81,6 +94,7 @@ public:
     void drainFactionChanges(std::vector<FactionChangeCommand>& out);
     void drainMeleeFallbackEquips(std::vector<EquipmentSwapCommand>& out);
     void drainRangedAttacks(std::vector<RangedAttackCommand>& out);
+    void drainHarvests(std::vector<HarvestCommand>& out);
 
 private:
     AICommandBus() = default;
@@ -93,10 +107,12 @@ private:
     std::vector<FactionChangeCommand> m_pendingFactionChanges;
     std::vector<EquipmentSwapCommand> m_pendingMeleeFallbackEquips;
     std::vector<RangedAttackCommand> m_pendingRangedAttacks;
+    std::vector<HarvestCommand> m_pendingHarvests;
     std::atomic<uint64_t> m_nextMessageSequence{1};
     std::atomic<uint64_t> m_nextTransitionSequence{1};
     std::atomic<uint64_t> m_nextEquipmentSequence{1};
     std::atomic<uint64_t> m_nextRangedAttackSequence{1};
+    std::atomic<uint64_t> m_nextHarvestSequence{1};
 };
 
 } // namespace VoidLight

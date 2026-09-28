@@ -232,6 +232,9 @@ bool EntityDataManager::init() {
         m_attackConfigs.reserve(CHARACTER_CAPACITY);
         m_attackOwners.reserve(CHARACTER_CAPACITY);
         m_attackStates.reserve(CHARACTER_CAPACITY);
+        m_forageConfigs.reserve(CHARACTER_CAPACITY);
+        m_forageOwners.reserve(CHARACTER_CAPACITY);
+        m_forageStates.reserve(CHARACTER_CAPACITY);
 
         // NPC Memory data (indexed by edmIndex, pre-allocated alongside hotData)
         m_memoryData.reserve(CHARACTER_CAPACITY);
@@ -287,6 +290,13 @@ bool EntityDataManager::init() {
             [this]() { m_playerFactionStanding = SparseSidecar<PlayerFactionStanding>{}; });
 
         m_sidecarGrowHooks.emplace_back(
+            [this](size_t n) { m_npcNeed.resizeSparse(n); });
+        m_sidecarPerEntityHooks.emplace_back(
+            [this](uint32_t i) { m_npcNeed.removeAllFor(i); });
+        m_sidecarResetHooks.emplace_back(
+            [this]() { m_npcNeed = SparseSidecar<NpcNeedData>{}; });
+
+        m_sidecarGrowHooks.emplace_back(
             [this](size_t n) { m_memoryOverflow.resizeSparse(n); });
         m_sidecarPerEntityHooks.emplace_back(
             [this](uint32_t i) { m_memoryOverflow.removeAllFor(i); });
@@ -334,6 +344,9 @@ void EntityDataManager::clearAllEntityStorage() {
     m_attackConfigs.clear();
     m_attackOwners.clear();
     m_attackStates.clear();
+    m_forageConfigs.clear();
+    m_forageOwners.clear();
+    m_forageStates.clear();
 
     // Static entity storage
     m_staticHotData.clear();
@@ -3496,6 +3509,45 @@ void EntityDataManager::addPlayerFactionStanding(size_t edmIndex, uint8_t factio
     standing.scores[faction] = static_cast<int8_t>(next);
 }
 
+// ============================================================================
+// NPC NEED SIDECAR ACCESS
+// ============================================================================
+
+NpcNeedData& EntityDataManager::ensureNpcNeed(size_t edmIndex) {
+    return m_npcNeed.apply(static_cast<uint32_t>(edmIndex));
+}
+
+void EntityDataManager::removeNpcNeed(size_t edmIndex) {
+    m_npcNeed.remove(static_cast<uint32_t>(edmIndex));
+}
+
+bool EntityDataManager::hasNpcNeed(size_t edmIndex) const noexcept {
+    return m_npcNeed.has(static_cast<uint32_t>(edmIndex));
+}
+
+float EntityDataManager::getNpcNeedPressure(size_t edmIndex) const noexcept {
+    const NpcNeedData* need = m_npcNeed.get(static_cast<uint32_t>(edmIndex));
+    return need ? need->pressure : 0.0f;
+}
+
+void EntityDataManager::setNpcNeedPressure(size_t edmIndex, float pressure) {
+    m_npcNeed.apply(static_cast<uint32_t>(edmIndex)).pressure = std::clamp(pressure, 0.0f, 1.0f);
+}
+
+SparseSidecar<NpcNeedData>& EntityDataManager::npcNeedSidecar() noexcept {
+    return m_npcNeed;
+}
+
+const SparseSidecar<NpcNeedData>& EntityDataManager::npcNeedSidecar() const noexcept {
+    return m_npcNeed;
+}
+
+void EntityDataManager::markHarvestableDepleted(uint32_t typeLocalIndex) {
+    HarvestableData& harvestable = getHarvestableData(typeLocalIndex);
+    harvestable.isDepleted = true;
+    harvestable.currentRespawn = harvestable.respawnTime;
+}
+
 size_t EntityDataManager::getStaticIndex(EntityHandle handle) const {
     if (handle.kind != EntityKind::StaticObstacle) {
         return SIZE_MAX;
@@ -3867,6 +3919,7 @@ void EntityDataManager::clearBehaviorConfig(size_t edmIdx) {
         case BehaviorType::Follow: popFromPool(m_followConfigs, m_followStates, m_followOwners, ref.index); break;
         case BehaviorType::Guard: popFromPool(m_guardConfigs, m_guardStates, m_guardOwners, ref.index); break;
         case BehaviorType::Attack: popFromPool(m_attackConfigs, m_attackStates, m_attackOwners, ref.index); break;
+        case BehaviorType::Forage: popFromPool(m_forageConfigs, m_forageStates, m_forageOwners, ref.index); break;
         default: break; // Custom/None/COUNT — no pool slot to remove
     }
 
@@ -3934,6 +3987,12 @@ void EntityDataManager::reassignBehaviorConfig(size_t edmIdx, const VoidLight::B
             m_attackConfigs.push_back(newConfig.params.attack);
             m_attackStates.emplace_back();
             m_attackOwners.push_back(edmIdx);
+            break;
+        case BehaviorType::Forage:
+            ref.index = static_cast<uint32_t>(m_forageConfigs.size());
+            m_forageConfigs.push_back(newConfig.params.forage);
+            m_forageStates.emplace_back();
+            m_forageOwners.push_back(edmIdx);
             break;
         default:
             // Custom/COUNT — no pool; type is stored only in the ref for the execute switch

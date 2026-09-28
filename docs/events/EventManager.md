@@ -124,7 +124,8 @@ Current `EventTypeId` values:
 Weather, SceneChange, NPCSpawn, ParticleEffect,
 ResourceChange, World, Camera, Harvest, Collision,
 WorldTrigger, CollisionObstacleChanged, Custom,
-Time, Combat, Entity, BehaviorMessage, MerchantSpawn, StanceChanged
+Time, Combat, Entity, BehaviorMessage, MerchantSpawn, StanceChanged,
+Scarcity
 ```
 
 Key event types:
@@ -132,6 +133,7 @@ Key event types:
 - `BehaviorMessage` covers inter-entity AI signaling such as `RAISE_ALERT`
 - `MerchantSpawn` covers merchant-focused NPC spawning through `MerchantSpawnEvent`
 - `StanceChanged` (`StanceChangedEvent`) is produced by `AIManager` after a real directed stance-cell mutation (`setStance` / `worsenStance` / `improveStance`). Payload: fromFaction, towardFaction, oldStance, newStance, settlementId (first current-world settlement whose faction equals from or toward, else 0). Immediate dispatch. `resetFactionStances()` emits nothing. `GamePlayState` owns the transient event-log handler.
+- `Scarcity` (`ScarcityEvent`, header-only, not pooled) is produced by `HarvestCommit::commit` on the main thread (Deferred) for every depletion that leaves fewer than `HarvestCommit::SCARCITY_THRESHOLD` (2) available harvestables within `SCARCITY_RADIUS` (512 px), from both the player and NPC foragers. Payload: center (depleted node position), radius, availableCount, resource (the depleted node's resource), harvester. `availableCount` covers harvestables of **any** resource kind, not only `resource`. Emission is stateless (one event per qualifying depletion, no area cache); the event itself is unfiltered. `GamePlayState` owns the transient event-log handler and logs only when the harvester is the player or the center is within `radius` of the player.
 - `DamageEvent` under `EventTypeId::Combat` is the hot path for gameplay damage
 - `Collision` is a reserved legacy ID. There is no `CollisionEvent` payload in
   the current event path.

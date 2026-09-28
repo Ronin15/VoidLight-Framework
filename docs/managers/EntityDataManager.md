@@ -134,13 +134,13 @@ struct BehaviorConfigRef {
     uint32_t index;                 // slot index in that pool
 };
 
-// EDM holds one pair per variant (Idle, Wander, Chase, Patrol, Flee, Follow, Guard, Attack).
+// EDM holds one pair per variant (Idle, Wander, Chase, Patrol, Flee, Follow, Guard, Attack, Forage).
 // Config and state pools share the same index by invariant (AIManager commit
 // uses reassignBehaviorConfig / clearBehaviorConfig as storage primitives).
 std::vector<WanderBehaviorConfig> m_wanderConfigs;
 std::vector<WanderStateData>      m_wanderStates;
 std::vector<size_t>               m_wanderOwners;   // owner edmIndex per slot
-// ... repeated for each of the 8 variants.
+// ... repeated for each of the 9 variants.
 ```
 
 Access:
@@ -258,7 +258,15 @@ AreaEffectData& getAreaEffectData(EntityHandle handle);
 
 // By index (for batch processing)
 CharacterData& getCharacterDataByIndex(size_t index);
+
+// Storage write: isDepleted = true, currentRespawn = respawnTime.
+// Main thread only; HarvestCommit owns validation, WRM version bump, and events.
+void markHarvestableDepleted(uint32_t typeLocalIndex);
 ```
+
+Harvestable depletion goes through `HarvestCommit::commit` (world layer) for
+both the player and AI foragers; do not write `isDepleted` from controllers or
+behaviors. Respawn ticking is not implemented yet (Slice 6.1).
 
 ### Path Data Access
 
@@ -301,6 +309,28 @@ SparseSidecar<KnockbackData>& knockbackSidecar() noexcept;
 ```
 
 `EventManager` applies knockback when processing `DamageEvent`. `AIManager` and player movement consume and decay it during update. Expired entries are cleared on the main thread after worker batches join.
+
+### NPC Need Sidecar
+
+```cpp
+NpcNeedData& ensureNpcNeed(size_t edmIndex);          // main thread; lazy apply()
+void removeNpcNeed(size_t edmIndex);                  // main thread, outside AI batches
+bool hasNpcNeed(size_t edmIndex) const noexcept;
+float getNpcNeedPressure(size_t edmIndex) const noexcept;  // 0 when absent
+void setNpcNeedPressure(size_t edmIndex, float pressure);  // clamps to [0, 1]
+SparseSidecar<NpcNeedData>& npcNeedSidecar() noexcept;
+```
+
+`NpcNeedData` (12 bytes: `pressure`, `retryCooldown`, `failCount`,
+`returnBehavior`) is survival-need storage for civilian NPCs. Storage only:
+growth rate, forage threshold, and backoff are `Behaviors::` policy. Entries are
+created on the main thread by `AIManager` (civilian Idle/Wander default-config
+role assignment) and `initForage`, and removed on the main thread only when
+`AIManager` reassigns the entity to a role that has no need (preset, explicit
+config, or non-civilian role). Workers never create or remove entries.
+A worker may mutate only its own entity's entry via `SparseSidecar::get()`
+(passed as `BehaviorContext::needs`). The sidecar's reset hooks clear it on
+slot reuse, destroy, `prepareForStateTransition()`, and `clean()`.
 
 ### Player Faction Standing Sidecar
 

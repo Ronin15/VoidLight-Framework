@@ -36,6 +36,7 @@
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include "managers/WorldResourceManager.hpp"
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -485,7 +486,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleEntitiesShareBehaviorType) {
 
 BOOST_AUTO_TEST_CASE(TestAllBehaviorTypesCanBeAssigned) {
     // Test all available behavior types
-    const char* behaviorTypes[] = {"Idle", "Wander", "Chase", "Patrol", "Guard", "Attack", "Flee", "Follow"};
+    const char* behaviorTypes[] = {"Idle", "Wander", "Chase", "Patrol", "Guard", "Attack", "Flee", "Follow", "Forage"};
 
     std::vector<std::shared_ptr<AITestNPC>> entities;
     std::vector<EntityHandle> handles;
@@ -1086,6 +1087,320 @@ BOOST_AUTO_TEST_CASE(TestPlayerFactionStandingSidecarLifetime) {
     } else {
         BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(playerIdx, 1), 0);
     }
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+// ============================================================================
+// NPC NEED SIDECAR TESTS (Slice 6)
+// ============================================================================
+
+BOOST_FIXTURE_TEST_SUITE(NpcNeedSidecarTests, AIManagerEDMFixture)
+
+BOOST_AUTO_TEST_CASE(NpcNeedGetterDefaultsWhenAbsent) {
+    auto& edm = EntityDataManager::Instance();
+    auto npc = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    BOOST_REQUIRE(npc->getHandle().isValid());
+    const size_t idx = edm.getIndex(npc->getHandle());
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    BOOST_CHECK(!edm.hasNpcNeed(idx));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(idx), 0.0f);
+    BOOST_CHECK(edm.npcNeedSidecar().get(static_cast<uint32_t>(idx)) == nullptr);
+    // Out-of-range index reads as absent, never grows storage.
+    BOOST_CHECK(!edm.hasNpcNeed(idx + 100000));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(idx + 100000), 0.0f);
+
+    NpcNeedData& need = edm.ensureNpcNeed(idx);
+    BOOST_CHECK(edm.hasNpcNeed(idx));
+    BOOST_CHECK_EQUAL(need.pressure, 0.0f);
+    BOOST_CHECK_EQUAL(need.retryCooldown, 0.0f);
+    BOOST_CHECK_EQUAL(need.failCount, 0);
+    BOOST_CHECK(need.returnBehavior == BehaviorType::Idle);
+
+    edm.setNpcNeedPressure(idx, 0.4f);
+    BOOST_CHECK_CLOSE(edm.getNpcNeedPressure(idx), 0.4f, 0.001f);
+    edm.setNpcNeedPressure(idx, 2.0f);
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(idx), 1.0f);
+    edm.setNpcNeedPressure(idx, -1.0f);
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(idx), 0.0f);
+
+    // ensureNpcNeed returns the existing entry rather than resetting it.
+    edm.setNpcNeedPressure(idx, 0.6f);
+    BOOST_CHECK_CLOSE(edm.ensureNpcNeed(idx).pressure, 0.6f, 0.001f);
+    BOOST_CHECK_EQUAL(edm.npcNeedSidecar().activeCount(), 1u);
+}
+
+BOOST_AUTO_TEST_CASE(NpcNeedSidecarClearedOnDestroyAndReuse) {
+    auto& edm = EntityDataManager::Instance();
+    auto npc = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    const EntityHandle handle = npc->getHandle();
+    BOOST_REQUIRE(handle.isValid());
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    edm.setNpcNeedPressure(idx, 0.8f);
+    BOOST_REQUIRE(edm.hasNpcNeed(idx));
+
+    edm.destroyEntity(handle);
+    edm.processDestructionQueue();
+    BOOST_CHECK(!edm.hasNpcNeed(idx));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(idx), 0.0f);
+    BOOST_CHECK_EQUAL(edm.npcNeedSidecar().activeCount(), 0u);
+
+    // A new entity in the (possibly reused) slot starts without a need entry.
+    auto reused = AITestNPC::create(Vector2D(120.0f, 120.0f));
+    BOOST_REQUIRE(reused->getHandle().isValid());
+    const size_t reusedIdx = edm.getIndex(reused->getHandle());
+    BOOST_REQUIRE(reusedIdx != SIZE_MAX);
+    BOOST_CHECK(!edm.hasNpcNeed(reusedIdx));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(reusedIdx), 0.0f);
+}
+
+BOOST_AUTO_TEST_CASE(NpcNeedSidecarClearedOnPrepareForStateTransition) {
+    auto& edm = EntityDataManager::Instance();
+    auto npcA = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    auto npcB = AITestNPC::create(Vector2D(200.0f, 200.0f));
+    const size_t idxA = edm.getIndex(npcA->getHandle());
+    const size_t idxB = edm.getIndex(npcB->getHandle());
+    BOOST_REQUIRE(idxA != SIZE_MAX);
+    BOOST_REQUIRE(idxB != SIZE_MAX);
+
+    edm.setNpcNeedPressure(idxA, 0.5f);
+    edm.setNpcNeedPressure(idxB, 0.9f);
+    BOOST_REQUIRE_EQUAL(edm.npcNeedSidecar().activeCount(), 2u);
+
+    edm.prepareForStateTransition();
+    BOOST_CHECK_EQUAL(edm.npcNeedSidecar().activeCount(), 0u);
+    BOOST_CHECK(!edm.hasNpcNeed(idxA));
+    BOOST_CHECK(!edm.hasNpcNeed(idxB));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(idxA), 0.0f);
+}
+
+BOOST_AUTO_TEST_CASE(ForageAssignmentCreatesNeedEntry) {
+    auto& edm = EntityDataManager::Instance();
+    auto npc = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Forage");
+    BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
+    BOOST_CHECK(edm.getBehaviorConfigRef(idx).type == BehaviorType::Forage);
+    BOOST_CHECK(edm.hasNpcNeed(idx));
+}
+
+BOOST_AUTO_TEST_CASE(NeedEnabledOnlyForCivilianRoles) {
+    auto& edm = EntityDataManager::Instance();
+    auto& ai = AIManager::Instance();
+
+    // Civilian NPC roles from classes.json suggestedBehavior.
+    const EntityHandle villager =
+        edm.createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Villager");
+    const EntityHandle blacksmith =
+        edm.createNPCWithRaceClass(Vector2D(150.0f, 100.0f), "Human", "Blacksmith");
+    // Non-civilian roles and a Wander animal.
+    const EntityHandle guard =
+        edm.createNPCWithRaceClass(Vector2D(200.0f, 100.0f), "Human", "Guard");
+    const EntityHandle warrior =
+        edm.createNPCWithRaceClass(Vector2D(250.0f, 100.0f), "Human", "Warrior");
+    const EntityHandle deer = edm.createAnimal(Vector2D(300.0f, 100.0f), "Deer", "Adult");
+    for (const EntityHandle h : {villager, blacksmith, guard, warrior, deer}) {
+        BOOST_REQUIRE(h.isValid());
+        BOOST_REQUIRE(edm.getIndex(h) != SIZE_MAX);
+    }
+
+    const size_t villagerIdx = edm.getIndex(villager);
+    const size_t blacksmithIdx = edm.getIndex(blacksmith);
+    const size_t guardIdx = edm.getIndex(guard);
+    const size_t warriorIdx = edm.getIndex(warrior);
+    const size_t deerIdx = edm.getIndex(deer);
+
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(villagerIdx).type == BehaviorType::Wander);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(blacksmithIdx).type == BehaviorType::Idle);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(guardIdx).type == BehaviorType::Guard);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(warriorIdx).type == BehaviorType::Chase);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(deerIdx).type == BehaviorType::Wander);
+    BOOST_REQUIRE(edm.getCharacterDataByIndex(deerIdx).category == CreatureCategory::Animal);
+
+    BOOST_CHECK(edm.hasNpcNeed(villagerIdx));
+    BOOST_CHECK(edm.hasNpcNeed(blacksmithIdx));
+    BOOST_CHECK(!edm.hasNpcNeed(guardIdx));
+    BOOST_CHECK(!edm.hasNpcNeed(warriorIdx));
+    BOOST_CHECK(!edm.hasNpcNeed(deerIdx));
+
+    // Explicit role assignment follows the same rule: Patrol never gets a need,
+    // Idle does.
+    ai.assignBehavior(warrior, "Patrol");
+    BOOST_CHECK(!edm.hasNpcNeed(warriorIdx));
+    ai.assignBehavior(guard, "Idle");
+    BOOST_CHECK(edm.hasNpcNeed(guardIdx));
+    ai.assignBehavior(deer, "Idle");
+    BOOST_CHECK(!edm.hasNpcNeed(deerIdx));
+
+    // Preset and explicit configs are assigned intent: Forage would return through
+    // the default config and discard them, so they carry no need entry.
+    ai.assignBehavior(villager, "SmallWander");
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(villagerIdx).type == BehaviorType::Wander);
+    BOOST_CHECK(!edm.hasNpcNeed(villagerIdx));
+    ai.assignBehavior(blacksmith, Behaviors::getDefaultConfig(BehaviorType::Idle));
+    BOOST_CHECK(!edm.hasNpcNeed(blacksmithIdx));
+    // Back to the base role by name: need re-enabled with a fresh, staggered entry.
+    ai.assignBehavior(villager, "Wander");
+    BOOST_CHECK(edm.hasNpcNeed(villagerIdx));
+    BOOST_CHECK_LT(edm.getNpcNeedPressure(villagerIdx), Behaviors::FORAGE_ENTER_THRESHOLD);
+}
+
+BOOST_AUTO_TEST_CASE(NeedEntrySeedStaggersSameFrameCivilians) {
+    auto& edm = EntityDataManager::Instance();
+
+    // Two civilians created on the same frame: role assignment seeds each need
+    // entry from its entity id, so their entry pressures differ.
+    const EntityHandle first =
+        edm.createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Villager");
+    const EntityHandle second =
+        edm.createNPCWithRaceClass(Vector2D(150.0f, 100.0f), "Human", "Villager");
+    BOOST_REQUIRE(first.isValid());
+    BOOST_REQUIRE(second.isValid());
+    const size_t firstIdx = edm.getIndex(first);
+    const size_t secondIdx = edm.getIndex(second);
+    BOOST_REQUIRE(firstIdx != SIZE_MAX);
+    BOOST_REQUIRE(secondIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.hasNpcNeed(firstIdx));
+    BOOST_REQUIRE(edm.hasNpcNeed(secondIdx));
+    BOOST_REQUIRE_NE(first.getId() % 1024, second.getId() % 1024);
+
+    const auto expectedSeed = [](EntityHandle::IDType id) {
+        return Behaviors::NEED_PRESSURE_PER_SECOND * Behaviors::NEED_ENTRY_STAGGER_SECONDS *
+            static_cast<float>(id % 1024) / 1024.0f;
+    };
+    const float firstPressure = edm.getNpcNeedPressure(firstIdx);
+    const float secondPressure = edm.getNpcNeedPressure(secondIdx);
+    BOOST_CHECK_CLOSE(firstPressure, expectedSeed(first.getId()), 0.01f);
+    BOOST_CHECK_CLOSE(secondPressure, expectedSeed(second.getId()), 0.01f);
+    BOOST_CHECK_NE(firstPressure, secondPressure);
+    BOOST_CHECK_LT(firstPressure, Behaviors::FORAGE_ENTER_THRESHOLD);
+    BOOST_CHECK_LT(secondPressure, Behaviors::FORAGE_ENTER_THRESHOLD);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+// ============================================================================
+// HARVESTABLE SNAPSHOT TESTS (Slice 6)
+// ============================================================================
+
+namespace {
+
+struct AIManagerHarvestFixture : AIManagerEDMFixture {
+    inline static const std::string WORLD_ID = "ai_snapshot_world";
+
+    AIManagerHarvestFixture() {
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
+        auto& wrm = WorldResourceManager::Instance();
+        BOOST_REQUIRE(wrm.createWorld(WORLD_ID));
+        wrm.setActiveWorld(WORLD_ID);
+        oreHandle = ResourceTemplateManager::Instance().getHandleById("iron_ore");
+        BOOST_REQUIRE(oreHandle.isValid());
+        CollisionManager::Instance().setWorldBounds(0, 0, 4000.0f, 4000.0f);
+    }
+
+    ~AIManagerHarvestFixture() {
+        WorldResourceManager::Instance().clean();
+    }
+
+    AIManagerHarvestFixture(const AIManagerHarvestFixture&) = delete;
+    AIManagerHarvestFixture& operator=(const AIManagerHarvestFixture&) = delete;
+
+    EntityHandle createNode(const Vector2D& position) {
+        EntityHandle handle = EntityDataManager::Instance().createHarvestable(
+            position, oreHandle, 2, 2, 30.0f, WORLD_ID);
+        BOOST_REQUIRE(handle.isValid());
+        return handle;
+    }
+
+    static bool isDepleted(EntityHandle node) {
+        const auto& edm = EntityDataManager::Instance();
+        const size_t index = edm.getIndex(node);
+        BOOST_REQUIRE(index != SIZE_MAX);
+        return edm.getHarvestableData(edm.getStaticHotDataByIndex(index).typeLocalIndex).isDepleted;
+    }
+
+    static void step() {
+        BackgroundSimulationManager::Instance().invalidateTiers();
+        BackgroundSimulationManager::Instance().update(Vector2D(100.0f, 100.0f), 0.016f);
+        AIManager::Instance().update(0.016f);
+    }
+
+    VoidLight::ResourceHandle oreHandle{};
+};
+
+} // namespace
+
+BOOST_FIXTURE_TEST_SUITE(HarvestableSnapshotTests, AIManagerHarvestFixture)
+
+BOOST_AUTO_TEST_CASE(HarvestableSnapshotClearedOnStateTransition) {
+    auto& edm = EntityDataManager::Instance();
+    auto& ai = AIManager::Instance();
+    auto& bus = VoidLight::AICommandBus::Instance();
+
+    const EntityHandle nodeNear = createNode(Vector2D(130.0f, 100.0f));
+    const EntityHandle nodeFar = createNode(Vector2D(400.0f, 100.0f));
+    const EntityHandle villager =
+        edm.createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Villager");
+    BOOST_REQUIRE(villager.isValid());
+    const size_t villagerIdx = edm.getIndex(villager);
+    BOOST_REQUIRE(villagerIdx != SIZE_MAX);
+    const size_t nearIdx = edm.getIndex(nodeNear);
+    BOOST_REQUIRE(nearIdx != SIZE_MAX);
+
+    // First update builds the snapshot; a second update with an unchanged WRM
+    // version does not rebuild.
+    const size_t rebuilds0 = ai.getHarvestableSnapshotRebuildCount();
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshot().size(), 2u);
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds0 + 1);
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds0 + 1);
+
+    // A harvest command pending across the transition is dropped with the snapshot.
+    bus.enqueueHarvest(villager, villagerIdx, nodeNear, static_cast<uint32_t>(nearIdx));
+    ai.prepareForStateTransition();
+    BOOST_CHECK(ai.getHarvestableSnapshot().empty());
+
+    // The next update rebuilds even though the WRM version did not change.
+    ai.assignBehavior(villager, "Wander");
+    edm.getTransformByIndex(villagerIdx).position = Vector2D(100.0f, 100.0f);
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshot().size(), 2u);
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds0 + 2);
+    BOOST_CHECK(!isDepleted(nodeNear));
+    BOOST_CHECK(!isDepleted(nodeFar));
+
+    // Positive control: the same command committed without a transition depletes
+    // the node, resets need, and returns the forager to its origin behavior.
+    // Pressure stays below FORAGE_ENTER_THRESHOLD so the Wander executor does not
+    // start foraging (and overwrite returnBehavior) in the same frame.
+    NpcNeedData& need = edm.ensureNpcNeed(villagerIdx);
+    need.pressure = 0.5f;
+    need.failCount = 2;
+    need.returnBehavior = BehaviorType::Idle;
+    edm.getTransformByIndex(villagerIdx).position = Vector2D(100.0f, 100.0f);
+    bus.enqueueHarvest(villager, villagerIdx, nodeNear, static_cast<uint32_t>(nearIdx));
+    step();
+    BOOST_CHECK(isDepleted(nodeNear));
+    BOOST_CHECK(!isDepleted(nodeFar));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(villagerIdx), 0.0f);
+    BOOST_CHECK_EQUAL(edm.npcNeedSidecar().get(static_cast<uint32_t>(villagerIdx))->failCount, 0);
+    BOOST_CHECK(edm.getBehaviorConfigRef(villagerIdx).type == BehaviorType::Idle);
+    const uint32_t invIdx = edm.getCharacterDataByIndex(villagerIdx).inventoryIndex;
+    BOOST_REQUIRE(invIdx != INVALID_INVENTORY_INDEX);
+    BOOST_CHECK_EQUAL(edm.getInventoryQuantity(invIdx, oreHandle), 2);
+
+    // Depletion bumps the WRM version: next update rebuilds and excludes the node.
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds0 + 3);
+    BOOST_REQUIRE_EQUAL(ai.getHarvestableSnapshot().size(), 1u);
+    BOOST_CHECK(ai.getHarvestableSnapshot()[0].handle == nodeFar);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

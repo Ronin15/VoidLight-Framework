@@ -116,6 +116,13 @@ behavior rules are in `.claude/rules/ai.md`.
   `WorldHarvestInit`; NPC spawn policy in `WorldPopulation` / `spawnNpc`.
   Settlement NPCs use `settlement.faction`; wilderness Warriors keep
   faction override 1.
+- **Survival need:** EDM `SparseSidecar<NpcNeedData>` storage; growth,
+  threshold, and backoff are `Behaviors::` policy; entries are created by
+  AIManager on the main thread for civilian Idle/Wander default-config roles
+  and removed there on reassignment to any other role.
+- **Harvest commit:** `HarvestCommit::commit` (world layer, main thread) is
+  the single depletion path for player and AI; WRM only versions and counts.
+  Workers read AIManager's harvestable snapshot view, never WRM.
 - **WorldManager stays a coordinator** (load/unload, registry,
   settlement queries). Never add environment, stance, forage, decision,
   discovery, or background-tick policy to it.

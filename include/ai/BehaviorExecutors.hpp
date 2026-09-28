@@ -31,9 +31,62 @@
 #include "ai/FactionStance.hpp"
 #include "managers/EntityDataTypes.hpp" // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
 #include "managers/EventManager.hpp" // For EventManager::DeferredEvent
-#include "managers/SparseSidecar.hpp" // For SparseSidecar<KnockbackData>
+#include "managers/SparseSidecar.hpp" // For SparseSidecar<KnockbackData>, SparseSidecar<NpcNeedData>
+#include "world/HarvestCommit.hpp" // For HARVEST_RANGE (shared forage reach)
 #include <array>
+#include <span>
 #include <vector>
+
+/**
+ * @brief One available harvestable in AIManager's frame snapshot
+ *
+ * Built on the main thread by AIManager (only when the WRM harvestable version
+ * changes) and handed to workers through HarvestableSnapshotView. Workers never
+ * query WorldResourceManager.
+ */
+struct HarvestableSnapshotEntry {
+    Vector2D position{0.0f, 0.0f};
+    EntityHandle handle{};
+    uint32_t staticIndex{UINT32_MAX};
+};
+
+/**
+ * @brief Read-only, grid-bucketed view of AIManager's harvestable snapshot
+ *
+ * Entries are grouped by CELL_SIZE cell (row-major from origin) and sorted by
+ * ascending staticIndex inside each cell; cellStarts holds cols * rows + 1
+ * offsets into entries. A SCARCITY_RADIUS query touches at most 3x3 cells, and
+ * a target is validated by binary search inside its own cell. Positions outside
+ * the grid clamp to the edge cells, so builder and readers agree on every cell.
+ */
+struct HarvestableSnapshotView {
+    static constexpr float CELL_SIZE = VoidLight::HarvestCommit::SCARCITY_RADIUS;
+
+    std::span<const HarvestableSnapshotEntry> entries{};
+    std::span<const uint32_t> cellStarts{};
+    Vector2D origin{0.0f, 0.0f};
+    uint32_t cols{0};
+    uint32_t rows{0};
+
+    [[nodiscard]] bool empty() const noexcept { return entries.empty(); }
+
+    // Requires !empty().
+    [[nodiscard]] uint32_t cellColumn(float x) const noexcept {
+        return clampCell((x - origin.getX()) / CELL_SIZE, cols);
+    }
+    [[nodiscard]] uint32_t cellRow(float y) const noexcept {
+        return clampCell((y - origin.getY()) / CELL_SIZE, rows);
+    }
+
+private:
+    [[nodiscard]] static uint32_t clampCell(float cell, uint32_t count) noexcept {
+        if (!(cell > 0.0f)) {
+            return 0;
+        }
+        const float last = static_cast<float>(count - 1);
+        return cell >= last ? count - 1 : static_cast<uint32_t>(cell);
+    }
+};
 
 /**
  * @brief Context passed to behavior execution functions
@@ -85,9 +138,16 @@ struct BehaviorContext {
     // process-wide sidecar — null has no meaning here and CLAUDE.md forbids nullable accessors.
     SparseSidecar<KnockbackData>& knockback;
 
+    // Pre-fetched survival need sidecar. Workers access only their own entry via
+    // needs.get(edmIndex); entries are created/removed on the main thread only.
+    SparseSidecar<NpcNeedData>& needs;
+
     // Frame-cached environment scales from AIManager (main thread). Copied by
     // value into processBatch; workers must not call GameTimeManager or WeatherController.
     EnvironmentSnapshot envSnapshot{};
+
+    // Read-only harvestable snapshot (main-thread built, immutable while batches run).
+    HarvestableSnapshotView harvestables{};
 
     BehaviorContext(TransformData& t, EntityHotData& h, EntityHandle::IDType id, size_t idx, float dt,
         EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
@@ -99,8 +159,10 @@ struct BehaviorContext {
         uint8_t pFaction,
         bool hostileInRow,
         SparseSidecar<KnockbackData>& kbSidecar,
-        EnvironmentSnapshot env = {})
-        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), playerFaction(pFaction), hasHostileInRow(hostileInRow), knockback(kbSidecar), envSnapshot(env) {
+        SparseSidecar<NpcNeedData>& needSidecar,
+        EnvironmentSnapshot env = {},
+        HarvestableSnapshotView harvestableView = {})
+        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), playerFaction(pFaction), hasHostileInRow(hostileInRow), knockback(kbSidecar), needs(needSidecar), envSnapshot(env), harvestables(harvestableView) {
     }
 };
 
@@ -157,6 +219,58 @@ constexpr float COMBAT_TIMEOUT_SECONDS = 5.0f;
 
 // Radius used by Idle/Wander/Patrol re-engage and Attack's minimum target scan.
 constexpr float HOSTILE_ENGAGE_RANGE = 250.0f;
+
+// Survival need policy (civilian Idle/Wander NPCs). EDM stores NpcNeedData only.
+// Need pressure growth per second; reaches the forage threshold after ~126 s.
+inline constexpr float NEED_PRESSURE_PER_SECOND = 1.0f / 180.0f;
+// Pressure at which Idle/Wander consider switching to Forage.
+inline constexpr float FORAGE_ENTER_THRESHOLD = 0.7f;
+// Base retry cooldown (s) after a failed forage attempt; doubles per failure.
+inline constexpr float FORAGE_RETRY_COOLDOWN = 15.0f;
+// Backoff cap: FORAGE_RETRY_COOLDOWN << 4 = 240 s.
+inline constexpr uint8_t FORAGE_MAX_BACKOFF_SHIFT = 4;
+// Arrival tolerance for a stalled forager and the main-thread commit reach check.
+inline constexpr float FORAGE_STALL_REACH = 1.5f * VoidLight::HarvestCommit::HARVEST_RANGE;
+// Rejected commits / far stalls one Forage episode tolerates before it backs off
+// and returns to its origin role.
+inline constexpr uint8_t FORAGE_MAX_FAILED_ATTEMPTS = 3;
+// New need entries start with up to this many seconds of pressure (deterministic
+// per entity) so NPCs created together do not reach the threshold on one frame.
+inline constexpr float NEED_ENTRY_STAGGER_SECONDS = 30.0f;
+
+/**
+ * @brief Initialize a newly created need entry (main thread)
+ *
+ * Seeds pressure with a deterministic per-entity offset of up to
+ * NEED_ENTRY_STAGGER_SECONDS of growth, so a batch of NPCs created on the same
+ * frame crosses FORAGE_ENTER_THRESHOLD spread over that window.
+ */
+void seedNeed(NpcNeedData& need, EntityHandle::IDType entityId);
+
+/**
+ * @brief Advance an NPC's survival need by one tick (worker-safe, own entry only)
+ *
+ * Grows pressure by NEED_PRESSURE_PER_SECOND * dt (clamped to 1) and counts the
+ * retry cooldown down. Never switches behavior; Forage entry is decided inside
+ * the Idle/Wander executors.
+ */
+void tickNeed(NpcNeedData& need, float deltaTime);
+
+/**
+ * @brief Decide whether an Idle/Wander civilian should start foraging (worker-safe)
+ *
+ * Requires a need entry with pressure >= FORAGE_ENTER_THRESHOLD and no active
+ * retry cooldown. Looks for a candidate in ctx.harvestables within
+ * HarvestCommit::SCARCITY_RADIUS that keeps at least NPC_HARVEST_RESERVE other
+ * nodes within SCARCITY_RADIUS of itself (the same rule HarvestCommit enforces).
+ * With a candidate it records currentType as the need's returnBehavior and
+ * enqueues a switch to Forage. Otherwise it applies the exponential retry
+ * backoff so an exhausted area does not cause Forage churn.
+ * @param ctx Behavior context of the executing NPC
+ * @param currentType Behavior to resume after foraging (Idle or Wander)
+ * @return true if a switch to Forage was enqueued (caller should return)
+ */
+bool shouldStartForage(BehaviorContext& ctx, BehaviorType currentType);
 
 // ============================================================================
 // EXECUTION FUNCTIONS (one per behavior type)
@@ -226,6 +340,14 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
  */
 void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config, VoidLight::FollowStateData& state);
 
+/**
+ * @brief Execute Forage behavior logic
+ * @param ctx Pre-populated BehaviorContext with EDM references
+ * @param config Forage behavior configuration
+ * @param state Mutable forage variant state from the dense state pool
+ */
+void executeForage(BehaviorContext& ctx, const VoidLight::ForageBehaviorConfig& config, VoidLight::ForageStateData& state);
+
 // ============================================================================
 // INITIALIZATION FUNCTIONS (called when behavior assigned)
 // ============================================================================
@@ -293,6 +415,14 @@ void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config, Void
  * @param state Mutable follow state slot from the dense pool
  */
 void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig& config, VoidLight::FollowStateData& state);
+
+/**
+ * @brief Initialize Forage behavior state in EDM (also ensures the NPC need entry exists)
+ * @param edmIndex Entity's index in EDM
+ * @param config Forage behavior configuration
+ * @param state Mutable forage state slot from the dense pool
+ */
+void initForage(size_t edmIndex, const VoidLight::ForageBehaviorConfig& config, VoidLight::ForageStateData& state);
 
 // ============================================================================
 // MAIN DISPATCHER

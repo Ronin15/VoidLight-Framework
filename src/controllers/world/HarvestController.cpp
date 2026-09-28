@@ -6,16 +6,14 @@
 #include "controllers/world/HarvestController.hpp"
 #include "core/Logger.hpp"
 #include "entities/Player.hpp"
-#include "events/HarvestResourceEvent.hpp"
 #include "events/ResourceChangeEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/WorldResourceManager.hpp"
+#include "world/HarvestCommit.hpp"
 #include "world/HarvestConfig.hpp"
-#include "world/WorldData.hpp"
 #include <format>
 #include <limits>
-#include <random>
 
 HarvestController::HarvestController(std::shared_ptr<Player> player)
     : mp_player(player) {
@@ -100,7 +98,6 @@ bool HarvestController::startHarvest() {
     m_harvestTimer = 0.0f;
     m_harvestDuration = config.baseDuration;
     m_currentTarget = handle;
-    m_targetStaticIndex = staticIndex;
     m_harvestStartPos = player->getPosition();
     m_targetPosition = hot.transform.position;
 
@@ -119,7 +116,6 @@ void HarvestController::cancelHarvest() {
     m_harvestTimer = 0.0f;
     m_harvestDuration = 0.0f;
     m_currentTarget = EntityHandle{};
-    m_targetStaticIndex = 0;
     m_currentType = VoidLight::HarvestType::Gathering;
 
     HARVEST_DEBUG("Harvest cancelled");
@@ -149,7 +145,7 @@ bool HarvestController::findNearestHarvestable(EntityHandle& outHandle, size_t& 
 
     // Query harvestables from WRM spatial index
     m_harvestableIndicesBuffer.clear();
-    if (wrm.queryHarvestablesInRadius(playerPos, HARVEST_RANGE, m_harvestableIndicesBuffer) == 0) {
+    if (wrm.queryHarvestablesInRadius(playerPos, VoidLight::HarvestCommit::HARVEST_RANGE, m_harvestableIndicesBuffer) == 0) {
         return false;
     }
 
@@ -197,57 +193,35 @@ void HarvestController::completeHarvest() {
         return;
     }
 
+    // Shared depletion path (generation check, EDM depletion, WRM version,
+    // HarvestResourceEvent, ScarcityEvent). The player may take the last node.
+    const auto yield = VoidLight::HarvestCommit::commit(
+        m_currentTarget, player->getHandle(), 0);
+    if (!yield) {
+        HARVEST_DEBUG("Harvest target no longer valid or already depleted");
+        cancelHarvest();
+        return;
+    }
+
     auto& edm = EntityDataManager::Instance();
-    auto& wrm = WorldResourceManager::Instance();
-
-    // Validate target is still valid. Use the generation-safe handle rather than
-    // the cached static index alone: static pool slots are reused with a new
-    // generation on destroy, so a freed+reoccupied slot holding a different
-    // harvestable could otherwise pass a bare index/isAlive()/kind check.
-    if (edm.getStaticHandle(m_targetStaticIndex) != m_currentTarget) {
-        HARVEST_WARN("Harvest target no longer valid");
-        cancelHarvest();
-        return;
-    }
-
-    const auto& hot = edm.getStaticHotDataByIndex(m_targetStaticIndex);
-
-    // Get harvestable data (mutable for updating depleted state)
-    auto& harvestData = edm.getHarvestableData(hot.typeLocalIndex);
-    if (harvestData.isDepleted) {
-        HARVEST_DEBUG("Harvest target already depleted");
-        cancelHarvest();
-        return;
-    }
-
-    // Calculate yield
-    int yield = harvestData.yieldMin;
-    if (harvestData.yieldMax > harvestData.yieldMin) {
-        static thread_local std::mt19937 rng(std::random_device{}());
-        std::uniform_int_distribution<int> dist(harvestData.yieldMin, harvestData.yieldMax);
-        yield = dist(rng);
-    }
 
     // Try to add directly to player inventory
     uint32_t playerInvIdx = player->getInventoryIndex();
     bool addedToInventory = false;
 
-    HARVEST_DEBUG(std::format("Player inventory index: {}", playerInvIdx));
-
     if (playerInvIdx != INVALID_INVENTORY_INDEX) {
         // Get old quantity with targeted lookup (avoids full inventory scan)
-        int oldQuantity = edm.getInventoryQuantity(playerInvIdx, harvestData.yieldResource);
+        int oldQuantity = edm.getInventoryQuantity(playerInvIdx, yield->resource);
 
-        addedToInventory = edm.addToInventory(playerInvIdx, harvestData.yieldResource, yield);
+        addedToInventory = edm.addToInventory(playerInvIdx, yield->resource, yield->quantity);
 
         // Fire ResourceChangeEvent for UI updates (only if added to inventory)
         if (addedToInventory) {
-            int newQuantity = oldQuantity + yield;
             auto resourceChangeEvent = std::make_shared<ResourceChangeEvent>(
                 player->getHandle(),
-                harvestData.yieldResource,
+                yield->resource,
                 oldQuantity,
-                newQuantity,
+                oldQuantity + yield->quantity,
                 "harvested");
             EventManager::Instance().dispatchEvent(resourceChangeEvent);
         }
@@ -258,46 +232,25 @@ void HarvestController::completeHarvest() {
     // If inventory full or no inventory, spawn as dropped item
     if (!addedToInventory) {
         // Spawn slightly offset from harvestable position
-        Vector2D spawnPos = hot.transform.position;
+        Vector2D spawnPos = yield->position;
         spawnPos.setX(spawnPos.getX() + 16.0f);
 
-        const std::string& worldId = wrm.getActiveWorld();
-        edm.createDroppedItem(spawnPos, harvestData.yieldResource, yield, worldId);
+        const std::string& worldId = WorldResourceManager::Instance().getActiveWorld();
+        edm.createDroppedItem(spawnPos, yield->resource, yield->quantity, worldId);
 
         HARVEST_INFO(std::format("Completed {} - {} x{} (dropped)",
             VoidLight::harvestTypeToString(m_currentType),
-            harvestData.yieldResource.toString(), yield));
+            yield->resource.toString(), yield->quantity));
     } else {
         HARVEST_INFO(std::format("Completed {} - {} x{} (added to inventory)",
             VoidLight::harvestTypeToString(m_currentType),
-            harvestData.yieldResource.toString(), yield));
+            yield->resource.toString(), yield->quantity));
     }
-
-    // Mark harvestable as depleted
-    harvestData.isDepleted = true;
-    harvestData.currentRespawn = harvestData.respawnTime;
-
-    // Fire HarvestResourceEvent to update world tile visuals
-    // Note: Only fires for EDM harvestables. The WorldManager handler will
-    // check if the tile actually has an obstacle before modifying it.
-    // This allows tile-based and EDM-based harvestables to coexist.
-    int tileX = static_cast<int>(m_targetPosition.getX() / VoidLight::TILE_SIZE);
-    int tileY = static_cast<int>(m_targetPosition.getY() / VoidLight::TILE_SIZE);
-
-    auto harvestEvent = std::make_shared<HarvestResourceEvent>(
-        static_cast<int>(m_currentTarget.getId()),
-        tileX,
-        tileY,
-        std::string(harvestData.yieldResource.toString()));
-    EventManager::Instance().dispatchEvent(harvestEvent);
-
-    HARVEST_DEBUG(std::format("Fired HarvestResourceEvent at tile ({}, {})", tileX, tileY));
 
     // Reset harvest state
     m_isHarvesting = false;
     m_harvestTimer = 0.0f;
     m_harvestDuration = 0.0f;
     m_currentTarget = EntityHandle{};
-    m_targetStaticIndex = 0;
     m_currentType = VoidLight::HarvestType::Gathering;
 }

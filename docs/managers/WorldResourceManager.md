@@ -20,6 +20,11 @@ Actual inventory quantities, dropped items, and harvestable state live in `Entit
 WRM behavior is query and registration focused. Quantity mutation belongs in EDM
 inventory/resource APIs, not in WRM transfer-style APIs.
 
+Harvest depletion is not WRM policy. `HarvestCommit::commit`
+(`include/world/HarvestCommit.hpp`, main thread) is the single depletion path
+for the player and AI; WRM only versions the registry and counts available
+nodes for it.
+
 ## Core API
 
 ### Lifecycle
@@ -68,7 +73,32 @@ queryDroppedItemsInRadius(center, radius, outIndices);
 queryHarvestablesInRadius(center, radius, outIndices);
 queryContainersInRadius(center, radius, outIndices);
 findClosestDroppedItem(center, radius, outIndex);
+countAvailableHarvestablesInRadius(center, radius);  // live, non-depleted, any kind
 ```
+
+`countAvailableHarvestablesInRadius` walks the active world's harvestable grid
+cells directly under the shared registry lock (allocation-free) and counts live,
+non-depleted harvestables of any resource kind. `HarvestCommit` uses it for the
+NPC area reserve and the scarcity threshold.
+
+`getStats().queryCount` counts `queryHarvestablesInRadius`,
+`copyHarvestableIndices`, and `countAvailableHarvestablesInRadius` calls (and
+therefore also the player `HarvestController`'s nearest-node lookups). Tests use
+it to prove Forage workers do not query WRM per entity per frame.
+
+### Harvestable Version
+
+```cpp
+getHarvestableVersion();          // monotonic, never reset
+notifyHarvestableStateChanged();  // bump only; WRM stores no availability state
+```
+
+`m_harvestableVersion` is an atomic counter bumped by `registerHarvestable`,
+`unregisterHarvestable`, `setActiveWorld`, `clearSpatialDataForWorld`,
+`removeWorld`, `prepareForStateTransition`, `clean`, and
+`notifyHarvestableStateChanged` (called by `HarvestCommit` after the EDM
+depletion write). `AIManager` reads it before copying indices and rebuilds its
+worker harvestable snapshot only when it changes.
 
 ### Query-only Resource Totals
 

@@ -814,6 +814,44 @@ public:
      */
     void addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta);
 
+    // ========================================================================
+    // NPC NEED SIDECAR ACCESS (SparseSidecar<NpcNeedData>)
+    // Storage only; need growth, threshold, and backoff are Behaviors:: policy.
+    // ========================================================================
+
+    /**
+     * @brief Create (or retrieve existing) need state for an entity. Main-thread only.
+     */
+    NpcNeedData& ensureNpcNeed(size_t edmIndex);
+
+    /**
+     * @brief Remove the entity's need entry (no-op when absent). Main-thread only,
+     *        never while AI batches run.
+     */
+    void removeNpcNeed(size_t edmIndex);
+
+    /**
+     * @brief True if the entity has a need entry.
+     */
+    [[nodiscard]] bool hasNpcNeed(size_t edmIndex) const noexcept;
+
+    /**
+     * @brief Need pressure in [0, 1]; 0 when the entity has no need entry.
+     */
+    [[nodiscard]] float getNpcNeedPressure(size_t edmIndex) const noexcept;
+
+    /**
+     * @brief Set need pressure (clamped to [0, 1]). Creates the entry if absent. Main-thread only.
+     */
+    void setNpcNeedPressure(size_t edmIndex, float pressure);
+
+    /**
+     * @brief Direct access to the need sidecar (for BehaviorContext pre-fetch).
+     *        Worker threads mutate only the entry of the entity they execute via get().
+     */
+    [[nodiscard]] SparseSidecar<NpcNeedData>& npcNeedSidecar() noexcept;
+    [[nodiscard]] const SparseSidecar<NpcNeedData>& npcNeedSidecar() const noexcept;
+
     /**
      * @brief Get read-only span of static hot data (for collision system)
      */
@@ -883,6 +921,12 @@ public:
     [[nodiscard]] const HarvestableData& getHarvestableData(EntityHandle handle) const;
     [[nodiscard]] HarvestableData& getHarvestableData(uint32_t typeLocalIndex);
     [[nodiscard]] const HarvestableData& getHarvestableData(uint32_t typeLocalIndex) const;
+
+    /**
+     * @brief Storage write: mark a harvestable depleted and start its respawn timer.
+     *        Main-thread only; the caller owns validation and events (HarvestCommit).
+     */
+    void markHarvestableDepleted(uint32_t typeLocalIndex);
 
     [[nodiscard]] AreaEffectData& getAreaEffectData(EntityHandle handle);
     [[nodiscard]] const AreaEffectData& getAreaEffectData(EntityHandle handle) const;
@@ -1050,6 +1094,7 @@ public:
     [[nodiscard]] const VoidLight::FollowBehaviorConfig& getFollowConfig(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::GuardBehaviorConfig& getGuardConfig(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::AttackBehaviorConfig& getAttackConfig(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::ForageBehaviorConfig& getForageConfig(uint32_t poolIndex) const;
 
     // Per-variant dense state accessors — mutable& for frame-by-frame writes in execute().
     // Indexed by the same pool index as the corresponding config pool.
@@ -1061,6 +1106,7 @@ public:
     [[nodiscard]] VoidLight::FollowStateData& getFollowState(uint32_t poolIndex);
     [[nodiscard]] VoidLight::GuardStateData& getGuardState(uint32_t poolIndex);
     [[nodiscard]] VoidLight::AttackStateData& getAttackState(uint32_t poolIndex);
+    [[nodiscard]] VoidLight::ForageStateData& getForageState(uint32_t poolIndex);
 
     // Const overloads for diagnostics / tests
     [[nodiscard]] const VoidLight::IdleStateData& getIdleState(uint32_t poolIndex) const;
@@ -1071,6 +1117,7 @@ public:
     [[nodiscard]] const VoidLight::FollowStateData& getFollowState(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::GuardStateData& getGuardState(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::AttackStateData& getAttackState(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::ForageStateData& getForageState(uint32_t poolIndex) const;
 
     /**
      * @brief Check if behavior data exists and is valid for an entity
@@ -1366,6 +1413,8 @@ private:
     // removeAllFor() called from freeSlot() to clean up on entity destruction.
     SparseSidecar<KnockbackData> m_knockback;
     SparseSidecar<PlayerFactionStanding> m_playerFactionStanding;
+    // Civilian survival need — entries created by AIManager role assignment / Forage init.
+    SparseSidecar<NpcNeedData> m_npcNeed;
 
     // Sidecar coordination hooks — registered once in init(). Each sidecar pushes its
     // three lambdas here so allocateSlot / freeSlot / clearAllEntityStorage dispatch
@@ -1399,6 +1448,7 @@ private:
     std::vector<VoidLight::FollowBehaviorConfig> m_followConfigs;
     std::vector<VoidLight::GuardBehaviorConfig> m_guardConfigs;
     std::vector<VoidLight::AttackBehaviorConfig> m_attackConfigs;
+    std::vector<VoidLight::ForageBehaviorConfig> m_forageConfigs;
 
     // Parallel owner vectors — m_*Owners[i] == edmIndex that owns m_*Configs[i]
     // AND m_*States[i]. Config and state pools share the same owner vector by invariant.
@@ -1411,6 +1461,7 @@ private:
     std::vector<size_t> m_followOwners;
     std::vector<size_t> m_guardOwners;
     std::vector<size_t> m_attackOwners;
+    std::vector<size_t> m_forageOwners;
 
     // Dense per-variant state pools — lockstep with config pools (same index, same owner).
     // Populated with a default-constructed slot in reassignBehaviorConfig; filled by
@@ -1423,6 +1474,7 @@ private:
     std::vector<VoidLight::FollowStateData> m_followStates;
     std::vector<VoidLight::GuardStateData> m_guardStates;
     std::vector<VoidLight::AttackStateData> m_attackStates;
+    std::vector<VoidLight::ForageStateData> m_forageStates;
 
     // NPC Memory data (indexed by edmIndex, pre-allocated alongside hotData)
     // Persists across behavior changes unlike BehaviorData
@@ -1633,6 +1685,11 @@ inline const VoidLight::AttackBehaviorConfig& EntityDataManager::getAttackConfig
     return m_attackConfigs[poolIndex];
 }
 
+inline const VoidLight::ForageBehaviorConfig& EntityDataManager::getForageConfig(uint32_t poolIndex) const {
+    assert(poolIndex < m_forageConfigs.size() && "Forage config pool index out of bounds");
+    return m_forageConfigs[poolIndex];
+}
+
 // ============================================================================
 // BEHAVIOR STATE POOL ACCESSORS (inline hot-path)
 // ============================================================================
@@ -1707,6 +1764,15 @@ inline VoidLight::AttackStateData& EntityDataManager::getAttackState(uint32_t po
 inline const VoidLight::AttackStateData& EntityDataManager::getAttackState(uint32_t poolIndex) const {
     assert(poolIndex < m_attackStates.size() && "Attack state pool index out of bounds");
     return m_attackStates[poolIndex];
+}
+
+inline VoidLight::ForageStateData& EntityDataManager::getForageState(uint32_t poolIndex) {
+    assert(poolIndex < m_forageStates.size() && "Forage state pool index out of bounds");
+    return m_forageStates[poolIndex];
+}
+inline const VoidLight::ForageStateData& EntityDataManager::getForageState(uint32_t poolIndex) const {
+    assert(poolIndex < m_forageStates.size() && "Forage state pool index out of bounds");
+    return m_forageStates[poolIndex];
 }
 
 inline PathData& EntityDataManager::getPathData(size_t index) {

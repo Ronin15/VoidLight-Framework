@@ -17,8 +17,9 @@ enum class BehaviorType : uint8_t {
     Attack = 5,
     Flee = 6,
     Idle = 7,
-    Custom = 8,
-    COUNT = 9,
+    Forage = 8,
+    Custom = 9,
+    COUNT = 10,
     None = 0xFF // Invalid/uninitialized
 };
 
@@ -333,6 +334,22 @@ struct FollowBehaviorConfig {
 };
 
 /**
+ * Configuration for ForageBehavior
+ *
+ * Civilian resource gathering: search the main-thread harvestable snapshot,
+ * walk to a node, harvest it, and hand the result to the main-thread commit.
+ * Arrival uses the shared HarvestCommit::HARVEST_RANGE, so there is no
+ * per-config arrival radius.
+ */
+struct ForageBehaviorConfig {
+    float searchRadius{512.0f}; // Candidate search radius (px); static_assert-tied to HarvestCommit::SCARCITY_RADIUS in ForageBehavior.cpp
+    float harvestDuration{1.5f}; // Seconds spent harvesting once in range
+    float updateInterval{1.0f}; // Seconds between target re-searches after a failed attempt
+    float pathRequestCooldown{5.0f}; // Minimum seconds between path requests
+    float variation{1.0f}; // Random variation added to cooldowns (0-variation s)
+};
+
+/**
  * Configuration for GuardBehavior
  *
  * Controls how entities guard a position and return to it after threats.
@@ -576,6 +593,7 @@ struct BehaviorConfigData {
         AttackBehaviorConfig attack;
         FleeBehaviorConfig flee;
         FollowBehaviorConfig follow;
+        ForageBehaviorConfig forage;
 
         uint8_t raw[384]; // Sized to accommodate largest config (AttackBehaviorConfig)
     } params;
@@ -591,7 +609,11 @@ struct BehaviorConfigData {
     static BehaviorConfigData makeAttack(const AttackBehaviorConfig& cfg = {});
     static BehaviorConfigData makeFlee(const FleeBehaviorConfig& cfg = {});
     static BehaviorConfigData makeFollow(const FollowBehaviorConfig& cfg = {});
+    static BehaviorConfigData makeForage(const ForageBehaviorConfig& cfg = {});
 };
+
+static_assert(sizeof(ForageBehaviorConfig) <= sizeof(BehaviorConfigData::ConfigUnion::raw),
+    "ForageBehaviorConfig must fit the behavior config union");
 
 // Inline factory implementations
 inline BehaviorConfigData BehaviorConfigData::makeIdle(const IdleBehaviorConfig& cfg) {
@@ -647,6 +669,13 @@ inline BehaviorConfigData BehaviorConfigData::makeFollow(const FollowBehaviorCon
     BehaviorConfigData data;
     data.type = BehaviorType::Follow;
     data.params.follow = cfg;
+    return data;
+}
+
+inline BehaviorConfigData BehaviorConfigData::makeForage(const ForageBehaviorConfig& cfg) {
+    BehaviorConfigData data;
+    data.type = BehaviorType::Forage;
+    data.params.forage = cfg;
     return data;
 }
 

@@ -24,18 +24,21 @@ Responsibilities:
 - `AIManager`: orchestration, batching, scans, player cache, update sequencing
 - `BehaviorExecutors`: per-behavior execute/init functions
 - `AICommandBus`: queued behavior messages, transitions, faction changes,
-  ranged attacks, and melee fallback equipment swaps
+  ranged attacks, melee fallback equipment swaps, and Forage harvest requests
+- `HarvestCommit` (`include/world/HarvestCommit.hpp`): shared main-thread
+  depletion path used by `commitQueuedHarvests()` and the player's
+  `HarvestController`
 
 ### Update Pipeline
 
 1. gather active EDM indices into `m_activeIndicesBuffer`
-2. cache per-frame player position, world bounds, game time, and `EnvironmentSnapshot`
+2. cache per-frame player position, world bounds, game time, and `EnvironmentSnapshot`; then `refreshHarvestableSnapshot()` (see [Harvestable Snapshot and Survival Need](#harvestable-snapshot-and-survival-need))
 3. **pre-batch main-thread commit** of the command bus (faction, melee fallback, queued transitions, messages) — required so workers see this frame's assignments
 4. ask `WorkerBudgetManager` for a batch strategy against the full active workload
 5. run each contiguous batch through `processBatch(...)`
-6. in the per-entity fused loop, apply emotional **decay** (`edm.updateEmotionalDecay`), switch on `BehaviorConfigRef::type`, call the typed executor, process movement, and consume knockback sidecar state. There is no emotional contagion pre-pass.
+6. in the per-entity fused loop, apply emotional **decay** (`edm.updateEmotionalDecay`), tick survival need (`Behaviors::tickNeed`) for entities with an `NpcNeedData` entry, switch on `BehaviorConfigRef::type`, call the typed executor, process movement, and consume knockback sidecar state. There is no emotional contagion pre-pass.
 7. flush deferred `EventManager::DeferredEvent` batches
-8. **post-batch** main-thread commit of command-bus outputs (ranged spawns, equipment, transitions, messages)
+8. **post-batch** main-thread commit of command-bus outputs (ranged spawns, equipment, `commitQueuedHarvests()`, transitions, messages). Harvests commit before transitions so a successful forager's switch back to its return behavior lands in the same frame
 
 `BehaviorContext` pre-fetches shared state needed by the typed executors, including the EDM knockback sidecar and a by-value `envSnapshot`. Worker threads may read/update their entity's behavior state, but structural behavior changes and sidecar removal are committed on the main thread. Workers must not call `GameTimeManager`, `WeatherController`, or `AIManager::getEnvironmentSnapshot()`.
 
@@ -134,6 +137,51 @@ Clamped to `[-100, 100]`. Invalid handle / oob faction is a no-op. Combat ticks 
 A persistent `EventTypeId::Weather` handler (also registered in `init()`, not from `GamePlayState`) stores last weather type, intensity, and visibility. Intensity is stored and ignored by combine. Default until the first event is Clear / intensity 1 / visibility 1. `prepareForStateTransition()` and `clean()` reset cached weather and the snapshot to identity. The handler stays registered across transitions and is removed only in `clean()`.
 
 Combine is `timeScale * weatherScale`, each output clamped to `[0.25, 1.5]`, then `detectionScale *= clamp(visibility, 0, 1)` with no second clamp. `Custom` weather uses Clear scales. Tables live in `src/ai/EnvironmentModifiers.cpp`.
+
+## Harvestable Snapshot and Survival Need
+
+Forage workers never query `WorldResourceManager`. `AIManager` owns a
+main-thread snapshot of the active world's harvestables:
+
+- `refreshHarvestableSnapshot()` runs in `update()` after the environment
+  snapshot. It reads `WorldResourceManager::getHarvestableVersion()` **before**
+  copying; if the version equals the cached one it returns with no WRM traffic.
+  Otherwise it copies the active world's harvestable indices into a reusable
+  scratch buffer, sorts them, and gathers live, non-depleted EDM harvestables
+  (`HarvestableSnapshotEntry{position, handle, staticIndex}`).
+  `bucketHarvestableSnapshot()` then counting-sorts them into
+  `m_harvestableSnapshot` by 512 px grid cell (`HarvestableSnapshotView::CELL_SIZE`
+  = `SCARCITY_RADIUS`), ascending static index inside each cell, with
+  `m_harvestableCellStarts` holding `cols × rows + 1` offsets. All buffers are
+  reused members; a rebuild costs O(harvestables + cells) and happens only on a
+  version change.
+- The snapshot is passed to `processBatch` as a `HarvestableSnapshotView`
+  (entries, cell offsets, origin, dims) and is read-only while batches run.
+  Forage scans touch only the cells within 512 px (at most 3×3), not the whole
+  world. `getHarvestableSnapshot()` and `getHarvestableSnapshotRebuildCount()`
+  are main-thread diagnostics.
+- `syncNeedForRole(edmIndex, type, defaultConfig)` runs at both
+  role-assignment sites. It ensures an EDM `NpcNeedData` entry only for
+  `EntityKind::NPC` with `CreatureCategory::NPC`, an Idle or Wander role, and
+  the default config (the by-name, non-preset path); a new entry is seeded via
+  `Behaviors::seedNeed` with a per-entity pressure stagger. Any other
+  assignment (preset, explicit config, non-civilian role) removes the entry;
+  Forage assignments leave it to `initForage`.
+- `commitQueuedHarvests()` drains `AICommandBus` harvest requests into the
+  reusable `m_pendingHarvests`, sorts by (harvestable static index, sequence),
+  and rejects stale harvester handles, harvesters without an inventory, stale
+  harvestable handles, and harvesters farther than
+  `Behaviors::FORAGE_STALL_REACH` from the node. It then calls
+  `HarvestCommit::commit(node, harvester, NPC_HARVEST_RESERVE)`. On a yield it
+  adds to the NPC inventory and dispatches `ResourceChangeEvent` ("harvested"),
+  or discards the yield with a debug log when the inventory is full. It then
+  resets the need and switches the NPC to its `returnBehavior`.
+- `prepareForStateTransition()` and `clean()` clear the snapshot, scratch, and
+  pending harvests and reset the cached version; `AICommandBus::clearAll()`
+  clears queued harvests. Commit-time generation checks cover leftovers.
+
+Need growth, the forage threshold, and backoff are `Behaviors::` policy; see
+[Behavior Modes](BehaviorModes.md#survival-need-and-forage).
 
 ## Combat and Memory Integration
 

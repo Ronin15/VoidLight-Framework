@@ -42,6 +42,9 @@ void init(size_t edmIndex, const VoidLight::BehaviorConfigData& configData) {
         case BehaviorType::Follow:
             initFollow(edmIndex, configData.params.follow, edm.getFollowState(ref.index));
             break;
+        case BehaviorType::Forage:
+            initForage(edmIndex, configData.params.forage, edm.getForageState(ref.index));
+            break;
         case BehaviorType::Custom:
         case BehaviorType::COUNT:
         case BehaviorType::None:
@@ -90,6 +93,8 @@ VoidLight::BehaviorConfigData getDefaultConfig(BehaviorType type) {
             return BehaviorConfigData::makeFlee();
         case BehaviorType::Follow:
             return BehaviorConfigData::makeFollow();
+        case BehaviorType::Forage:
+            return BehaviorConfigData::makeForage();
         default:
             // Return an "empty" config for unknown types
             return BehaviorConfigData{};

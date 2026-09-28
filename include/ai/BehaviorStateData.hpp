@@ -105,6 +105,31 @@ struct PatrolStateData {
 };
 
 // ============================================================================
+// FORAGE STATE
+// ============================================================================
+
+enum class ForagePhase : uint8_t {
+    Searching = 0, // Scanning the harvestable snapshot for a target
+    Moving = 1, // Walking to the target harvestable
+    Harvesting = 2, // In range, accumulating harvestTimer
+    AwaitingCommit = 3 // Harvest enqueued; main-thread commit pending
+};
+
+struct ForageStateData {
+    EntityHandle targetHandle; // Harvestable being foraged (generation-checked at commit)
+    EntityHandle lastFailedTarget; // Excluded from the next search after a failed attempt
+    Vector2D targetPos; // Cached target position from the snapshot
+    uint32_t targetStaticIndex{0}; // Static EDM index of targetHandle
+    float harvestTimer{0.0f}; // Seconds spent harvesting the current target
+    float searchCooldown{0.0f}; // Throttle timer for target searches
+    float lastTargetDistance{0.0f}; // Distance to target last frame (stall detection)
+    ForagePhase phase{ForagePhase::Searching};
+    uint8_t failedAttempts{0}; // Rejected commits / far stalls this episode (capped)
+    uint8_t padding1{0};
+    uint8_t padding2{0};
+};
+
+// ============================================================================
 // FLEE STATE (~136 bytes with safe zones)
 // ============================================================================
 

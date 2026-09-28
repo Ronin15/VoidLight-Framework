@@ -20,6 +20,7 @@
 #include "gameStates/PauseState.hpp"
 #include "events/HarvestResourceEvent.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/ScarcityEvent.hpp"
 #include "events/StanceChangedEvent.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/AIManager.hpp"
@@ -52,7 +53,7 @@
 
 // Constructor/destructor defined here where GPUSceneRecorder is complete (for unique_ptr)
 GamePlayState::GamePlayState()
-    : m_transitioningToLoading{false}, m_transitioningToGameOver{false}, mp_Player{nullptr}, m_initialized{false}, m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{}, m_stanceChangedEventToken{} {}
+    : m_transitioningToLoading{false}, m_transitioningToGameOver{false}, mp_Player{nullptr}, m_initialized{false}, m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{}, m_stanceChangedEventToken{}, m_scarcityEventToken{} {}
 
 GamePlayState::~GamePlayState() = default;
 
@@ -601,6 +602,43 @@ void GamePlayState::registerEventHandlers() {
             }
         });
     m_stanceChangedSubscribed = true;
+
+    m_scarcityEventToken = eventMgr.registerHandlerWithToken(
+        EventTypeId::Scarcity, [this](const EventData& data) {
+            if (!data.isActive() || !data.event || !mp_Player) {
+                return;
+            }
+
+            const auto* scarcityEvent =
+                dynamic_cast<const ScarcityEvent*>(data.event.get());
+            if (!scarcityEvent) {
+                return;
+            }
+
+            // Player-relevance filter: the event is unfiltered at emission;
+            // only log depletions made by the player or within the scarcity
+            // radius of the player.
+            const bool byPlayer =
+                scarcityEvent->getHarvester() == mp_Player->getHandle();
+            const float radius = scarcityEvent->getRadius();
+            if (!byPlayer &&
+                Vector2D::distanceSquared(scarcityEvent->getCenter(),
+                    mp_Player->getPosition()) > radius * radius) {
+                return;
+            }
+
+            const auto resource =
+                ResourceTemplateManager::Instance().getResourceTemplate(
+                    scarcityEvent->getResource());
+            const std::string_view resourceName =
+                resource ? std::string_view{resource->getName()}
+                         : std::string_view{"Resources"};
+            UIManager::Instance().addEventLogEntry(
+                "event_log",
+                std::format("{} are growing scarce nearby ({} left)",
+                    resourceName, scarcityEvent->getAvailableCount()));
+        });
+    m_scarcitySubscribed = true;
 }
 
 void GamePlayState::unregisterEventHandlers() {
@@ -624,6 +662,11 @@ void GamePlayState::unregisterEventHandlers() {
     if (m_stanceChangedSubscribed) {
         eventMgr.removeHandler(m_stanceChangedEventToken);
         m_stanceChangedSubscribed = false;
+    }
+
+    if (m_scarcitySubscribed) {
+        eventMgr.removeHandler(m_scarcityEventToken);
+        m_scarcitySubscribed = false;
     }
 }
 

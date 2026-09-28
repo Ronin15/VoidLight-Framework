@@ -81,6 +81,7 @@ void WorldResourceManager::clean() {
     m_activeWorld.clear();
 
     m_stats.reset();
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
     m_initialized.store(false, std::memory_order_release);
 
     WORLD_RESOURCE_INFO("WorldResourceManager cleaned up");
@@ -119,6 +120,7 @@ void WorldResourceManager::prepareForStateTransition() {
 
     m_stats.reset();
     m_stats.worldsTracked = 1;
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
 
     WORLD_RESOURCE_DEBUG("Prepared for state transition");
 }
@@ -214,6 +216,7 @@ bool WorldResourceManager::removeWorld(const WorldId& worldId) {
 
     m_inventoryRegistry.erase(invIt);
     m_stats.worldsTracked.fetch_sub(1, std::memory_order_relaxed);
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
 
     WORLD_RESOURCE_INFO(std::format("Removed world: {}", worldId));
     return true;
@@ -339,6 +342,8 @@ void WorldResourceManager::registerHarvestable(size_t edmIndex, const Vector2D& 
             m_activeWorldHarvestableCount.fetch_add(1, std::memory_order_relaxed);
         }
     }
+
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void WorldResourceManager::unregisterHarvestable(size_t edmIndex) {
@@ -362,6 +367,8 @@ void WorldResourceManager::unregisterHarvestable(size_t edmIndex) {
         m_harvestableSpatialIndices[spatialIt->second].remove(edmIndex);
         m_harvestableSpatialToWorld.erase(spatialIt);
     }
+
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
 
     WORLD_RESOURCE_DEBUG(std::format("Unregistered harvestable {}", edmIndex));
 }
@@ -510,6 +517,7 @@ size_t WorldResourceManager::getHarvestableCount(const WorldId& worldId) const {
 
 void WorldResourceManager::copyHarvestableIndices(const WorldId& worldId,
     std::vector<size_t>& out) const {
+    m_stats.queryCount.fetch_add(1, std::memory_order_relaxed);
     out.clear();
     std::shared_lock lock(m_registryMutex);
 
@@ -700,6 +708,8 @@ size_t WorldResourceManager::queryDroppedItemsInRadius(const Vector2D& center, f
 
 size_t WorldResourceManager::queryHarvestablesInRadius(const Vector2D& center, float radius,
     std::vector<size_t>& outIndices) const {
+    m_stats.queryCount.fetch_add(1, std::memory_order_relaxed);
+
     if (!m_initialized.load(std::memory_order_acquire)) {
         outIndices.clear();
         return 0;
@@ -747,6 +757,62 @@ size_t WorldResourceManager::queryHarvestablesInRadius(const Vector2D& center, f
     return outIndices.size();
 }
 
+size_t WorldResourceManager::countAvailableHarvestablesInRadius(const Vector2D& center,
+    float radius) const {
+    m_stats.queryCount.fetch_add(1, std::memory_order_relaxed);
+
+    if (!m_initialized.load(std::memory_order_acquire) ||
+        m_activeWorldHarvestableCount.load(std::memory_order_relaxed) == 0) {
+        return 0;
+    }
+
+    std::shared_lock lock(m_registryMutex);
+
+    if (m_activeWorld.empty()) {
+        return 0;
+    }
+
+    auto it = m_harvestableSpatialIndices.find(m_activeWorld);
+    if (it == m_harvestableSpatialIndices.end()) {
+        return 0;
+    }
+
+    // Walk the grid cells directly (no candidate buffer): allocation-free and
+    // safe for concurrent readers under the shared lock.
+    const SpatialIndex& index = it->second;
+    const auto& edm = EntityDataManager::Instance();
+    const float radiusSq = radius * radius;
+    const int32_t minCellX = SpatialIndex::toCell(center.getX() - radius);
+    const int32_t maxCellX = SpatialIndex::toCell(center.getX() + radius);
+    const int32_t minCellY = SpatialIndex::toCell(center.getY() - radius);
+    const int32_t maxCellY = SpatialIndex::toCell(center.getY() + radius);
+
+    size_t count = 0;
+    for (int32_t cy = minCellY; cy <= maxCellY; ++cy) {
+        for (int32_t cx = minCellX; cx <= maxCellX; ++cx) {
+            auto cellIt = index.cells.find(SpatialIndex::makeKey(cx, cy));
+            if (cellIt == index.cells.end()) {
+                continue;
+            }
+            for (size_t idx : cellIt->second) {
+                const auto& hot = edm.getStaticHotDataByIndex(idx);
+                if (!hot.isAlive() || hot.kind != EntityKind::Harvestable) {
+                    continue;
+                }
+                if (edm.getHarvestableData(hot.typeLocalIndex).isDepleted) {
+                    continue;
+                }
+                const float dx = hot.transform.position.getX() - center.getX();
+                const float dy = hot.transform.position.getY() - center.getY();
+                if (dx * dx + dy * dy <= radiusSq) {
+                    ++count;
+                }
+            }
+        }
+    }
+    return count;
+}
+
 bool WorldResourceManager::findClosestDroppedItem(const Vector2D& center, float radius, size_t& outIndex) const {
     // Main-thread-only path; reuse member scratch to avoid a per-call allocation.
     // queryDroppedItemsInRadius clear()s the buffer, so capacity is preserved.
@@ -789,6 +855,7 @@ void WorldResourceManager::setActiveWorld(const WorldId& worldId) {
     std::unique_lock lock(m_registryMutex);
     m_activeWorld = worldId;
     recalculateActiveWorldCounts();
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
     WORLD_RESOURCE_INFO(std::format("Active world set to: {}", worldId.empty() ? "(none)" : worldId));
 }
 
@@ -848,6 +915,8 @@ void WorldResourceManager::clearSpatialDataForWorld(const WorldId& worldId) {
         }
         containerIt->second.clear();
     }
+
+    m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
 
     WORLD_RESOURCE_INFO(std::format("Cleared spatial data for world: {}", worldId));
 }
