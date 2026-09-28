@@ -2,26 +2,40 @@
 paths:
   - "include/managers/EntityDataManager*"
   - "src/managers/EntityDataManager*"
+  - "include/managers/EntityDataTypes*"
   - "include/managers/AIManager*"
   - "src/managers/AIManager*"
   - "include/ai/**"
   - "src/ai/**"
   - "**/Behavior*"
-  - "**/BehaviorExecutors*"
 ---
 
-# EDM, AI, and Behavior Rules
+# EDM, AI, and Behavior Quick Reference
 
-## EDM (EntityDataManager) Patterns
+Canonical rules: root `CLAUDE.md` ("EDM, AI, and Controllers") plus the
+nested `include/ai/CLAUDE.md`, `src/ai/CLAUDE.md`,
+`include/managers/CLAUDE.md`, and `src/managers/CLAUDE.md`. Those win on
+conflict. This file only adds concrete API anchors.
 
-**Pure data storage** — stores/retrieves/aggregates entity state. AI decision logic belongs in `Behaviors::` (`BehaviorExecutors.hpp/.cpp`).
-
-- **State, not policy**: EDM fields describe what the entity *is* (position, health, timers, emotion state). Thresholds, weights, tuning, and decision policy belong in the behavior layer or config — never EDM.
-- **BehaviorContext access**: `ctx.behaviorData` (state), `ctx.pathData` (navigation), `ctx.memoryData` (combat/emotions) — all pre-fetched in `processBatch()`.
-- **Combat/emotion split**: `EDM::recordCombatEvent()` records stats/memory only. Emotion math belongs outside EDM in AI/behavior code. Witnessed combat/death memories are behavior-consumed state; EDM stores memory records only. `AIManager::update()` commits command-bus changes and caches world/player data on the main thread before worker batches; behavior execution and emotional decay run in the AI batch path.
-- **Controller → AI boundary**: Controllers MUST NEVER directly mutate AI behavior state in EDM. Main thread: `Behaviors::queueBehaviorMessage(idx, BehaviorMessage::X)`. Worker threads: `Behaviors::deferBehaviorMessage()`.
-- **Cross-frame state** (paths, timers): MUST live in EDM, never local variables — temporaries die each frame, causing infinite recomputation.
-
-## AI Behavior Switching
-
-`Behaviors::switchBehavior()` enqueues a transition. `AIManager::commitQueuedBehaviorTransitions()` performs `clearBehaviorData()` → `reassignBehaviorConfig()` → `init()`. State set before the transition commit is wiped — always set new behavior state after the switch. Behavior configs live in per-variant dense pools on EDM; access via `getBehaviorConfigRef(idx)` + `get<Variant>Config(ref.index)`.
+- **EDM is storage, not policy.** Fields describe what an entity *is*.
+  Thresholds, weights, tuning, and decisions live in `Behaviors::`
+  (`BehaviorExecutors.hpp/.cpp`, `src/ai/behaviors/`) or config.
+- **Expansion rule** (`EntityDataTypes.hpp`): every-frame fields go on the
+  hot/character line; "some NPCs, sometimes" data goes in a
+  `SparseSidecar`, cleared on destroy and `prepareForStateTransition()`.
+- **`BehaviorContext`** (batch contract, `include/ai/BehaviorExecutors.hpp`):
+  `ctx.sharedState` (`BehaviorData`), `ctx.pathData` (optional
+  `PathData*`), `ctx.memoryData`, `ctx.characterData`, and the by-value
+  `ctx.envSnapshot` filled on the main thread. Executors never call
+  `GameTimeManager` / `WeatherController`.
+- **Behavior switching:** `Behaviors::switchBehavior()` enqueues.
+  `AIManager::commitQueuedBehaviorTransitions()` runs
+  `edm.clearBehaviorData()` → `edm.reassignBehaviorConfig()` →
+  `Behaviors::init()`. Anything set before the commit is wiped — set new
+  behavior state after it.
+- **Behavior configs** live in per-variant dense pools on EDM:
+  `getBehaviorConfigRef(idx)` then `get<Variant>Config(ref.index)`.
+- **Messages:** main thread `Behaviors::queueBehaviorMessage()`; workers
+  `Behaviors::deferBehaviorMessage()`. Controllers never write AI state in
+  EDM directly.
+- **Cross-frame state** (paths, timers) lives in EDM, never in locals.

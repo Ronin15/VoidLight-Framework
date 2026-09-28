@@ -1,137 +1,140 @@
 ---
 name: voidlight-test-suite-generator
-description: Generates complete test suite infrastructure (test scripts, functional tests, benchmark tests, output directories, CMake integration) for a new SDL3 VoidLight-Framework system or manager following project conventions. Use when adding a new manager or system that needs testing infrastructure.
-allowed-tools: [Read, Write, Bash, Edit, Grep]
+description: Scaffolds Boost.Test infrastructure for a new SDL3 VoidLight-Framework manager, controller, or system - test source in the matching tests/<subsystem>/ directory, tests/CMakeLists.txt registration, a .sh/.bat runner pair (or an entry in an existing grouped runner), master-runner registration, and optional benchmark - following tests/CLAUDE.md conventions. Use when adding a new manager or system that has no test executable yet.
+allowed-tools: [Read, Write, Bash, Edit, Grep, Glob]
 ---
 
 # VoidLight-Framework Test Suite Generator
 
-Automates standardized test infrastructure for a new VoidLight-Framework system, following the
-project's established patterns. This file is the lean playbook; all code/script/CMake templates
-live in `references/templates.md` and are loaded on demand from the steps below.
+Scaffolds test infrastructure for a new VoidLight-Framework system following the live repo
+patterns. This file is the playbook; code/script/CMake templates live in
+`references/templates.md` and are loaded on demand from the steps below.
+
+**Rules that override the templates:** root `CLAUDE.md`, `tests/CLAUDE.md`, and the narrower
+`tests/ai/CLAUDE.md` / `tests/managers/CLAUDE.md` when the source lands there. Read the ones
+that apply before generating; do not leave placeholder assertions (`BOOST_CHECK(true)`) in
+generated cases.
 
 ## What This Skill Generates
 
-1. **Test runner pair** — `tests/test_scripts/run_<system>_tests.sh` + `.bat`
-2. **Functional test source** — `tests/<SystemName>Tests.cpp` (PascalCase source)
-3. **Benchmark source** (optional) — `tests/<SystemName>Benchmark.cpp` + runner pair
-4. **`tests/CMakeLists.txt`** — add executable to the `ALL_TESTS` list + source mapping
-5. **Master runner** — add to the `SCRIPT_DIR` array in `tests/test_scripts/run_all_tests.sh`
-6. **Output directory** — `test_results/<system>/`
-7. **Documentation stub** — `tests/docs/<SystemName>_Testing.md`
+1. **Functional test source** — `tests/<subsystem>/<SystemName>Tests.cpp`
+2. **Benchmark source** (optional) — `tests/performance/<SystemName>Benchmark.cpp`
+3. **`tests/CMakeLists.txt`** — executable in `ALL_TESTS` + source mapping (+ extra target
+   wiring only when needed, e.g. `EVENT_ACCESS_TESTS`)
+4. **Runner** — new `tests/test_scripts/run_<system>_tests.sh` + `.bat` pair, **or** an entry in
+   an existing grouped runner (e.g. `run_controller_tests.sh`/`.bat` for controllers)
+5. **Master runners** — `CORE_TEST_SCRIPTS` / `BENCHMARK_TEST_SCRIPTS` arrays in
+   `tests/test_scripts/run_all_tests.sh` **and** the matching `for %%T in (...)` list in
+   `run_all_tests.bat`
+6. **Docs** — a short section in `tests/TESTING.md` (and the owning `docs/<subsystem>/` doc if
+   it lists tests). There is no `tests/docs/` directory; do not create one.
 
 ## When To Use
 
-Activate automatically when the user says things like:
-- "generate tests for NewManager"
-- "create test suite for AnimationSystem"
+- "generate tests for NewManager" / "scaffold tests for the new system"
 - "set up testing for SoundManager"
-- "scaffold tests for new system"
 
-## Naming Invariants (do not drift from these)
+If the system already has an executable, add cases to the existing source instead.
 
-- Test **executables** are snake_case: `<system>_tests`, `<system>_benchmark`.
-- Test **source files** are PascalCase: `<SystemName>Tests.cpp`, `<SystemName>Benchmark.cpp`.
-- Tests register in **`tests/CMakeLists.txt`** (NOT root `CMakeLists.txt`): add to the
-  `ALL_TESTS` list and map to the source in the `foreach` block. No per-test `add_executable`.
-- Every runner ships as a `.sh` + `.bat` pair.
-- The real master runner is `tests/test_scripts/run_all_tests.sh` with a `SCRIPT_DIR` array;
-  root `run_all_tests.sh` is a backward-compat wrapper — never edit it.
+## Naming and Layout Invariants
+
+- Executables are snake_case: `<system>_tests`, `<system>_benchmark` (or
+  `<system>_scaling_benchmark`). Output: `bin/debug/` or `bin/release/`.
+- Sources are PascalCase and live in the subsystem directory that matches `src/`:
+  `tests/managers/`, `tests/controllers/`, `tests/core/`, `tests/ai/`, `tests/world/`,
+  `tests/collisions/`, `tests/events/`, `tests/gpu/`, `tests/integration/` (cross-manager),
+  `tests/utils/`, `tests/performance/` (benchmarks). Root `tests/*.cpp` is legacy — don't add there.
+- Register in **`tests/CMakeLists.txt`** only (not root `CMakeLists.txt`). The shared `foreach`
+  handles `add_executable`, linking `VoidLightLib Boost::unit_test_framework`,
+  `BOOST_TEST_NO_SIGNAL_HANDLING`, and CTest with `WORKING_DIRECTORY` = project root.
+  GPU tests use the separate `GPU_UNIT_TESTS` / `GPU_INTEGRATION_TESTS` / `GPU_SYSTEM_TESTS` lists.
+- Boost.Test is linked, not header-only: `#define BOOST_TEST_MODULE <SystemName>Tests` then
+  `#include <boost/test/unit_test.hpp>`.
+- Every standalone runner ships as `.sh` + `.bat`. The real master runner is
+  `tests/test_scripts/run_all_tests.sh`; root `run_all_tests.sh` is a redirect wrapper — never edit it.
+- Runners write results flat into `test_results/` (e.g. `test_results/<system>_tests_results.txt`);
+  no per-system subdirectory is needed.
 - Benchmarks time with `std::chrono::steady_clock`.
 
-## Collect User Input First
+## Collect Input First
 
-1. **System Name** — PascalCase, used for file/suite naming (e.g. `AnimationManager`).
-2. **Manager Class Name** — actual C++ class under test; must exist in the codebase.
-3. **Test categories** — Functional (always), Integration (if it integrates), Benchmark (if perf-critical).
-4. **Integration dependencies** (if any) — e.g. `AIManager, CollisionManager`.
-5. **Key functionality** — brief description used to seed test cases.
-
-Verify the named class exists before generating. If the system already has tests, ask whether
-to regenerate (overwrite) or add cases instead.
+1. **System name** (PascalCase) and the C++ class under test — verify it exists
+   (`include/<subsystem>/<Class>.hpp`).
+2. **Subsystem directory** for the source (derive from the header path).
+3. **Runtime path participants** — trace which managers the class actually calls (EDM,
+   ThreadSystem, EventManager, Collision, Pathfinder, WorkerBudget…) before writing the fixture.
+4. **Benchmark?** — only if perf-critical.
+5. **Key contracts** to cover — lifecycle (init / update / `prepareForStateTransition()` /
+   clean), event persistence, cache invalidation, handle/slot reuse, worker-batch futures.
 
 ## Generation Workflow
 
-### Step 1 — Discover the current convention (do NOT trust templates blindly)
-
-Repo conventions drift. Read the live pattern first and prefer it over the templates if they differ:
+### Step 1 — Discover the live convention (templates can drift)
 
 ```bash
-# 1. List existing runner pairs (every .sh has a .bat)
-ls tests/test_scripts/run_*tests*.sh tests/test_scripts/run_*tests*.bat
-
-# 2. Read a representative runner pair to copy structure verbatim
-Read: $PROJECT_ROOT/tests/test_scripts/run_ai_optimization_tests.sh
-Read: $PROJECT_ROOT/tests/test_scripts/run_ai_optimization_tests.bat
-
-# 3. Confirm CMake registration + master runner mechanism
-Read: $PROJECT_ROOT/tests/CMakeLists.txt                 # ALL_TESTS list + foreach mapping
-Read: $PROJECT_ROOT/tests/test_scripts/run_all_tests.sh  # SCRIPT_DIR array
-
-# 4. Inspect a real test source for include/style/naming (PascalCase, e.g. AIOptimizationTest.cpp)
-ls tests/*.cpp
+ls tests/<subsystem>/                                   # neighbouring sources
+Read: tests/managers/ProjectileManagerTests.cpp         # manager fixture pattern
+Read: tests/controllers/ProjectileRenderControllerTests.cpp   # controller pattern
+Read: tests/core/WorkerBudgetTests.cpp                  # global ThreadSystem fixture
+Read: tests/test_scripts/run_projectile_manager_tests.sh     # current standalone runner (+ .bat)
+Read: tests/CMakeLists.txt                              # ALL_TESTS + foreach mapping + CTest block
+sed -n '/^CORE_TEST_SCRIPTS=(/,/^)/p' tests/test_scripts/run_all_tests.sh
 ```
+Controllers: also read `tests/controllers/common/ControllerTestFixture.hpp` and the shared
+`Controller*Tests.hpp` contract helpers, and `tests/test_scripts/run_controller_tests.sh`.
 
-### Step 2 — Generate the test runner pair
+### Step 2 — Functional test source
 
-Generate `tests/test_scripts/run_<system>_tests.sh` (then `chmod +x`) and its Windows `.bat`
-pair. Template and substitutions: read `references/templates.md` § 1. Timeout: 30s functional,
-120s benchmark.
+Write `tests/<subsystem>/<SystemName>Tests.cpp`. Template: `references/templates.md` § 2.
+Replace every commented placeholder with real assertions derived from the key contracts; delete
+sections that do not apply rather than leaving empty cases.
 
-### Step 3 — Generate the functional test source
+### Step 3 — Benchmark source (optional)
 
-Write `tests/<SystemName>Tests.cpp` (PascalCase). Template: read `references/templates.md` § 2.
-Add `#define INTEGRATION_TESTS` if integration was selected and `#define THREAD_SAFETY_TESTS`
-for managers; seed cases from the key-functionality description.
+`tests/performance/<SystemName>Benchmark.cpp`. Template: `references/templates.md` § 3.
 
-### Step 4 — Generate the benchmark source (optional)
+### Step 4 — Register in `tests/CMakeLists.txt`
 
-Only if "Benchmark Tests" was selected. Write `tests/<SystemName>Benchmark.cpp` and its runner
-pair (`run_<system>_benchmark.sh` + `.bat`). Template: read `references/templates.md` § 3.
+Add to `ALL_TESTS` and add the `elseif` mapping. If the test uses `EventManagerTestAccess`, add
+it to `EVENT_ACCESS_TESTS`. Benchmarks that are slow under CTest get a `--run_test=` filter in
+the CTest registration block. Snippets: `references/templates.md` § 4.
 
-### Step 5 — Register in `tests/CMakeLists.txt`
+### Step 5 — Runner
 
-Two Edits: add the executable to `ALL_TESTS`, and add a source mapping in the `foreach` block.
-Exact snippets and rules: read `references/templates.md` § 4. Read the file first, match
-formatting. Do not add per-test `add_executable` or `src/...` sources — `VoidLightLib` covers them.
+- Controller → add a flag + `EXECUTABLES+=` entry to `run_controller_tests.sh` and the `.bat`.
+- Otherwise → new `run_<system>_tests.sh` (`chmod +x`) + `.bat`. Template: § 1.
+- Benchmark → `run_<system>_benchmark.sh` + `.bat` modeled on `run_projectile_benchmark.sh`.
 
-### Step 6 — Update the master runner
+### Step 6 — Master runners
 
-Edit `tests/test_scripts/run_all_tests.sh` to add the new runner path(s) into the `SCRIPT_DIR`
-array. Details: read `references/templates.md` § 5. Never edit root `run_all_tests.sh`.
+Add the new `.sh` to `CORE_TEST_SCRIPTS` (or `BENCHMARK_TEST_SCRIPTS`) in
+`tests/test_scripts/run_all_tests.sh`, and the `.bat` to the matching list in
+`run_all_tests.bat`. Skip when the test was added to an existing grouped runner. § 5.
 
-### Step 7 — Create the output directory
+### Step 7 — Docs
+
+Add a short section to `tests/TESTING.md` (what it covers, executable, runner). § 6.
+
+### Step 8 — Verify (per-change gate)
 
 ```bash
-mkdir -p "$PROJECT_ROOT/test_results/<system>"
-touch "$PROJECT_ROOT/test_results/<system>/.gitkeep"
+cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug    # only if not configured / CMake changed
+ninja -C build <system>_tests
+./bin/debug/<system>_tests --list_content
+./bin/debug/<system>_tests
+./tests/test_scripts/run_<system>_tests.sh           # confirm the runner finds the exe
 ```
-
-### Step 8 — Generate the documentation stub
-
-Write `tests/docs/<SystemName>_Testing.md`. Template: read `references/templates.md` § 6.
-
-### Step 9 — Verification build
-
-```bash
-cd $PROJECT_ROOT
-cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build
-ls -lh bin/debug/<system>_tests           # and bin/debug/<system>_benchmark if generated
-./tests/test_scripts/run_<system>_tests.sh --verbose
-```
+Do **not** run `run_all_tests.sh --core-only` here — that is the Branch/PR gate.
 
 ## Report to the User
 
-Summarize what was created and modified, plus build status and initial test result:
-- Created: runner pair(s), `tests/<SystemName>Tests.cpp` (+ benchmark), docs stub, `test_results/<system>/`.
-- Modified: `tests/CMakeLists.txt` (ALL_TESTS + mapping), `tests/test_scripts/run_all_tests.sh` (array).
-- Next steps: implement real cases (replace placeholders), rebuild, run the runner, define benchmark baselines.
-- Test executables: `bin/{debug,release}/<system>_tests`, `bin/debug/<system>_benchmark`.
+- Created / modified files (source, runner pair or grouped-runner edit, CMake, master runners, TESTING.md).
+- Build result and test result, stating exactly which executable was run.
+- Any contracts left uncovered and why.
 
 ## Operating Rules
 
-- Always collect user input and verify the class exists before generating.
-- Follow the naming invariants above; include the copyright header on every generated file.
-- Make scripts executable; verify CMake edits match surrounding formatting.
-- Build after generation to catch errors early. If CMake edits fail, show the snippet and
-  instruct manual insertion. If the build fails, show errors and suggest fixes.
+- Verify the class exists and trace its runtime path before writing the fixture.
+- Copyright header on every generated file (C++ block comment; `#`/`::` line in scripts).
+- Match surrounding formatting when editing CMake and runner lists.
+- If the build fails, show the errors and fix them.

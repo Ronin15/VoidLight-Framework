@@ -92,7 +92,9 @@ def main():
         'Event': ['event_'],
         'Save/Load': ['save_'],
         'UI': ['ui_', 'settings_', 'input_'],
-        'Core': ['game_engine', 'game_state', 'buffer_', 'camera']
+        'EDM/Entities': ['entity_', 'npc_', 'knockback_', 'sparse_sidecar'],
+        'Projectile/BSM': ['projectile_', 'background_simulation'],
+        'Core': ['game_engine', 'game_state', 'buffer_', 'camera', 'manager_runtime']
     }
 
     for category, prefixes in categories.items():

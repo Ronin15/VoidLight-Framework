@@ -21,7 +21,8 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     cat << EOF
 Usage: $0 [OPTIONS]
 
-Run valgrind massif on all VoidLight-Framework test executables.
+Run valgrind massif on all VoidLight-Framework *tests executables
+(device-dependent gpu_* tests are skipped). Slow: expect tens of minutes.
 
 OPTIONS:
     -h, --help          Show this help message
@@ -71,11 +72,11 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# valgrind/ms_print are not available on macOS/darwin. CLAUDE.md documents
-# AddressSanitizer as the supported memory-profiling path on this platform.
+# valgrind/ms_print are Linux-only. CLAUDE.md ("Sanitizers") documents the
+# AddressSanitizer build used where valgrind is unavailable.
 if ! command -v valgrind >/dev/null 2>&1; then
     echo -e "${RED}Error: valgrind not found (unavailable on macOS/darwin).${NC}"
-    echo -e "${YELLOW}massif requires valgrind. On macOS use the AddressSanitizer build from CLAUDE.md instead:${NC}"
+    echo -e "${YELLOW}massif requires valgrind. Use the AddressSanitizer build from CLAUDE.md instead:${NC}"
     echo '  cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug \'
     echo '    -DCMAKE_CXX_FLAGS="-D_GLIBCXX_DEBUG -fsanitize=address -fno-omit-frame-pointer -g" \'
     echo '    -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" -DUSE_MOLD_LINKER=OFF && ninja -C build'
@@ -92,7 +93,9 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Find all test executables
-mapfile -t TEST_EXECUTABLES < <(find "$TEST_DIR" -maxdepth 1 -name "*tests" -type f -executable | sort)
+# GPU/device tests need a display/device and produce driver noise under
+# valgrind (tests/valgrind/README.md) - profile those manually if needed.
+mapfile -t TEST_EXECUTABLES < <(find "$TEST_DIR" -maxdepth 1 -name "*tests" ! -name 'gpu_*' -type f -executable | sort)
 
 if [ ${#TEST_EXECUTABLES[@]} -eq 0 ]; then
     echo -e "${RED}Error: No test executables found in $TEST_DIR${NC}"
@@ -134,34 +137,31 @@ for TEST_PATH in "${TEST_EXECUTABLES[@]}"; do
     echo -e "${GREEN}[$CURRENT/$TOTAL_TESTS - $PERCENT%]${NC} $TEST_NAME"
     echo "  $TIME_INFO"
 
-    # Run massif
+    # Run massif. Test the command directly: under `set -e` a bare failing
+    # command would abort the whole loop before any `$?` check ran.
+    MASSIF_ARGS=(
+        --tool=massif
+        --massif-out-file="$OUTPUT_DIR/${TEST_NAME}_massif.out"
+        --time-unit=ms
+        --detailed-freq=1
+        --max-snapshots=100
+        --threshold=0.1
+    )
     if [ $VERBOSE -eq 1 ]; then
-        valgrind \
-            --tool=massif \
-            --massif-out-file="$OUTPUT_DIR/${TEST_NAME}_massif.out" \
-            --time-unit=ms \
-            --detailed-freq=1 \
-            --max-snapshots=100 \
-            --threshold=0.1 \
-            "$TEST_PATH" --log_level=test_suite
+        RUN_OK=0
+        valgrind "${MASSIF_ARGS[@]}" "$TEST_PATH" --log_level=test_suite || RUN_OK=$?
     else
-        valgrind \
-            --tool=massif \
-            --massif-out-file="$OUTPUT_DIR/${TEST_NAME}_massif.out" \
-            --time-unit=ms \
-            --detailed-freq=1 \
-            --max-snapshots=100 \
-            --threshold=0.1 \
-            "$TEST_PATH" --log_level=test_suite \
-            > "$OUTPUT_DIR/${TEST_NAME}_run.log" 2>&1
+        RUN_OK=0
+        valgrind "${MASSIF_ARGS[@]}" "$TEST_PATH" --log_level=test_suite \
+            > "$OUTPUT_DIR/${TEST_NAME}_run.log" 2>&1 || RUN_OK=$?
     fi
 
-    if [ $? -eq 0 ]; then
+    if [ $RUN_OK -eq 0 ]; then
         # Generate text report
         ms_print "$OUTPUT_DIR/${TEST_NAME}_massif.out" > "$OUTPUT_DIR/${TEST_NAME}_massif_report.txt" 2>&1
         echo -e "  ${GREEN}✅ Complete${NC}"
     else
-        echo -e "  ${RED}❌ Failed${NC}"
+        echo -e "  ${RED}❌ Failed (exit $RUN_OK)${NC}"
         FAILED=$((FAILED + 1))
     fi
 

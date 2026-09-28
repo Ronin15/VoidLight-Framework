@@ -1,715 +1,428 @@
 # Test Suite Templates
 
-Detail file for the `voidlight-test-suite-generator` Skill. Load this on demand when a
-generation step in `SKILL.md` points here. Always prefer the live repo convention discovered
-in Step 1 over these snippets if they differ.
+Detail file for the `voidlight-test-suite-generator` Skill. Load on demand when a step in
+`SKILL.md` points here. The live repo pattern discovered in Step 1 wins over these snippets, and
+root `CLAUDE.md` + `tests/CLAUDE.md` (+ `tests/ai/CLAUDE.md` / `tests/managers/CLAUDE.md`) win
+over both.
 
-**Common substitutions across all templates:**
-- `<SystemName>` → User-provided class name, PascalCase (e.g. `AnimationManager`)
-- `<system>` → snake_case system name used for executables/paths (e.g. `animation_manager`)
-- `<brief-description>` → User-provided key functionality
-- `<OtherSystem>` → Integration dependency names (if applicable)
-- `${TIMEOUT_DURATION}` → `30` for functional tests, `120` for benchmarks
+**Substitutions:**
+- `<SystemName>` → PascalCase class name (e.g. `AnimationManager`)
+- `<system>` → snake_case name used for executables/scripts (e.g. `animation_manager`)
+- `<subsystem>` → test directory matching the header (`managers`, `controllers`, `core`, `ai`, `world`, …)
+- `<header-path>` → include path as used in `src/` (e.g. `managers/AnimationManager.hpp`)
+
+Reference files (read at least one before generating):
+- Manager: `tests/managers/ProjectileManagerTests.cpp`
+- Controller: `tests/controllers/ProjectileRenderControllerTests.cpp`, `tests/controllers/common/*.hpp`
+- Core/unit: `tests/core/WorkerBudgetTests.cpp`
+- World/EDM-heavy: `tests/world/WorldPopulationTests.cpp`
+- Benchmark: `tests/performance/ProjectileScalingBenchmark.cpp`
+- Runner: `tests/test_scripts/run_projectile_manager_tests.sh` / `.bat`
 
 ---
 
-## 1. Test Runner Script (`run_<system>_tests.sh`)
+## 1. Standalone Runner (`tests/test_scripts/run_<system>_tests.sh`)
 
-Save to `$PROJECT_ROOT/tests/test_scripts/run_<system>_tests.sh`, then `chmod +x` it.
+Mirrors `run_projectile_manager_tests.sh`. `chmod +x` after writing. Supported flags:
+`--verbose`, `--run_test=<name>`, `--help` (add `--release` only if the user needs it — most
+current runners are debug-only). `run_all_tests.sh` passes `--verbose` through and judges
+pass/fail by the exit code, so the script must `exit $RESULT`.
 
 ```bash
 #!/bin/bash
+# Script to run <SystemName> tests
+# Copyright (c) 2025 Hammer Forged Games, MIT License
 
-# Copyright (c) 2025 Hammer Forged Games
-# All rights reserved.
-# Licensed under the MIT License - see LICENSE file for details
-
-# Test runner for <SystemName> tests
-# Usage: ./run_<system>_tests.sh [--verbose] [--debug] [--release] [--help]
-
-# Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
+YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
-RESET='\033[0m'
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-# Find project root (directory containing CMakeLists.txt)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+PROJECT_DIR="$SCRIPT_DIR/../.."
+VERBOSE=false
+TEST_FILTER=""
 
-# Default values
-BUILD_TYPE="debug"
-VERBOSE=""
-TIMEOUT_DURATION=30
-
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --verbose)
-            VERBOSE="--log_level=all"
-            shift
-            ;;
-        --debug)
-            BUILD_TYPE="debug"
-            shift
-            ;;
-        --release)
-            BUILD_TYPE="release"
-            shift
-            ;;
-        --help)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --verbose    Enable verbose test output"
-            echo "  --debug      Run debug build tests (default)"
-            echo "  --release    Run release build tests"
-            echo "  --help       Show this help message"
-            echo ""
-            echo "Description:"
-            echo "  Runs <SystemName> functional tests"
-            echo "  Tests: <brief-description>"
-            echo ""
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Use --help for usage information"
-            exit 1
-            ;;
-    esac
+for arg in "$@"; do
+  case $arg in
+    --verbose) VERBOSE=true; shift ;;
+    --run_test=*) TEST_FILTER="${arg}"; shift ;;
+    --help)
+      echo -e "${BLUE}<SystemName> Tests Runner${NC}"
+      echo -e "Usage: ./run_<system>_tests.sh [options]"
+      echo -e "\nOptions:"
+      echo -e "  --verbose          Run tests with verbose output"
+      echo -e "  --run_test=<name>  Run a specific test case"
+      echo -e "  --help             Show this help message"
+      echo -e "\nTest Coverage:"
+      echo -e "  <SuiteName>:"
+      echo -e "    - <contract covered>"
+      exit 0
+      ;;
+  esac
 done
 
-# Test executable name
-TEST_EXECUTABLE="<system>_tests"
+mkdir -p "$PROJECT_DIR/test_results"
+RESULTS_FILE="$PROJECT_DIR/test_results/<system>_tests_results.txt"
 
-# Determine test executable path
-if [ "$BUILD_TYPE" = "release" ]; then
-    TEST_PATH="$PROJECT_ROOT/bin/release/$TEST_EXECUTABLE"
-else
-    TEST_PATH="$PROJECT_ROOT/bin/debug/$TEST_EXECUTABLE"
-fi
+echo -e "${BLUE}======================================================${NC}"
+echo -e "${BLUE}         <SystemName> Tests${NC}"
+echo -e "${BLUE}======================================================${NC}"
 
-# Check if test executable exists
-if [ ! -f "$TEST_PATH" ]; then
-    echo -e "${RED}Error: Test executable not found at $TEST_PATH${RESET}"
-    echo "Please build the project first:"
-    echo "  cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build"
+TEST_EXECUTABLE="$PROJECT_DIR/bin/debug/<system>_tests"
+if [ ! -f "$TEST_EXECUTABLE" ]; then
+    echo -e "${RED}Test executable not found: $TEST_EXECUTABLE${NC}"
+    echo -e "${YELLOW}Make sure you have built the project with tests enabled.${NC}"
+    echo -e "Run: ${CYAN}cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build${NC}"
     exit 1
 fi
 
-# Create output directory
-OUTPUT_DIR="$PROJECT_ROOT/test_results/<system>"
-mkdir -p "$OUTPUT_DIR"
+echo -e "${CYAN}Running <SystemName> tests...${NC}"
+echo "<SystemName> Tests - $(date)" > "$RESULTS_FILE"
 
-# Output file
-OUTPUT_FILE="$OUTPUT_DIR/<system>_test_results.txt"
-
-# Run tests
-echo -e "${BLUE}Running <SystemName> Tests...${RESET}"
-echo "Executable: $TEST_PATH"
-echo "Output: $OUTPUT_FILE"
-echo ""
-
-# Run with timeout protection
-if command -v timeout &> /dev/null; then
-    timeout ${TIMEOUT_DURATION}s "$TEST_PATH" $VERBOSE 2>&1 | tee "$OUTPUT_FILE"
-    TEST_EXIT_CODE=${PIPESTATUS[0]}
-elif command -v gtimeout &> /dev/null; then
-    gtimeout ${TIMEOUT_DURATION}s "$TEST_PATH" $VERBOSE 2>&1 | tee "$OUTPUT_FILE"
-    TEST_EXIT_CODE=${PIPESTATUS[0]}
+if [ "$VERBOSE" = true ]; then
+    $TEST_EXECUTABLE --log_level=all $TEST_FILTER 2>&1 | tee -a "$RESULTS_FILE"
+    RESULT=${PIPESTATUS[0]}
 else
-    "$TEST_PATH" $VERBOSE 2>&1 | tee "$OUTPUT_FILE"
-    TEST_EXIT_CODE=$?
+    $TEST_EXECUTABLE --log_level=test_suite $TEST_FILTER 2>&1 | tee -a "$RESULTS_FILE"
+    RESULT=${PIPESTATUS[0]}
 fi
 
-# Check results
-echo ""
-if [ $TEST_EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}✓ <SystemName> Tests PASSED${RESET}"
-    exit 0
-elif [ $TEST_EXIT_CODE -eq 124 ]; then
-    echo -e "${RED}✗ <SystemName> Tests TIMEOUT (exceeded ${TIMEOUT_DURATION}s)${RESET}"
-    echo "Possible infinite loop or performance issue"
-    exit 3
+echo "" >> "$RESULTS_FILE"
+echo "Test completed at: $(date)" >> "$RESULTS_FILE"
+echo "Exit code: $RESULT" >> "$RESULTS_FILE"
+
+echo -e "\n${BLUE}======================================================${NC}"
+if [ $RESULT -eq 0 ]; then
+    echo -e "${GREEN}✓ All <SystemName> tests passed!${NC}"
 else
-    echo -e "${RED}✗ <SystemName> Tests FAILED (exit code: $TEST_EXIT_CODE)${RESET}"
-    echo ""
-    echo "To debug, run:"
-    echo "  $TEST_PATH --verbose"
-    echo ""
-    exit 1
+    echo -e "${RED}✗ Some <SystemName> tests failed${NC}"
+    echo -e "${YELLOW}Check the detailed results in: $RESULTS_FILE${NC}"
 fi
+echo -e "${CYAN}Test results saved to: $RESULTS_FILE${NC}"
+echo -e "${BLUE}======================================================${NC}"
+
+exit $RESULT
 ```
 
 ### Windows `.bat` pair
 
-Every runner in `tests/test_scripts/` ships as both `.sh` and `.bat`. Copy the structure from
-the example `.bat` pair read in Step 1 (e.g. `run_ai_optimization_tests.bat`), apply the same
-substitutions, and save to `$PROJECT_ROOT/tests/test_scripts/run_<system>_tests.bat`.
+Copy `run_projectile_manager_tests.bat` structure (`setlocal EnableDelayedExpansion`,
+`:parse_args` loop, `bin\debug\<system>_tests.exe`, results in `test_results\`), apply the same
+substitutions, and save as `tests/test_scripts/run_<system>_tests.bat`. Header comment:
+`:: Copyright (c) 2025 Hammer Forged Games, MIT License`.
+
+### Controllers — use the grouped runner instead
+
+Controller tests run through `run_controller_tests.sh` / `.bat`. Add a `--<short>` flag +
+`RUN_<SHORT>` variable in the arg parser and help text, and:
+
+```bash
+if [ "$RUN_ALL" = true ] || [ "$RUN_<SHORT>" = true ]; then
+  EXECUTABLES+=("<system>_tests")
+fi
+```
+
+Mirror the change in the `.bat`. Other grouped runners exist (`run_game_time_tests.sh`,
+`run_entity_data_manager_tests.sh`, `run_npc_memory_tests.sh`, `run_resource_tests.sh`,
+`run_event_tests.sh`) — extend one when the new executable belongs to that family.
 
 ---
 
-## 2. Functional Test Source (`<SystemName>Tests.cpp`)
+## 2. Functional Test Source (`tests/<subsystem>/<SystemName>Tests.cpp`)
 
-Source-file naming: PascalCase ending in `Tests.cpp` (e.g. `AnimationManagerTests.cpp`),
-matching existing files in `tests/`. The executable stays snake_case (`<system>_tests`); the
-`tests/CMakeLists.txt` mapping connects the two. Read a real source first to copy
-include/style conventions (e.g. `tests/AIOptimizationTest.cpp`).
+Pattern from current tests: copyright block → `@file` doc comment listing covered contracts →
+`BOOST_TEST_MODULE` + linked `<boost/test/unit_test.hpp>` → project includes with subsystem
+prefixes → global `ThreadSystem` fixture (only if the runtime path dispatches worker tasks) →
+per-suite fixture that inits exactly the managers the path needs with `BOOST_REQUIRE`, cleaning
+up in reverse order → `BOOST_FIXTURE_TEST_SUITE` groups by contract.
 
-Save to `$PROJECT_ROOT/tests/<SystemName>Tests.cpp`.
-
-**Customization based on user input:**
-- If "Integration Tests" selected, include `#define INTEGRATION_TESTS`
-- If system is a manager (multi-threaded), include `#define THREAD_SAFETY_TESTS`
-- Generate specific test cases based on the "Key Functionality" description
+Fixture scope, determinism, event-wiring, and "don't override production state" rules come
+from `tests/CLAUDE.md` — apply them; they are not repeated here.
 
 ```cpp
 /* Copyright (c) 2025 Hammer Forged Games
  * All rights reserved.
  * Licensed under the MIT License - see LICENSE file for details
-*/
-
-#define BOOST_TEST_MODULE <SystemName>Tests
-#include <boost/test/included/unit_test.hpp>
-
-#include "<SystemName>.hpp"
-// Include other dependencies as needed
+ */
 
 /**
  * @file <SystemName>Tests.cpp
- * @brief Functional tests for <SystemName>
+ * @brief Tests for <SystemName>
  *
- * Test Categories:
- * - Construction/Destruction
- * - Basic Functionality
- * - Edge Cases
- * - Error Handling
- * - Thread Safety (if applicable)
- * - Integration (if applicable)
+ * Covers:
+ * - <contract 1, e.g. init/clean lifecycle and prepareForStateTransition() reset>
+ * - <contract 2, e.g. cache invalidation on WorldUnloaded>
+ * - <contract 3, e.g. worker-batch results committed on main thread>
  */
 
+#define BOOST_TEST_MODULE <SystemName>Tests
+#include <boost/test/unit_test.hpp>
+
+#include "core/ThreadSystem.hpp"
+#include "<header-path>"
+// Add only the managers the runtime path actually uses, e.g.:
+// #include "managers/EntityDataManager.hpp"
+// #include "managers/EventManager.hpp"
+
 // ============================================================================
-// Test Fixtures
+// Global fixture — only when the path dispatches ThreadSystem work
+// ============================================================================
+
+struct GlobalThreadSystemFixture
+{
+    GlobalThreadSystemFixture()
+    {
+        if (!VoidLight::ThreadSystem::Instance().init())
+        {
+            throw std::runtime_error("ThreadSystem::init() failed in <SystemName>Tests");
+        }
+    }
+
+    ~GlobalThreadSystemFixture()
+    {
+        VoidLight::ThreadSystem::Instance().clean();
+    }
+};
+
+BOOST_GLOBAL_FIXTURE(GlobalThreadSystemFixture);
+
+// ============================================================================
+// Fixture — init in dependency order, clean in reverse
 // ============================================================================
 
 struct <SystemName>Fixture
 {
     <SystemName>Fixture()
     {
-        // Setup code
-        BOOST_TEST_MESSAGE("Setting up <SystemName> test fixture");
+        // BOOST_REQUIRE(EntityDataManager::Instance().init());
+        BOOST_REQUIRE(<SystemName>::Instance().init());
     }
 
     ~<SystemName>Fixture()
     {
-        // Cleanup code
-        BOOST_TEST_MESSAGE("Tearing down <SystemName> test fixture");
+        <SystemName>::Instance().clean();
+        // EntityDataManager::Instance().clean();
     }
 
-    // Helper members
-    // <SystemName>* mp_system = nullptr;
+    static constexpr float FIXED_DT = 1.0f / 60.0f;
 };
 
 // ============================================================================
-// Construction/Destruction Tests
+// Lifecycle
 // ============================================================================
 
-BOOST_FIXTURE_TEST_SUITE(<SystemName>TestSuite, <SystemName>Fixture)
+BOOST_FIXTURE_TEST_SUITE(<SystemName>LifecycleTests, <SystemName>Fixture)
 
-BOOST_AUTO_TEST_CASE(TestConstruction)
+BOOST_AUTO_TEST_CASE(InitLeavesManagerReady)
 {
-    BOOST_TEST_MESSAGE("Testing <SystemName> construction");
-
-    // Test default construction
-    <SystemName> system;
-
-    // Verify initial state
-    // BOOST_CHECK_EQUAL(system.getSomeValue(), expectedValue);
-
-    BOOST_TEST_MESSAGE("<SystemName> construction test passed");
+    // Assert the observable post-init state, e.g.:
+    // BOOST_CHECK(<SystemName>::Instance().isInitialized());
 }
 
-BOOST_AUTO_TEST_CASE(TestDestruction)
+BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsState)
 {
-    BOOST_TEST_MESSAGE("Testing <SystemName> destruction");
-
-    // Create and destroy system
-    {
-        <SystemName> system;
-        // Use system
-    }
-
-    // Verify proper cleanup (no leaks, resources released)
-    BOOST_CHECK(true); // Placeholder
-
-    BOOST_TEST_MESSAGE("<SystemName> destruction test passed");
+    // Populate state through the public API, transition, assert it is cleared.
 }
-
-// ============================================================================
-// Basic Functionality Tests
-// ============================================================================
-
-BOOST_AUTO_TEST_CASE(TestBasicFunctionality)
-{
-    BOOST_TEST_MESSAGE("Testing <SystemName> basic functionality");
-
-    <SystemName> system;
-
-    // Test key functionality based on user input
-    // Example:
-    // system.initialize();
-    // BOOST_CHECK(system.isInitialized());
-
-    BOOST_TEST_MESSAGE("<SystemName> basic functionality test passed");
-}
-
-// ============================================================================
-// Edge Cases
-// ============================================================================
-
-BOOST_AUTO_TEST_CASE(TestEdgeCases)
-{
-    BOOST_TEST_MESSAGE("Testing <SystemName> edge cases");
-
-    <SystemName> system;
-
-    // Test boundary conditions
-    // Test null inputs
-    // Test empty states
-    // Test maximum values
-
-    BOOST_CHECK(true); // Placeholder
-
-    BOOST_TEST_MESSAGE("<SystemName> edge case test passed");
-}
-
-// ============================================================================
-// Error Handling
-// ============================================================================
-
-BOOST_AUTO_TEST_CASE(TestErrorHandling)
-{
-    BOOST_TEST_MESSAGE("Testing <SystemName> error handling");
-
-    <SystemName> system;
-
-    // Test error conditions
-    // Verify exceptions thrown correctly
-    // Verify error codes returned
-
-    // Example:
-    // BOOST_CHECK_THROW(system.invalidOperation(), std::runtime_error);
-
-    BOOST_TEST_MESSAGE("<SystemName> error handling test passed");
-}
-
-// ============================================================================
-// Thread Safety Tests (if applicable)
-// ============================================================================
-
-// Only include if system is used in multi-threaded context
-#ifdef THREAD_SAFETY_TESTS
-
-BOOST_AUTO_TEST_CASE(TestThreadSafety)
-{
-    BOOST_TEST_MESSAGE("Testing <SystemName> thread safety");
-
-    <SystemName> system;
-
-    // Test concurrent access
-    // Verify mutex protection
-    // Check for race conditions
-
-    BOOST_CHECK(true); // Placeholder - implement actual threading test
-
-    BOOST_TEST_MESSAGE("<SystemName> thread safety test passed");
-}
-
-#endif
-
-// ============================================================================
-// Integration Tests (if applicable)
-// ============================================================================
-
-// Only include if system integrates with others
-#ifdef INTEGRATION_TESTS
-
-BOOST_AUTO_TEST_CASE(TestIntegrationWith<OtherSystem>)
-{
-    BOOST_TEST_MESSAGE("Testing <SystemName> integration with <OtherSystem>");
-
-    <SystemName> system;
-    // <OtherSystem> otherSystem;
-
-    // Test interaction between systems
-    // Verify data flow
-    // Check synchronization
-
-    BOOST_CHECK(true); // Placeholder
-
-    BOOST_TEST_MESSAGE("<SystemName> integration test passed");
-}
-
-#endif
 
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================
-// Entry Point
+// <Contract group> — one suite per contract area; delete unused groups
 // ============================================================================
 
-// Boost.Test automatically generates main() with BOOST_TEST_MODULE
+BOOST_FIXTURE_TEST_SUITE(<SystemName><Contract>Tests, <SystemName>Fixture)
+
+BOOST_AUTO_TEST_CASE(<ObservableBehaviorName>)
+{
+    // Arrange with deterministic data, act via update(FIXED_DT) or the public API,
+    // assert externally visible results.
+}
+
+BOOST_AUTO_TEST_SUITE_END()
 ```
+
+Controller tests: reuse `tests/controllers/common/ControllerTestFixture.hpp` and the shared
+`ControllerGetNameTests.hpp`, `ControllerSubscriptionTests.hpp`,
+`ControllerSuspendResumeTests.hpp`, `ControllerResubscribeTests.hpp`,
+`ControllerOwnershipTests.hpp` helpers instead of hand-writing those contracts. GPU-dependent
+cases must skip gracefully when no device is available (see
+`ProjectileRenderControllerTests.cpp`).
 
 ---
 
-## 3. Benchmark Test Source (`<SystemName>Benchmark.cpp`)
+## 3. Benchmark Source (`tests/performance/<SystemName>Benchmark.cpp`)
 
-Only generate if the user selects "Benchmark Tests". Timing uses `std::chrono::steady_clock`.
-Save to `$PROJECT_ROOT/tests/<SystemName>Benchmark.cpp`.
+Only when requested. Pattern from `ProjectileScalingBenchmark.cpp`: one-time manager init
+inside the fixture (`VOIDLIGHT_ENABLE_BENCHMARK_MODE()` first), `prepareForTest()` calling
+`prepareForStateTransition()` on each participating manager (including
+`WorkerBudgetManager`), seeded RNG, `std::chrono::steady_clock` timing, results printed to
+stdout (the runner script tees them into `test_results/`). Do not write files or call
+`system()` from the benchmark.
 
 ```cpp
 /* Copyright (c) 2025 Hammer Forged Games
  * All rights reserved.
  * Licensed under the MIT License - see LICENSE file for details
-*/
-
-#define BOOST_TEST_MODULE <SystemName>Benchmark
-#include <boost/test/included/unit_test.hpp>
-
-#include "<SystemName>.hpp"
-#include <chrono>
-#include <iostream>
-#include <fstream>
-
-/**
- * @file <SystemName>Benchmark.cpp
- * @brief Performance benchmarks for <SystemName>
- *
- * Benchmark Categories:
- * - Throughput Testing
- * - Latency Measurement
- * - Scaling Analysis
- * - Resource Usage
  */
 
-// ============================================================================
-// Benchmark Helpers
-// ============================================================================
+/**
+ * <SystemName> Scaling Benchmark
+ *
+ * 1. Entity scaling from <N> to <M>
+ * 2. Threading mode comparison via WorkerBudget adaptive decisions
+ */
 
-class BenchmarkTimer
+#define BOOST_TEST_MODULE <SystemName>Benchmark
+#include <boost/test/unit_test.hpp>
+
+#include <chrono>
+#include <format>
+#include <iostream>
+#include <random>
+
+#include "core/Logger.hpp"
+#include "core/ThreadSystem.hpp"
+#include "core/WorkerBudget.hpp"
+#include "<header-path>"
+
+namespace {
+
+class <SystemName>BenchmarkFixture
 {
 public:
-    void start()
-    {
-        m_start = std::chrono::steady_clock::now();
-    }
-
-    double stop()
-    {
-        auto end = std::chrono::steady_clock::now();
-        std::chrono::duration<double, std::milli> duration = end - m_start;
-        return duration.count();
-    }
-
-private:
-    std::chrono::steady_clock::time_point m_start;
-};
-
-void saveMetric(const std::string& name, double value, const std::string& unit)
-{
-    // NOTE: Requires PROJECT_ROOT environment variable
-    const char* root = std::getenv("PROJECT_ROOT");
-    std::string path = root ? std::string(root) + "/test_results/<system>/performance_metrics.txt"
-                            : "test_results/<system>/performance_metrics.txt";
-    std::ofstream file(path, std::ios::app);
-    file << name << ": " << value << " " << unit << std::endl;
-    std::cout << name << ": " << value << " " << unit << std::endl;
-}
-
-// ============================================================================
-// Benchmark Fixture
-// ============================================================================
-
-struct <SystemName>BenchmarkFixture
-{
     <SystemName>BenchmarkFixture()
     {
-        BOOST_TEST_MESSAGE("Setting up <SystemName> benchmark fixture");
-        // Create output directory (requires PROJECT_ROOT environment variable)
-        system("mkdir -p \"$PROJECT_ROOT/test_results/<system>\"");
-        // Clear previous metrics
-        system("rm -f \"$PROJECT_ROOT/test_results/<system>/performance_metrics.txt\"");
-    }
-
-    ~<SystemName>BenchmarkFixture()
-    {
-        BOOST_TEST_MESSAGE("Tearing down <SystemName> benchmark fixture");
-    }
-
-    BenchmarkTimer timer;
-    // <SystemName> system;
-};
-
-// ============================================================================
-// Throughput Benchmarks
-// ============================================================================
-
-BOOST_FIXTURE_TEST_SUITE(<SystemName>BenchmarkSuite, <SystemName>BenchmarkFixture)
-
-BOOST_AUTO_TEST_CASE(BenchmarkThroughput_1K)
-{
-    BOOST_TEST_MESSAGE("Benchmarking <SystemName> throughput (1K operations)");
-
-    const int OPERATIONS = 1000;
-    <SystemName> system;
-
-    timer.start();
-    for (int i = 0; i < OPERATIONS; i++)
-    {
-        // Perform operation
-        // system.doOperation();
-    }
-    double elapsed = timer.stop();
-
-    double throughput = OPERATIONS / (elapsed / 1000.0); // ops/sec
-    saveMetric("Throughput_1K", throughput, "ops/sec");
-    saveMetric("Latency_1K", elapsed / OPERATIONS, "ms/op");
-
-    BOOST_TEST_MESSAGE("Throughput (1K): " << throughput << " ops/sec");
-}
-
-BOOST_AUTO_TEST_CASE(BenchmarkThroughput_10K)
-{
-    BOOST_TEST_MESSAGE("Benchmarking <SystemName> throughput (10K operations)");
-
-    const int OPERATIONS = 10000;
-    <SystemName> system;
-
-    timer.start();
-    for (int i = 0; i < OPERATIONS; i++)
-    {
-        // Perform operation
-        // system.doOperation();
-    }
-    double elapsed = timer.stop();
-
-    double throughput = OPERATIONS / (elapsed / 1000.0);
-    saveMetric("Throughput_10K", throughput, "ops/sec");
-    saveMetric("Latency_10K", elapsed / OPERATIONS, "ms/op");
-
-    BOOST_TEST_MESSAGE("Throughput (10K): " << throughput << " ops/sec");
-}
-
-// ============================================================================
-// Scaling Benchmarks
-// ============================================================================
-
-BOOST_AUTO_TEST_CASE(BenchmarkScaling)
-{
-    BOOST_TEST_MESSAGE("Benchmarking <SystemName> scaling characteristics");
-
-    <SystemName> system;
-
-    // Test scaling from 100 to 10000 operations
-    std::vector<int> sizes = {100, 500, 1000, 5000, 10000};
-
-    for (int size : sizes)
-    {
-        timer.start();
-        for (int i = 0; i < size; i++)
+        if (!s_initialized)
         {
-            // Perform operation
-            // system.doOperation();
+            VOIDLIGHT_ENABLE_BENCHMARK_MODE();
+            BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
+            BOOST_REQUIRE(<SystemName>::Instance().init());
+            s_initialized = true;
         }
-        double elapsed = timer.stop();
-
-        double throughput = size / (elapsed / 1000.0);
-        std::string metricName = "Throughput_" + std::to_string(size);
-        saveMetric(metricName, throughput, "ops/sec");
+        m_rng.seed(42);
     }
 
-    BOOST_TEST_MESSAGE("<SystemName> scaling benchmark completed");
-}
-
-// ============================================================================
-// Resource Usage Benchmarks
-// ============================================================================
-
-BOOST_AUTO_TEST_CASE(BenchmarkMemoryUsage)
-{
-    BOOST_TEST_MESSAGE("Benchmarking <SystemName> memory usage");
-
-    // Measure memory usage with different loads
-    // This is a placeholder - actual implementation depends on system
-
-    <SystemName> system;
-
-    // Estimate memory per operation
-    // For actual measurement, consider using valgrind massif
-
-    saveMetric("Estimated_Memory_Per_Op", 0.0, "bytes"); // Placeholder
-
-    BOOST_TEST_MESSAGE("<SystemName> memory usage benchmark completed");
-}
-
-BOOST_AUTO_TEST_SUITE_END()
-
-// ============================================================================
-// Benchmark Summary
-// ============================================================================
-
-struct BenchmarkSummaryFixture
-{
-    ~BenchmarkSummaryFixture()
+    void prepareForTest()
     {
-        const char* root = std::getenv("PROJECT_ROOT");
-        std::string resultsPath = root ? std::string(root) + "/test_results/<system>/performance_metrics.txt"
-                                        : "test_results/<system>/performance_metrics.txt";
-        BOOST_TEST_MESSAGE("=== <SystemName> Benchmark Summary ===");
-        BOOST_TEST_MESSAGE("Results saved to: " << resultsPath);
-        BOOST_TEST_MESSAGE("Review metrics for performance analysis");
+        <SystemName>::Instance().prepareForStateTransition();
+        VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
     }
+
+protected:
+    static inline bool s_initialized{false};
+    std::mt19937 m_rng;
 };
 
-BOOST_FIXTURE_TEST_SUITE(SummaryGeneration, BenchmarkSummaryFixture)
+} // namespace
 
-BOOST_AUTO_TEST_CASE(GenerateSummary)
+BOOST_FIXTURE_TEST_SUITE(<SystemName>ScalingTests, <SystemName>BenchmarkFixture)
+
+BOOST_AUTO_TEST_CASE(<SystemName>Scaling)
 {
-    // Generate summary report
-    const char* root = std::getenv("PROJECT_ROOT");
-    std::string reportPath = root ? std::string(root) + "/test_results/<system>/performance_report.md"
-                                   : "test_results/<system>/performance_report.md";
-    std::ofstream report(reportPath);
-    report << "# <SystemName> Performance Report\n\n";
-    report << "**Date:** " << __DATE__ << " " << __TIME__ << "\n\n";
-    report << "## Metrics\n\n";
-    report << "See `performance_metrics.txt` for detailed metrics.\n\n";
-    report << "## Analysis\n\n";
-    report << "TODO: Add performance analysis\n";
-    report.close();
+    constexpr float FIXED_DT = 1.0f / 60.0f;
+    constexpr int FRAMES = 100;
+    for (size_t count : {100u, 1000u, 5000u})
+    {
+        prepareForTest();
+        // populate <count> entities deterministically
 
-    BOOST_CHECK(true);
+        const auto start = std::chrono::steady_clock::now();
+        for (int frame = 0; frame < FRAMES; ++frame)
+        {
+            <SystemName>::Instance().update(FIXED_DT);
+        }
+        const auto end = std::chrono::steady_clock::now();
+        const double msPerFrame =
+            std::chrono::duration<double, std::milli>(end - start).count() / FRAMES;
+
+        std::cout << std::format("{:>6} entities: {:.3f} ms/frame\n", count, msPerFrame);
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
 ```
+
+Runner: model `run_<system>_benchmark.sh` / `.bat` on `run_projectile_benchmark.sh` (timestamped
+results file under `test_results/` plus a `*_current.txt` copy). Name must contain `benchmark`
+or `scaling` so `run_all_tests.sh` labels it as a benchmark.
 
 ---
 
 ## 4. CMake Registration (`tests/CMakeLists.txt`)
 
-Tests are NOT defined in the root `CMakeLists.txt`. They are registered in
-**`tests/CMakeLists.txt`** via two edits. Linking (`VoidLightLib Boost::unit_test_framework`),
-the `BOOST_TEST_NO_SIGNAL_HANDLING` define, output directory, and CTest registration are all
-applied generically by the existing `foreach` loop — do NOT write per-test `add_executable` /
-`target_link_libraries` / `set_target_properties`. The test links against `VoidLightLib`, which
-already contains the production sources — do NOT add `src/...` files to the test target. Read
-the file first to copy the live structure, then use the Edit tool to match surrounding
-formatting exactly.
+Never add tests to the root `CMakeLists.txt`, and never add `src/...` sources (`VoidLightLib`
+already contains them). The `foreach` loop applies `add_executable`, links
+`VoidLightLib Boost::unit_test_framework`, and sets `BOOST_TEST_NO_SIGNAL_HANDLING`; the CTest
+loop registers each test with the project root as working directory.
 
-**Edit 1 — add to the `ALL_TESTS` list:**
+**Edit 1 — `ALL_TESTS`** (append near related entries):
 ```cmake
-set(ALL_TESTS
-    ...
     <system>_tests
-    <system>_benchmark   # only if a benchmark was generated
-)
+    <system>_benchmark      # only if generated
 ```
 
-**Edit 2 — add a source mapping inside the `foreach(test_name ${ALL_TESTS})` block:**
+**Edit 2 — source mapping** (before the closing `endif()` of the mapping chain):
 ```cmake
     elseif(${test_name} STREQUAL "<system>_tests")
-        set(test_source "<SystemName>Tests.cpp")
+        set(test_source "<subsystem>/<SystemName>Tests.cpp")
     elseif(${test_name} STREQUAL "<system>_benchmark")
-        set(test_source "<SystemName>Benchmark.cpp")
+        set(test_source "performance/<SystemName>Benchmark.cpp")
 ```
-(If the source lives in a subdirectory like `tests/ai/`, use the relative path, e.g.
-`set(test_source "ai/<SystemName>Tests.cpp")`.)
+Careful: names starting with `resource_` or `particle_manager_` are routed through `MATCHES`
+branches earlier in the chain — pick a name that does not collide, or extend that branch.
+
+**Optional edits:**
+- Uses `EventManagerTestAccess` → add `<system>_tests` to `EVENT_ACCESS_TESTS`.
+- Needs a mock or extra helper source → `target_sources(<system>_tests PRIVATE mocks/...)`
+  after the loop, like `save_manager_tests`.
+- Slow benchmark under CTest → add an `elseif` with a `--run_test=<Suite>/<Case>` filter in the
+  CTest registration loop.
+- GPU tests → use the `GPU_UNIT_TESTS` / `GPU_INTEGRATION_TESTS` / `GPU_SYSTEM_TESTS` lists and
+  their own mapping blocks instead of `ALL_TESTS`.
 
 ---
 
-## 5. Master Test Runner (`tests/test_scripts/run_all_tests.sh`)
+## 5. Master Runners
 
-The real master runner is **`tests/test_scripts/run_all_tests.sh`** (the root
-`run_all_tests.sh` is only a backward-compat wrapper — never edit it). It runs a
-`SCRIPT_DIR`-based array of runner paths, not per-section `echo`/`check_status` blocks. Read it
-first, then use the Edit tool to insert the new runner into the array, in the relevant grouping:
+`tests/test_scripts/run_all_tests.sh` holds two arrays: `CORE_TEST_SCRIPTS` (fast; what
+`--core-only` runs) and `BENCHMARK_TEST_SCRIPTS`. Add the new script to the right one:
 
 ```bash
   "$SCRIPT_DIR/run_<system>_tests.sh"
-  "$SCRIPT_DIR/run_<system>_benchmark.sh"   # only if a benchmark runner was generated
 ```
+
+`tests/test_scripts/run_all_tests.bat` keeps its own `for %%T in (...)` lists — add the `.bat`
+there too:
+
+```bat
+    run_<system>_tests.bat
+```
+
+Skip both when the executable was added to an existing grouped runner. Never edit the root
+`run_all_tests.sh` redirect wrapper.
 
 ---
 
-## 6. Documentation Stub (`tests/docs/<SystemName>_Testing.md`)
+## 6. Documentation (`tests/TESTING.md`)
 
-Save to `$PROJECT_ROOT/tests/docs/<SystemName>_Testing.md`.
+Add the runner to the "Available Test Scripts" lists (Linux/macOS and Windows) and a short
+section under "Test Implementation Details":
 
-```markdown
-# <SystemName> Testing
+````markdown
+### <SystemName> Tests
 
-## Overview
-
-Tests for <SystemName> functionality and performance.
-
-## Test Suites
-
-### Functional Tests
-- **Location:** `tests/<SystemName>Tests.cpp`
-- **Runner:** `tests/test_scripts/run_<system>_tests.sh`
-- **Coverage:**
-  - Construction/Destruction
-  - Basic Functionality
-  - Edge Cases
-  - Error Handling
-  - Thread Safety (if applicable)
-
-### Benchmark Tests
-- **Location:** `tests/<SystemName>Benchmark.cpp`
-- **Runner:** `tests/test_scripts/run_<system>_benchmark.sh`
-- **Metrics:**
-  - Throughput (ops/sec)
-  - Latency (ms/op)
-  - Scaling characteristics
-  - Resource usage
-
-## Running Tests
+- **Source:** `tests/<subsystem>/<SystemName>Tests.cpp`
+- **Executable:** `bin/debug/<system>_tests`
+- **Runner:** `tests/test_scripts/run_<system>_tests.sh` (`.bat` on Windows)
+- **Covers:** <contracts, one line each>
 
 ```bash
-# Functional tests
-./tests/test_scripts/run_<system>_tests.sh --verbose
-
-# Benchmarks
-./tests/test_scripts/run_<system>_benchmark.sh --verbose
-
-# All tests (included in master runner)
-./tests/test_scripts/run_all_tests.sh --core-only
-./tests/test_scripts/run_all_tests.sh --benchmarks-only
+./bin/debug/<system>_tests --list_content
+./bin/debug/<system>_tests --run_test="<CaseName>*"
 ```
+````
 
-## Test Results
-
-Results are saved to:
-- `test_results/<system>/<system>_test_results.txt`
-- `test_results/<system>/performance_metrics.txt`
-- `test_results/<system>/performance_report.md`
-
-## Adding New Tests
-
-1. Add test case to `tests/<SystemName>Tests.cpp`
-2. Use `BOOST_AUTO_TEST_CASE` macro
-3. Follow existing test patterns
-4. Run tests to verify
-
-## Performance Baselines
-
-TODO: Document expected performance baselines for benchmarks.
-
-## Known Issues
-
-TODO: Document any known test issues or limitations.
-```
+If the subsystem has an owning doc under `docs/<subsystem>/` that lists its tests, add a line there too.

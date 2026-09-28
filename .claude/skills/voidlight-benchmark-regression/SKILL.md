@@ -1,154 +1,127 @@
 ---
 name: voidlight-benchmark-regression
-description: Runs performance benchmarks for SDL3 VoidLight-Framework and detects regressions by comparing metrics against baseline. Use when testing performance-sensitive changes to AI, collision, pathfinding, particle systems, or before merging features to ensure no performance degradation.
+description: Runs the VoidLight-Framework benchmark scripts sequentially and compares results to platform-local baselines in test_results/baseline/ as percentage deltas. Use when the user asks to run benches, check for performance regressions, or refresh/compare baselines, or before merging performance-sensitive AI, collision, pathfinding, event, particle, projectile, threading, GPU, SIMD, or integrated changes. Not a per-change or slice-complete gate.
 allowed-tools: [Bash, Read, Write, Grep]
 ---
 
-# VoidLight-Framework Performance Regression Detection
+# VoidLight-Framework Benchmark Regression
 
-This Skill is **critical** for SDL3 VoidLight-Framework's performance requirements: 10,000+
-entities at 60+ FPS with minimal CPU. It detects performance regressions before they reach
-production.
+Benches are **not** mixed into correctness tests and are **not** a per-change,
+slice-complete, or default Branch/PR gate (see the gate table in
+`docs/framework-implementation-slices.md`). Run them when the user asks or when a
+change is performance-sensitive. Numbers are machine-local: compare against
+`test_results/baseline/` as percentage deltas, never as portable absolutes.
+Repo rules live in root `CLAUDE.md` plus nested `CLAUDE.md` files.
 
-This file is the lean playbook. Detail lives in `references/` and is loaded on demand:
-- **`references/benchmarks.md`** — per-benchmark catalog, baseline file format, metric
-  extraction commands, and per-benchmark regression thresholds.
-- **`references/report-template.md`** — the full regression report + console summary template.
-- **`references/troubleshooting.md`** — timeouts, the final validation gate, and troubleshooting.
+Read references only at the step that needs them:
+- **`references/benchmarks.md`** — before step 5 (or earlier if a script's build flag or
+  output file is unclear): script → executable → output file table, baseline layout,
+  grep commands per bench, per-bench detection notes.
+- **`references/report-template.md`** — when writing the report.
+- **`references/troubleshooting.md`** — on a timeout/crash, noisy results, or before
+  handing over the report (completeness checklist).
 
-## Performance Requirements (from CLAUDE.md)
+## Run
 
-- **AI System:** 10,000+ entities at 60+ FPS with <6% CPU
-- **Collision System:** Spatial hash with efficient AABB detection
-- **Pathfinding:** A* pathfinding with dynamic weights (async-only in production)
-- **Event System:** 1K-10K event throughput
-- **Particle System:** Camera-aware batched rendering
-
-## Cross-Platform Note
-
-Absolute performance numbers vary by platform (CPU, memory, OS). Always compare **percentage
-change against a platform-specific baseline** in `test_results/baseline/`, never hard-coded
-absolutes. Severity thresholds (>15% = CRITICAL, etc.) apply universally. Example outputs in
-the reference files are representative of one platform only.
-
-## Workflow
-
-1. **Identify or create baseline** — store previous metrics
-2. **Discover + run the full benchmark suite** — sequentially, AI first
-3. **Extract metrics** — parse each benchmark's output
-4. **Compare vs baseline** — percentage change per metric
-5. **Flag regressions** — classify by severity
-6. **Generate report** — full analysis with recommendations
-
-**⚠️ AI Scaling Benchmark is MANDATORY.** The AI System is the most performance-critical
-component. Always run `ai_scaling_benchmark` (via `./tests/test_scripts/run_ai_benchmark.sh`)
-and never proceed to report generation without AI results.
-
----
-
-### Step 1: Identify Baseline
-
-Baselines live in `$PROJECT_ROOT/test_results/baseline/`. If that directory does not exist,
-create a fresh baseline from this run (exit code 4, informational). Also create a new baseline
-when the user requests a refresh or after validating an intentional optimization.
-
-For the exact baseline file layout, creation logic, and update/history commands, read
-**`references/benchmarks.md`** (Baseline File Format).
-
-### Step 2: Discover + Run the Suite
-
-**Discover the current benchmark set at runtime** — do NOT assume a fixed list; the suite grows
-as systems are added. Enumerate what the repo actually builds and reconcile against the catalog:
-```bash
-ls bin/debug/*_benchmark bin/debug/*_analysis 2>/dev/null
-ls tests/test_scripts/run_*benchmark*.sh tests/test_scripts/run_*analysis*.sh 2>/dev/null
-```
-
-**All discovered benchmarks MUST be run** for a complete regression analysis. Run any benchmark
-surfaced by discovery even if it is not yet documented in `references/benchmarks.md`. The core
-expected set is the AI scaling, collision scaling, pathfinder, event scaling, particle, GPU frame
-timing, SIMD, integrated system, background simulation, adaptive threading, and projectile scaling
-benchmarks — each has a matching `run_*.sh` script.
-
-**⚠️ SEQUENTIAL EXECUTION ONLY.** Run benchmarks one at a time, waiting for each to fully complete
-before starting the next. NEVER run benchmarks in parallel (background tasks, concurrent shells) —
-parallelism causes CPU/memory contention that skews timing. Use foreground (`run_in_background:
-false`) for every invocation. Run the AI benchmark first (most critical, longest-running).
+1. `git status --short`. Do not treat an unacknowledged dirty tree as a clean baseline.
+2. Prefer Release. If only Debug is practical, say so. Several scripts are Debug-only
+   (see the build-mode column in `references/benchmarks.md`); record the build mode per
+   script and never compare a Release result against a Debug baseline.
+3. Use `test_results/baseline/` (read `baseline_metadata.txt` for build mode, platform,
+   and dates). No matching baseline → **baseline-creation mode**, not pass/fail. Refresh
+   baselines only when asked or after a validated intentional perf change.
+4. Run the scripts **sequentially** from the repo root, in the foreground, one at a time.
+   Parallel runs distort timings. A timeout or crash makes the whole pass incomplete.
 
 ```bash
-# Set PROJECT_ROOT and run from the project directory first:
-#   cd /path/to/VoidLight-Framework && export PROJECT_ROOT=$(pwd)
-# Then run each discovered script in order, AI first, e.g.:
-./tests/test_scripts/run_ai_benchmark.sh        # CRITICAL — always first
+./tests/test_scripts/run_ai_benchmark.sh
 ./tests/test_scripts/run_collision_scaling_benchmark.sh
 ./tests/test_scripts/run_pathfinder_benchmark.sh
-# ... continue through every discovered run_*.sh, sequentially
+./tests/test_scripts/run_event_scaling_benchmark.sh
+./tests/test_scripts/run_particle_manager_benchmark.sh
+./tests/test_scripts/run_gpu_frame_benchmark.sh
+./tests/test_scripts/run_simd_benchmark.sh --verbose 2>&1 | tee test_results/simd_benchmark_current.txt
+./tests/test_scripts/run_integrated_benchmark.sh 2>&1 | tee test_results/integrated_benchmark_current.txt
+./tests/test_scripts/run_background_simulation_manager_benchmark.sh
+./tests/test_scripts/run_adaptive_threading_analysis.sh
+./tests/test_scripts/run_projectile_benchmark.sh
 ```
 
-Each benchmark has timeout protection (AI: 600s, others: 300s). A timeout signals a likely
-infinite loop or performance catastrophe — flag it (exit code 3). Full per-benchmark catalog,
-durations (suite ~26 min), test cases, and targets are in **`references/benchmarks.md`**.
+Add `--release` to scripts that accept it (AI, event, particle, GPU, projectile) when
+running Release. The SIMD and integrated scripts only print to stdout, so capture them
+with `tee` as shown. `run_collision_benchmark.sh` is just a wrapper for the collision
+scaling script; do not run both. `./tests/test_scripts/run_all_tests.sh --benchmarks-only`
+runs the same 11 scripts but gives less control over capture and ordering.
 
-### Step 3: Extract Metrics
+AI, pathfinding, adaptive threading, integrated, and projectile results are required
+for a complete report. Mark GPU frame timing environment-sensitive if not run on a
+normal desktop session (the average frame is usually VSync-bound).
 
-Parse each benchmark's output file in `test_results/` for its key metrics. Each benchmark has a
-specific grep recipe, expected output shape, and baseline key format documented in
-**`references/benchmarks.md`** (Metrics Extraction Patterns). Critical extraction rules:
+5. Compare `test_results/` output (including `*_current.txt`) to the matching baseline
+   files. Per metric: `change_pct = (current - baseline) / baseline * 100`, sign inverted
+   for lower-is-better metrics (times, ns/entity). **>15% degradation on a critical system
+   (AI, collision, pathfinding, event, projectile, integrated) is blocking** unless that
+   bench's docs say otherwise. If a result regresses, check whether the bench **scope**
+   changed (entity counts, workload text, new/removed test cases, build mode; `git log`
+   on the bench source listed in `references/benchmarks.md`) before calling it an
+   algorithm regression.
 
-- **AI:** entity-scaling table + updates/sec (primary metric).
-- **Pathfinding:** **async throughput (paths/sec) + success rate ONLY** — immediate/synchronous
-  pathfinding is deprecated and must NOT be tracked.
-- **Collision:** SAP/Hash timing + trigger detection (detectors, overlaps, spatial/sweep method).
-- **SIMD:** speedup factor + platform (must not be "Scalar (no SIMD)") for all 4 operations.
-- **Adaptive Threading:** MIN_WORKLOAD enforcement (8/8 PASS), per-system threshold learning,
-  hysteresis, batch multiplier.
-- **Integrated / Background Sim / Projectile / Event / Particle / GPU:** see reference.
+Keep AI attack rows separate. Do not fold decision pressure, tactical reset, cold burst,
+and cadenced resolve into one "attack" metric.
 
-### Step 4: Compare Against Baseline
-
-For each metric: `change_pct = ((current - baseline) / baseline) * 100` (invert sign for
-lower-is-better metrics like time/CPU). Classify against the universal severity thresholds below.
-
-### Step 5: Flag Regressions
+## Severity
 
 | Severity | Condition |
 |----------|-----------|
-| 🔴 **CRITICAL** (block merge) | Any metric degrades >15%; AI FPS <60; AI CPU >8%; benchmark timeout |
-| 🟠 **WARNING** (review) | Degradation 10-15%; AI FPS 60-65; collision/pathfinding >10% slower |
-| 🟡 **MINOR** (monitor) | Degradation 5-10% |
-| ⚪ **STABLE** | Change <5% (measurement noise) |
-| 🟢 **IMPROVEMENT** | Improvement >5% |
+| **BLOCKING** | >15% degradation on a critical system; benchmark timeout/crash; pathfinding success below 100%; adaptive-threading PASS checks failing; SIMD platform reported as `Scalar (no SIMD)` |
+| **WARNING** | 10-15% degradation, or >15% on a non-critical/environment-sensitive bench (GPU, particle, background sim) |
+| **MINOR** | 5-10% degradation (monitor) |
+| **STABLE** | within ±5% (noise) |
+| **IMPROVEMENT** | >5% better |
 
-The AI system carries hard gates (FPS <60 or CPU >8% are always CRITICAL regardless of %).
-For the `classify_change()` reference implementation and per-benchmark detection specifics
-(AI scaling patterns, SIMD Release vs Debug, integrated, background sim, adaptive threading,
-projectile), read **`references/benchmarks.md`** (Per-Benchmark Regression Detection Thresholds).
+Per-bench nuances (SIMD Debug vs Release, integrated manager budget, low-precision
+pathfinding numbers) are in `references/benchmarks.md`.
 
-### Step 6: Generate Report
+## Metrics
 
-Build the report from the template in **`references/report-template.md`** (full markdown report
-+ console summary). Save to `$PROJECT_ROOT/test_results/regression_reports/regression_YYYY-MM-DD.md`.
+- **AI:** entity scaling (updates/sec, threading mode), behavior mix, WorkerBudget
+  adaptive tuning. Decision pressure / tactical reset: logic and movement only (damage
+  and projectiles suppressed). Cold burst: synchronized fresh-state spike (melee
+  EventManager damage + ranged AICommandBus projectiles before WorkerBudget learning).
+  Cadenced resolve: primary ongoing combat throughput (AI update, ranged commit, melee
+  dispatch, projectile create).
+- **Collision:** MM (SAP), dense MM ns/pair, MS (spatial hash), combined, density,
+  trigger detection counts and method.
+- **Pathfinding:** async throughput, completion/success rate, batching — not deprecated
+  immediate-path timings.
+- **Event:** throughput, per-event latency, concurrency, batch vs single enqueue,
+  threading threshold, combat burst profile.
+- **Particles:** update time by particle count, high-count update average, batch count.
+- **GPU:** average frame, swapchain, upload, submit.
+- **SIMD:** platform and speedup for AI distance, collision bounds, layer mask,
+  particle physics.
+- **Integrated:** avg/P95/P99 frame, dropped-frame %, max sustainable active NPCs,
+  coordination overhead, sustained degradation.
+- **Background sim:** scaling, throughput, threading, batch count.
+- **Adaptive threading:** `MIN_WORKLOAD`, learned thresholds, hysteresis, batch
+  multiplier range.
+- **Projectile:** entities/ms, ns/entity, threading mode, SIMD 4-wide curve.
 
-The **Pathfinding System section is MANDATORY** in every report — never skip it. Before
-submitting, run the **Final Report Validation Checklist** in `references/troubleshooting.md`;
-if any item is unchecked, extract the missing data first rather than submitting.
+## Report
 
----
+Blocking regressions first, then warnings, then improvements. Include scripts run,
+build mode per script, and baseline source/date. The report is **incomplete** if any
+of the 11 scripts is missing without an explicit blocker, or if required metrics above
+are absent. Use `references/report-template.md`; save to
+`test_results/regression_reports/regression_YYYY-MM-DD.md`.
+
+Do not edit production code on a regression pass unless the user asks to fix a
+confirmed regression.
 
 ## Exit Codes
 
-- **0:** All benchmarks passed, no regressions
-- **1:** Critical regressions detected (BLOCKING)
-- **2:** Warnings detected (review required)
-- **3:** Benchmark failed to run (timeout/crash)
-- **4:** Baseline creation mode (informational)
-
-## When to Use
-
-Activate automatically when the user says: "check for performance regressions", "run benchmarks",
-"test performance", "verify no performance degradation", "compare against baseline". Also use
-before merging feature branches, after optimizations, weekly during active development, before
-releases, and when modifying AI, collision, pathfinding, or particle systems.
-
-Full suite ~27 minutes + ~2-3 minutes report generation. For timeouts and troubleshooting
-(inconsistent results, no baseline, etc.), read **`references/troubleshooting.md`**.
+- **0:** no regressions
+- **1:** blocking regressions
+- **2:** warnings only
+- **3:** a benchmark failed to run (timeout/crash) — pass incomplete
+- **4:** baseline-creation mode (informational)

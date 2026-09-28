@@ -1,75 +1,42 @@
-# Troubleshooting, Timeouts & Validation Gate
+# Troubleshooting & Completeness Checklist
 
 Detail reference for the `voidlight-benchmark-regression` Skill. Loaded on demand.
 
----
+## Timeouts and Crashes
 
-## Timeout Protection
+Script-level timeouts: AI 180s, projectile 120s, particle 300s. Other scripts have none;
+treat a run hanging well past its usual duration as a timeout. Any timeout or crash makes
+the pass incomplete (exit code 3). Re-run the single executable to reproduce, e.g.
+`gdb --args ./bin/debug/ai_scaling_benchmark --log_level=test_suite`.
 
-Each benchmark has timeout protection:
-- AI Scaling: 600 seconds (10 minutes)
-- Others: 300 seconds (5 minutes)
+## Noisy or Inconsistent Results
 
-If timeout occurs, flag as potential infinite loop or performance catastrophe (exit code 3).
+- Something else was running (other benches, builds, browsers): re-run sequentially on an
+  idle machine.
+- Thermal throttling or power profile changes: check CPU governor / power mode.
+- Build-mode mismatch with the baseline (`baseline_metadata.txt`): not comparable.
+- Scope change (new rows, changed counts, workload text changed): check `git log` on the
+  bench source before calling it a regression.
+- Single outlier row (e.g. Max ≫ Avg in background sim): re-run that bench once before
+  reporting; report both runs if it persists.
 
----
+## No Baseline
 
-## Final Report Validation Checklist
+Baseline-creation mode for that bench (exit 4 if nothing else to compare). Report the
+numbers as the new reference; copy into `test_results/baseline/` only when the user
+agrees, and update `baseline_metadata.txt`.
 
-**⚠️ MANDATORY: Verify BEFORE submitting report to user.**
-If ANY checklist item is unchecked, DO NOT submit the report. Extract missing data first.
+## Completeness Checklist (before handing over the report)
 
-### Benchmark Execution
-- [ ] All discovered benchmarks completed successfully (no timeouts/crashes)
-- [ ] AI Scaling: Entity scaling results present with updates/sec metrics
-- [ ] **Pathfinding: Async throughput metrics extracted** ← CRITICAL!
-- [ ] Collision: SAP/Hash timing and trigger detection data extracted
-- [ ] Event Manager: Throughput data extracted
-- [ ] Particle Manager: Update timing data extracted
-- [ ] GPU Frame Timing: Frame time, swapchain, upload, submit metrics extracted
-- [ ] SIMD Performance: Platform detection and speedup data extracted
-- [ ] Integrated System: Frame statistics, scaling, coordination overhead extracted
-- [ ] Background Simulation: Scaling and adaptive tuning summary extracted
-- [ ] Adaptive Threading: MIN_WORKLOAD enforcement (8/8 PASS), threshold learning, hysteresis extracted
-- [ ] Projectile Scaling: Entity throughput (entities/ms) and SIMD 4-wide curve extracted
-
-### Report Completeness
-- [ ] **Pathfinding System section included in report** ← DO NOT SKIP!
-- [ ] AI System: Entity scaling and threading comparison sections present
-- [ ] Collision System: Performance table present
-- [ ] Event Manager: Metrics table present
-- [ ] Particle Manager: Performance data present
-- [ ] GPU Frame Timing: Performance data present
-- [ ] SIMD System: Platform and speedup table present
-- [ ] Integrated System: Frame statistics, scaling summary, coordination overhead present
-- [ ] Background Simulation: Scaling table and threading data present
-- [ ] Adaptive Threading: MIN_WORKLOAD results, threshold learning per system, hysteresis present
-- [ ] Projectile Scaling: Entity scaling table and SIMD 4-wide throughput table present
-- [ ] Overall status determined (PASSED/WARNING/FAILED)
-- [ ] Regression/improvement analysis complete
-
-### Critical Pathfinding Verification
-- [ ] Pathfinding metrics extracted from `test_results/pathfinder_benchmark_current.txt`
-- [ ] All 5 distance ranges present (50, 400, 2000, 4000, 8000 units)
-- [ ] Success rates reported (must be 100%)
-- [ ] Performance comparison against baseline completed
-- [ ] Pathfinding section visible in final report
-
----
-
-## Troubleshooting
-
-**Benchmark timeouts:**
-- Possible infinite loop or catastrophic performance regression
-- Run individual benchmark with debugging: `gdb ./bin/debug/ai_scaling_benchmark`
-
-**Inconsistent results:**
-- System load affecting benchmarks
-- Re-run benchmarks in clean environment
-- Close other applications
-- Check for thermal throttling
-
-**No baseline found:**
-- Skill will create baseline from current run
-- Subsequent runs will compare against this baseline
-- Update baseline after validating improvements
+- [ ] All 11 scripts ran, or each missing one has an explicit blocker (e.g. GPU not built /
+      no display)
+- [ ] Build mode recorded per script; baseline source and date recorded
+- [ ] AI: entity scaling + all four attack tables reported separately
+- [ ] Pathfinding: async `Completed` and completion time for every batch size (no
+      immediate-path timings)
+- [ ] Adaptive threading: MIN_WORKLOAD 8/8, `Validation:` lines, learned thresholds
+- [ ] Integrated: frame stats, scaling summary, max sustainable Active NPCs, coordination
+      overhead, sustained degradation
+- [ ] Projectile: entity scaling + SIMD 4-wide table
+- [ ] Collision, event, particle, GPU, SIMD, background sim metrics present
+- [ ] Overall status (PASSED / WARNING / FAILED / BASELINE CREATED) stated

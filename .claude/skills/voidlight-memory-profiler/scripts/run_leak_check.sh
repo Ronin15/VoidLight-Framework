@@ -21,10 +21,15 @@ if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     cat << EOF
 Usage: $0 [TEST_PATTERN]
 
-Run quick memory leak check using valgrind memcheck.
+Run an ad-hoc valgrind memcheck over test executables matching a pattern.
+
+For the curated ownership/lifetime target set (with EDM slices, timeouts and
+PASS/REVIEW/FAIL output) prefer the repo runner instead:
+    ./tests/valgrind/quick_memory_check.sh [--extended | --target <name>]
 
 ARGUMENTS:
-    TEST_PATTERN        Glob pattern for test files (default: "*tests")
+    TEST_PATTERN        Glob pattern for test files (default: "*tests",
+                        which skips device-dependent gpu_* tests)
 
 OPTIONS:
     -h, --help          Show this help message
@@ -44,8 +49,9 @@ fi
 
 TEST_PATTERN="${1:-*tests}"
 
-# valgrind is not available on macOS/darwin. CLAUDE.md documents AddressSanitizer
-# as the supported leak-detection path on this platform.
+# valgrind is Linux-only. CLAUDE.md ("Sanitizers") documents the AddressSanitizer
+# build used as the leak-detection path where valgrind is unavailable.
+SUPPRESSIONS_FILE="$BASE_DIR/tests/valgrind/valgrind_suppressions.supp"
 if ! command -v valgrind >/dev/null 2>&1; then
     echo -e "${RED}Error: valgrind not found (unavailable on macOS/darwin).${NC}"
     echo -e "${YELLOW}Use the AddressSanitizer build from CLAUDE.md instead:${NC}"
@@ -59,7 +65,18 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Find matching test executables
-mapfile -t TEST_EXECUTABLES < <(find "$TEST_DIR" -maxdepth 1 -name "$TEST_PATTERN" -type f -executable | sort)
+# GPU/device tests need a display/device and produce driver noise under
+# valgrind (tests/valgrind/README.md) - skip them unless explicitly requested.
+if [ -z "$1" ]; then
+    mapfile -t TEST_EXECUTABLES < <(find "$TEST_DIR" -maxdepth 1 -name "$TEST_PATTERN" ! -name 'gpu_*' -type f -executable | sort)
+else
+    mapfile -t TEST_EXECUTABLES < <(find "$TEST_DIR" -maxdepth 1 -name "$TEST_PATTERN" -type f -executable | sort)
+fi
+
+VALGRIND_SUPP_ARGS=()
+if [ -f "$SUPPRESSIONS_FILE" ]; then
+    VALGRIND_SUPP_ARGS=("--suppressions=$SUPPRESSIONS_FILE")
+fi
 
 if [ ${#TEST_EXECUTABLES[@]} -eq 0 ]; then
     echo -e "${RED}Error: No test executables found matching: $TEST_PATTERN${NC}"
@@ -85,14 +102,18 @@ for TEST_PATH in "${TEST_EXECUTABLES[@]}"; do
 
     echo -e "${GREEN}Checking:${NC} $TEST_NAME"
 
+    # A failing test must not abort the loop under `set -e`; the exit code is
+    # reported separately from the memcheck findings.
+    TEST_EXIT=0
     valgrind \
         --leak-check=full \
         --show-leak-kinds=all \
         --track-origins=yes \
-        --verbose \
+        --num-callers=20 \
+        "${VALGRIND_SUPP_ARGS[@]}" \
         --log-file="$OUTPUT_DIR/${TEST_NAME}_memcheck.log" \
         "$TEST_PATH" --log_level=test_suite \
-        > /dev/null 2>&1
+        > /dev/null 2>&1 || TEST_EXIT=$?
 
     # Parse results
     DEFINITE_LEAKS=$(grep "definitely lost:" "$OUTPUT_DIR/${TEST_NAME}_memcheck.log" | tail -1 | awk '{print $4}' | tr -d ',')
@@ -102,8 +123,9 @@ for TEST_PATH in "${TEST_EXECUTABLES[@]}"; do
     INVALID_WRITE=$(grep -c "Invalid write" "$OUTPUT_DIR/${TEST_NAME}_memcheck.log" || true)
 
     # Report
-    if [ "$DEFINITE_LEAKS" -gt 0 ] || [ "$INVALID_READ" -gt 0 ] || [ "$INVALID_WRITE" -gt 0 ]; then
+    if [ "$DEFINITE_LEAKS" -gt 0 ] || [ "$INVALID_READ" -gt 0 ] || [ "$INVALID_WRITE" -gt 0 ] || [ "$TEST_EXIT" -ne 0 ]; then
         echo -e "  ${RED}❌ ISSUES FOUND${NC}"
+        [ "$TEST_EXIT" -ne 0 ] && echo -e "    - Test exited with code: ${RED}$TEST_EXIT${NC}"
         [ "$DEFINITE_LEAKS" -gt 0 ] && echo -e "    - Definite leaks: ${RED}$DEFINITE_LEAKS bytes${NC}"
         [ "$INVALID_READ" -gt 0 ] && echo -e "    - Invalid reads: ${RED}$INVALID_READ${NC}"
         [ "$INVALID_WRITE" -gt 0 ] && echo -e "    - Invalid writes: ${RED}$INVALID_WRITE${NC}"

@@ -1,217 +1,55 @@
 # VoidLight Quality Check — Coding Standards & Quick Fixes
 
-Coding-standard rules mirrored from `CLAUDE.md` (section 3), plus the Quick Fix Guide for the most common violations. Loaded on demand from `SKILL.md`. Detection commands and the full check catalog live in `references/checks.md`.
+Detection recipes for section 3 of the check catalog, plus a Quick Fix Guide. The rules are defined in root `CLAUDE.md` › Core Rules › C++ and APIs (naming, formatting, API shape, copyright) — read them there; this file only says how to check them.
 
-### 3. Coding Standards (CLAUDE.md Compliance)
+## 3. Coding Standards
 
-#### 3.1 Naming Conventions
+### 3.1 Naming
 
-**Check Commands:**
+Naming is enforced by clang-tidy `readability-identifier-naming` (`tests/clang-tidy/.clang-tidy`) in the Branch/PR pass. Quick grep for lowercase type names:
 ```bash
-# Find potential naming violations
-grep -rn "class [a-z]" src/ include/              # Classes must be UpperCamelCase
-grep -rn "^[A-Z][a-z]*(" src/ --include="*.cpp"   # Functions should be lowerCamelCase (src/ has no top-level .cpp; recurse)
+grep -rnE "^\s*(class|struct|enum class) [a-z]\w*\s*(final\s*)?(:.*)?\{?\s*$" include/ src/
 ```
+WARNING.
 
-**Standards:**
+### 3.2 Formatting
 
-| Item | Convention | Example |
-|------|-----------|---------|
-| Classes/Enums | UpperCamelCase | `GameEngine`, `EntityType` |
-| Functions/Variables | lowerCamelCase | `updateEntity()`, `deltaTime` |
-| Member Variables | `m_` prefix | `m_entityCount` |
-| Member Pointers | `mp_` prefix | `mp_renderer` |
-| Constants | ALL_CAPS | `MAX_ENTITIES` |
-| Namespaces | lowercase | `namespace utils` |
-
-**Automated Checks:**
+4-space indent, no tabs, Allman braces. Check new/changed lines in the diff rather than the whole tree:
 ```bash
-# Check for member variables without m_ prefix (in .cpp files)
-grep -rn "^\s*[a-z][a-zA-Z0-9]*\s*;" src/ include/ | grep -v "m_" | grep -v "mp_"
-
-# Check for class names starting with lowercase
-grep -rn "^class [a-z]" include/
+git diff -U0 main... -- '*.cpp' '*.hpp' | grep -nP "^\+.*\t"      # tabs in added lines
 ```
+INFO/WARNING — match the surrounding file when it predates the rule.
 
-**Quality Gate:** ✓ All naming conventions followed
-
-#### 3.2 Formatting Standards
-
-**Standards:**
-- **Indentation:** 4 spaces (no tabs)
-- **Braces:** Allman style (braces on new line)
-- **Line length:** Reasonable (no hard limit, but keep readable)
-
-**Example:**
-```cpp
-// ✓ GOOD - Allman braces, 4-space indent
-void GameEngine::update(float deltaTime)
-{
-    if (m_isRunning)
-    {
-        processEvents();
-        updateSystems(deltaTime);
-    }
-}
-
-// ✗ BAD - K&R braces, wrong indent
-void GameEngine::update(float deltaTime) {
-  if (m_isRunning) {
-    processEvents();
-  }
-}
+### 3.3 C++ API rules
+```bash
+grep -rnE "\(void\)\s*[a-z]\w*;" src/ include/ | grep -v "include/core/Logger.hpp"   # unused-param casts
+grep -rn "\[\[maybe_unused\]\]" src/                                                 # only allowed on empty virtual base defaults
+grep -rnE "constexpr const char\s*\*|const char\s*\*\s*[A-Z_]+\s*=" src/ include/   # C-string constants -> std::string_view
 ```
+Also review diffs for: raw arrays, C-string APIs outside the final SDL/C boundary, `string_view -> string` churn, unchecked `[[nodiscard]]` bool returns (`init()`, `load()`, `create()`). Existing hits may be pre-existing; flag new ones. WARNING.
 
 ## Quick Fix Guide
 
-**Most Common Violations:**
-
-1. **Unused parameters:** drop the name, keep the type (CLAUDE.md — never `(void)param;` or `[[maybe_unused]]` in production, except empty virtual base defaults)
-   ```cpp
-   void func(int) { }
-   ```
-
-2. **Static variable in threaded code:**
-   ```cpp
-   // Move to class member or use thread_local
-   ```
-
-3. **Missing copyright:**
-   ```cpp
-   /* Copyright (c) 2025 Hammer Forged Games
-    * All rights reserved.
-    * Licensed under the MIT License - see LICENSE file for details
-   */
-   ```
-
-4. **Using std::cout:**
-   ```cpp
-   LOG_INFO("message");  // instead of std::cout
-   ```
-
-5. **Raw new/delete:**
-   ```cpp
-   auto ptr = std::make_unique<Type>();  // instead of new
-   ```
-
-6. **Unnecessary shared_ptr copies:**
-   ```cpp
-   // Instead of: auto copy = m_sharedPtr;
-   // Use member directly or capture raw pointer in lambdas
-   auto* rawPtr = m_sharedPtr.get();
-   ```
-
-7. **shared_ptr in hot-path loops:**
-   ```cpp
-   // Inside batch processing loops, use raw pointers
-   Entity* entity = storage.entities[i].get();
-   // Keep shared_ptr in storage, use raw in tight loops
-   ```
-
-8. **String concatenation in logging:**
-   ```cpp
-   // Instead of: LOG_INFO("Value: " + std::to_string(x));
-   LOG_INFO(std::format("Value: {}", x));
-   ```
-
-9. **Conditional logging without *_IF macro:**
-   ```cpp
-   // Instead of: if (debug) { AI_INFO("msg"); }
-   AI_INFO_IF(debug, "msg");
-   ```
-
-10. **Per-frame allocations:**
-    ```cpp
-    // Instead of: void update() { std::vector<T> temp; ... }
-    // Use member buffer: m_buffer.clear(); m_buffer.push_back(...);
-    ```
-
-11. **Missing reserve() for known sizes:**
-    ```cpp
-    std::vector<T> vec;
-    vec.reserve(knownSize);  // Add before push_back loop
-    ```
-
-12. **UI component without positioning:**
-    ```cpp
-    ui.createButton("id", rect, "text");
-    ui.setComponentPositioning("id", {UIPositionMode::CENTERED_BOTH, ...});
-    ```
-
-13. **SDL_RenderPresent in GameState:**
-    ```cpp
-    // NEVER call SDL_RenderPresent/Clear in GameState::render()
-    // Only draw content, GameEngine handles Present
-    ```
-
-14. **Immediate state transition in enter():**
-    ```cpp
-    // Instead of: void enter() { pushState<Next>(); }
-    // Use deferred: m_shouldTransition = true; // then transition in update()
-    ```
-
-15. **Duplicate Manager::Instance() calls:**
-    ```cpp
-    // Instead of calling Instance() multiple times in same function:
-    void handleInput() {
-        // Cache ALL managers at function start as local references
-        const auto& inputMgr = InputManager::Instance();
-        auto& aiMgr = AIManager::Instance();
-        auto& ui = UIManager::Instance();
-        // ... use cached references throughout
-    }
-    ```
-
-16. **Cached mp_* member pointers (OBSOLETE):**
-    ```cpp
-    // OBSOLETE - Don't cache manager pointers as class members
-    // mp_uiMgr = &UIManager::Instance();  // REMOVE THIS PATTERN
-
-    // CORRECT - Use local references at function start
-    auto& ui = UIManager::Instance();
-    ui.createButton(...);
-    ```
-
-17. **Per-entity state in AIBehavior member variables:**
-    ```cpp
-    // ✗ FORBIDDEN - EntityHandle/timers/counters as behavior members
-    class MyBehavior : public AIBehavior {
-        EntityHandle m_target{};  // MOVE TO EDM BehaviorData
-        float m_timer{0.0f};      // MOVE TO EDM BehaviorData
-    };
-
-    // ✓ CORRECT - Access via EDM BehaviorData
-    void MyBehavior::executeLogic(BehaviorContext& ctx) {
-        auto& state = ctx.behaviorData->state.custom;
-        state.target = newTarget;  // Per-entity, thread-safe
-    }
-    ```
-
-18. **Controller directly mutating AI behavior state:**
-    ```cpp
-    // ✗ FORBIDDEN - Direct EDM behavior state mutation from controller
-    guardState.alertLevel = 3;  // LAYER VIOLATION
-
-    // ✓ CORRECT - Send behavior message
-    Behaviors::queueBehaviorMessage(idx, BehaviorMessage::RAISE_ALERT);
-    ```
-
-19. **Missing manager in state transition:**
-    ```cpp
-    // ✓ All managers must be transitioned in exit(), especially:
-    aiMgr.prepareForStateTransition();
-    bgSimMgr.prepareForStateTransition();  // Commonly missed!
-    // ... rest of managers ... edm last
-    ```
-
-20. **Thread-local vector capacity destroyed by swap/return:**
-    ```cpp
-    // ✗ BAD - swap destroys capacity, causes per-frame allocations
-    result.swap(t_deferredEvents);
-
-    // ✓ CORRECT - ref-based with clear() preserves capacity
-    void collect(std::vector<Event>& out) {
-        out.insert(out.end(), make_move_iterator(...), make_move_iterator(...));
-        t_deferredEvents.clear();  // Keeps capacity
-    }
-    ```
+| Violation | Fix |
+|-----------|-----|
+| Unused parameter | Drop the name: `void f(int)`. |
+| Mutable `static` in threaded code | Member state, `thread_local`, or atomic. |
+| Raw thread / local thread-count heuristic | `ThreadSystem` task shaped by `WorkerBudget`; report execution after completion. |
+| Missing copyright | Add the header from CLAUDE.md › C++ and APIs. |
+| `std::cout` / `printf` | Subsystem log macro, e.g. `AI_INFO(std::format(...))`. |
+| Log string concat | `GAMEENGINE_INFO(std::format("Value: {}", x));` |
+| `if (c) { AI_INFO(...); }` | `AI_INFO_IF(c, ...);` |
+| `#ifdef DEBUG` | `VOIDLIGHT_DEBUG_ONLY(...)`. |
+| Raw `new`/`delete`, raw-pointer ownership | `std::make_unique` / RAII; references, `std::optional`, or handles for non-owning/optional access. |
+| `shared_ptr` copy/capture in hot path | Pass `const&`, capture by reference within the owner's lifetime, or iterate EDM indices/handles. |
+| `string_view` param converted for map lookup | Take `const std::string&`. |
+| Per-frame local container | Reusable member (or `thread_local` in worker code), `clear()` each frame, `reserve()` when size known. |
+| Thread-local buffer `swap`/return-by-value | `void collect(std::vector<T>& out)` + `t_buf.clear()`. |
+| UI component not positioned | `ui.setComponentPositioning(id, {UIPositionMode::..., ...})` after create, or use a positioning helper. |
+| Clear/end/submit/present in a GameState | Remove; states only record and draw. `GameEngine::present()` owns the frame. |
+| Transition in `enter()` | Set intent in `enter()`, call `mp_stateManager->changeState(GameStateId::...)` in `update()`. |
+| Cached manager `mp_*` / `mp_*Ctrl` member | Local `auto& x = Manager::Instance();` at function top; `m_controllers.add<T>()` in `enter()`. |
+| Behavior per-entity state outside EDM | Add the field to the variant `*StateData` in `include/ai/BehaviorStateData.hpp`. |
+| Controller mutates AI state | `Behaviors::queueBehaviorMessage(idx, BehaviorMessage::...)`. |
+| Missing manager in exit path | Follow the 11-manager order in CLAUDE.md › State Transitions and Events; mirror `GamePlayState::exit()`. |
+| State registers a persistent handler / collision callback | Transient `registerHandlerWithToken()` in `enter()`; collision wiring stays manager-owned. |

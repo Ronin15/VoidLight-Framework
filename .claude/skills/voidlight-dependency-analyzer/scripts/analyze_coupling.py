@@ -106,8 +106,8 @@ def analyze_manager_coupling(graph, base_dir):
         # Container) with WRM's spatial index on create/destroy. Intentional design
         # — callers rely on this to avoid having to register separately. .cpp-only.
         ('EntityDataManager.hpp', 'WorldResourceManager.hpp'),
-        # EntityDataManager is the engine's central SoA data hub (CLAUDE.md Key
-        # Systems) — wide fan-in from managers that read/write entity state
+        # EntityDataManager is the engine's central SoA data hub (CLAUDE.md
+        # "EDM, AI, and Controllers") — wide fan-in from managers that read/write entity state
         # directly is the documented design, not incidental coupling.
         ('AIManager.hpp', 'EntityDataManager.hpp'),
         ('CollisionManager.hpp', 'EntityDataManager.hpp'),
@@ -117,6 +117,14 @@ def analyze_manager_coupling(graph, base_dir):
         # Ordinary event-driven time/weather notification, same pattern already
         # accepted for WorldManager -> EventManager above.
         ('GameTimeManager.hpp', 'EventManager.hpp'),
+        # AIManager dispatches/consumes events (deferred damage, behavior
+        # messages) through the central event hub — same Managers -> EventManager
+        # pattern as above.
+        ('AIManager.hpp', 'EventManager.hpp'),
+        # EDM::createNPCWithRaceClass auto-registers classes.json
+        # suggestedBehavior via AIManager::registerEntity and unregisters on
+        # destroy (CLAUDE.md "EDM, AI, and Controllers"). Documented, .cpp-only.
+        ('EntityDataManager.hpp', 'AIManager.hpp'),
         # Season/ParticleEffectType are single-enum type headers (see
         # LIGHTWEIGHT_CROSS_CUTTING_HEADERS in detect_layer_violations.py), not
         # peer managers — they only happen to live in include/managers/. High

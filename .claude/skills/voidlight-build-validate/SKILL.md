@@ -1,225 +1,105 @@
 ---
 name: voidlight-build-validate
-description: Runs complete build validation pipeline for SDL3 VoidLight-Framework including Debug build, smoke test execution, core test suite, and summary report generation. Use when the user wants to quickly validate their changes, check if the codebase is in a good state, or run the standard daily validation workflow.
+description: Branch/PR-level validation for VoidLight-Framework - full Debug build with warning count, optional app smoke test, the core-only suite (run_all_tests.sh --core-only --errors-only), and a summary report. Use when a branch is ready to merge/PR or the user explicitly asks for a full validation or core-suite run. Not for per-change or slice-complete checks.
 allowed-tools: [Bash, Read, Write]
 ---
 
-# VoidLight-Framework Build Validation Pipeline
+# VoidLight-Framework Build Validation
 
-This Skill automates the standard build validation workflow for SDL3 VoidLight-Framework. It performs a complete validation cycle that developers typically run 5-10 times daily.
+Runs the core-only suite, so it is the **Branch / PR** gate from
+`docs/framework-implementation-slices.md` (or an explicit user request). Gate summary:
 
-## Workflow Overview
+| Gate | What to run | This Skill? |
+| --- | --- | --- |
+| Per-change | `ninja -C build app` (app only, fast) or `ninja -C build <test_exe>` + `./bin/debug/<test_exe> [--run_test="Case*"]` | No — run directly |
+| Slice complete | `ninja -C build` + the Boost.Test executables covering the changed code; no core-only suite, no benches | No |
+| Slice review | `game-systems-architect` on the slice diff before commit | No |
+| Branch / PR | `run_all_tests.sh --core-only --errors-only` + cppcheck, clang-tidy, ASan, TSan | **Yes** — core-suite part |
 
-The Skill executes these steps in sequence:
-1. **Clean Debug Build** with warning detection
-2. **Smoke Test** for crash detection
-3. **Core Test Suite** for functional validation
-4. **Summary Report** generation
+For "does it build?" during implementation, run the per-change gate instead and stop.
+Static analysis is `voidlight-quality-check`; sanitizer builds are separate (mutually
+exclusive, see root `CLAUDE.md`). Run everything from the project root. Never commit or edit sources.
 
-## Detailed Execution Steps
+## Step 1 — Debug build
 
-### Step 1: Clean Debug Build
-
-**Command:**
 ```bash
-cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build
+cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build 2>&1 | tee /tmp/voidlight_build.log
 ```
 
-**Validation:**
-- Check if build succeeded (exit code 0)
-- Filter and count compilation warnings:
-  ```bash
-  ninja -C build -v 2>&1 | grep -E "(warning|unused|error)" | head -n 100
-  ```
-- Categorize warnings by type (unused variables, type conversions, etc.)
-- Flag if warning count exceeds threshold (>5 warnings = warning, >20 = concern)
+Full `ninja -C build` is required: the core suite needs every test executable (`app` builds
+only `VoidLight_Template`). Success = `ninja` exit code 0 (`${PIPESTATUS[0]}`). Count warnings
+from the captured log — an incremental build only reports files it recompiled:
 
-**Error Handling:**
-- If build fails, extract and display first 20 compilation errors
-- Show file paths and line numbers for errors
-- Recommend checking recent changes
-
-### Step 2: Smoke Test (Crash Detection)
-
-**Command:**
 ```bash
-timeout 60s ./bin/debug/VoidLight_Template > /tmp/app_log.txt 2>&1
+grep -E "warning:|error:" /tmp/voidlight_build.log | sort -u | head -n 100
 ```
 
-**Working Directory:** `$PROJECT_ROOT/`
+Flag >5 warnings as a warning, >20 as a concern. On failure, show the first ~20 errors with
+file:line and stop (report exit code 1).
 
-**Validation:**
-- Check exit code:
-  - 0 = clean exit
-  - 124 = timeout (expected, app runs indefinitely)
-  - Others = crash/error
-- Scan `/tmp/app_log.txt` for:
-  - Segmentation faults
-  - Assertion failures
-  - Exception messages
-  - Memory errors (AddressSanitizer output if enabled)
-  - SDL errors
+## Step 2 — Smoke test (display required)
 
-**Success Criteria:**
-- Exit code 124 (timeout) OR 0 (clean exit)
-- No crash signatures in log
-- No critical errors logged
+Skip and report "skipped (headless)" when neither `$DISPLAY` nor `$WAYLAND_DISPLAY` is set —
+the app opens an SDL3 GPU window.
 
-**Error Handling:**
-- If crashed, extract stack trace from log
-- Show last 50 lines of output before crash
-- Recommend running with AddressSanitizer for memory issues
+```bash
+timeout 60s ./bin/debug/VoidLight_Template > /tmp/app_log.txt 2>&1; echo $?
+```
 
-### Step 3: Core Test Suite
+Exit 124 (timeout) or 0 = pass. Anything else, or segfault / assertion / exception / SDL error
+text in the log, = crash: show the last 50 log lines and suggest an ASan build.
 
-**Command:**
+## Step 3 — Core suite
+
 ```bash
 ./tests/test_scripts/run_all_tests.sh --core-only --errors-only
 ```
 
-**Working Directory:** `$PROJECT_ROOT/`
+`--core-only` runs only the `CORE_TEST_SCRIPTS` array; derive the count at runtime rather than
+hardcoding it:
 
-**What This Runs:**
-The exact core suite is defined by the `TEST_SCRIPTS` array inside `tests/test_scripts/run_all_tests.sh` — do not assume a frozen list. Discover the current set at runtime instead of relying on a hardcoded snapshot:
 ```bash
-# List the runner scripts that make up the suite
-ls tests/test_scripts/run_*tests*.sh
-# Or read the authoritative array the master runner executes
-grep '\$SCRIPT_DIR/run_' tests/test_scripts/run_all_tests.sh
+sed -n '/^CORE_TEST_SCRIPTS=(/,/^)/p' tests/test_scripts/run_all_tests.sh
 ```
-This covers the Core/Manager/Controller/Integration test runners (thread system, AI, behavior, event, collision, pathfinding, resource, world, particle, EDM, controllers, GPU, etc.). The count grows as systems are added, so derive it from the output above rather than embedding a number.
 
-**Validation:**
-- Parse output for test results
-- Extract pass/fail counts
-- Identify failed test names
-- Check for unexpected errors or crashes
+Parse pass/fail counts and failed script names (also in
+`test_results/combined/all_tests_results.txt`). Typical runtime 2–5 minutes. For each failure,
+point to the most targeted repro first:
 
-**Success Criteria:**
-- All discovered test suites pass (count derived from the runner array above, not hardcoded)
-- No segfaults or crashes
-- Execution completes in reasonable time (~2-5 minutes)
+```bash
+./bin/debug/<test_executable> --run_test="FailingCase*"
+./tests/test_scripts/run_<system>_tests.sh --verbose
+```
 
-**Error Handling:**
-- If tests fail, list failed test names
-- Show brief error output for each failure
-- Suggest running specific test script for details:
-  ```bash
-  ./tests/test_scripts/run_<system>_tests.sh --verbose
-  ```
+Classify failures per `tests/CLAUDE.md` (production bug, test setup, stale expectation,
+environment, pre-existing). Never relax expectations to get green.
 
-### Step 4: Generate Summary Report
+## Step 4 — Report
 
-**Report Format:**
+Save to `/tmp/voidlight_build_validation_report.md` and print a console summary:
 
 ```markdown
 # Build Validation Report
-**Date:** YYYY-MM-DD HH:MM:SS
-**Branch:** <current-branch>
-**Project:** SDL3 VoidLight-Framework
+**Date:** YYYY-MM-DD HH:MM · **Branch:** <branch>
 
-## Results Summary
+✓/✗ **Build:** <status> (<n> warnings)
+✓/✗/– **Smoke Test:** <status> (<exit reason> | skipped: headless)
+✓/✗ **Core Tests:** <passed>/<total> scripts passed
 
-✓/✗ **Build:** <Status> (<warning-count> warnings)
-✓/✗ **Smoke Test:** <Status> (<exit-reason>)
-✓/✗ **Core Tests:** <passed>/<total> passed
-
-**Total Execution Time:** <time>
-
-## Details
-
-### Build Warnings (<count>)
-<list of warnings if any, max 10>
-
-### Test Failures (<count>)
-<list of failed tests with brief errors>
-
-### Recommendations
-<specific actions based on failures>
-
----
-**Status:** ✓ PASSED / ✗ FAILED
+## Build Warnings (max 10)
+## Test Failures (script, failing case, brief error)
+## Recommendations
+**Status:** ✓ PASSED / ✗ FAILED · Total time: <t>
 ```
 
-**Save Location:** `/tmp/voidlight_build_validation_report.md`
-
-**Console Output:**
-```
-=== VoidLight-Framework Build Validation ===
-
-✓ Build: Success (3 warnings)
-✓ Smoke Test: Clean (60s timeout)
-✓ Core Tests: <passed>/<total> passed   # totals discovered from the runner, not fixed
-
-Total Time: 3m 42s
-
-Status: ✓ PASSED
-
-Report: /tmp/voidlight_build_validation_report.md
-```
-
-## Exit Codes
-
-- **0:** All validations passed
-- **1:** Build failed
-- **2:** Smoke test crashed
-- **3:** Core tests failed
-- **4:** Multiple failures
-
-## Usage Examples
-
-When the user says:
-- "validate my changes"
-- "check if everything builds"
-- "run the daily validation"
-- "make sure tests pass"
-- "quick build check"
-
-Activate this Skill automatically.
-
-## Important Notes
-
-1. **Always run from project root:** `$PROJECT_ROOT/`
-2. **Timeout protection:** Smoke test has 60s timeout (app runs indefinitely)
-3. **Core tests only:** Skips benchmarks (those take 5-20 minutes)
-4. **Report persistence:** Report saved to `/tmp/` for user review
-5. **Non-destructive:** Does not commit, push, or modify source files
-
-## Performance Expectations
-
-- **Build:** 30-90 seconds (depends on changes)
-- **Smoke Test:** 60 seconds (timeout)
-- **Core Tests:** 2-5 minutes
-- **Total:** ~3-7 minutes
-
-## Integration with Development Workflow
-
-This Skill is designed to be run:
-- **Before commits:** Ensure code is stable
-- **After pulls:** Validate merge didn't break anything
-- **During development:** Quick validation cycles
-- **Before PRs:** Final check before creating pull request
+Exit codes: 0 all passed, 1 build failed, 2 smoke crash, 3 core tests failed, 4 multiple.
+Remind the user the rest of the Branch/PR gate (cppcheck, clang-tidy, ASan, TSan) is not covered.
 
 ## Troubleshooting
 
-**Build fails with linker errors:**
-- Try: `rm -rf build/ && cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug && ninja -C build`
-
-**Smoke test always crashes:**
-- Run with AddressSanitizer:
-  ```bash
-  cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_CXX_FLAGS="-D_GLIBCXX_DEBUG -fsanitize=address -fno-omit-frame-pointer -g" \
-    -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address" \
-    -DUSE_MOLD_LINKER=OFF && ninja -C build
-  ```
-
-**Tests hang indefinitely:**
-- Check for deadlocks in ThreadSystem
-- Review recent threading changes
-- Run specific test with timeout: `timeout 120s ./bin/debug/<test_name>`
-
-**High warning count:**
-- Review CLAUDE.md coding standards
-- Run quality check Skill for detailed analysis
-- Filter warnings: `ninja -C build -v 2>&1 | grep -E "warning" | sort | uniq`
+- **Linker/stale build errors:** `rm build/CMakeCache.txt` and reconfigure (required when
+  switching sanitizers or major options).
+- **Smoke crash / memory errors:** rebuild with the ASan command in root `CLAUDE.md`.
+- **Hangs:** `timeout 120s ./bin/debug/<test>`; check recent ThreadSystem/future changes; use a
+  TSan build with `TSAN_OPTIONS="suppressions=$(pwd)/tests/tsan_suppressions.txt"`.
+- **High warning count:** check against root `CLAUDE.md` standards; run `voidlight-quality-check`.

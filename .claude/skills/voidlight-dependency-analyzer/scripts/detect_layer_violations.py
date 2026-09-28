@@ -88,8 +88,9 @@ APPROVED_EXCEPTIONS = {
     # Logger is a foundational utility used at all layers — not a layer violation.
     ('BinarySerializer.hpp', 'Logger.hpp'),
     # GameEngine owns/drives the state machine; GameStateManager owns game states.
-    # Documented accepted boundary bends — see CLAUDE.md "Dependency direction"
-    # and docs/architecture/dependency_analysis_2026-03-31.md.
+    # Documented accepted boundary bends — see docs/ARCHITECTURE.md
+    # ("GameStateManager is state-machine infrastructure") and
+    # docs/architecture/dependency_analysis_2026-03-31.md.
     ('GameEngine.hpp', 'GameStateManager.hpp'),
     ('GameStateManager.hpp', 'GameState.hpp'),
     # EventManager::DeferredEvent is a struct NESTED inside class EventManager
@@ -119,6 +120,8 @@ LIGHTWEIGHT_CROSS_CUTTING_HEADERS = {
     'ParticleEffectType.hpp', # particle effect type enum — only includes <cstdint>
     'SparseSidecar.hpp',      # generic sparse-storage template, zero project includes (stdlib only)
     'EventTypeId.hpp',        # event type enum — only includes <cstdint>
+    'FactionStance.hpp',      # faction stance enum/table — stdlib only (<array>, <cstdint>)
+    'Sex.hpp',                # creature sex enum — only includes <cstdint>
 }
 
 
@@ -160,8 +163,15 @@ def check_layer_violations(base_dir):
             includes = extract_includes(header)
 
             for include in includes:
-                # Determine layer of the included file
-                include_layer = classify_layer(include)
+                # Determine layer of the included file. A bare include
+                # ("Event.hpp", "Logger.hpp") resolves next to the including
+                # header, so classify it by the header's own directory rather
+                # than silently dropping it as 'Other'.
+                if '/' not in include:
+                    include_layer = classify_layer(
+                        os.path.join(os.path.dirname(header), include))
+                else:
+                    include_layer = classify_layer(include)
 
                 # Check for violations
                 violates = False

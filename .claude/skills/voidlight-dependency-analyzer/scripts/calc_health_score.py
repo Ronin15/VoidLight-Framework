@@ -275,7 +275,8 @@ def main():
     print()
     print("Note: Functional coupling is EXPECTED in game engines - systems must interact!")
     print()
-    print(f"High-Bloat Headers: {metrics['high_bloat_headers']} of {metrics['total_headers']} ({metrics['high_bloat_headers']/metrics['total_headers']*100:.1f}%)")
+    bloat_pct = (metrics['high_bloat_headers'] / metrics['total_headers'] * 100) if metrics['total_headers'] else 0.0
+    print(f"High-Bloat Headers: {metrics['high_bloat_headers']} of {metrics['total_headers']} ({bloat_pct:.1f}%)")
     print(f"Maximum Dependency Depth: {metrics['max_depth']}")
     print(f"Average Coupling: {metrics['avg_coupling']:.2f} dependencies per header")
     print()

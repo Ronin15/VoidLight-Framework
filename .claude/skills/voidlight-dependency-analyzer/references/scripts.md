@@ -3,7 +3,8 @@
 Canonical, maintained implementations live in `scripts/` next to `SKILL.md`.
 They discover headers/dirs from `include/` and `src/` at runtime and classify
 every directory automatically. **Always prefer these over hand-rolled bash.**
-All scripts write to `test_results/dependency_analysis/`. Run from the repo root.
+All scripts read `include/` + `src/` and write to `test_results/dependency_analysis/`
+relative to the current directory, so run them from the repo root.
 
 ## Run Order
 
@@ -28,7 +29,7 @@ Paths below assume `OUT=test_results/dependency_analysis` and
 |--------|-----------|----------|-------|
 | `extract_deps.py` | `extract_deps.py` | `$OUT/dependency_graph.txt` | Builds the include adjacency list (`Source.hpp -> Target.hpp`) from `include/` + `src/`. Run first; everything else consumes the graph. |
 | `detect_cycles.py` | `detect_cycles.py $GRAPH` | `$OUT/circular_dependencies.txt` | DFS cycle detection. Exit 0 = none, exit 1 = cycles found. Summary file holds `circular_dependencies=<N>`. |
-| `detect_layer_violations.py` | `detect_layer_violations.py` | `$OUT/layer_violations.txt` | Auto-classifies every dir, enforces one-way layer rules (Core/Utils dependency-free, Managers not depending on States/Entities, no cross-state deps). |
+| `detect_layer_violations.py` | `detect_layer_violations.py` | `$OUT/layer_violations.txt` | Auto-classifies every dir (bare includes resolve to the including header's dir), enforces the per-layer table in architecture-model.md (Core/Utils dependency-free, Managers/Controllers never include States, no cross-state deps). Always exits 0; count is in the file. |
 | `analyze_coupling.py` | `analyze_coupling.py $GRAPH [base_dir]` | `$OUT/coupling_metrics.txt`, `$OUT/coupling_summary.txt` | Fan-in/out, instability, manager-to-manager coupling. Uses the functional-dependency allowlist (see architecture-model.md) so expected game-system coupling is not flagged. |
 | `analyze_header_bloat.py` | `analyze_header_bloat.py` | `$OUT/header_bloat_analysis.txt` | High-include headers, frequently-included headers (ripple effect), forward-declaration opportunities. |
 | `calc_depth.py` | `calc_depth.py $GRAPH` | `$OUT/dependency_depths.txt` | Max dependency depth per header = compile-time recompilation ripple. |
@@ -51,42 +52,8 @@ These are the thresholds the scripts (and any manual reading of their output) us
 
 **Dependency depth:** `>10` 🔴 VERY HIGH · `>7` ⚠️ HIGH · `>4` 🟡 MODERATE · else ✅ LOW.
 
-## Exit Codes (overall analysis)
+## Exit codes
 
-- **0:** No architectural issues detected
-- **1:** Circular dependencies found (BLOCKING)
-- **2:** Layer violations detected (CRITICAL)
-- **3:** High coupling detected (WARNING)
-- **4:** Multiple issues detected
-
-## Underlying Algorithms (illustrative — the scripts are authoritative)
-
-If a script is unavailable or you need to understand/reproduce a check by hand,
-these are the algorithms the scripts implement. Prefer the scripts; this is
-fallback documentation only.
-
-**Graph build:** for each `*.hpp` under `include/` and `src/`, grep `^#include "..."`,
-basename both ends, emit `Source.hpp -> Target.hpp` lines (local includes only,
-skip system `<...>` includes).
-
-**Cycle detection:** DFS with a recursion stack; when a neighbor is already on the
-stack, the path slice from that neighbor to the current node is a cycle.
-
-**Coupling:** fan-out = count of `^Header ->` lines; fan-in = count of `-> Header$`
-lines; instability as above. Manager-to-manager: build a `✓` matrix from header
-includes, then count references to each other manager inside the `.cpp` to grade
-strength against the allowlist.
-
-**Layer violations:** classify each header by its directory, then flag includes
-that point "upward" or sideways against the per-layer rules:
-- Core / Utils headers including anything outside core/ + utils/.
-- Manager headers including `gameStates/` (forbidden) or `entities/` (review).
-- State headers including another state header (cross-state dependency).
-
-**Header bloat:** count `^#include "` per header; count how many files include each
-header (`grep -r`); flag widely-included headers that are themselves include-heavy.
-
-**Depth:** memoized DFS computing max distance to a leaf node per header.
-
-**Trees:** recursive descent over the adjacency list with a visited set (mark
-`(circular)` on revisit) and a max-depth cap (mark `(...)` at the cap).
+Only `detect_cycles.py` signals via exit code (0 = none, 1 = cycles). All other
+scripts exit 0 and report counts in their output files; a Python traceback
+means a stale assumption in the script — fix the script, not the output.

@@ -11,103 +11,78 @@ a dependency is a true violation, or explain why a coupling pair is acceptable.
 
 ## Dependency Direction
 
+Canonical source: `docs/ARCHITECTURE.md` and root `CLAUDE.md`
+("Dependency direction: `Core -> Managers -> GameStates -> Entities/Controllers`").
+Higher layers may include lower layers; managers must not depend on states.
+
 ```
 Core (GameEngine, ThreadSystem, Logger, TimestepManager, WorkerBudget)
   ↓
-Managers (AIManager, CollisionManager, EventManager, WorldManager, etc.)
+Managers (AIManager, CollisionManager, EventManager, WorldManager,
+          EntityDataManager + EntityDataTypes, GameStateManager, etc.)
   ↓
-GameStates (GameState, MainMenuState, GamePlayState, PauseState, etc.)
+GameStates (GameState, MainMenuState, GamePlayState, LoadingState, etc.)
   ↓
-Entities / Controllers (EntityDataManager SoA data; state-scoped controllers)
+Entities / Controllers (entity types/handles; state-scoped controllers)
 
 Cross-cutting layers (used by the above): Utils, Events, AI, Collisions, World, GPU
 ```
 
+Note: `GameStateManager` lives under `managers/` but is state-stack
+infrastructure, not a domain manager (docs/ARCHITECTURE.md). `EntityDataManager`
+and its data-type module `EntityDataTypes.hpp` live under `managers/`.
+
 At time of writing the live top-level set is `{core, managers, controllers,
 gameStates, entities, events, ai, collisions, utils, world, gpu}` (11 layers).
 
-## Per-Layer Rules
+## Per-Layer Rules (as enforced by `detect_layer_violations.py`)
 
-**1. Core Layer** (`src/core/`, `include/core/`)
-- **Can depend on:** Nothing (foundation layer)
-- **Used by:** Everything
-- **Components:** GameEngine, ThreadSystem, Logger, TimestepManager, WorkerBudget
+The script's `layer_rules` table is authoritative; this mirrors it.
+Same-layer includes are always allowed (except state→state). Bare includes
+(`"Event.hpp"`) are classified by the including header's directory.
 
-**2. Managers Layer** (`src/managers/`, `include/managers/`)
-- **Can depend on:** Core, Utils
-- **Cannot depend on:** States, Entities (except via interfaces)
-- **Coupling:** Managers should be loosely coupled, communicate via GameEngine
-- **Components:** AIManager, CollisionManager, PathfinderManager, EventManager, etc.
+| Layer (dir) | May include | Notes |
+|-------------|-------------|-------|
+| Core (`core/`) | nothing | Approved bend: `GameEngine.hpp → GameStateManager.hpp` |
+| Utils (`utils/`) | nothing | Approved bend: `BinarySerializer.hpp → Logger.hpp` |
+| Managers (`managers/`) | Core, Utils, Events, AI, Entities, Collisions, World, GPU | Never GameStates or Controllers. Approved bend: `GameStateManager.hpp → GameState.hpp` |
+| Controllers (`controllers/`) | Core, Utils, Managers, Events, AI, Entities, Collisions, World, GPU | Never GameStates (state-scoped via `ControllerRegistry`) |
+| GameStates (`gameStates/`) | everything except other states | `GameState.hpp` base include is allowed |
+| Entities (`entities/`) | Core, Utils, Events | |
+| AI (`ai/`) | Core, Utils, Events | Approved: `BehaviorExecutors.hpp → EventManager.hpp`, `→ EntityDataTypes.hpp` |
+| Events (`events/`) | Core, Utils | |
+| Collisions (`collisions/`) | Core, Utils | |
+| World (`world/`) | Core, Utils, Events | |
+| GPU (`gpu/`) | Core, Utils, Events | |
 
-**3. States Layer** (`src/gameStates/`, `include/gameStates/`)
-- **Can depend on:** Core, Managers, Controllers, Utils
-- **Cannot depend on:** Other States (no cross-state dependencies)
-- **Components:** GameState, MainMenuState, GamePlayState, PauseState, etc.
-
-**4. Entities Layer** (`src/entities/`, `include/entities/`)
-- **Can depend on:** Core, Utils
-- **Should avoid:** Direct manager dependencies (use interfaces/callbacks)
-- **Components:** Entity, Component classes
-
-**5. Utils Layer** (`src/utils/`, `include/utils/`)
-- **Can depend on:** Nothing (pure utility functions)
-- **Used by:** Everything
-- **Components:** Vector2D, SIMDMath, JsonReader, BinarySerializer, Camera
-
-**6. Controllers Layer** (`src/controllers/`, `include/controllers/`)
-- **Can depend on:** Core, Utils, Managers, Entities, Events, World, GPU, AI, Collisions
-- **Cannot depend on:** States (controllers are state-scoped via ControllerRegistry)
-- **Components:** ControllerRegistry, CombatController, HudController, WeatherController, etc. (under `combat/`, `social/`, `world/`, `render/`, `ui/`)
-
-**7. GPU Layer** (`src/gpu/`, `include/gpu/`)
-- **Can depend on:** Core, Utils, Events
-- **Components:** GPUDevice, GPURenderer, GPUShaderManager, SpriteBatch, GPUVertexPool, etc.
-
-> Additional cross-cutting layers exist: `ai/`, `events/`, `collisions/`, `world/`.
-> The helper scripts classify every directory automatically.
+**Lightweight cross-cutting headers** (any layer may include; stdlib-only
+enum/tag/value types filed under a domain dir): `EntityHandle.hpp`,
+`TriggerTag.hpp`, `Season.hpp`, `ParticleEffectType.hpp`, `SparseSidecar.hpp`,
+`EventTypeId.hpp`, `FactionStance.hpp`. Extend `LIGHTWEIGHT_CROSS_CUTTING_HEADERS`
+in the script only for genuinely dependency-free type headers.
 
 ## Coupling Rules
 
-### Game Engine Functional Coupling
+- **Always bad:** circular includes; managers/controllers including states;
+  state→state includes.
+- **Usually fine:** functional manager→manager coupling (systems must
+  interact), managers → `EventManager`, anything → `EntityDataManager` /
+  `EntityDataTypes` (EDM is the SoA data hub). High reference counts between
+  allowlisted pairs are expected — don't recommend refactoring them.
+- **Worth flagging:** heavy headers included from `.hpp` where a forward
+  declaration would do; non-allowlisted tight coupling (>10 refs in the `.cpp`)
+  with no clear functional reason.
 
-Game engines have **necessary functional dependencies** between managers. The
-following patterns are **CORRECT and expected**:
-
-✅ **Functional Game System Dependencies (GOOD):**
-- AIManager → CollisionManager (AI needs collision queries for obstacle avoidance, LOS)
-- AIManager → PathfinderManager (AI needs pathfinding for navigation)
-- CollisionManager → WorldManager (collision needs world geometry/tile data)
-- Managers → EventManager (event-driven notifications are good architecture)
-- UIManager → FontManager (UI needs fonts to render text)
-- WorldManager → TextureManager (world needs tile/sprite textures)
-- WorldManager → WorldResourceManager (world registers resource nodes in the spatial index)
-- ResourceFactory → ResourceTemplateManager (factory pattern requires templates)
-- EntityDataManager → WorldResourceManager (EDM auto-registers static entities with WRM spatial index on create/destroy — intentional, .cpp-only)
-- ResourceTemplateManager ↔ ResourceFactory (.cpp-only bidirectional: RTM initializes/uses RF; RF calls RTM.generateHandle() — no circular headers)
-
-✅ **Approved Layer Exceptions (do not flag):**
-- BinarySerializer.hpp (Utils) includes Logger.hpp (Core) — Logger is a foundational utility used at all layers; this is not a true violation
-
-**Manager-to-Manager Rules:**
-- ✅ GOOD: Functional dependencies for game systems
-- ✅ GOOD: Event-based communication between managers
-- 🔴 FORBIDDEN: Circular Manager dependencies (breaks compilation)
-- 🔴 FORBIDDEN: Managers depending on States (violates layer boundaries)
-
-**What Actually Matters:**
-- **Circular dependencies:** 🔴 ALWAYS BAD (breaks compilation)
-- **Layer violations:** 🔴 ALWAYS BAD (breaks architecture)
-- **Tight coupling:** ✅ OFTEN NECESSARY for game systems to work together
-- **High reference counts:** ✅ EXPECTED when systems interact functionally
-
-**State-to-Manager:**
-- ✅ GOOD: GamePlayState → AIManager (states use managers)
-- 🔴 FORBIDDEN: AIManager → GamePlayState (managers don't know about states)
-
-**Header Inclusion:**
-- ✅ GOOD: Forward declarations in headers, include in .cpp
-- ⚠️  WARNING: Including heavy headers in .hpp (ripple effect)
-- 🔴 FORBIDDEN: Circular includes (breaks compilation)
+Non-obvious allowlisted pairs and why:
+- EntityDataManager → WorldResourceManager: EDM auto-registers static entities
+  with the WRM spatial index on create/destroy (.cpp-only).
+- EntityDataManager → AIManager: `createNPCWithRaceClass` auto-registers
+  classes.json suggestedBehavior via `AIManager::registerEntity` (CLAUDE.md,
+  "EDM, AI, and Controllers" — do not add more policy there).
+- ResourceTemplateManager ↔ ResourceFactory: .cpp-only bidirectional use, no
+  circular headers.
+- `Season` / `ParticleEffectType` / `UIConstants`: single-enum/constant headers
+  filed under `managers/`, not peer managers.
 
 ### Functional Dependency Allowlist (used by analyze_coupling.py)
 
@@ -115,42 +90,35 @@ These pairs are treated as expected and NOT flagged as problematic tight couplin
 
 ```
 AIManager->CollisionManager        AIManager->PathfinderManager
+AIManager->EventManager            AIManager->EntityDataManager
 CollisionManager->WorldManager     CollisionManager->EventManager
+CollisionManager->EntityDataManager
 WorldManager->EventManager         WorldManager->WorldResourceManager
-WorldManager->TextureManager       UIManager->FontManager
-UIManager->UIConstants             InputManager->UIManager
-InputManager->FontManager          PathfinderManager->EventManager
-ParticleManager->EventManager      ResourceFactory->ResourceTemplateManager
+WorldManager->TextureManager       WorldManager->Season
+UIManager->FontManager             UIManager->UIConstants
+InputManager->UIManager            InputManager->FontManager
+PathfinderManager->EventManager    ParticleManager->EventManager
+ParticleManager->ParticleEffectType
+GameTimeManager->EventManager      GameTimeManager->Season
+ResourceFactory->ResourceTemplateManager
 ResourceTemplateManager->ResourceFactory
-WorldResourceManager->EventManager EntityDataManager->WorldResourceManager
+WorldResourceManager->EventManager
+EntityDataManager->WorldResourceManager
+EntityDataManager->ResourceTemplateManager
+EntityDataManager->AIManager
+BackgroundSimulationManager->EntityDataManager
 ```
+The script (`functional_deps` in `analyze_coupling.py`) is authoritative.
 
-## Common Dependency Issues in VoidLight-Framework
+## Common Issues → Fix
 
-### Issue 1: Manager Circular Dependencies
-**Symptom:** Compilation errors with forward declaration issues
-**Cause:** Two managers including each other's headers
-**Solution:** One-way dependency with interface or event system
-
-### Issue 2: State-to-State Dependencies
-**Symptom:** States including other state headers
-**Cause:** Sharing data/logic between states
-**Solution:** Move shared logic to Manager or GameEngine
-
-### Issue 3: GameEngine.hpp Bloat
-**Symptom:** Long compile times for any GameEngine change
-**Cause:** GameEngine includes all managers in header
-**Solution:** Forward declarations + includes in .cpp
-
-### Issue 4: Layer Violations
-**Symptom:** Manager includes State header
-**Cause:** Manager needs state-specific logic
-**Solution:** Dependency inversion - state registers callback with manager
-
-### Issue 5: Utils Dependencies
-**Symptom:** Utils including Core or Manager headers
-**Cause:** Utils trying to use engine-specific types
-**Solution:** Make Utils pure (STL only), or move to appropriate layer
+| Symptom | Usual cause | Fix |
+|---------|-------------|-----|
+| Incomplete-type / include-order compile errors | Two headers include each other | Forward-declare one side; include in `.cpp` |
+| State includes another state | Shared logic between screens | Move it to a manager service or utility |
+| Manager includes a state header | Manager needs screen policy | Invert: state calls the manager (states drive, managers serve) |
+| Utils/Core header pulls in engine types | Type filed in the wrong layer | Move the type down, or split a lightweight type header |
+| Widely-included heavy header | Implementation types leaking into `.hpp` | Split data types out (as `EntityDataTypes.hpp` was) / forward-declare |
 
 ## Circular Dependency Fix Patterns
 

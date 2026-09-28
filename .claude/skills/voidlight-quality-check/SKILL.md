@@ -1,87 +1,90 @@
 ---
 name: voidlight-quality-check
-description: Runs comprehensive code quality checks for SDL3 VoidLight-Framework including compilation warnings, static analysis (cppcheck, clang-tidy), coding standards validation, threading safety verification, and architecture compliance. Use before commits, pull requests, or when the user wants to verify code meets project quality standards.
+description: Runs VoidLight-Framework quality checks - focused cppcheck and clang-tidy plus grep-based standards, threading, and architecture checks against the CLAUDE.md rules. Use when the user asks for a quality, standards, architecture, or cppcheck/clang-tidy pass, or when a branch is ready for merge/PR. Branch/PR gate - not for per-change or slice-complete checks.
 allowed-tools: [Bash, Read, Grep]
 ---
 
-# VoidLight-Framework Code Quality Gate
+# VoidLight-Framework Code Quality Check
 
-Enforces SDL3 VoidLight-Framework quality standards from `CLAUDE.md`. Catches issues before they reach version control: compilation warnings, static analysis, coding standards, threading safety, and architecture compliance.
+Enforces the rules in root `CLAUDE.md` plus the nested `CLAUDE.md` files for touched paths (`include/ai`, `src/ai`, `include/managers`, `src/managers`, `include/controllers/ui`, `src/controllers/ui`, `tests`, `tests/ai`, `tests/managers`). On conflict, CLAUDE.md wins over this skill.
 
-This SKILL.md is the lean playbook. The detailed material is loaded on demand from `references/`:
+Load references only when needed:
 
-- **`references/checks.md`** — the full numbered check catalog (detection commands, forbidden-pattern examples, quality gates), the Quality Report Format, exit codes, severity classification, and the git-hook appendix.
-- **`references/standards.md`** — coding-standard rules mirrored from CLAUDE.md (naming, formatting) plus the Quick Fix Guide for the 20 most common violations.
+- **`references/checks.md`** — read before running sections 1–2 and 4–7 (commands, per-check severity, report format, exit codes).
+- **`references/standards.md`** — read for section 3 (naming/formatting/API greps) or when writing fixes (Quick Fix Guide).
+
+## Gate Positioning
+
+Gates are defined in `docs/framework-implementation-slices.md` — do not mix them:
+
+| Gate | What runs | This skill |
+|------|-----------|------------|
+| Per-change | targeted `ninja -C build` + named Boost.Test executable | Not this skill (grep checks on the touched files are fine if asked) |
+| Slice complete | `ninja -C build` + Boost.Test executables for the slice | Not this skill |
+| Slice review | review specialist on the slice diff | grep/architecture checks may support the review |
+| **Branch / PR** | `run_all_tests.sh --core-only --errors-only`, cppcheck, clang-tidy, ASan, TSan | **cppcheck + clang-tidy live here** |
+
+Do not add builds, the core-only suite, sanitizers, or full (unfocused) analyzer passes unless the user asks. If the user names a file, stay there unless a finding requires tracing a dependency.
 
 ## When to Use
 
-Activate automatically when the user says things like: "check code quality", "run quality gate", "verify my code before commit", "make sure code follows standards", or "check for threading violations". Also use before every commit, during PR review, after merging, and when adding new systems.
+"check code quality", "run the quality gate", "cppcheck/clang-tidy pass", "check standards/architecture/threading", or the branch is ready for PR. Also useful as a targeted grep pass while reviewing a diff.
 
 ## Check Categories
 
-Run in order. Each item is detailed in `references/checks.md` (section 3 in `references/standards.md`).
+Each item is detailed in `references/checks.md` (section 3 in `references/standards.md`).
 
-1. **Compilation Quality** — zero-warning policy; build and grep for warning/unused/error.
-2. **Static Analysis**
-   - 2.1 **cppcheck** — memory leaks, null derefs, buffer overflows, uninitialized vars.
-   - 2.2 **clang-tidy** — bug/modernize/performance checks; gated on availability (optional tool).
-3. **Coding Standards** — naming (UpperCamelCase / lowerCamelCase / `m_` / `mp_` / ALL_CAPS), 4-space Allman formatting. See `references/standards.md`.
-4. **Threading Safety (CRITICAL)** — no static vars in threaded code (4.1), no raw `std::thread` (4.2), mutex protection on managers (4.3).
-5. **Architecture Compliance (5.1–5.19)**
-   - 5.1 GPU frame-lifecycle ownership — no `endFrame`/`present`/submit from GameStates.
-   - 5.2 RAII & smart pointers — minimal raw `new`/`delete`.
+1. **Compilation Quality** — zero-warning policy (uses an existing build; only build if asked).
+2. **Static Analysis (Branch/PR gate)** — 2.1 focused cppcheck, 2.2 focused clang-tidy.
+3. **Coding Standards** — naming, 4-space Allman, C++ API rules (no raw-pointer ownership / nullable raw pointers, no C-strings / raw arrays, unused params unnamed). See `references/standards.md`.
+4. **Threading Safety (CRITICAL)** — 4.1 no non-`thread_local` static state in threaded code, 4.2 `ThreadSystem` + `WorkerBudget` only (no raw threads / private pools / thread-count heuristics), 4.3 synchronization matches actual thread ownership.
+5. **Architecture Compliance (5.1–5.20)**
+   - 5.1 GPU frame lifecycle — one present per frame; no clear/end/submit/present from GameStates.
+   - 5.2 RAII & ownership — no raw `new`/`delete`, no raw-pointer ownership.
    - 5.3 Smart-pointer performance — no `shared_ptr` copies/captures in hot paths.
-   - 5.4 String parameters — no `string_view`→`string` conversion for map lookups.
+   - 5.4 String parameters — no `string_view`→`string` churn for map lookups.
    - 5.5 Logger usage — `std::format`, `*_IF` macros, `VOIDLIGHT_DEBUG_ONLY` (never raw `#ifdef DEBUG`).
    - 5.6 Buffer reuse — no per-frame allocations; `reserve()` when size known.
-   - 5.7 UI positioning — `setComponentPositioning()` after every create.
-   - 5.8 Rendering rules — deferred transitions; `LoadingState` for async loads.
-   - 5.9 Singleton access — no cached `mp_*` pointers; cache locals when multi-use.
-   - 5.10 Controller access — no cached `mp_*Ctrl`; cache when multi-use.
-   - 5.11 Behavior entity state — per-entity state in EDM, not behavior members.
-   - 5.12 Controller→AI boundary — behavior messages, not direct EDM mutation.
-   - 5.13 State-transition completeness — all 11 managers in correct order, both exit paths.
+   - 5.7 UI positioning — `setComponentPositioning()` after create; controllers use `UIManager` sizing APIs.
+   - 5.8 Rendering/transition rules — deferred transitions; `LoadingState` for async loads.
+   - 5.9 Singleton access — no cached manager `mp_*` members; local references.
+   - 5.10 Controller access — `m_controllers.add<T>()` in `enter()`, no cached `mp_*Ctrl`.
+   - 5.11 Behavior per-entity state — lives in EDM behavior state, not behavior-file globals.
+   - 5.12 Controller→AI boundary — behavior messages, not direct EDM behavior mutation.
+   - 5.13 State-transition completeness — 11-manager order, both exit paths, `ControllerRegistry::clear()`.
    - 5.14 Thread-local capacity — `clear()`, never `swap`/return-by-value.
-   - 5.15 World-lifecycle cleanup — world-scoped caches cleared on unload.
-   - 5.16 Second source of truth (WARNING) — cross-frame per-entity state belongs in EDM.
-   - 5.17 Render-controller lifecycle (WARNING) — render controllers don't own teardown.
-   - 5.18 Event-contract bypass (WARNING) — new writers fire established events.
-   - 5.19 EDM policy creep (WARNING) — EDM is state, not policy/thresholds.
-6. **Copyright & Legal** — MIT header on every source file.
-7. **Test Coverage** — new managers have a test file + script wired into `run_all_tests.sh`.
-
-For the full check catalog with commands and fixes, read `references/checks.md`. For coding-standard rules and the Quick Fix Guide, read `references/standards.md`.
+   - 5.15 World-lifecycle cleanup — world caches cleared by transition cleanup or unload.
+   - 5.16 Second source of truth (WARNING).
+   - 5.17 Render-controller lifecycle (WARNING).
+   - 5.18 Event-contract bypass (WARNING).
+   - 5.19 EDM policy creep (WARNING).
+   - 5.20 Event handler & collision-callback ownership — persistent vs transient handlers.
+6. **Copyright** — project MIT header on every source file.
+7. **Test Coverage** — behavior changes ship with focused Boost.Test coverage.
 
 ## Core Workflow
 
-All commands run from `$PROJECT_ROOT/`.
+All commands run from the repo root.
 
-1. **Build and scan warnings:**
+1. `git status --short` so pre-existing dirty files are not mistaken for new findings.
+2. **Warnings** (existing build log or an incremental build if asked): `ninja -C build 2>&1 | grep -E "warning|error" | head -n 100`
+3. **Static analysis (Branch/PR gate)** — read `tests/cppcheck/README.md` and `tests/clang-tidy/README.md`, then run only the focused scripts:
    ```bash
-   ninja -C build -v 2>&1 | grep -E "(warning|unused|error)" | head -n 100
+   tests/cppcheck/cppcheck_focused.sh
+   tests/clang-tidy/clang_tidy_focused.sh
    ```
-2. **cppcheck:**
-   ```bash
-   ./tests/cppcheck/cppcheck_focused.sh \
-     || cppcheck --enable=all --suppress=missingIncludeSystem --std=c++20 --quiet src/ include/ 2>&1
-   ```
-3. **clang-tidy (gated — optional tool, may not be installed):**
-   ```bash
-   command -v clang-tidy >/dev/null 2>&1 && ./tests/clang-tidy/clang_tidy_focused.sh \
-     || echo "clang-tidy not installed — skipping (cppcheck still covers static analysis)"
-   ```
-4. **Standards + threading + architecture greps:** run the per-check detection commands from `references/checks.md` (sections 3–5) and `references/standards.md` (section 3). These are fast (~5–10s total). Each section gives its detection command, forbidden patterns, and quality gate. Several use runtime discovery (e.g. grep behavior headers under `include/ai/`, AI-enabled states under `src/gameStates/`) — run those greps, do not hardcode names.
-5. **Copyright + test coverage:** sections 6–7 of `references/checks.md`.
-6. **Report:** produce the report using the Quality Report Format in `references/checks.md`, classify findings by severity (BLOCKING / WARNING / INFO), and set the exit code from the Exit Codes table.
+   Focused cppcheck uses `tests/cppcheck/cppcheck_lib.cfg` + `tests/cppcheck/cppcheck_suppressions.txt` — do not substitute the full `run_cppcheck.sh` / `run_clang_tidy.sh` wrappers or a raw `cppcheck src/ include/` invocation. clang-tidy needs `compile_commands.json` (from `cmake -B build/ ...`) and uses `tests/clang-tidy/.clang-tidy` + `clang_tidy_suppressions.txt`. If a tool is missing or the compile DB is stale, report the blocker instead of improvising.
+4. **Standards / threading / architecture greps** — sections 3–5 of the references (~5–10s). Grep hits are candidates, not verdicts: open the code before reporting. Use runtime discovery (states under `src/gameStates/`, behaviors under `src/ai/behaviors/`); do not hardcode names.
+5. **Copyright + test coverage** — sections 6–7 of `references/checks.md`.
+6. **Triage** — classify each finding as real issue, false positive, tooling, or pre-existing. Check `docs/review-non-issues.md` before raising anything; do not re-flag adjudicated items. Never hide a production failure in tests.
+7. **Report** — Quality Report Format in `references/checks.md`, severity BLOCKING / WARNING / INFO. If fixes are requested: minimal scoped fixes, production + tests together when behavior changes, then re-run the analyzer that reported the issue.
 
 ## Quality Gates (summary)
 
-- **BLOCKING (must fix):** static vars in threaded code; per-entity state in behavior members; `shared_ptr` copies in hot paths; per-frame allocations; duplicate `Instance()` / cached `mp_*` in GameStates; frame end/present/submit from GameStates; controller→AI direct mutation; missing managers in the 11-manager transition order (both exit paths); thread-local `swap`/return-by-value; world caches surviving unload; compile errors; critical cppcheck/clang-tidy; missing copyright headers.
-- **WARNING (should fix):** second source of truth; render-controller teardown; event-contract bypass; EDM policy creep; compile warnings; naming violations; missing tests; string concat in logs; missing `*_IF` macros; missing UI positioning; missing `reserve()`.
+- **BLOCKING:** non-`thread_local` static state in threaded code; raw threads / bypassing `WorkerBudget`; behavior per-entity state outside EDM; `shared_ptr` copies in hot paths; per-frame allocations; cached manager/controller `mp_*` members in GameStates; clear/end/submit/present from GameStates; controller→AI direct mutation; missing managers in the 11-manager transition order (both exit paths); thread-local `swap`/return-by-value; world caches surviving transition/unload; raw-pointer ownership; compile errors; critical cppcheck/clang-tidy; missing copyright headers.
+- **WARNING:** second source of truth; render-controller teardown; event-contract bypass; EDM policy creep; handler registered in the wrong lifetime; compile warnings; naming; missing tests; log string concat; missing `*_IF`; missing UI positioning; missing `reserve()`; nullable raw-pointer params/returns; C-string / raw-array APIs.
 - **INFO:** style, perf hints, organization.
-
-Full severity classification: `references/checks.md`. Per-violation Quick Fix Guide: `references/standards.md`.
 
 ## Performance Expectations
 
-Compilation ~10–30s · cppcheck ~30–60s · clang-tidy ~60–120s · grep checks ~5–10s · total ~2–4 min.
+grep checks ~5–10s · cppcheck focused ~30–60s · clang-tidy focused several minutes (scales with `src/` size).

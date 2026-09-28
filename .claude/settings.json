@@ -1,4 +1,20 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(ninja -C build)",
+      "Bash(ninja -C build *)",
+      "Bash(cmake -B build/ *)",
+      "Bash(./bin/debug/*)",
+      "Bash(./bin/release/*)",
+      "Bash(./tests/test_scripts/*)",
+      "Bash(tests/cppcheck/cppcheck_focused.sh)",
+      "Bash(tests/clang-tidy/clang_tidy_focused.sh)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)"
+    ]
+  },
   "enabledPlugins": {
     "clangd-lsp@claude-plugins-official": true
   }
