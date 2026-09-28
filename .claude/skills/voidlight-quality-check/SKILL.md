@@ -6,7 +6,7 @@ allowed-tools: [Bash, Read, Grep]
 
 # VoidLight-Framework Code Quality Check
 
-Enforces the rules in root `CLAUDE.md` plus the nested `CLAUDE.md` files for touched paths (`include/ai`, `src/ai`, `include/managers`, `src/managers`, `include/controllers/ui`, `src/controllers/ui`, `tests`, `tests/ai`, `tests/managers`). On conflict, CLAUDE.md wins over this skill.
+Enforces the rules in root `CLAUDE.md` plus the `.claude/rules/` file for each touched path (see the "Path Rules" table in `CLAUDE.md`). On conflict, those rules win over this skill.
 
 Load references only when needed:
 

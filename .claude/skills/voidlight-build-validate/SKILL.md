@@ -71,7 +71,7 @@ point to the most targeted repro first:
 ./tests/test_scripts/run_<system>_tests.sh --verbose
 ```
 
-Classify failures per `tests/CLAUDE.md` (production bug, test setup, stale expectation,
+Classify failures per `.claude/rules/tests.md` (production bug, test setup, stale expectation,
 environment, pre-existing). Never relax expectations to get green.
 
 ## Step 4 — Report

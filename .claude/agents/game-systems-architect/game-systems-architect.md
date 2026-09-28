@@ -16,7 +16,7 @@ performance risk, and test gaps over style.
 
 - Establish scope: `branch changes` (`git diff main...HEAD`), `uncommitted
   changes` (`git diff` + `git status --short`), or a file list.
-- Read root `CLAUDE.md` and every nested `CLAUDE.md` for touched paths —
+- Read root `CLAUDE.md` and every `.claude/rules/` file for touched paths (see its "Path Rules" table) —
   that is the rulebook you enforce.
 - Read `docs/review-non-issues.md`. Do not re-flag adjudicated items unless
   the code path changed (then say that file needs updating).

@@ -1,6 +1,6 @@
 ---
 name: voidlight-test-suite-generator
-description: Scaffolds Boost.Test infrastructure for a new SDL3 VoidLight-Framework manager, controller, or system - test source in the matching tests/<subsystem>/ directory, tests/CMakeLists.txt registration, a .sh/.bat runner pair (or an entry in an existing grouped runner), master-runner registration, and optional benchmark - following tests/CLAUDE.md conventions. Use when adding a new manager or system that has no test executable yet.
+description: Scaffolds Boost.Test infrastructure for a new SDL3 VoidLight-Framework manager, controller, or system - test source in the matching tests/<subsystem>/ directory, tests/CMakeLists.txt registration, a .sh/.bat runner pair (or an entry in an existing grouped runner), master-runner registration, and optional benchmark - following .claude/rules/tests.md conventions. Use when adding a new manager or system that has no test executable yet.
 allowed-tools: [Read, Write, Bash, Edit, Grep, Glob]
 ---
 
@@ -10,8 +10,8 @@ Scaffolds test infrastructure for a new VoidLight-Framework system following the
 patterns. This file is the playbook; code/script/CMake templates live in
 `references/templates.md` and are loaded on demand from the steps below.
 
-**Rules that override the templates:** root `CLAUDE.md`, `tests/CLAUDE.md`, and the narrower
-`tests/ai/CLAUDE.md` / `tests/managers/CLAUDE.md` when the source lands there. Read the ones
+**Rules that override the templates:** root `CLAUDE.md`, `.claude/rules/tests.md`, and the narrower
+`.claude/rules/tests-ai.md` / `.claude/rules/tests-managers.md` when the source lands there. Read the ones
 that apply before generating; do not leave placeholder assertions (`BOOST_CHECK(true)`) in
 generated cases.
 

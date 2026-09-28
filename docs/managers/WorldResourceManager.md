@@ -103,4 +103,4 @@ WRM should be described as a fast lookup/indexing layer:
 
 ## State Transition Notes
 
-AI-heavy `exit()` unloads the world **before** WRM `prepareForStateTransition()` (GamePlay: destroy NPCs → AI/projectile/BSM/World prepare → `unloadWorld()` → then WRM prepare). WRM is an index; it is not cleared “before world teardown.” See `AGENTS.md` and `GamePlayState::exit()`.
+AI-heavy `exit()` unloads the world **before** WRM `prepareForStateTransition()` (GamePlay: destroy NPCs → AI/projectile/BSM/World prepare → `unloadWorld()` → then WRM prepare). WRM is an index; it is not cleared “before world teardown.” See `CLAUDE.md` and `GamePlayState::exit()`.

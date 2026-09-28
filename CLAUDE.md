@@ -4,17 +4,27 @@ Repo agent instructions. Match existing subsystem patterns, fix root causes, and
 
 ## Instruction Order
 
-Explicit user instructions → this file → nested `CLAUDE.md` for touched
-paths (deeper wins) → existing subsystem patterns → general style. If the
-user names a specific file, stay in it unless they approve spillover.
+Explicit user instructions → this file → the path rule for the files you
+touch → existing subsystem patterns → general style. If the user names a
+specific file, stay in it unless they approve spillover.
 
-Nested `CLAUDE.md` files load on demand when Claude reads files in their
-subtree; read the matching one before editing there: `include/ai`,
-`src/ai`, `include/controllers/ui`, `src/controllers/ui`,
-`include/managers`, `src/managers`, `tests`, `tests/ai`, `tests/managers`.
-Path-scoped quick references live in `.claude/rules/` (EDM/AI, SIMD). Keep
-this file durable and repo-wide; put subtree-only rules in the subtree's
-`CLAUDE.md`.
+## Path Rules (read before editing)
+
+Subsystem rules live in `.claude/rules/`. They auto-load only when a
+matching file is opened with Read, so **before editing or creating a file
+in these paths, Read the listed rule file if it is not already in
+context** (this also applies to subagents and to edits made via Bash):
+
+| Paths | Rule file |
+| --- | --- |
+| `include/ai/`, `src/ai/`, `*Behavior*`, `*AIManager*` | `.claude/rules/ai.md` |
+| `include/managers/`, `src/managers/`, `include/world/`, `src/world/` | `.claude/rules/managers.md` |
+| `include/controllers/ui/`, `src/controllers/ui/` | `.claude/rules/ui-controllers.md` |
+| `tests/` | `.claude/rules/tests.md` (+ `tests-ai.md` / `tests-managers.md` for AI and manager/EDM tests) |
+| `*SIMD*` | `.claude/rules/simd.md` |
+
+Keep this file repo-wide and under 200 lines; put subsystem-only rules in
+the matching rule file, and never duplicate a rule across files.
 
 ## Project Stance
 
@@ -69,35 +79,14 @@ cmake -B build/ -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-D_GLIBCXX_
 export TSAN_OPTIONS="suppressions=$(pwd)/tests/tsan_suppressions.txt"
 ```
 
-Reconfigure:
+Run / test:
 
 ```bash
-rm build/CMakeCache.txt && cmake -B build/ ...
-```
-
-Run:
-
-```bash
-./bin/debug/VoidLight_Template
-./bin/release/VoidLight_Template
-```
-
-Tests:
-
-```bash
+ninja -C build app                  # app only, no tests
+./bin/debug/VoidLight_Template      # or ./bin/release/
 ./bin/debug/<test_executable>
 ./bin/debug/<test_executable> --list_content
 ./bin/debug/<test_executable> --run_test="TestCase*"
-./bin/debug/entity_data_manager_tests
-./bin/debug/ai_manager_edm_integration_tests
-./bin/debug/behavior_functionality_tests --run_test="FleeFromAttacker*"
-```
-
-Slow scripts:
-
-```bash
-./tests/test_scripts/run_all_tests.sh --core-only --errors-only  # branch/PR gate
-./tests/test_scripts/run_controller_tests.sh --verbose
 ```
 
 Slice / local gates (see `docs/framework-implementation-slices.md`):
@@ -107,13 +96,7 @@ Slice / local gates (see `docs/framework-implementation-slices.md`):
 - **Slice review:** **game-systems-architect** before committing the slice.
 - **Branch / PR** (not each commit or slice completion): `./tests/test_scripts/run_all_tests.sh --core-only --errors-only`; cppcheck, clang-tidy, ASan, TSan. Sanitizers are mutually exclusive.
 
-Boost.Test notes:
-
-- Test names use the `BOOST_AUTO_TEST_CASE` name directly.
-- Suite prefixes are optional.
-- Use `--list_content` to confirm the exact test name before filtering.
-
-See `tests/TESTING.md` for broader test documentation.
+Boost.Test names are the `BOOST_AUTO_TEST_CASE` name (suite prefix optional); confirm with `--list_content`. Broader test docs: `tests/TESTING.md`.
 
 ## Repo Map
 
@@ -121,7 +104,7 @@ See `tests/TESTING.md` for broader test documentation.
 - Headers mirror source under `include/`
 - Other important dirs: `tests/`, `docs/`, `res/`, `res/shaders/`
 - Slice implementation workflow and gates: `docs/framework-implementation-slices.md`.
-- Claude agents, skills, and path rules: `.claude/agents/`, `.claude/skills/`, `.claude/rules/` (routing: "Specialist Routing" above).
+- Claude agents, skills, and path rules: `.claude/agents/`, `.claude/skills/`, `.claude/rules/`.
 - Dependency direction: `Core -> Managers -> GameStates -> Entities/Controllers`
 - **Managers serve the states:** states own screen lifecycle and policy; domain managers provide services states call. `GameStateManager` is state-stack infrastructure (not a domain manager). Full-screen transitions use exit-then-enter; UI is cleared in the transition and rebuilt in `enter()`. See `docs/ARCHITECTURE.md`.
 - Common architectural anchors: `GameEngine`, `ThreadSystem`, `EntityDataManager`, `AIManager`, `EventManager`, `ControllerRegistry`, `GPURenderer`, `GPUSceneRecorder`, `SpriteBatch`

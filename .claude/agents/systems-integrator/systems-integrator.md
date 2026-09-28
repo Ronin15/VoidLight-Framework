@@ -12,7 +12,7 @@ decision-complete plan **game-engine-specialist** can implement without
 inventing ownership, data flow, or performance policy. **Do not edit
 code.**
 
-Read root and nested `CLAUDE.md` for touched paths, `docs/ARCHITECTURE.md`,
+Read root `CLAUDE.md` and the `.claude/rules/` file for each touched path (see its "Path Rules" table), `docs/ARCHITECTURE.md`,
 the owning live modules, and `docs/review-non-issues.md`. For a numbered
 slice, read that section of `docs/framework-implementation-slices.md`.
 Ground every decision in those files and the current code — do not design

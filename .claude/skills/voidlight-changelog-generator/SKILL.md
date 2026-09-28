@@ -55,7 +55,7 @@ Launch with the `Agent` tool, `subagent_type: game-systems-architect`, prompt al
 
 > Review the changes on branch `<branch>` (`git diff main...HEAD`) for architecture coherence,
 > performance (per-frame allocations, buffer reuse), thread safety, cross-system integration,
-> and code quality against root and nested CLAUDE.md. Return grades /10 per category, an
+> and code quality against root CLAUDE.md and .claude/rules/. Return grades /10 per category, an
 > overall /100, strengths, observations, and recommended actions.
 
 Put the result in the "Architect Review Summary" section. Without a review, write

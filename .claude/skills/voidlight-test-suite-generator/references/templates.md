@@ -2,7 +2,7 @@
 
 Detail file for the `voidlight-test-suite-generator` Skill. Load on demand when a step in
 `SKILL.md` points here. The live repo pattern discovered in Step 1 wins over these snippets, and
-root `CLAUDE.md` + `tests/CLAUDE.md` (+ `tests/ai/CLAUDE.md` / `tests/managers/CLAUDE.md`) win
+root `CLAUDE.md` + `.claude/rules/tests.md` (+ `.claude/rules/tests-ai.md` / `.claude/rules/tests-managers.md`) win
 over both.
 
 **Substitutions:**
@@ -140,7 +140,7 @@ per-suite fixture that inits exactly the managers the path needs with `BOOST_REQ
 up in reverse order → `BOOST_FIXTURE_TEST_SUITE` groups by contract.
 
 Fixture scope, determinism, event-wiring, and "don't override production state" rules come
-from `tests/CLAUDE.md` — apply them; they are not repeated here.
+from `.claude/rules/tests.md` — apply them; they are not repeated here.
 
 ```cpp
 /* Copyright (c) 2025 Hammer Forged Games

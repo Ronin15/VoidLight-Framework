@@ -1,6 +1,6 @@
 # VoidLight Quality Check — Check Catalog
 
-Detection recipes for each category in `SKILL.md`. Rules themselves live in root `CLAUDE.md` (section names cited per check) and nested `CLAUDE.md` files — read the rule there, not here. Every grep below was validated against the tree; hits are **candidates**, so open the code before reporting. Run from the repo root. `grep` here may be ugrep: use `-E` for groups/alternation.
+Detection recipes for each category in `SKILL.md`. Rules themselves live in root `CLAUDE.md` (section names cited per check) and `.claude/rules/*.md` — read the rule there, not here. Every grep below was validated against the tree; hits are **candidates**, so open the code before reporting. Run from the repo root. `grep` here may be ugrep: use `-E` for groups/alternation.
 
 ## 1. Compilation Quality
 
@@ -36,7 +36,7 @@ Gate: zero CRITICAL, review HIGH.
 
 See `references/standards.md`.
 
-## 4. Threading Safety (CLAUDE.md › Performance and Threading; `src/managers/CLAUDE.md` › Threading)
+## 4. Threading Safety (CLAUDE.md › Performance and Threading; `.claude/rules/managers.md` › Threading)
 
 ### 4.1 Non-thread_local static state
 ```bash
@@ -71,7 +71,7 @@ grep -rnE "\bnew [A-Z]\w*[({]" src/ include/ | grep -vE "^\S+:\s*(//|\*)"
 grep -rnE "\bdelete\b" src/ include/ --include=*.cpp --include=*.hpp | grep -vE "= delete|//|\*"
 grep -rnE "[A-Z]\w*\*\s*\w+\s*=\s*nullptr\s*[,)]" include/        # nullable raw-pointer params
 ```
-Raw-pointer ownership: BLOCKING. New nullable raw-pointer params/returns/out-params: WARNING (existing optional-lookup contracts in `include/managers/CLAUDE.md` excepted). `.get()` belongs only at the final GPU/SDL API boundary.
+Raw-pointer ownership: BLOCKING. New nullable raw-pointer params/returns/out-params: WARNING (existing optional-lookup contracts in `.claude/rules/managers.md` excepted). `.get()` belongs only at the final GPU/SDL API boundary.
 
 ### 5.3 shared_ptr in hot paths
 ```bash
@@ -102,7 +102,7 @@ grep -rn "std::vector<.*>" src/ --include="*.cpp" | grep -E "update|render|proce
 ```
 Local containers or `make_unique/make_shared` in update/render/batch paths → reuse a member (or `thread_local` in worker code) and `clear()`. Missing `reserve()` when size is known is a WARNING. BLOCKING on hot paths.
 
-### 5.7 UI positioning (CLAUDE.md › Rendering, UI, and GameState; `src/controllers/ui/CLAUDE.md`)
+### 5.7 UI positioning (CLAUDE.md › Rendering, UI, and GameState; `.claude/rules/ui-controllers.md`)
 Helpers (`createTitleAtTop`, `createButtonAtBottom`, `createCenteredButton`, `createCenteredDialog`, `create*AtBottomRight`) position themselves. Flag files where plain creates outnumber positioning calls, then eyeball:
 ```bash
 for f in src/gameStates/*.cpp src/controllers/ui/*.cpp; do
@@ -137,7 +137,7 @@ for f in src/gameStates/*.cpp; do awk '/^(void|bool) .*::/{fn=$2; sub(/\(.*/,"",
 ```
 Controllers are added with `m_controllers.add<T>()` in `enter()`; no cached `mp_*Ctrl` (BLOCKING). Cache `*m_controllers.get<T>()` in a local only when used more than once in a scope.
 
-### 5.11 Behavior per-entity state (CLAUDE.md › EDM, AI, and Controllers; `src/ai/CLAUDE.md`)
+### 5.11 Behavior per-entity state (CLAUDE.md › EDM, AI, and Controllers; `.claude/rules/ai.md`)
 Behaviors are `Behaviors::` executor functions in `src/ai/behaviors/*.cpp` taking `BehaviorContext` plus a config and EDM variant state (`include/ai/BehaviorStateData.hpp`, e.g. `GuardStateData`). There is no per-behavior class instance to hold state.
 ```bash
 grep -nE "^\s*(static\s+)?[A-Za-z_:<>]+\s+[gs]_\w+" src/ai/behaviors/*.cpp src/ai/BehaviorExecutors.cpp | grep -v thread_local
@@ -166,7 +166,7 @@ grep -rnE "return (std::move\()?t_\w+\)?;" src/ --include="*.cpp"
 ```
 Collect via `void collect(std::vector<T>& out)` + `t_buf.clear()`. Note `EventManager::enqueueBatch(std::move(m_allDamageEvents))` is an adjudicated non-issue. BLOCKING.
 
-### 5.15 World-lifecycle cleanup (CLAUDE.md › State Transitions and Events; `src/managers/CLAUDE.md` › Lifecycle)
+### 5.15 World-lifecycle cleanup (CLAUDE.md › State Transitions and Events; `.claude/rules/managers.md` › Lifecycle)
 ```bash
 grep -rln "WorldUnloaded\|WorldLoaded" src/managers/ --include="*.cpp"
 grep -rnE "m_\w*(Index|Lookup|Cache)\b" include/managers/ --include="*.hpp"
@@ -175,10 +175,10 @@ World-geometry caches, spatial indices, reverse lookups, and cached EDM indices 
 
 ### 5.16–5.19 Review-only (WARNING)
 No reliable grep; check during diff review.
-- **5.16 Second source of truth** — per-entity state that render, collision, save/load, or the next frame reads must live in EDM, not manager/controller scratch (`src/controllers/ui/CLAUDE.md`: controllers are never a second source of truth). Starting point: `grep -rn "unordered_map<EntityHandle" include/managers/ include/controllers/`.
+- **5.16 Second source of truth** — per-entity state that render, collision, save/load, or the next frame reads must live in EDM, not manager/controller scratch (`.claude/rules/ui-controllers.md`: controllers are never a second source of truth). Starting point: `grep -rn "unordered_map<EntityHandle" include/managers/ include/controllers/`.
 - **5.17 Render-controller lifecycle** — `src/controllers/render/` reads state and emits draws; no `prepareForStateTransition`, manager `clear*`, or unsubscribing others' handlers: `grep -rnE "prepareForStateTransition|unsubscribe|Instance\(\)\.(clear|remove|destroy)" src/controllers/render/`.
 - **5.18 Event-contract bypass** — if existing writers of a field fire an event (UI refresh, log, collision), new writers must fire the same event with the same immediate/deferred dispatch.
-- **5.19 EDM policy creep** — EDM stores facts/state; thresholds, weights, emotion math, and decision policy belong in AI/behavior code (`include/managers/CLAUDE.md` › EntityDataManager Contracts). Starting point: `grep -nE "Threshold|Weight|Multiplier|Tuning|Decision" include/managers/EntityDataManager.hpp`.
+- **5.19 EDM policy creep** — EDM stores facts/state; thresholds, weights, emotion math, and decision policy belong in AI/behavior code (`.claude/rules/managers.md` › EntityDataManager Contracts). Starting point: `grep -nE "Threshold|Weight|Multiplier|Tuning|Decision" include/managers/EntityDataManager.hpp`.
 
 ### 5.20 Event handler & collision-callback ownership (CLAUDE.md › State Transitions and Events)
 ```bash
@@ -194,7 +194,7 @@ find src/ include/ -type f \( -name "*.cpp" -o -name "*.hpp" \) -exec grep -L "C
 ```
 Header text: CLAUDE.md › C++ and APIs. BLOCKING for new files.
 
-## 7. Test Coverage (`tests/CLAUDE.md`)
+## 7. Test Coverage (`.claude/rules/tests.md`)
 
 Behavior changes ship with production + test updates in the same change. New systems: Boost.Test source under the matching `tests/<subsystem>/`, registered in `tests/CMakeLists.txt`, with a runner in `tests/test_scripts/` wired into `run_all_tests.sh`. Verify with the named executable (`./bin/debug/<exe> --run_test=...`), not the wrapper scripts. WARNING.
 

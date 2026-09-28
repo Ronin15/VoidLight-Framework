@@ -11,7 +11,7 @@ slice-complete, or default Branch/PR gate (see the gate table in
 `docs/framework-implementation-slices.md`). Run them when the user asks or when a
 change is performance-sensitive. Numbers are machine-local: compare against
 `test_results/baseline/` as percentage deltas, never as portable absolutes.
-Repo rules live in root `CLAUDE.md` plus nested `CLAUDE.md` files.
+Repo rules live in root `CLAUDE.md` plus `.claude/rules/`.
 
 Read references only at the step that needs them:
 - **`references/benchmarks.md`** — before step 5 (or earlier if a script's build flag or

@@ -138,7 +138,7 @@ Current foundation (at slice start; landed APIs are in Status):
 - `GamePlayState` owns session chrome: `event_log`, `time_label`, FPS (`F2`). Pause/resume hardcodes `hud_*` ids plus that chrome.
 - `HarvestController` exposes `getProgress()` with no HUD widget.
 - `InventoryController` / `SocialController` own overlays and already write the GamePlayState event log by id. That stays out of `HudController`.
-- `src/controllers/ui/CLAUDE.md`: reusable gameplay UI flow belongs in controllers; one-off status text stays on the state.
+- `.claude/rules/ui-controllers.md`: reusable gameplay UI flow belongs in controllers; one-off status text stays on the state.
 
 Architecture notes:
 
@@ -381,7 +381,7 @@ Checklist:
 - [x] Player faction standing sidecar (EDM storage; AIManager policy; not mixed into `getRelationshipLevel`)
 - [x] StanceChanged event + GamePlayState event log
 - [x] Collision remap from directed Hostile toward the player faction (not `faction == 1`)
-- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`, `docs/events/EventManager.md`, `docs/managers/EntityDataManager.md`, `docs/world/WorldPopulation.md`, `include/managers/CLAUDE.md`)
+- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`, `docs/events/EventManager.md`, `docs/managers/EntityDataManager.md`, `docs/world/WorldPopulation.md`, `.claude/rules/managers.md`)
 - [x] Tests updated in the same change (populate faction, territory query, standing theft/gift/combat, StanceChanged payload, collision remap)
 
 Acceptance checks:

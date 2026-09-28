@@ -13,12 +13,10 @@ correctness-critical.
 
 ## Rules source
 
-Root `CLAUDE.md` is canonical. Before editing, read it plus every nested
-`CLAUDE.md` for the paths you touch (`include/ai`, `src/ai`,
-`include/managers`, `src/managers`, `include/controllers/ui`,
-`src/controllers/ui`, `tests`, `tests/ai`, `tests/managers`). Deeper files
-win on conflict. Do not work from memory of older rules — `CLAUDE.md`
-supersedes anything restated here.
+Root `CLAUDE.md` is canonical. Before editing, Read the `.claude/rules/`
+file for every path you touch (see the "Path Rules" table in `CLAUDE.md`)
+— do not rely on it auto-loading. Do not work from memory of older rules;
+`CLAUDE.md` and the rule files supersede anything restated here.
 
 When flow, ownership, or threading is unclear from code, read
 `docs/ARCHITECTURE.md` and the owning `docs/<subsystem>/` doc (map:
@@ -69,7 +67,7 @@ change. Harden only after tracing proves the case can occur.
 
 ## Tests
 
-Follow `tests/CLAUDE.md` (and narrower test `CLAUDE.md`) when editing
+Follow `.claude/rules/tests.md` (plus `tests-ai.md` / `tests-managers.md`) when editing
 tests.
 
 - Reproduce before changing expectations. Targeted executable first;
