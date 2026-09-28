@@ -1,6 +1,6 @@
 # Architecture notes
 
-**Current architecture:** [../ARCHITECTURE.md](../ARCHITECTURE.md) and root `AGENTS.md`.
+**Current architecture:** [../ARCHITECTURE.md](../ARCHITECTURE.md) and root `CLAUDE.md`.
 
 This folder holds dated snapshots and plans. They are **not** the live contract.
 

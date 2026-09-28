@@ -6,10 +6,10 @@ not a product roadmap. Add work as a `## Slice N` section when it is scheduled.
 A **numbered slice** has a **Goal**, **Checklist**, and **Acceptance checks**.
 It is not done until every item in **that section** is `[x]`, owning docs and
 tests are updated, the slice-complete gate has passed, and
-**cpp-review-specialist** has reviewed the diff.
+**game-systems-architect** has reviewed the diff.
 
 Do not implement from chat notes. Add the section first, then implement from
-it. **Code wins over stale slice prose.** Durable contracts live in `AGENTS.md`
+it. **Code wins over stale slice prose.** Durable contracts live in `CLAUDE.md`
 and subsystem docs.
 
 ## Ground Rules
@@ -29,13 +29,13 @@ and subsystem docs.
 
 ## Gates (do not mix these)
 
-Canonical gate names used by agents and `AGENTS.md`:
+Canonical gate names used by agents and `CLAUDE.md`:
 
 | Gate | When | What |
 | --- | --- | --- |
 | **Per-change** | Every edit while implementing | Targeted `ninja -C build` or `ninja -C build app` plus the named Boost.Test executable for the touched system. **Not** cppcheck, clang-tidy, ASan, TSan, or the core-only suite. |
 | **Slice complete** | Before marking the slice done | Every Checklist and Acceptance item `[x]`; owning docs and tests updated; `ninja -C build`; then the Boost.Test executables covering the slice's changed code (`--run_test` when a case is enough). No `run_all_tests.sh --core-only`. No benches. |
-| **Slice review** | Before committing the slice | `cpp-review-specialist` on the slice diff. Do not commit a completed slice unreviewed. |
+| **Slice review** | Before committing the slice | `game-systems-architect` on the slice diff. Do not commit a completed slice unreviewed. |
 | **Branch / PR** | When the branch is ready to merge — not each commit or slice completion | `./tests/test_scripts/run_all_tests.sh --core-only --errors-only` (`.bat` on Windows); cppcheck, clang-tidy, ASan, TSan (sanitizers are mutually exclusive). Optional Valgrind. |
 
 Interactive `./bin/<cfg>/VoidLight_Template` is display-gated. Leave visual/GPU
@@ -43,14 +43,14 @@ residuals `[ ]` until confirmed; they do not block slice-complete.
 
 ## Implementing a slice
 
-Route through `.grok/skills/cpp-workflows` when using specialists.
+Route through the Claude subagents (see "Specialist Routing" in `CLAUDE.md`).
 
 1. **Open or add** `## Slice N: …`. Read Goal, Current foundation, and
    Architecture notes. Cross-read [ARCHITECTURE.md](ARCHITECTURE.md) and any
    doc linked in the slice.
-2. **Design first** (`cpp-design-specialist`) if ownership, lifecycle, or
+2. **Design first** (`systems-integrator`) if ownership, lifecycle, or
    multi-manager flow is unclear. Do not mark the slice complete in the design.
-3. **Implement only that slice's scope** (`cpp-specialist`) in the owning
+3. **Implement only that slice's scope** (`game-engine-specialist`) in the owning
    `include/` + `src/` modules. Check off Checklist items as each integration
    lands (runtime behavior + tests). Use the **per-change** gate while iterating.
 4. **Satisfy Acceptance checks.** Update durable docs when contracts change.
@@ -98,7 +98,7 @@ Acceptance checks:
 - [ ] …
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test executables for the changed code pass
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [ ] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Not started
 ```
@@ -138,7 +138,7 @@ Current foundation (at slice start; landed APIs are in Status):
 - `GamePlayState` owns session chrome: `event_log`, `time_label`, FPS (`F2`). Pause/resume hardcodes `hud_*` ids plus that chrome.
 - `HarvestController` exposes `getProgress()` with no HUD widget.
 - `InventoryController` / `SocialController` own overlays and already write the GamePlayState event log by id. That stays out of `HudController`.
-- `src/controllers/ui/AGENTS.md`: reusable gameplay UI flow belongs in controllers; one-off status text stays on the state.
+- `src/controllers/ui/CLAUDE.md`: reusable gameplay UI flow belongs in controllers; one-off status text stays on the state.
 
 Architecture notes:
 
@@ -153,7 +153,7 @@ Architecture notes:
 
 Checklist:
 
-- [x] `cpp-design-specialist` locks ownership (HudController vs UIManager vs GamePlayState vs demos)
+- [x] `systems-integrator` locks ownership (HudController vs UIManager vs GamePlayState vs demos)
 - [x] `HudController` creates and updates action HUD widgets (vitals, target, hotbar, harvest progress)
 - [x] `GamePlayState` pause/resume uses `HudController::setVisible()` and only toggles state-owned chrome (`event_log`, `time_label`, `fps`)
 - [x] `UIManager::createCombatHUD` / `updateCombatHUD` / `destroyCombatHUD` are removed from the production state path
@@ -170,7 +170,7 @@ Acceptance checks:
 - [x] Remaining tooling states (AIDemo/EventDemo) compile without a new HudController surface; HUD-demo states were removed
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `hud_controller_tests`, plus any moved UIManager combat-HUD cases
-- [x] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Slice reviewed (`game-systems-architect`) before commit
 - [ ] Interactive visual confirmation in `VoidLight_Template` (pause/resume HUD, harvest caption at 720p/1080p, target expiry)
 
 Status: Partial — action HUD ownership implemented and reviewed; visual/GPU confirmation remaining.
@@ -199,7 +199,7 @@ Architecture notes:
 - Add `SettlementRecord` to `WorldData.hpp`: `uint32_t id`, `int centerTileX`, `int centerTileY`, `int radiusTiles`, `Biome biome`, `uint8_t faction`, `uint8_t buildingCount`. `WorldData` holds `std::vector<SettlementRecord> settlements`.
 - `WorldGenerator` writes each accepted village center into `settlements` (do not discard `villageCenters`). `radiusTiles = VILLAGE_RADIUS` (12). `biome` from the center tile. `faction = 0` for overworld villages. `buildingCount` = buildings actually placed. `id` is 1-based index in the vector.
 - Populate runs from `WorldManager::loadNewWorld` immediately after `initializeWorldResources()`, same `worldId` as WRM. Clear the worldId registry and destroy NPCs spawned for that `worldId` from `unloadWorldLocked()`. Do not populate from `GamePlayState::enter()`. Do not implement the `loadWorld` stub in this slice; when saved-world load lands later, it must call the same populate after `WorldData` is restored if NPCs are not in the save.
-- `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API. Placement: world-load helper next to `initializeWorldResources`, called from `loadNewWorld` / `unloadWorldLocked`. Query API on `WorldManager` (or the named type) for later slices: settlements for the current/given `worldId`, and point-in-radius lookup (`center + radiusTiles * TILE_SIZE`).
+- `systems-integrator` names the populate type and its `worldId` register/query/clear API. Placement: world-load helper next to `initializeWorldResources`, called from `loadNewWorld` / `unloadWorldLocked`. Query API on `WorldManager` (or the named type) for later slices: settlements for the current/given `worldId`, and point-in-radius lookup (`center + radiusTiles * TILE_SIZE`).
 - Spawn in pixel space like harvestables: `tile * TILE_SIZE (32) + TILE_SIZE * 0.5f`. Skip water, `obstacleType != NONE`, and `buildingId != 0` (except guards, which spawn on `isTopLeftOfBuilding` tiles).
 - Per settlement, locked counts and `classes.json` behaviors:
   - 1× `Human` / `GeneralMerchant`, `assignBehavior(..., "Idle")`, at or adjacent to the village center.
@@ -216,7 +216,7 @@ Architecture notes:
 
 Checklist:
 
-- [x] `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
+- [x] `systems-integrator` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
 - [x] `SettlementRecord` + `WorldData::settlements`; generator persists village centers (id, biome, faction 0, buildingCount, radius 12)
 - [x] Populate after `initializeWorldResources()`; destroy+clear on `unloadWorldLocked`; skip if already populated
 - [x] Per-settlement 1 merchant Idle + 2 Guard + 4 Villager Wander; sparse forest/haunted Warriors (faction 1, Chase home role); walkable spawn; cap 256
@@ -236,7 +236,7 @@ Acceptance checks:
 - [x] Slice 1 HUD / social / combat work against spawned NPCs (merchant `FLAG_MERCHANT`; same `createNPCWithRaceClass` path as HUD/combat)
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `world_manager_tests` plus the populate suite
-- [x] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Reviewed — Medium findings fixed (main-thread destroy drain, player offset from merchant, count/cap tests, WorldManager-owned NPC clear).
 
@@ -272,7 +272,7 @@ Checklist:
 - [x] `spawnNpc` helper; WorldPopulation / debug `R` / NPCSpawnEvent use it; MerchantSpawn stays sugar
 - [x] `WorldHarvestInit` extracted; `Tile::harvestableIndex` removed
 - [x] `behaviorType` / `homeRole` comments; monster/animal auto-register matches NPC
-- [x] Owning docs + AGENTS.md updated (WorldManager stays coordinator; Slices 4–9 dump list)
+- [x] Owning docs + CLAUDE.md updated (WorldManager stays coordinator; Slices 4–9 dump list)
 - [x] Tests updated in the same change
 
 Acceptance checks:
@@ -284,7 +284,7 @@ Acceptance checks:
 - [x] Pause/resume still does not populate; debug `R` still works and is not in the populate registry
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `world_manager_tests`, `world_population_tests`, `entity_data_manager_tests`, plus event spawn coverage
-- [x] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Complete — exclusive load window, structural mutex, harvestable unload destroy, `spawnNpc`, `WorldHarvestInit`. Review: no High/Medium production findings. Residual: factory drops `m_structuralMutex` after `createNPC` before `registerEntity` (production relies on pause + drain skip).
 
@@ -345,7 +345,7 @@ Acceptance checks:
 - [x] Worker batches do not call `WeatherController` / `GameTimeManager`
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `behavior_functionality_tests` and/or `ai_manager_edm_integration_tests`
-- [x] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Implemented and reviewed. Slice-complete gate passed (`ninja -C build`, `behavior_functionality_tests`, `ai_manager_edm_integration_tests`). Shelter is out of scope. Review: no High; Medium (detection untested) dismissed — `TestGuardDetectsPlayerAtNoonNotAtNight` plus `TestGuardDetectsAtIdentityNotAtNightScale`; Low comment/scan follow-ups landed.
 
@@ -381,7 +381,7 @@ Checklist:
 - [x] Player faction standing sidecar (EDM storage; AIManager policy; not mixed into `getRelationshipLevel`)
 - [x] StanceChanged event + GamePlayState event log
 - [x] Collision remap from directed Hostile toward the player faction (not `faction == 1`)
-- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`, `docs/events/EventManager.md`, `docs/managers/EntityDataManager.md`, `docs/world/WorldPopulation.md`, `include/managers/AGENTS.md`)
+- [x] Owning docs updated (`docs/ai/AIManager.md`, `docs/ai/BehaviorModes.md`, `docs/controllers/SocialController.md`, `docs/events/EventManager.md`, `docs/managers/EntityDataManager.md`, `docs/world/WorldPopulation.md`, `include/managers/CLAUDE.md`)
 - [x] Tests updated in the same change (populate faction, territory query, standing theft/gift/combat, StanceChanged payload, collision remap)
 
 Acceptance checks:
@@ -392,7 +392,7 @@ Acceptance checks:
 - [x] Per-NPC relationship APIs still pass
 - [x] `ninja -C build` passes
 - [x] Targeted Boost.Test: `behavior_functionality_tests`, `social_controller_tests`, `world_population_tests`, `ai_manager_edm_integration_tests`, `event_types_tests`
-- [x] Slice reviewed (`cpp-review-specialist`) before commit
+- [x] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Remainder implemented and reviewed. Collision remap is in this slice (not optional). Review Mediums (same-faction gift standing test; standing sidecar destroy/reuse/`resetFactionStances` lifetime) and Lows (collision sync APIs private; GamePlayState token init) addressed. Do not rebuild the table.
 
@@ -434,7 +434,7 @@ Acceptance checks:
 - [ ] Workers do not WRM-query every entity every frame
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, plus harvest tests if the player signal changes
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [ ] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Not started. Depends on Slices 2 and 5.
 
@@ -444,7 +444,7 @@ Goal: In `AIManager::processBatch`, a staggered selector can `switchBehavior` fr
 
 Current foundation:
 
-- `Behaviors::switchBehavior` + `AICommandBus`. Idle/Patrol/Guard already contain hardcoded switches (`src/ai/behaviors/*`). `AIManager::commitQueuedBehaviorTransitions()` clears behavior data before `init()`; new state is set after that commit (`AGENTS.md`).
+- `Behaviors::switchBehavior` + `AICommandBus`. Idle/Patrol/Guard already contain hardcoded switches (`src/ai/behaviors/*`). `AIManager::commitQueuedBehaviorTransitions()` clears behavior data before `init()`; new state is set after that commit (`CLAUDE.md`).
 - Slice 2 writes home role at populate/assign. Slices 4–6 supply environment, stance, need.
 - `PersonalityTraits` on `NPCMemoryData` (bravery, aggression, composure, loyalty) — written at spawn, read every frame.
 
@@ -474,7 +474,7 @@ Acceptance checks:
 - [ ] Personality differences are observable in identical setups
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `ai_manager_edm_integration_tests`
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [ ] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Not started. Depends on Slices 2–6.
 
@@ -494,14 +494,14 @@ Architecture notes:
 
 - Discovery: bit grid on `WorldData` keyed with the world (chunk size 8 tiles → 25×25 bits for 200×200, packed bytes, no per-frame allocation). Update from player tile position on the main thread (mark the player’s chunk and 8-neighbors explored). Clear with the world on `unloadWorldLocked`. Do **not** dump minimap policy or discovery mutation loops into `WorldManager`; it only owns world lifetime/clear.
 - Persist discovery in this slice: extend `SaveGameManager` with `worldId` + packed discovery bytes (and restore them on load into the matching `WorldData`). If the loaded worldId does not match, start unexplored.
-- Widgets via `UIManager` primitives (panel + GPU vertices through the existing UI path). Ids under a `hud_minimap_*` prefix. `cpp-design-specialist` picks `HudController` vs a sibling UI controller; pause/resume must hide the minimap with one visibility call, not a new id list on `GamePlayState`.
+- Widgets via `UIManager` primitives (panel + GPU vertices through the existing UI path). Ids under a `hud_minimap_*` prefix. `systems-integrator` picks `HudController` vs a sibling UI controller; pause/resume must hide the minimap with one visibility call, not a new id list on `GamePlayState`.
 - Markers: player from the controller’s player handle; settlements from Slice 2 records (downsampled, not all EDM NPCs). Faction-colored dots only if Slice 5 stance/faction is present; otherwise a single settlement color.
 - Files: `include/world/WorldData.hpp` (discovery), `include/managers/SaveGameManager.hpp/.cpp`, `include/controllers/ui/HudController.hpp/.cpp` (or new `include/controllers/ui/` controller), `src/gameStates/GamePlayState.cpp` only for layout/init of the chosen controller, `docs/controllers/HudController.md` or the new controller doc, `docs/ui/`, `tests/controllers/HudControllerTests.cpp` (or the new controller tests), save tests.
 - Out of scope: implementing `Minimap_Implementation.md`’s `MinimapWidget` class inside `UIManager`.
 
 Checklist:
 
-- [ ] `cpp-design-specialist` picks HudController vs sibling controller
+- [ ] `systems-integrator` picks HudController vs sibling controller
 - [ ] Discovery bit grid on `WorldData`; update from player tile; clear on unload
 - [ ] Save/load discovery with `SaveGameManager` keyed by `worldId`
 - [ ] Minimap widgets + player marker + settlement dots; pause/resume via one `setVisible`
@@ -515,7 +515,7 @@ Acceptance checks:
 - [ ] Action HUD pause still hides the minimap
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test for the HUD/minimap controller and save coverage
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [ ] Slice reviewed (`game-systems-architect`) before commit
 - [ ] Interactive visual confirmation in `VoidLight_Template`
 
 Status: Not started. Data depends on Slice 2; faction-colored dots depend on Slice 5. Scheduled after Slice 7.
@@ -551,6 +551,6 @@ Acceptance checks:
 - [ ] An NPC that leaves Active, spends time in Background, and returns has advanced patrol index and/or need versus velocity-only
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test: `background_simulation_manager_tests`
-- [ ] Slice reviewed (`cpp-review-specialist`) before commit
+- [ ] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Not started. Depends on Slices 2 and 6. Scheduled after Slice 8.

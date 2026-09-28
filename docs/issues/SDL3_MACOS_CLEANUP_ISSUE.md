@@ -122,7 +122,7 @@ This keeps gamepad functionality active during gameplay while the underlying SDL
 
 ## Code Documentation
 
-The current InputManager implementation in `src/managers/InputManager.cpp` follows the proper cleanup pattern. The AGENTS.md documents the expected behavior:
+The current InputManager implementation in `src/managers/InputManager.cpp` follows the proper cleanup pattern. The CLAUDE.md documents the expected behavior:
 
 ```
 - InputManager SDL Gamepad Cleanup: CRITICAL - Use proper initialization and cleanup pattern

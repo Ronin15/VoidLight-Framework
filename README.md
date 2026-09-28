@@ -226,7 +226,7 @@ For the full workflow, command reference, file locations, and seasonal texture g
 - **Utilities:** [FrameProfiler](docs/utils/FrameProfiler.md), [Camera](docs/utils/Camera.md), [JsonReader](docs/utils/JsonReader.md), [JSON Resource Loading](docs/utils/JSON_Resource_Loading_Guide.md), [MenuNavigation](docs/utils/MenuNavigation.md), [Serialization](docs/utils/SERIALIZATION.md), [ResourceHandle System](docs/utils/ResourceHandle_System.md)
 - **Architecture:** [Interpolation System](docs/architecture/InterpolationSystem.md)
 - **Performance:** [Power Efficiency](docs/performance/PowerEfficiency.md), [EntityDataManager Power Analysis](docs/performance_reports/power_profile_edm_comparison_2026-01-29.md)
-- **Development:** Repo-wide agent guidance lives in [AGENTS.md](AGENTS.md).
+- **Development:** Repo-wide agent guidance lives in [CLAUDE.md](CLAUDE.md).
 - **Engine Issues:** [SDL3 macOS Cleanup Issue](docs/issues/SDL3_MACOS_CLEANUP_ISSUE.md)
 
 For the full, up-to-date documentation map, see [docs/README.md](docs/README.md).

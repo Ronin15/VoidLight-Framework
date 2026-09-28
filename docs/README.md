@@ -84,7 +84,7 @@ the SDL3_GPU rendering path.
 
 - [Power Efficiency](performance/PowerEfficiency.md)
 - [SDL3 macOS Cleanup Issue](issues/SDL3_MACOS_CLEANUP_ISSUE.md) (platform note, not current architecture)
-- [AGENTS.md](../AGENTS.md)
+- [CLAUDE.md](../CLAUDE.md)
 
 ## Testing and Validation
 

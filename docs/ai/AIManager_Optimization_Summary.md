@@ -11,7 +11,7 @@ does not own per-entity `AIBehavior` instances, cloned behavior objects, or an
 structural outputs on the main thread.
 
 This page is a summary, not the source of truth. Durable contracts live in
-[AIManager.md](AIManager.md) and `AGENTS.md`. Use benchmark and profiling
+[AIManager.md](AIManager.md) and `CLAUDE.md`. Use benchmark and profiling
 scripts for measurements on the active build and machine.
 
 ## Model

@@ -28,7 +28,7 @@ EntityHandle spawnNpc(const Vector2D& position,
 `createNPCWithRaceClass` currently auto-registers `classes.json`
 suggestedBehavior via `AIManager::registerEntity`. Empty `behaviorOverride`
 leaves that assignment. Non-empty override calls `assignBehavior` after create
-(writes `homeRole` and current `behaviorType`). `include/managers/AGENTS.md`
+(writes `homeRole` and current `behaviorType`). `include/managers/CLAUDE.md`
 still says EDM is storage-only; spawn assignment has not been peeled out of
 create yet.
 

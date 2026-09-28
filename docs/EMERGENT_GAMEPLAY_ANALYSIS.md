@@ -4,13 +4,13 @@
 
 **Not a runtime contract.** Faction stance now lives in `docs/ai/AIManager.md`
 (`FactionStance` 16×16 table). NPC memory lives in `docs/ai/NPCMemory.md`.
-Durable architecture is `AGENTS.md` and those subsystem docs. The gaps listed
+Durable architecture is `CLAUDE.md` and those subsystem docs. The gaps listed
 below (no faction system / no NPC memory) are historical as of January 2026.
 
 Analysis of SDL3 VoidLight-Framework's current capabilities and recommendations for supporting emergent gameplay systems.
 
 **Date**: January 2026
-**Status**: Analysis Complete — not a runtime contract. Durable architecture lives in `AGENTS.md` and subsystem docs.
+**Status**: Analysis Complete — not a runtime contract. Durable architecture lives in `CLAUDE.md` and subsystem docs.
 
 ---
 
