@@ -23,15 +23,15 @@
  * Each entity has its own waypoint slot - no shared state to contend on.
  */
 struct PathData {
-    uint16_t pathLength{0};             // Number of waypoints (max 32)
-    uint16_t navIndex{0};               // Current waypoint index
-    float pathUpdateTimer{0.0f};        // Time since last path update
-    float progressTimer{0.0f};          // Time since last progress
+    uint16_t pathLength{0}; // Number of waypoints (max 32)
+    uint16_t navIndex{0}; // Current waypoint index
+    float pathUpdateTimer{0.0f}; // Time since last path update
+    float progressTimer{0.0f}; // Time since last progress
     float lastNodeDistance{std::numeric_limits<float>::max()};
-    float stallTimer{0.0f};             // Stall detection
-    float pathRequestCooldown{0.0f};    // Prevent request spam
-    Vector2D currentWaypoint{0, 0};     // Cached current waypoint for fast access
-    bool hasPath{false};                // Quick check if path is valid
+    float stallTimer{0.0f}; // Stall detection
+    float pathRequestCooldown{0.0f}; // Prevent request spam
+    Vector2D currentWaypoint{0, 0}; // Cached current waypoint for fast access
+    bool hasPath{false}; // Quick check if path is valid
     std::atomic<uint8_t> pathRequestPending{0}; // Path request in flight (release/acquire)
     std::atomic<uint32_t> latestPathRequestId{0}; // Monotonic request token for stale-result filtering
 
@@ -109,7 +109,7 @@ struct BehaviorData {
     uint8_t _pad[3]{};
 
     // Cached from CharacterData at init (avoids typeLocalIndex indirection every frame)
-    float moveSpeed{0.0f};  // 0 = uninitialized, set from CharacterData in initXxx()
+    float moveSpeed{0.0f}; // 0 = uninitialized, set from CharacterData in initXxx()
 
     // Common separation state (used by most behaviors)
     float separationTimer{0.0f};
@@ -123,12 +123,12 @@ struct BehaviorData {
     // Pending message queue (8 bytes: 4 messages max)
     // Each message: messageId (1 byte) + param encoded as uint8 (1 byte) = 2 bytes
     struct PendingMessage {
-        uint8_t messageId{0};   // BehaviorMessage::* constant
-        uint8_t param{0};       // Optional parameter (behavior-specific)
+        uint8_t messageId{0}; // BehaviorMessage::* constant
+        uint8_t param{0}; // Optional parameter (behavior-specific)
     };
     PendingMessage pendingMessages[4];
     uint8_t pendingMessageCount{0};
-    uint8_t _msgPad[3]{};       // Padding for alignment
+    uint8_t _msgPad[3]{}; // Padding for alignment
 
     static constexpr uint8_t FLAG_VALID = 0x01;
     static constexpr uint8_t FLAG_INITIALIZED = 0x02;

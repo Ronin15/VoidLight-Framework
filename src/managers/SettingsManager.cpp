@@ -61,7 +61,7 @@ bool SettingsManager::loadFromFile(const std::string& filepath) {
 
     std::unique_lock<std::shared_mutex> lock(m_settingsMutex);
 
-  // Parse each category
+    // Parse each category
     const JsonObject& rootObj = root.asObject();
     for (const auto& [categoryName, categoryValue] : rootObj) {
         if (!categoryValue.isObject()) {
@@ -74,16 +74,16 @@ bool SettingsManager::loadFromFile(const std::string& filepath) {
         for (const auto& [key, value] : categoryObj) {
             SettingValue settingValue;
 
-      // Convert JSON value to SettingValue variant
+            // Convert JSON value to SettingValue variant
             if (value.isBool()) {
                 settingValue = value.asBool();
             } else if (value.isNumber()) {
                 double numValue = value.asNumber();
-        // Preserve the authored token type: an integer literal (`1920`) becomes
-        // an int variant, a real literal (`0.8`, `1.0`) becomes a float. This
-        // keeps typed get<int>/get<float> round-tripping. Still range-check the
-        // int cast — an integer literal outside int range would be UB to
-        // truncate, so fall back to float there.
+                // Preserve the authored token type: an integer literal (`1920`) becomes
+                // an int variant, a real literal (`0.8`, `1.0`) becomes a float. This
+                // keeps typed get<int>/get<float> round-tripping. Still range-check the
+                // int cast — an integer literal outside int range would be UB to
+                // truncate, so fall back to float there.
                 if (value.isIntegerNumber() && std::isfinite(numValue) &&
                     numValue >= static_cast<double>(std::numeric_limits<int>::min()) &&
                     numValue <= static_cast<double>(std::numeric_limits<int>::max())) {
@@ -118,7 +118,7 @@ bool SettingsManager::saveToFile(const std::string& filepath) {
         return false;
     }
 
-  // Build JSON manually for formatting control
+    // Build JSON manually for formatting control
     file << "{\n";
 
     size_t categoryIndex = 0;
@@ -133,7 +133,7 @@ bool SettingsManager::saveToFile(const std::string& filepath) {
             writeEscapedJsonString(file, key);
             file << ": ";
 
-      // Write value based on type
+            // Write value based on type
             std::visit(
                 [&file](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
@@ -142,9 +142,9 @@ bool SettingsManager::saveToFile(const std::string& filepath) {
                     } else if constexpr (std::is_same_v<T, int>) {
                         file << arg;
                     } else if constexpr (std::is_same_v<T, float>) {
-              // Emit a guaranteed decimal marker so the value re-parses as a
-              // real (not an integer literal) and reloads back into a float
-              // variant instead of collapsing to int.
+                        // Emit a guaranteed decimal marker so the value re-parses as a
+                        // real (not an integer literal) and reloads back into a float
+                        // variant instead of collapsing to int.
                         std::string s = std::format("{}", arg);
                         file << s;
                         if (s.find_first_of(".eEnN") == std::string::npos) {
@@ -206,7 +206,7 @@ bool SettingsManager::remove(const std::string& category,
 
     categoryIt->second.erase(keyIt);
 
-  // Remove category if empty
+    // Remove category if empty
     if (categoryIt->second.empty()) {
         m_settings.erase(categoryIt);
     }
@@ -287,7 +287,7 @@ void SettingsManager::notifyListeners(const std::string& category,
     std::lock_guard<std::mutex> lock(m_listenersMutex);
 
     for (const auto& listener : m_listeners) {
-    // Call listener if it's watching all categories or this specific category
+        // Call listener if it's watching all categories or this specific category
         if (listener.category.empty() || listener.category == category) {
             listener.callback(category, key, newValue);
         }

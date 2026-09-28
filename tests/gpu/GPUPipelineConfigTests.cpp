@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(SpriteOpaqueConfigStructure) {
     auto config = GPUPipeline::createSpriteConfig(
         nullptr, nullptr,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        false  // opaque
+        false // opaque
     );
 
     // Opaque should have no blending
@@ -125,7 +125,7 @@ BOOST_AUTO_TEST_CASE(SpriteOpaqueConfigStructure) {
 
     // Should have correct vertex format
     BOOST_CHECK_EQUAL(config.vertexBufferCount, 1u);
-    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 3u);  // position, texcoord, color
+    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 3u); // position, texcoord, color
 
     // Verify color format
     BOOST_CHECK(config.colorFormat == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
@@ -135,7 +135,7 @@ BOOST_AUTO_TEST_CASE(SpriteAlphaConfigStructure) {
     auto config = GPUPipeline::createSpriteConfig(
         nullptr, nullptr,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        true  // alpha blend
+        true // alpha blend
     );
 
     // Alpha should have blending enabled (premultiplied alpha)
@@ -175,7 +175,7 @@ BOOST_AUTO_TEST_CASE(ParticleConfigStructure) {
 
     // Should have ColorVertex format
     BOOST_CHECK_EQUAL(config.vertexBufferCount, 1u);
-    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 2u);  // position, color
+    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 2u); // position, color
 }
 
 BOOST_AUTO_TEST_CASE(ParticleConfigVertexStride) {

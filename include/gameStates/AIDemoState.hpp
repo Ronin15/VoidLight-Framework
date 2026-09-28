@@ -27,7 +27,7 @@ class GPUSceneRecorder;
 
 class AIDemoState : public GameState {
 public:
-    AIDemoState();  // Defined in .cpp for unique_ptr with forward-declared types
+    AIDemoState(); // Defined in .cpp for unique_ptr with forward-declared types
     ~AIDemoState() override;
 
     void update(float deltaTime) override;

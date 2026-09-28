@@ -25,41 +25,41 @@ namespace WorldSpawnConfig {
 // BIOME ASSIGNMENT THRESHOLDS
 // ----------------------------------------------------------------------------
 namespace Biome {
-    // Humidity thresholds (0.0 = dry, 1.0 = wet)
+// Humidity thresholds (0.0 = dry, 1.0 = wet)
 constexpr float DESERT_HUMIDITY_MAX = 0.35f;
 constexpr float SWAMP_HUMIDITY_MIN = 0.70f;
 constexpr float SWAMP_ELEVATION_MAX = 0.45f;
 
-    // PLAINS: moderate humidity, mid elevation (temperate default)
+// PLAINS: moderate humidity, mid elevation (temperate default)
 constexpr float PLAINS_HUMIDITY_MIN = 0.35f;
 constexpr float PLAINS_HUMIDITY_MAX = 0.60f;
 constexpr float PLAINS_ELEVATION_MIN = 0.35f;
 constexpr float PLAINS_ELEVATION_MAX = 0.65f;
 
-    // FOREST: higher humidity with moderate-to-high elevation
+// FOREST: higher humidity with moderate-to-high elevation
 constexpr float FOREST_HUMIDITY_MIN = 0.55f;
 constexpr float FOREST_ELEVATION_MIN = 0.40f;
 
-    // Special biome spawn chances (applied when no other biome matches)
-constexpr float HAUNTED_CHANCE = 0.03f;    // 3% (reduced from 5%)
-constexpr float CELESTIAL_CHANCE = 0.03f;  // 3% (reduced from 5%)
+// Special biome spawn chances (applied when no other biome matches)
+constexpr float HAUNTED_CHANCE = 0.03f; // 3% (reduced from 5%)
+constexpr float CELESTIAL_CHANCE = 0.03f; // 3% (reduced from 5%)
 }
 
 // ----------------------------------------------------------------------------
 // RIVER/WATER GENERATION
 // ----------------------------------------------------------------------------
 namespace Water {
-constexpr int RIVER_DENSITY_DIVISOR = 1000;       // Rivers = area / this
-constexpr float RIVER_START_ELEVATION_OFFSET = 0.2f;  // Min elevation above water level to start river
-constexpr int RIVER_MAX_FLOW_STEPS = 50;          // Max river length in tiles
+constexpr int RIVER_DENSITY_DIVISOR = 1000; // Rivers = area / this
+constexpr float RIVER_START_ELEVATION_OFFSET = 0.2f; // Min elevation above water level to start river
+constexpr int RIVER_MAX_FLOW_STEPS = 50; // Max river length in tiles
 }
 
 // ----------------------------------------------------------------------------
 // OBSTACLE SPAWN RATES (Trees, Rocks, Water obstacles)
 // ----------------------------------------------------------------------------
 namespace Obstacles {
-    // Per-biome spawn chances (0.0 - 1.0)
-constexpr float PLAINS_CHANCE = 0.12f;    // Sparse trees in open grassland
+// Per-biome spawn chances (0.0 - 1.0)
+constexpr float PLAINS_CHANCE = 0.12f; // Sparse trees in open grassland
 constexpr float FOREST_CHANCE = 0.40f;
 constexpr float MOUNTAIN_CHANCE = 0.30f;
 constexpr float SWAMP_CHANCE = 0.20f;
@@ -67,61 +67,61 @@ constexpr float DESERT_CHANCE = 0.10f;
 constexpr float HAUNTED_CHANCE = 0.30f;
 constexpr float CELESTIAL_CHANCE = 0.15f;
 
-    // Swamp obstacle type distribution
-constexpr float SWAMP_TREE_RATIO = 0.70f;   // 70% trees, 30% water
+// Swamp obstacle type distribution
+constexpr float SWAMP_TREE_RATIO = 0.70f; // 70% trees, 30% water
 
-    // Haunted obstacle type distribution
+// Haunted obstacle type distribution
 constexpr float HAUNTED_TREE_RATIO = 0.60f; // 60% trees, 40% rocks
 
-    // Clustering behavior (prevents dense blobs)
-constexpr int MAX_NEIGHBORS_ALLOWED = 2;     // Block if more than this many neighbors
-constexpr float CLUSTER_GROWTH_FOREST = 0.50f;  // Chance to extend cluster in forest
-constexpr float CLUSTER_GROWTH_OTHER = 0.20f;   // Chance to extend cluster in other biomes
+// Clustering behavior (prevents dense blobs)
+constexpr int MAX_NEIGHBORS_ALLOWED = 2; // Block if more than this many neighbors
+constexpr float CLUSTER_GROWTH_FOREST = 0.50f; // Chance to extend cluster in forest
+constexpr float CLUSTER_GROWTH_OTHER = 0.20f; // Chance to extend cluster in other biomes
 }
 
 // ----------------------------------------------------------------------------
 // DEPOSIT SPAWN RATES (Ore and Gem deposits in MOUNTAIN biome)
 // ----------------------------------------------------------------------------
 namespace Deposits {
-    // Base chance for any deposit to spawn when placing a MOUNTAIN obstacle
-constexpr float BASE_CHANCE = 0.08f;  // 8% of MOUNTAIN rocks become deposits
+// Base chance for any deposit to spawn when placing a MOUNTAIN obstacle
+constexpr float BASE_CHANCE = 0.08f; // 8% of MOUNTAIN rocks become deposits
 
-    // Per-resource rarity weights. These sum to 0.99; the remaining ~1% of the
-    // [0,1) roll range falls through every cumulative branch in selectDepositType
-    // and is intentionally routed to IRON (so IRON is effectively ~26%).
-    // Common ores (80% of deposits)
-constexpr float IRON_WEIGHT = 0.25f;       // 25% of deposits
-constexpr float COPPER_WEIGHT = 0.20f;     // 20%
-constexpr float COAL_WEIGHT = 0.20f;       // 20%
-constexpr float LIMESTONE_WEIGHT = 0.15f;  // 15%
+// Per-resource rarity weights. These sum to 0.99; the remaining ~1% of the
+// [0,1) roll range falls through every cumulative branch in selectDepositType
+// and is intentionally routed to IRON (so IRON is effectively ~26%).
+// Common ores (80% of deposits)
+constexpr float IRON_WEIGHT = 0.25f; // 25% of deposits
+constexpr float COPPER_WEIGHT = 0.20f; // 20%
+constexpr float COAL_WEIGHT = 0.20f; // 20%
+constexpr float LIMESTONE_WEIGHT = 0.15f; // 15%
 
-    // Rare ores (10% of deposits)
-constexpr float GOLD_WEIGHT = 0.08f;       // 8%
-constexpr float MITHRIL_WEIGHT = 0.02f;    // 2% (very rare)
+// Rare ores (10% of deposits)
+constexpr float GOLD_WEIGHT = 0.08f; // 8%
+constexpr float MITHRIL_WEIGHT = 0.02f; // 2% (very rare)
 
-    // Gems (10% of deposits - all very rare)
-constexpr float EMERALD_WEIGHT = 0.03f;    // 3%
-constexpr float RUBY_WEIGHT = 0.025f;      // 2.5%
-constexpr float SAPPHIRE_WEIGHT = 0.025f;  // 2.5%
-constexpr float DIAMOND_WEIGHT = 0.01f;    // 1% (rarest)
+// Gems (10% of deposits - all very rare)
+constexpr float EMERALD_WEIGHT = 0.03f; // 3%
+constexpr float RUBY_WEIGHT = 0.025f; // 2.5%
+constexpr float SAPPHIRE_WEIGHT = 0.025f; // 2.5%
+constexpr float DIAMOND_WEIGHT = 0.01f; // 1% (rarest)
 }
 
 // ----------------------------------------------------------------------------
 // VILLAGE/BUILDING SPAWN CONFIGURATION
 // ----------------------------------------------------------------------------
 namespace Buildings {
-constexpr int BUILDING_SIZE = 2;           // 2x2 tiles per building
-constexpr int MAX_CONNECTED_SIZE = 4;      // Max connected building size (hut->house->large->cityhall)
+constexpr int BUILDING_SIZE = 2; // 2x2 tiles per building
+constexpr int MAX_CONNECTED_SIZE = 4; // Max connected building size (hut->house->large->cityhall)
 
-    // Village clustering parameters
-constexpr int VILLAGE_DENSITY_DIVISOR = 8000;   // Villages = area / this (e.g., 200x200 = ~5 villages)
-constexpr int VILLAGE_MIN_DISTANCE = 40;        // Minimum tiles between village centers
-constexpr int VILLAGE_RADIUS = 12;              // Max radius for building placement from center
-constexpr int VILLAGE_MIN_BUILDINGS = 3;        // Minimum buildings per village
-constexpr int VILLAGE_MAX_BUILDINGS = 8;        // Maximum buildings per village
+// Village clustering parameters
+constexpr int VILLAGE_DENSITY_DIVISOR = 8000; // Villages = area / this (e.g., 200x200 = ~5 villages)
+constexpr int VILLAGE_MIN_DISTANCE = 40; // Minimum tiles between village centers
+constexpr int VILLAGE_RADIUS = 12; // Max radius for building placement from center
+constexpr int VILLAGE_MIN_BUILDINGS = 3; // Minimum buildings per village
+constexpr int VILLAGE_MAX_BUILDINGS = 8; // Maximum buildings per village
 
-    // Per-biome village spawn weight (higher = more likely to have villages)
-constexpr float PLAINS_VILLAGE_WEIGHT = 1.0f;   // Most common
+// Per-biome village spawn weight (higher = more likely to have villages)
+constexpr float PLAINS_VILLAGE_WEIGHT = 1.0f; // Most common
 constexpr float FOREST_VILLAGE_WEIGHT = 0.6f;
 constexpr float DESERT_VILLAGE_WEIGHT = 0.3f;
 constexpr float SWAMP_VILLAGE_WEIGHT = 0.2f;
@@ -133,25 +133,25 @@ constexpr float CELESTIAL_VILLAGE_WEIGHT = 0.3f;
 // DECORATION SPAWN RATES & WEIGHTS
 // ----------------------------------------------------------------------------
 namespace Decorations {
-    // Per-biome spawn chances (0.0 - 1.0)
-constexpr float PLAINS_CHANCE = 0.35f;     // High decoration density (flowers, grass)
+// Per-biome spawn chances (0.0 - 1.0)
+constexpr float PLAINS_CHANCE = 0.35f; // High decoration density (flowers, grass)
 constexpr float FOREST_CHANCE = 0.25f;
 constexpr float CELESTIAL_CHANCE = 0.20f;
 constexpr float SWAMP_CHANCE = 0.30f;
 constexpr float HAUNTED_CHANCE = 0.25f;
 constexpr float MOUNTAIN_CHANCE = 0.15f;
-constexpr float WATER_CHANCE = 0.15f;      // Water decorations (lily pads, water flowers)
+constexpr float WATER_CHANCE = 0.15f; // Water decorations (lily pads, water flowers)
 constexpr float DEFAULT_CHANCE = 0.15f;
 
-    // Decoration type weights (relative frequency within biome)
-    // Higher weight = more likely to be selected
+// Decoration type weights (relative frequency within biome)
+// Higher weight = more likely to be selected
 constexpr float FLOWER_WEIGHT = 10.0f;
 constexpr float GRASS_WEIGHT = 15.0f;
 constexpr float MUSHROOM_WEIGHT = 8.0f;
 constexpr float BUSH_WEIGHT = 8.0f;
 constexpr float STUMP_WEIGHT = 5.0f;
 constexpr float ROCK_WEIGHT = 5.0f;
-constexpr float DEAD_LOG_WEIGHT = 2.0f;      // Rare - large decorations
+constexpr float DEAD_LOG_WEIGHT = 2.0f; // Rare - large decorations
 constexpr float LILY_PAD_WEIGHT = 10.0f;
 constexpr float WATER_FLOWER_WEIGHT = 8.0f;
 }
@@ -241,7 +241,7 @@ WorldGenerator::generateWorld(const WorldGenerationConfig& config,
     WORLD_MANAGER_INFO(std::format("Generating world: {}x{} with seed {}",
         config.width, config.height, config.seed));
 
-  // Report initial progress
+    // Report initial progress
     if (progressCallback) {
         progressCallback(0.0f, "Initializing world generation...");
     }
@@ -249,42 +249,42 @@ WorldGenerator::generateWorld(const WorldGenerationConfig& config,
     std::vector<std::vector<float>> elevationMap, humidityMap;
     auto world = generateNoiseMaps(config, elevationMap, humidityMap);
 
-  // Progress: Noise maps complete (30%)
+    // Progress: Noise maps complete (30%)
     if (progressCallback) {
         progressCallback(30.0f, "Generating terrain...");
     }
 
     assignBiomes(*world, elevationMap, humidityMap, config);
 
-  // Progress: Biomes assigned (50%)
+    // Progress: Biomes assigned (50%)
     if (progressCallback) {
         progressCallback(50.0f, "Creating biomes...");
     }
 
     createWaterBodies(*world, elevationMap, config);
 
-  // Progress: Water bodies created (70%)
+    // Progress: Water bodies created (70%)
     if (progressCallback) {
         progressCallback(70.0f, "Placing water...");
     }
 
     distributeObstacles(*world, config);
 
-  // Progress: Obstacles distributed (80%)
+    // Progress: Obstacles distributed (80%)
     if (progressCallback) {
         progressCallback(80.0f, "Distributing obstacles...");
     }
 
     distributeDecorations(*world, config);
 
-  // Progress: Decorations distributed (90%)
+    // Progress: Decorations distributed (90%)
     if (progressCallback) {
         progressCallback(90.0f, "Adding decorations...");
     }
 
     calculateInitialResources(*world);
 
-  // Progress: Complete (100%)
+    // Progress: Complete (100%)
     if (progressCallback) {
         progressCallback(100.0f, "Finalizing world...");
     }
@@ -333,11 +333,11 @@ void WorldGenerator::assignBiomes(
     int height = world.grid.size();
     int width = world.grid[0].size();
 
-  // Single generation-scoped RNG stream for special-biome scatter (like the
-  // other passes, e.g. createWaterBodies/distributeObstacles). Reseeding a bare
-  // LCG per tile and taking its first output produced near-linear values that
-  // formed vertical banding instead of scattered patches; advancing one stream
-  // per roll gives proper scatter.
+    // Single generation-scoped RNG stream for special-biome scatter (like the
+    // other passes, e.g. createWaterBodies/distributeObstacles). Reseeding a bare
+    // LCG per tile and taking its first output produced near-linear values that
+    // formed vertical banding instead of scattered patches; advancing one stream
+    // per roll gives proper scatter.
     std::default_random_engine specialRng(config.seed + 30000);
     std::uniform_real_distribution<float> specialDist(0.0f, 1.0f);
 
@@ -350,39 +350,39 @@ void WorldGenerator::assignBiomes(
 
             namespace BiomeCfg = WorldSpawnConfig::Biome;
 
-      // Water check first (lowest elevation)
+            // Water check first (lowest elevation)
             if (elevation < config.waterLevel) {
                 biome = Biome::OCEAN;
                 world.grid[y][x].isWater = true;
             }
-      // Mountain check (highest elevation)
+            // Mountain check (highest elevation)
             else if (elevation >= config.mountainLevel) {
                 biome = Biome::MOUNTAIN;
             }
-      // Land biomes based on humidity and elevation
+            // Land biomes based on humidity and elevation
             else {
-        // DESERT: Low humidity, any non-water elevation
+                // DESERT: Low humidity, any non-water elevation
                 if (humidity < BiomeCfg::DESERT_HUMIDITY_MAX) {
                     biome = Biome::DESERT;
                 }
-        // SWAMP: High humidity AND low elevation
+                // SWAMP: High humidity AND low elevation
                 else if (humidity > BiomeCfg::SWAMP_HUMIDITY_MIN &&
                     elevation < BiomeCfg::SWAMP_ELEVATION_MAX) {
                     biome = Biome::SWAMP;
                 }
-        // FOREST: High humidity with moderate-to-high elevation
+                // FOREST: High humidity with moderate-to-high elevation
                 else if (humidity >= BiomeCfg::FOREST_HUMIDITY_MIN &&
                     elevation >= BiomeCfg::FOREST_ELEVATION_MIN) {
                     biome = Biome::FOREST;
                 }
-        // PLAINS: Moderate humidity, mid elevation (temperate default)
+                // PLAINS: Moderate humidity, mid elevation (temperate default)
                 else if (humidity >= BiomeCfg::PLAINS_HUMIDITY_MIN &&
                     humidity <= BiomeCfg::PLAINS_HUMIDITY_MAX &&
                     elevation >= BiomeCfg::PLAINS_ELEVATION_MIN &&
                     elevation <= BiomeCfg::PLAINS_ELEVATION_MAX) {
                     biome = Biome::PLAINS;
                 }
-        // Remaining land: check for special biomes, else default to PLAINS
+                // Remaining land: check for special biomes, else default to PLAINS
                 else {
                     float special = specialDist(specialRng);
                     if (special < BiomeCfg::HAUNTED_CHANCE) {
@@ -390,7 +390,7 @@ void WorldGenerator::assignBiomes(
                     } else if (special < BiomeCfg::HAUNTED_CHANCE + BiomeCfg::CELESTIAL_CHANCE) {
                         biome = Biome::CELESTIAL;
                     } else {
-            // Default to PLAINS instead of FOREST for uncategorized mid-terrain
+                        // Default to PLAINS instead of FOREST for uncategorized mid-terrain
                         biome = Biome::PLAINS;
                     }
                 }
@@ -417,7 +417,7 @@ void WorldGenerator::createWaterBodies(
         }
     }
 
-  // Create rivers by connecting low elevation areas
+    // Create rivers by connecting low elevation areas
     namespace WaterCfg = WorldSpawnConfig::Water;
 
     std::default_random_engine rng(config.seed + 5000);
@@ -434,11 +434,11 @@ void WorldGenerator::createWaterBodies(
             int currentX = startX;
             int currentY = startY;
 
-      // Flow downhill for up to configured steps
+            // Flow downhill for up to configured steps
             for (int step = 0; step < WaterCfg::RIVER_MAX_FLOW_STEPS; ++step) {
                 float currentElevation = elevationMap[currentY][currentX];
 
-        // Find lowest neighboring tile
+                // Find lowest neighboring tile
                 int bestX = currentX;
                 int bestY = currentY;
                 float lowestElevation = currentElevation;
@@ -462,11 +462,11 @@ void WorldGenerator::createWaterBodies(
                     }
                 }
 
-        // If we found a lower neighbor, create water and continue
+                // If we found a lower neighbor, create water and continue
                 if (bestX != currentX || bestY != currentY) {
                     if (!world.grid[currentY][currentX].isWater) {
                         world.grid[currentY][currentX].isWater = true;
-            // Preserve original biome so rivers get biome-appropriate decorations
+                        // Preserve original biome so rivers get biome-appropriate decorations
                         world.grid[currentY][currentX].obstacleType = ObstacleType::NONE;
                     }
                     currentX = bestX;
@@ -490,12 +490,12 @@ void WorldGenerator::distributeObstacles(WorldData& world,
     std::default_random_engine rng(config.seed + 10000);
     std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
-  // Helper function to select deposit type based on weighted probabilities
+    // Helper function to select deposit type based on weighted probabilities
     auto selectDepositType = [](float roll) -> ObstacleType {
-    // Cumulative probability selection using weights from config
+        // Cumulative probability selection using weights from config
         float cumulative = 0.0f;
 
-    // Common ores
+        // Common ores
         cumulative += DepCfg::IRON_WEIGHT;
         if (roll < cumulative) return ObstacleType::IRON_DEPOSIT;
 
@@ -508,14 +508,14 @@ void WorldGenerator::distributeObstacles(WorldData& world,
         cumulative += DepCfg::LIMESTONE_WEIGHT;
         if (roll < cumulative) return ObstacleType::LIMESTONE_DEPOSIT;
 
-    // Rare ores
+        // Rare ores
         cumulative += DepCfg::GOLD_WEIGHT;
         if (roll < cumulative) return ObstacleType::GOLD_DEPOSIT;
 
         cumulative += DepCfg::MITHRIL_WEIGHT;
         if (roll < cumulative) return ObstacleType::MITHRIL_DEPOSIT;
 
-    // Gems
+        // Gems
         cumulative += DepCfg::EMERALD_WEIGHT;
         if (roll < cumulative) return ObstacleType::EMERALD_DEPOSIT;
 
@@ -528,12 +528,12 @@ void WorldGenerator::distributeObstacles(WorldData& world,
         cumulative += DepCfg::DIAMOND_WEIGHT;
         if (roll < cumulative) return ObstacleType::DIAMOND_DEPOSIT;
 
-    // Remainder routing: weights sum to 0.99, so rolls in [0.99, 1.0) reach here
-    // and are intentionally assigned to IRON (its effective share becomes ~26%).
+        // Remainder routing: weights sum to 0.99, so rolls in [0.99, 1.0) reach here
+        // and are intentionally assigned to IRON (its effective share becomes ~26%).
         return ObstacleType::IRON_DEPOSIT;
     };
 
-  // Count nearby obstacles (for density-aware spacing)
+    // Count nearby obstacles (for density-aware spacing)
     auto countNearbyObstacles = [&](int cx, int cy) -> int {
         int count = 0;
         for (int dy = -1; dy <= 1; ++dy) {
@@ -564,7 +564,7 @@ void WorldGenerator::distributeObstacles(WorldData& world,
             switch (tile.biome) {
                 case Biome::PLAINS:
                     obstacleChance = ObsCfg::PLAINS_CHANCE;
-                    obstacleType = ObstacleType::TREE;  // Sparse trees in open grassland
+                    obstacleType = ObstacleType::TREE; // Sparse trees in open grassland
                     break;
                 case Biome::FOREST:
                     obstacleChance = ObsCfg::FOREST_CHANCE;
@@ -572,7 +572,7 @@ void WorldGenerator::distributeObstacles(WorldData& world,
                     break;
                 case Biome::MOUNTAIN:
                     obstacleChance = ObsCfg::MOUNTAIN_CHANCE;
-        // Check if this should be a deposit instead of a rock
+                    // Check if this should be a deposit instead of a rock
                     if (dist(rng) < DepCfg::BASE_CHANCE) {
                         obstacleType = selectDepositType(dist(rng));
                     } else {
@@ -601,22 +601,22 @@ void WorldGenerator::distributeObstacles(WorldData& world,
                     break;
             }
 
-      // Smart density: organic cluster growth with natural variation
+            // Smart density: organic cluster growth with natural variation
             if (dist(rng) < obstacleChance) {
                 int nearbyCount = countNearbyObstacles(x, y);
                 bool canPlace = false;
 
                 if (nearbyCount == 0) {
-          // No neighbors - always allow (start new cluster or isolated tree)
+                    // No neighbors - always allow (start new cluster or isolated tree)
                     canPlace = true;
                 } else if (nearbyCount <= ObsCfg::MAX_NEIGHBORS_ALLOWED) {
-          // Within limit - chance to extend cluster (organic growth)
+                    // Within limit - chance to extend cluster (organic growth)
                     float clusterChance = (tile.biome == Biome::FOREST)
                         ? ObsCfg::CLUSTER_GROWTH_FOREST
                         : ObsCfg::CLUSTER_GROWTH_OTHER;
                     canPlace = dist(rng) < clusterChance;
                 }
-        // Too many neighbors - skip (prevents blob formations)
+                // Too many neighbors - skip (prevents blob formations)
 
                 if (canPlace) {
                     tile.obstacleType = obstacleType;
@@ -625,7 +625,7 @@ void WorldGenerator::distributeObstacles(WorldData& world,
         }
     }
 
-  // Second pass: Generate multi-tile buildings with connection logic
+    // Second pass: Generate multi-tile buildings with connection logic
     generateBuildings(world, rng);
 }
 
@@ -639,7 +639,7 @@ void WorldGenerator::distributeDecorations(WorldData& world,
     std::default_random_engine rng(config.seed + 20000);
     std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
-  // Pre-allocated vector for weighted decorations
+    // Pre-allocated vector for weighted decorations
     std::vector<WeightedDecoration> weightedDecorations;
     weightedDecorations.reserve(16);
 
@@ -647,7 +647,7 @@ void WorldGenerator::distributeDecorations(WorldData& world,
         for (int x = 0; x < width; ++x) {
             Tile& tile = world.grid[y][x];
 
-      // Skip tiles with buildings
+            // Skip tiles with buildings
             if (tile.buildingId > 0) {
                 continue;
             }
@@ -655,8 +655,8 @@ void WorldGenerator::distributeDecorations(WorldData& world,
             float decorationChance = 0.0f;
             weightedDecorations.clear();
 
-      // Water tiles get water-specific decorations
-      // Check both isWater flag AND water obstacles in swamp (puddles)
+            // Water tiles get water-specific decorations
+            // Check both isWater flag AND water obstacles in swamp (puddles)
             bool isWaterTile = tile.isWater || tile.obstacleType == ObstacleType::WATER;
             if (isWaterTile && (tile.biome == Biome::SWAMP || tile.biome == Biome::FOREST)) {
                 decorationChance = DecoCfg::WATER_CHANCE;
@@ -664,10 +664,10 @@ void WorldGenerator::distributeDecorations(WorldData& world,
                     {DecorationType::LILY_PAD, DecoCfg::LILY_PAD_WEIGHT},
                     {DecorationType::WATER_FLOWER, DecoCfg::WATER_FLOWER_WEIGHT}};
             } else if (tile.obstacleType != ObstacleType::NONE) {
-        // Skip land tiles with obstacles (trees, rocks)
+                // Skip land tiles with obstacles (trees, rocks)
                 continue;
             } else {
-        // Land decorations by biome
+                // Land decorations by biome
                 switch (tile.biome) {
                     case Biome::PLAINS:
                         decorationChance = DecoCfg::PLAINS_CHANCE;
@@ -793,7 +793,7 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
 
     if (width <= BldgCfg::BUILDING_SIZE || height <= BldgCfg::BUILDING_SIZE) return;
 
-  // World must be large enough for village placement (VILLAGE_RADIUS on each side)
+    // World must be large enough for village placement (VILLAGE_RADIUS on each side)
     int minWorldSize = 2 * BldgCfg::VILLAGE_RADIUS + 2;
     if (width < minWorldSize || height < minWorldSize) return;
 
@@ -802,10 +802,10 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
     std::uniform_int_distribution<int> yDist(BldgCfg::VILLAGE_RADIUS, height - BldgCfg::VILLAGE_RADIUS - 1);
     uint32_t nextBuildingId = 1;
 
-  // Calculate number of villages based on world size
+    // Calculate number of villages based on world size
     int targetVillages = std::max(1, (width * height) / BldgCfg::VILLAGE_DENSITY_DIVISOR);
 
-  // Helper to get biome village weight
+    // Helper to get biome village weight
     auto getBiomeWeight = [](Biome biome) -> float {
         switch (biome) {
             case Biome::PLAINS: return BldgCfg::PLAINS_VILLAGE_WEIGHT;
@@ -820,7 +820,7 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
         }
     };
 
-  // Helper to check if position is valid for village center
+    // Helper to check if position is valid for village center
     auto isValidVillageCenter = [&](int cx, int cy) -> bool {
         if (cx < BldgCfg::VILLAGE_RADIUS || cx >= width - BldgCfg::VILLAGE_RADIUS ||
             cy < BldgCfg::VILLAGE_RADIUS || cy >= height - BldgCfg::VILLAGE_RADIUS) {
@@ -830,10 +830,10 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
         return !tile.isWater && tile.biome != Biome::MOUNTAIN && tile.biome != Biome::OCEAN;
     };
 
-  // Store village centers to enforce minimum distance
+    // Store village centers to enforce minimum distance
     std::vector<std::pair<int, int>> villageCenters;
 
-  // Helper to check distance from existing villages
+    // Helper to check distance from existing villages
     auto isFarEnoughFromVillages = [&](int x, int y) -> bool {
         const int minDistSq = BldgCfg::VILLAGE_MIN_DISTANCE * BldgCfg::VILLAGE_MIN_DISTANCE;
         return std::none_of(villageCenters.begin(), villageCenters.end(),
@@ -844,8 +844,8 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
             });
     };
 
-  // Find village center locations
-    int maxAttempts = targetVillages * 50;  // Allow many attempts to find valid spots
+    // Find village center locations
+    int maxAttempts = targetVillages * 50; // Allow many attempts to find valid spots
     for (int attempt = 0; attempt < maxAttempts && static_cast<int>(villageCenters.size()) < targetVillages; ++attempt) {
         int cx = xDist(rng);
         int cy = yDist(rng);
@@ -853,14 +853,14 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
         if (!isValidVillageCenter(cx, cy)) continue;
         if (!isFarEnoughFromVillages(cx, cy)) continue;
 
-    // Check biome suitability
+        // Check biome suitability
         float biomeWeight = getBiomeWeight(world.grid[cy][cx].biome);
         if (biomeWeight <= 0.0f || dist(rng) > biomeWeight) continue;
 
         villageCenters.emplace_back(cx, cy);
     }
 
-  // Generate buildings for each village
+    // Generate buildings for each village
     std::uniform_int_distribution<int> buildingCountDist(BldgCfg::VILLAGE_MIN_BUILDINGS, BldgCfg::VILLAGE_MAX_BUILDINGS);
 
     for (const auto& center : villageCenters) {
@@ -869,23 +869,23 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
         int targetBuildings = buildingCountDist(rng);
         int buildingsPlaced = 0;
 
-    // Try to place buildings within village radius, favoring positions near center
+        // Try to place buildings within village radius, favoring positions near center
         int placementAttempts = targetBuildings * 20;
         for (int attempt = 0; attempt < placementAttempts && buildingsPlaced < targetBuildings; ++attempt) {
-      // Generate offset from center with bias toward center (gaussian-like distribution)
+            // Generate offset from center with bias toward center (gaussian-like distribution)
             float angle = dist(rng) * 2.0f * 3.14159f;
-            float radiusFactor = dist(rng) * dist(rng);  // Square for center bias
+            float radiusFactor = dist(rng) * dist(rng); // Square for center bias
             float radius = radiusFactor * static_cast<float>(BldgCfg::VILLAGE_RADIUS);
 
             int bx = villageX + static_cast<int>(radius * std::cos(angle));
             int by = villageY + static_cast<int>(radius * std::sin(angle));
 
-      // Validate position
+            // Validate position
             if (bx < 0 || bx >= width - 1 || by < 0 || by >= height - 1) continue;
             if (world.grid[by][bx].buildingId > 0) continue;
             if (!canPlaceBuilding(world, bx, by)) continue;
 
-      // Create building
+            // Create building
             uint32_t newBuildingId = createBuilding(world, bx, by, nextBuildingId);
             if (newBuildingId > 0) {
                 tryConnectBuildings(world, bx, by, newBuildingId);
@@ -911,17 +911,17 @@ bool WorldGenerator::canPlaceBuilding(const WorldData& world, int x, int y) {
     int height = static_cast<int>(world.grid.size());
     int width = height > 0 ? static_cast<int>(world.grid[0].size()) : 0;
 
-  // Check bounds for 2x2 building
+    // Check bounds for 2x2 building
     if (x < 0 || y < 0 || x >= width - 1 || y >= height - 1) {
         return false;
     }
 
-  // Check all 4 tiles of the 2x2 area
+    // Check all 4 tiles of the 2x2 area
     for (int dy = 0; dy < 2; ++dy) {
         for (int dx = 0; dx < 2; ++dx) {
             const Tile& tile = world.grid[y + dy][x + dx];
 
-      // Can't place on water, existing obstacles, or mountain biome
+            // Can't place on water, existing obstacles, or mountain biome
             if (tile.isWater ||
                 tile.obstacleType != ObstacleType::NONE ||
                 tile.biome == Biome::MOUNTAIN ||
@@ -939,7 +939,7 @@ uint32_t WorldGenerator::createBuilding(WorldData& world, int x, int y, uint32_t
     int height = static_cast<int>(world.grid.size());
     int width = height > 0 ? static_cast<int>(world.grid[0].size()) : 0;
 
-  // Validate bounds before creating building
+    // Validate bounds before creating building
     if (x < 0 || y < 0 || x >= width - 1 || y >= height - 1) {
         WORLD_MANAGER_ERROR(std::format("createBuilding: Invalid position ({}, {}) - out of bounds", x, y));
         return 0;
@@ -947,14 +947,14 @@ uint32_t WorldGenerator::createBuilding(WorldData& world, int x, int y, uint32_t
 
     uint32_t buildingId = nextBuildingId++;
 
-  // Mark all 4 tiles as part of this building (2x2)
+    // Mark all 4 tiles as part of this building (2x2)
     int tilesMarked = 0;
     for (int dy = 0; dy < 2; ++dy) {
         for (int dx = 0; dx < 2; ++dx) {
             int tileX = x + dx;
             int tileY = y + dy;
 
-      // Double-check bounds for safety
+            // Double-check bounds for safety
             if (tileX < 0 || tileY < 0 || tileX >= width || tileY >= height) {
                 WORLD_MANAGER_ERROR(std::format("createBuilding: Tile ({}, {}) out of bounds during building creation",
                     tileX, tileY));
@@ -963,7 +963,7 @@ uint32_t WorldGenerator::createBuilding(WorldData& world, int x, int y, uint32_t
 
             Tile& tile = world.grid[tileY][tileX];
 
-      // Verify tile is available before marking
+            // Verify tile is available before marking
             if (tile.obstacleType != ObstacleType::NONE || tile.buildingId > 0) {
                 WORLD_MANAGER_WARN(std::format("createBuilding: Tile ({}, {}) already occupied", tileX, tileY));
                 continue;
@@ -972,12 +972,12 @@ uint32_t WorldGenerator::createBuilding(WorldData& world, int x, int y, uint32_t
             tile.obstacleType = ObstacleType::BUILDING;
             tile.buildingId = buildingId;
             tile.buildingSize = 1; // Start as size 1 (hut)
-            tile.isTopLeftOfBuilding = (dx == 0 && dy == 0);  // Only top-left renders the building
+            tile.isTopLeftOfBuilding = (dx == 0 && dy == 0); // Only top-left renders the building
             tilesMarked++;
         }
     }
 
-  // Validate that all 4 tiles were successfully marked
+    // Validate that all 4 tiles were successfully marked
     if (tilesMarked != 4) {
         WORLD_MANAGER_ERROR(std::format("createBuilding: Building {} at ({}, {}) only marked {}/4 tiles",
             buildingId, x, y, tilesMarked));
@@ -998,10 +998,10 @@ void WorldGenerator::tryConnectBuildings(WorldData& world, int x, int y, uint32_
     std::vector<uint32_t> connectedBuildings;
     connectedBuildings.push_back(buildingId);
 
-  // Check for adjacent buildings to connect to (check all sides of the 2x2 building)
-  // For a 2x2 building at (x,y), check where other 2x2 buildings would be adjacent
+    // Check for adjacent buildings to connect to (check all sides of the 2x2 building)
+    // For a 2x2 building at (x,y), check where other 2x2 buildings would be adjacent
 
-  // Check left side - building at (x-2, y) would be directly adjacent
+    // Check left side - building at (x-2, y) would be directly adjacent
     if (x >= 2) {
         for (int dy = 0; dy < 2; ++dy) {
             if (y + dy < height) {
@@ -1015,7 +1015,7 @@ void WorldGenerator::tryConnectBuildings(WorldData& world, int x, int y, uint32_
         }
     }
 
-  // Check right side - building at (x+2, y) would be directly adjacent
+    // Check right side - building at (x+2, y) would be directly adjacent
     if (x + 2 < width) {
         for (int dy = 0; dy < 2; ++dy) {
             if (y + dy < height) {
@@ -1029,7 +1029,7 @@ void WorldGenerator::tryConnectBuildings(WorldData& world, int x, int y, uint32_
         }
     }
 
-  // Check top side - building at (x, y-2) would be directly adjacent
+    // Check top side - building at (x, y-2) would be directly adjacent
     if (y >= 1) {
         for (int dx = 0; dx < 2; ++dx) {
             if (x + dx < width) {
@@ -1043,7 +1043,7 @@ void WorldGenerator::tryConnectBuildings(WorldData& world, int x, int y, uint32_
         }
     }
 
-  // Check bottom side - building at (x, y+2) would be directly adjacent
+    // Check bottom side - building at (x, y+2) would be directly adjacent
     if (y + 2 < height) {
         for (int dx = 0; dx < 2; ++dx) {
             if (x + dx < width) {
@@ -1057,13 +1057,13 @@ void WorldGenerator::tryConnectBuildings(WorldData& world, int x, int y, uint32_
         }
     }
 
-  // Update building sizes for all connected buildings
+    // Update building sizes for all connected buildings
     uint8_t newSize = static_cast<uint8_t>(std::min(
         static_cast<uint32_t>(BldgCfg::MAX_CONNECTED_SIZE),
         static_cast<uint32_t>(connectedBuildings.size())));
 
     for (uint32_t connectedId : connectedBuildings) {
-    // Update all tiles belonging to each connected building
+        // Update all tiles belonging to each connected building
         for (int row = 0; row < height; ++row) {
             for (int col = 0; col < width; ++col) {
                 if (world.grid[row][col].buildingId == connectedId) {

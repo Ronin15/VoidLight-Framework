@@ -31,7 +31,7 @@
 #include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "managers/PathfinderManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
@@ -232,7 +232,7 @@ public:
 
             auto& attackState = edm.getAttackState(ref.index);
             attackState.currentState = (scenario == AttackScenario::BurstResolve)
-                ? 3  // Attacking: immediately resolves melee/ranged attack actions.
+                ? 3 // Attacking: immediately resolves melee/ranged attack actions.
                 : 1; // Assessing: immediately enters decision logic.
             attackState.attackTimer = (scenario == AttackScenario::BurstResolve ||
                                           scenario == AttackScenario::CadencedResolve)
@@ -515,7 +515,7 @@ BOOST_AUTO_TEST_CASE(AIEntityScaling) {
 
         float worldSize = std::sqrt(static_cast<float>(count)) * 100.0f;
         createEntities(count, worldSize);
-        setupWorld(worldSize);  // Pass spawn worldSize directly
+        setupWorld(worldSize); // Pass spawn worldSize directly
 
         // Verify ALL entities are in Active tier
         size_t activeCount = verifyActiveTier();
@@ -596,7 +596,7 @@ BOOST_AUTO_TEST_CASE(BehaviorMixTest) {
     for (const auto& mix : mixes) {
         prepareForTest();
         createEntitiesWithBehaviors(ENTITY_COUNT, WORLD_SIZE, mix.behaviors);
-        setupWorld(WORLD_SIZE);  // Pass spawn worldSize directly
+        setupWorld(WORLD_SIZE); // Pass spawn worldSize directly
 
         double medianMs = runBenchmark(verifyActiveTier());
         double updatesPerSec = (medianMs > 0.0)
@@ -818,7 +818,7 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning) {
     std::cout << "PART 1: Batch Sizing Hill-Climb\n";
     std::cout << "(Converges in ~100 frames)\n\n";
 
-    constexpr size_t BATCH_ENTITY_COUNT = 5000;  // Sufficient to trigger threading
+    constexpr size_t BATCH_ENTITY_COUNT = 5000; // Sufficient to trigger threading
     constexpr float BATCH_WORLD_SIZE = 7000.0f;
     constexpr int BATCH_MEASURE_INTERVAL = 100;
     constexpr int BATCH_TOTAL_FRAMES = 500;

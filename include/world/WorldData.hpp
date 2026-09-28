@@ -25,12 +25,12 @@ struct WorldGenerationConfig {
 };
 
 // World rendering and spatial constants
-constexpr float TILE_SIZE = 32.0f;  // Tile size in pixels
+constexpr float TILE_SIZE = 32.0f; // Tile size in pixels
 
 enum class Biome {
     DESERT,
     FOREST,
-    PLAINS,     // Open grassland with sparse vegetation
+    PLAINS, // Open grassland with sparse vegetation
     MOUNTAIN,
     SWAMP,
     HAUNTED,
@@ -184,13 +184,13 @@ struct Tile {
     VoidLight::ResourceHandle resourceHandle;
 
     // Building support for multi-tile structures
-    uint32_t buildingId = 0;        // 0 = no building, >0 = unique building ID
-    uint8_t buildingSize = 0;       // 0 = no building, 1-4 = connected building count
-    bool isTopLeftOfBuilding = false;  // Pre-computed flag for render optimization
+    uint32_t buildingId = 0; // 0 = no building, >0 = unique building ID
+    uint8_t buildingSize = 0; // 0 = no building, 1-4 = connected building count
+    bool isTopLeftOfBuilding = false; // Pre-computed flag for render optimization
 };
 
 struct SettlementRecord {
-    uint32_t id{0};       // 1-based
+    uint32_t id{0}; // 1-based
     int centerTileX{0};
     int centerTileY{0};
     int radiusTiles{12};

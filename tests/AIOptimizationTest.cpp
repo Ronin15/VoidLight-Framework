@@ -240,11 +240,11 @@ BOOST_AUTO_TEST_CASE(TestWorldBoundsClampingWithBehaviors) {
     };
 
     // Create entities at various positions including near boundaries
-    createEntity(Vector2D(50.0f, 50.0f), "Wander");           // Near min corner
-    createEntity(Vector2D(31950.0f, 31950.0f), "Wander");     // Near max corner
-    createEntity(Vector2D(16000.0f, 16000.0f), "Wander");     // Center
-    createEntity(Vector2D(30.0f, 16000.0f), "Wander");        // Near min X
-    createEntity(Vector2D(16000.0f, 31970.0f), "Wander");     // Near max Y
+    createEntity(Vector2D(50.0f, 50.0f), "Wander"); // Near min corner
+    createEntity(Vector2D(31950.0f, 31950.0f), "Wander"); // Near max corner
+    createEntity(Vector2D(16000.0f, 16000.0f), "Wander"); // Center
+    createEntity(Vector2D(30.0f, 16000.0f), "Wander"); // Near min X
+    createEntity(Vector2D(16000.0f, 31970.0f), "Wander"); // Near max Y
 
     // Run simulation for multiple frames to let behaviors move entities
     for (int frame = 0; frame < 100; ++frame) {

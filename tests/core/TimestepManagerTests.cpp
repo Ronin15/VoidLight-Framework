@@ -97,7 +97,7 @@ BOOST_AUTO_TEST_CASE(GetUpdateDeltaTimeIsAlwaysFixed) {
     TimestepManager tm(60.0f, 1.0f / 60.0f);
     const float expected = tm.getUpdateDeltaTime();
 
-    tm.startFrame();  // primes m_firstFrame; accumulator unchanged
+    tm.startFrame(); // primes m_firstFrame; accumulator unchanged
     BOOST_CHECK_CLOSE(tm.getUpdateDeltaTime(), expected, 0.0001f);
 
     // Even after draining all queued updates the value must be constant.
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(SetDisplayRefreshHzDoesNotCrash) {
     tm.setDisplayRefreshHz(0.0f);
     tm.setDisplayRefreshHz(-1.0f);
 
-    BOOST_CHECK(true);  // no crash is the assertion
+    BOOST_CHECK(true); // no crash is the assertion
 }
 
 BOOST_AUTO_TEST_CASE(UpdateFrequencyHzMatchesInverseOfFixedTimestep) {
@@ -193,10 +193,10 @@ BOOST_AUTO_TEST_CASE(ShouldUpdateAfterElapsedTime) {
     // A 50 ms sleep covers ~3 frames at 60 Hz; at least one shouldUpdate()
     // call must succeed to confirm the accumulator-driven loop is working.
     TimestepManager tm(60.0f, 1.0f / 60.0f);
-    tm.startFrame();  // prime m_lastFrameTime
+    tm.startFrame(); // prime m_lastFrameTime
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    tm.startFrame();  // measures ~50 ms and adds it to the accumulator
+    tm.startFrame(); // measures ~50 ms and adds it to the accumulator
 
     BOOST_CHECK(tm.shouldUpdate());
 }
@@ -221,10 +221,10 @@ BOOST_AUTO_TEST_CASE(SpiralOfDeathGuardClampsAccumulator) {
     // Sleeping 500 ms is >> MAX_ACCUMULATOR (0.25 s).
     // The clamp must prevent unbounded catch-up updates.
     TimestepManager tm(60.0f, 1.0f / 60.0f);
-    tm.startFrame();  // prime
+    tm.startFrame(); // prime
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    tm.startFrame();  // delta clamped at 0.25 s before being added
+    tm.startFrame(); // delta clamped at 0.25 s before being added
 
     int updateCount = 0;
     while (tm.shouldUpdate()) { ++updateCount; }
@@ -246,7 +246,7 @@ BOOST_AUTO_TEST_CASE(InterpolationAlphaRemainsInUnitRange) {
     TimestepManager tm(60.0f, 1.0f / 60.0f);
     tm.startFrame();
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(8));  // ~half a frame
+    std::this_thread::sleep_for(std::chrono::milliseconds(8)); // ~half a frame
     tm.startFrame();
 
     const double alpha = tm.getInterpolationAlpha();
@@ -264,7 +264,7 @@ BOOST_AUTO_TEST_CASE(InterpolationAlphaDropsAfterUpdate) {
     tm.startFrame();
 
     const double alphaBefore = tm.getInterpolationAlpha();
-    BOOST_REQUIRE(tm.shouldUpdate());  // consume one step
+    BOOST_REQUIRE(tm.shouldUpdate()); // consume one step
     const double alphaAfter = tm.getInterpolationAlpha();
 
     // Alpha decreases (or stays at 0 if accumulator was already at threshold).
@@ -278,7 +278,7 @@ BOOST_AUTO_TEST_CASE(ResetClearsAccumulatorAndUpdateQueue) {
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     tm.startFrame();
-    BOOST_REQUIRE(tm.shouldUpdate());  // confirm updates were queued
+    BOOST_REQUIRE(tm.shouldUpdate()); // confirm updates were queued
 
     tm.reset();
 
@@ -301,14 +301,14 @@ BOOST_AUTO_TEST_CASE(MultiFrameAccumulationIsMonotonic) {
     // Each startFrame() call should add a non-negative delta to the accumulator;
     // the total update count over two consecutive frames must be >= the first.
     TimestepManager tm(60.0f, 1.0f / 60.0f);
-    tm.startFrame();  // prime
+    tm.startFrame(); // prime
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(17));  // ~1 frame
+    std::this_thread::sleep_for(std::chrono::milliseconds(17)); // ~1 frame
     tm.startFrame();
     int firstCount = 0;
     while (tm.shouldUpdate()) { ++firstCount; }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(17));  // another frame
+    std::this_thread::sleep_for(std::chrono::milliseconds(17)); // another frame
     tm.startFrame();
     int secondCount = 0;
     while (tm.shouldUpdate()) { ++secondCount; }

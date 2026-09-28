@@ -76,7 +76,7 @@ private:
      */
     void onTimeEvent(const EventData& data);
 
-    WeatherType m_currentWeather{};  // Initialized in cpp to avoid header dependency
+    WeatherType m_currentWeather{}; // Initialized in cpp to avoid header dependency
 };
 
 #endif // WEATHER_CONTROLLER_HPP

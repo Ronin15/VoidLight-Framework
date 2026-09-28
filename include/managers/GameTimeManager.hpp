@@ -328,25 +328,25 @@ private:
     GameTimeManager& operator=(const GameTimeManager&) = delete;
 
     // Time tracking
-    float m_currentHour{12.0f};       // Current hour (0-23.999)
-    int m_currentDay{1};              // Current day (starts at 1)
-    float m_totalGameSeconds{0.0f};   // Total game seconds elapsed
+    float m_currentHour{12.0f}; // Current hour (0-23.999)
+    int m_currentDay{1}; // Current day (starts at 1)
+    float m_totalGameSeconds{0.0f}; // Total game seconds elapsed
 
     // Time progression
-    float m_timeScale{1.0f};          // Scale factor for time progression
+    float m_timeScale{1.0f}; // Scale factor for time progression
 
     // Daylight settings
-    float m_sunriseHour{6.0f};        // Hour when sun rises
-    float m_sunsetHour{18.0f};        // Hour when sun sets
+    float m_sunriseHour{6.0f}; // Hour when sun rises
+    float m_sunsetHour{18.0f}; // Hour when sun sets
 
     // Real-time tracking
     std::chrono::steady_clock::time_point m_lastUpdateTime;
 
     // Calendar state
     CalendarConfig m_calendarConfig;
-    int m_currentMonth{0};            // 0-based month index
-    int m_dayOfMonth{1};              // 1-based day within month
-    int m_currentYear{1};             // Year counter (starts at 1)
+    int m_currentMonth{0}; // 0-based month index
+    int m_dayOfMonth{1}; // 1-based day within month
+    int m_currentYear{1}; // Year counter (starts at 1)
     Season m_currentSeason{Season::Spring};
     SeasonConfig m_currentSeasonConfig;
 
@@ -358,7 +358,7 @@ private:
     Season m_previousSeason{Season::Spring};
 
     // Weather system
-    float m_weatherCheckInterval{4.0f};  // Game hours between weather rolls
+    float m_weatherCheckInterval{4.0f}; // Game hours between weather rolls
     float m_lastWeatherCheckHour{0.0f};
     bool m_autoWeatherEnabled{false};
 

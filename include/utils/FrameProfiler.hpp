@@ -21,7 +21,7 @@ enum class FramePhase : uint8_t {
     Events = 0,
     Update,
     Render,
-    Present,  // Presentation / pacing wait (separated from Render)
+    Present, // Presentation / pacing wait (separated from Render)
     COUNT
 };
 
@@ -44,20 +44,20 @@ enum class ManagerPhase : uint8_t {
  * @brief Render phases for detailed render profiling
  */
 enum class RenderPhase : uint8_t {
-    BeginScene = 0,   // Scene setup and render target switch
-    WorldTiles,       // TileRenderer chunk drawing
-    Entities,         // NPCs, player, etc.
-    EndScene,         // Composite to screen
-    UI,               // UIManager render
+    BeginScene = 0, // Scene setup and render target switch
+    WorldTiles, // TileRenderer chunk drawing
+    Entities, // NPCs, player, etc.
+    EndScene, // Composite to screen
+    UI, // UIManager render
     // GPU-specific phases (granular breakdown)
-    GPUCmdBuffer,     // Command buffer acquisition
+    GPUCmdBuffer, // Command buffer acquisition
     GPUSwapchainWait, // Swapchain texture acquisition / pacing wait
-    GPUVertexMap,     // Vertex pool mapping
-    GPUCopyPass,      // Begin copy pass
-    GPUUpload,        // Vertex/texture uploads
-    GPUScenePass,     // Scene render pass (drawing to scene texture)
-    GPUSwapPass,      // Swapchain render pass (composite + UI to swapchain)
-    GPUSubmit,        // Command buffer submission
+    GPUVertexMap, // Vertex pool mapping
+    GPUCopyPass, // Begin copy pass
+    GPUUpload, // Vertex/texture uploads
+    GPUScenePass, // Scene render pass (drawing to scene texture)
+    GPUSwapPass, // Swapchain render pass (composite + UI to swapchain)
+    GPUSubmit, // Command buffer submission
     COUNT
 };
 
@@ -226,7 +226,7 @@ private:
     std::array<double, static_cast<size_t>(RenderPhase::COUNT)> m_renderTimes{};
 
     // Configuration
-    double m_thresholdMs{20.0};  // 1.5x of 16.67ms (60fps) by default
+    double m_thresholdMs{20.0}; // 1.5x of 16.67ms (60fps) by default
     uint32_t m_suppressCount{0}; // Frames to skip hitch detection
 
     // Statistics
@@ -341,7 +341,7 @@ private:
 #define PROFILE_RENDER(r) VoidLight::ScopedRenderTimer VOIDLIGHT_PROFILE_CONCAT(_scopedRenderTimer, __LINE__)(r)
 #define PROFILE_RENDER_GPU(r) VoidLight::ScopedRenderTimerGPU VOIDLIGHT_PROFILE_CONCAT(_scopedRenderTimerGPU, __LINE__)(r)
 
-#else  // VOIDLIGHT_FRAME_PROFILER_ENABLED - Release build (stub)
+#else // VOIDLIGHT_FRAME_PROFILER_ENABLED - Release build (stub)
 
 // Stub class for release builds - completely empty
 class FrameProfiler {
@@ -381,8 +381,8 @@ public:
 #define PROFILE_RENDER(r) ((void)0)
 #define PROFILE_RENDER_GPU(r) ((void)0)
 
-#endif  // VOIDLIGHT_FRAME_PROFILER_ENABLED
+#endif // VOIDLIGHT_FRAME_PROFILER_ENABLED
 
-}  // namespace VoidLight
+} // namespace VoidLight
 
-#endif  // FRAME_PROFILER_HPP
+#endif // FRAME_PROFILER_HPP

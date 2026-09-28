@@ -32,28 +32,28 @@ using EntityPtr = std::shared_ptr<Entity>;
 using EntityWeakPtr = std::weak_ptr<Entity>;
 
 struct SpawnParameters {
-    std::string npcType;          // Type/class of NPC to spawn (or "Random" for random class)
-    std::string npcRace;          // Race of NPC to spawn (empty = "Human", "Random" for random race)
-    std::string npcID;            // Optional unique ID for the spawned NPC
-    int count{1};                 // Number of NPCs to spawn
-    float spawnRadius{0.0f};      // Radius around spawn point (0 = exact point)
-    bool facingPlayer{false};     // Whether NPCs should face the player when spawned
+    std::string npcType; // Type/class of NPC to spawn (or "Random" for random class)
+    std::string npcRace; // Race of NPC to spawn (empty = "Human", "Random" for random race)
+    std::string npcID; // Optional unique ID for the spawned NPC
+    int count{1}; // Number of NPCs to spawn
+    float spawnRadius{0.0f}; // Radius around spawn point (0 = exact point)
+    bool facingPlayer{false}; // Whether NPCs should face the player when spawned
     float minDistanceApart{0.0f}; // Minimum distance between spawned NPCs
 
     // Spawn behavior
-    bool fadeIn{false};           // Whether NPCs should fade in
-    float fadeTime{1.0f};         // Time to fade in (seconds)
-    bool playSpawnEffect{false};  // Whether to play spawn visual effect
-    std::string spawnEffectID;    // Effect to play on spawn
-    std::string spawnSoundID;     // Sound to play on spawn
+    bool fadeIn{false}; // Whether NPCs should fade in
+    float fadeTime{1.0f}; // Time to fade in (seconds)
+    bool playSpawnEffect{false}; // Whether to play spawn visual effect
+    std::string spawnEffectID; // Effect to play on spawn
+    std::string spawnSoundID; // Sound to play on spawn
 
     // Lifecycle behavior
-    float despawnTime{-1.0f};     // Time until despawn (-1 = never)
+    float despawnTime{-1.0f}; // Time until despawn (-1 = never)
     float despawnDistance{-1.0f}; // Distance at which NPC despawns (-1 = never)
 
     // AI behavior assignment
-    std::string aiBehavior;                    // Single AI behavior for all NPCs
-    std::vector<std::string> aiBehaviors;      // Multiple behaviors to rotate through
+    std::string aiBehavior; // Single AI behavior for all NPCs
+    std::vector<std::string> aiBehaviors; // Multiple behaviors to rotate through
 
     // Custom properties to set on spawned NPCs
     std::unordered_map<std::string, std::string> properties;

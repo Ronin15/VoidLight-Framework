@@ -307,7 +307,7 @@ BOOST_AUTO_TEST_CASE(TestSimpleWorldGeneration) {
 
     // Generate a very small world to minimize processing time
     WorldGenerationConfig config{};
-    config.width = 5;  // Very small to avoid hanging
+    config.width = 5; // Very small to avoid hanging
     config.height = 5;
     config.seed = 12345;
     config.elevationFrequency = 0.1f;

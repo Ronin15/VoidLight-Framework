@@ -268,7 +268,7 @@ BOOST_AUTO_TEST_CASE(IdempotentResize) {
 
     // Resize to same or smaller must be a no-op
     sidecar.resizeSparse(20);
-    sidecar.resizeSparse(5);   // Smaller — must not truncate
+    sidecar.resizeSparse(5); // Smaller — must not truncate
 
     BOOST_CHECK(sidecar.has(10));
     BOOST_CHECK_EQUAL(sidecar.get(10)->value, 5);

@@ -62,9 +62,9 @@ public:
     static const std::string EVENT_TYPE;
 
 private:
-    int m_entityId{-1};                  // Entity performing the harvest
-    Vector2D m_targetPosition;           // Target tile coordinates
-    std::string m_resourceType;          // Optional resource type hint
+    int m_entityId{-1}; // Entity performing the harvest
+    Vector2D m_targetPosition; // Target tile coordinates
+    std::string m_resourceType; // Optional resource type hint
 };
 
 #endif // HARVEST_RESOURCE_EVENT_HPP

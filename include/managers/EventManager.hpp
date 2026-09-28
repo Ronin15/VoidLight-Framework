@@ -68,11 +68,11 @@ using EntityPtr = std::shared_ptr<Entity>;
  * Optimized for natural alignment and minimal padding
  */
 struct EventData {
-    EventPtr event;     // Smart pointer to event
-    uint32_t flags;     // Active, dirty, etc.
+    EventPtr event; // Smart pointer to event
+    uint32_t flags; // Active, dirty, etc.
     EventTypeId typeId; // Type for fast dispatch
 
-  // Flags bit definitions
+    // Flags bit definitions
     static constexpr uint32_t FLAG_ACTIVE = 1 << 0;
     static constexpr uint32_t FLAG_DIRTY = 1 << 1;
     static constexpr uint32_t FLAG_PENDING_REMOVAL = 1 << 2;
@@ -135,13 +135,13 @@ public:
             return event;
         }
 
-    // Create new event via creator if provided
+        // Create new event via creator if provided
         if (m_creator) {
             auto event = m_creator();
             m_allEvents.push_back(event);
             return event;
         }
-    // No creator set; caller must handle nullptr
+        // No creator set; caller must handle nullptr
         return nullptr;
     }
 
@@ -184,61 +184,61 @@ class EventManager {
 public:
     static EventManager& Instance();
 
-  // Dispatch control for handler execution
+    // Dispatch control for handler execution
     enum class DispatchMode : uint8_t {
         Deferred = 0,
         Immediate = 1
     };
 
-  /**
+    /**
    * @brief Initializes the EventManager and its internal systems
    * @return true if initialization successful, false otherwise
    */
     [[nodiscard]] bool init();
 
-  /**
+    /**
    * @brief Checks if the Event Manager has been initialized
    * @return true if initialized, false otherwise
    */
     bool isInitialized() const;
 
-  /**
+    /**
    * @brief Cleans up all event resources
    */
     void clean();
 
-  /**
+    /**
    * @brief Prepares for state transition by safely cleaning up handlers
    * @details Call this before exit() in game states to avoid issues
    */
     void prepareForStateTransition();
 
-  /**
+    /**
    * @brief Processes the deferred dispatch queue
    */
     void update();
 
-  /**
+    /**
    * @brief Drains all deferred events from the dispatch queue
    * @details Calls update() multiple times until all deferred events are processed.
    *          Primarily intended for testing to ensure deterministic event processing.
    */
     void drainAllDeferredEvents();
 
-  // ==================== Batch Enqueue (for AI/Combat workers) ====================
+    // ==================== Batch Enqueue (for AI/Combat workers) ====================
 
-  /**
+    /**
    * @brief Deferred event for batch enqueueing
    * @details Used by AI worker threads to accumulate events locally,
    *          then enqueue in a single batch with one lock acquisition.
    */
     struct DeferredEvent {
-    // Custom is a safe empty default; producers always overwrite before enqueue.
+        // Custom is a safe empty default; producers always overwrite before enqueue.
         EventTypeId typeId{EventTypeId::Custom};
         EventData data{};
     };
 
-  /**
+    /**
    * @brief Enqueues multiple deferred events with a single lock acquisition
    * @param events Vector of deferred events to enqueue (moved)
    * @details AI workers should accumulate events locally during batch processing,
@@ -246,20 +246,20 @@ public:
    */
     void enqueueBatch(std::vector<DeferredEvent>&& events) const;
 
-  /**
+    /**
    * @brief Checks if EventManager has been shut down
    * @return true if manager is shut down, false otherwise
    */
     bool isShutdown() const;
 
-  // ==================== Handler Registration ====================
+    // ==================== Handler Registration ====================
 
-  /**
+    /**
    * @brief Registers a transient handler (cleared on state transition)
    */
     void registerHandler(EventTypeId typeId, FastEventHandler handler);
 
-  /**
+    /**
    * @brief Registers a persistent handler (survives state transitions)
    *
    * Use for manager-level infrastructure handlers registered in init().
@@ -267,17 +267,17 @@ public:
    */
     void registerPersistentHandler(EventTypeId typeId, FastEventHandler handler);
 
-  /**
+    /**
    * @brief Removes all handlers for an event type
    */
     void removeHandlers(EventTypeId typeId);
 
-  /**
+    /**
    * @brief Clears all registered handlers (including persistent — for shutdown)
    */
     void clearAllHandlers();
 
-  /**
+    /**
    * @brief Clears only transient handlers (persistent handlers survive)
    *
    * Called during state transitions. Manager-level handlers registered
@@ -285,42 +285,42 @@ public:
    */
     void clearTransientHandlers();
 
-  /**
+    /**
    * @brief Gets the handler count for an event type
    */
     size_t getHandlerCount(EventTypeId typeId) const;
 
-  // Token-based handler management
+    // Token-based handler management
     struct HandlerToken {
         EventTypeId typeId;
         uint64_t id;
     };
 
-  /**
+    /**
    * @brief Registers a transient handler and returns a token for removal
    */
     HandlerToken registerHandlerWithToken(EventTypeId typeId,
         FastEventHandler handler);
 
-  /**
+    /**
    * @brief Registers a persistent handler and returns a token for removal
    */
     HandlerToken registerPersistentHandlerWithToken(EventTypeId typeId,
         FastEventHandler handler);
 
-  /**
+    /**
    * @brief Removes a handler using its token (works for both persistent and transient)
    */
     bool removeHandler(const HandlerToken& token);
 
-  // ==================== Global Controls ====================
+    // ==================== Global Controls ====================
 
     VOIDLIGHT_DEBUG_ONLY(
-  // Threading control (benchmarking only - compiles out in release)
+        // Threading control (benchmarking only - compiles out in release)
         void enableThreading(bool enable);
         bool isThreadingEnabled() const;)
 
-  /**
+    /**
    * @brief Pause deferred drain only (menu / global pause).
    *
    * EventManager is the single bus for gameplay events (combat, weather,
@@ -333,14 +333,14 @@ public:
    */
     void setGlobalPause(bool paused);
 
-  /**
+    /**
    * @brief Gets the global pause state
    */
     bool isGloballyPaused() const;
 
-  // ==================== Trigger Methods (Dispatch-Only) ====================
+    // ==================== Trigger Methods (Dispatch-Only) ====================
 
-  /**
+    /**
    * @brief Triggers a weather change event
    * @details Pool-miss constructs Clear, then always setWeatherType(weatherType)
    *          so named types such as Stormy hit the Stormy row, not Custom.
@@ -349,7 +349,7 @@ public:
         float transitionTime = 5.0f,
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  /**
+    /**
    * @brief Triggers an NPC spawn event
    */
     bool spawnNPC(const std::string& npcType, float x, float y,
@@ -364,7 +364,7 @@ public:
         bool worldWide = false,
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  /**
+    /**
    * @brief Triggers a particle effect
    */
     bool triggerParticleEffect(const std::string& effectName, float x, float y,
@@ -377,7 +377,7 @@ public:
         const std::string& groupTag = "",
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  /**
+    /**
    * @brief Triggers a resource change event
    */
     bool triggerResourceChange(EntityHandle ownerHandle,
@@ -386,13 +386,13 @@ public:
         const std::string& changeReason = "",
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  /**
+    /**
    * @brief Triggers a world trigger event (OnEnter style)
    */
     bool triggerWorldTrigger(const WorldTriggerEvent& event,
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  /**
+    /**
    * @brief Triggers a collision obstacle changed event
    */
     bool triggerCollisionObstacleChanged(const Vector2D& position,
@@ -400,7 +400,7 @@ public:
         const std::string& description = "",
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  // World event triggers
+    // World event triggers
     bool triggerWorldLoaded(const std::string& worldId, int width, int height,
         DispatchMode mode = DispatchMode::Deferred) const;
     bool triggerWorldUnloaded(const std::string& worldId,
@@ -413,7 +413,7 @@ public:
     bool triggerStaticCollidersReady(size_t solidBodyCount, size_t triggerCount,
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  // Camera event triggers
+    // Camera event triggers
     bool triggerCameraMoved(const Vector2D& newPos, const Vector2D& oldPos,
         DispatchMode mode = DispatchMode::Deferred) const;
     bool triggerCameraModeChanged(int newMode, int oldMode,
@@ -427,7 +427,7 @@ public:
     bool triggerCameraZoomChanged(float newZoom, float oldZoom,
         DispatchMode mode = DispatchMode::Deferred) const;
 
-  /**
+    /**
    * @brief Dispatches an event directly without registration
    * @param event Shared pointer to the event to dispatch
    * @param mode Deferred (processed in update()) or Immediate
@@ -435,21 +435,21 @@ public:
    */
     bool dispatchEvent(const EventPtr& event, DispatchMode mode = DispatchMode::Deferred) const;
 
-  // ==================== Performance & Diagnostics ====================
+    // ==================== Performance & Diagnostics ====================
 
-  /**
+    /**
    * @brief Gets the number of pending events in the dispatch queue
    */
     size_t getPendingEventCount() const;
 
-  /**
+    /**
    * @brief Clears all event pools
    */
     void clearEventPools();
 
-  // ==================== Pool Acquisition (for deferred event creation) ====================
+    // ==================== Pool Acquisition (for deferred event creation) ====================
 
-  /**
+    /**
    * @brief Acquire a DamageEvent from pool (avoids per-event allocation)
    */
     std::shared_ptr<DamageEvent> acquireDamageEvent() const { return m_damagePool.acquire(); }
@@ -468,59 +468,59 @@ private:
 
     EventManager(); // Constructor pre-allocates handler vectors
 
-  // Shutdown state (main thread access only - game loop guarantees sequential updates)
+    // Shutdown state (main thread access only - game loop guarantees sequential updates)
     bool m_isShutdown{false};
     ~EventManager();
     EventManager(const EventManager&) = delete;
     EventManager& operator=(const EventManager&) = delete;
 
-  // Event pools for trigger methods (reuse event objects)
+    // Event pools for trigger methods (reuse event objects)
     mutable EventPool<WeatherEvent> m_weatherPool;
     mutable EventPool<NPCSpawnEvent> m_npcSpawnPool;
     mutable EventPool<MerchantSpawnEvent> m_merchantSpawnPool;
     mutable EventPool<ResourceChangeEvent> m_resourceChangePool;
 
-  // Hot-path event pools (triggered frequently during gameplay)
+    // Hot-path event pools (triggered frequently during gameplay)
     mutable EventPool<ParticleEffectEvent> m_particleEffectPool;
     mutable EventPool<CollisionObstacleChangedEvent> m_collisionObstacleChangedPool;
     mutable EventPool<DamageEvent> m_damagePool;
 
-  // Handler storage (type-indexed)
+    // Handler storage (type-indexed)
     std::array<std::vector<HandlerEntry>, static_cast<size_t>(EventTypeId::COUNT)>
         m_handlersByType;
     std::atomic<uint64_t> m_nextHandlerId{1};
 
-  // Threading and synchronization
+    // Threading and synchronization
     mutable std::shared_mutex m_handlersMutex;
     VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_threadingEnabled{true};)
     std::atomic<bool> m_initialized{false};
     std::atomic<bool> m_globallyPaused{false};
 
-  // Deferred dispatch queue
+    // Deferred dispatch queue
     struct PendingDispatch {
         uint64_t sequence{0};
         EventTypeId typeId{EventTypeId::Custom};
         EventData data{};
     };
-    mutable std::mutex m_dispatchMutex;  // Protects concurrent enqueue from AI workers
+    mutable std::mutex m_dispatchMutex; // Protects concurrent enqueue from AI workers
 
     mutable std::deque<PendingDispatch> m_pendingDispatch;
     mutable std::deque<PendingDispatch> m_pendingCombatDispatch;
     mutable uint64_t m_nextDeferredSequence{0};
     size_t m_maxDispatchQueue{8192};
 
-  // Reusable buffer for drainDispatchQueueWithBudget
+    // Reusable buffer for drainDispatchQueueWithBudget
     mutable std::vector<PendingDispatch> m_localDispatchBuffer;
     mutable std::vector<PendingDispatch> m_localNonCombatBuffer;
     mutable std::vector<PendingDispatch> m_localCombatDispatchBuffer;
     mutable std::vector<PreparedCombatEvent> m_preparedCombatBuffer;
     mutable std::vector<std::future<void>> m_combatPrepFutures;
 
-  // Snapshot of m_handlersByType taken once per drain, under m_handlersMutex,
-  // then used lock-free for the rest of drainDispatchQueueWithBudget(). Safe
-  // as a reused member (not a local): this function has exactly one caller
-  // (EventManager::update(), main-thread, once per frame) and is not itself
-  // reentrant, so nothing can clobber it mid-use.
+    // Snapshot of m_handlersByType taken once per drain, under m_handlersMutex,
+    // then used lock-free for the rest of drainDispatchQueueWithBudget(). Safe
+    // as a reused member (not a local): this function has exactly one caller
+    // (EventManager::update(), main-thread, once per frame) and is not itself
+    // reentrant, so nothing can clobber it mid-use.
     mutable std::array<std::vector<HandlerEntry>, static_cast<size_t>(EventTypeId::COUNT)>
         m_handlersSnapshotBuffer;
 
@@ -540,11 +540,11 @@ private:
     void clearPendingDispatchQueues() const;
     void drainDispatchQueueWithBudget();
 
-  // Consolidated dispatch helper
+    // Consolidated dispatch helper
     bool dispatchEvent(EventTypeId typeId, EventData& eventData, DispatchMode mode,
         std::string_view errorContext = "dispatchEvent") const;
 
-  // Release pooled events back to their pools after dispatch
+    // Release pooled events back to their pools after dispatch
     void releaseEventToPool(EventTypeId typeId, const EventPtr& event) const;
 };
 

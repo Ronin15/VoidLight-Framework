@@ -222,8 +222,8 @@ BOOST_AUTO_TEST_SUITE(CollisionPathfindingIntegrationSuite)
 BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFixture) {
     // Production path: requestPathToEDM + main-thread commitCompletedPaths.
 
-    Vector2D start(100.0f, 100.0f);  // Clear area
-    Vector2D goal(600.0f, 600.0f);   // Across obstacles
+    Vector2D start(100.0f, 100.0f); // Clear area
+    Vector2D goal(600.0f, 600.0f); // Across obstacles
 
     std::vector<Vector2D> path;
     const size_t npc = createPathNpc(start);
@@ -292,8 +292,8 @@ BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixt
 BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFixture) {
     // Test that collision events properly invalidate pathfinding cache
 
-    Vector2D start(100.0f, 100.0f);  // Clear starting position
-    Vector2D goal(300.0f, 300.0f);   // Distant goal requiring multiple steps
+    Vector2D start(100.0f, 100.0f); // Clear starting position
+    Vector2D goal(300.0f, 300.0f); // Distant goal requiring multiple steps
 
     std::vector<Vector2D> initialPath;
     const size_t npc = createPathNpc(start);
@@ -529,8 +529,8 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
 BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture) {
     // INTEGRATION TEST #3: Actually move an entity along a path and verify no collisions occur
 
-    Vector2D start(100.0f, 100.0f);  // Clear starting area
-    Vector2D goal(600.0f, 600.0f);   // Goal requires navigating around obstacles
+    Vector2D start(100.0f, 100.0f); // Clear starting area
+    Vector2D goal(600.0f, 600.0f); // Goal requires navigating around obstacles
 
     std::vector<Vector2D> path;
     const size_t npc = createPathNpc(start);

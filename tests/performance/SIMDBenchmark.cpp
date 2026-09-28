@@ -22,10 +22,10 @@ using namespace VoidLight::SIMD;
 // BENCHMARK CONFIGURATION
 // ============================================================================
 
-constexpr size_t ENTITY_COUNT = 10000;           // Test scale: 10K entities
-constexpr size_t WARMUP_ITERATIONS = 100;        // Warmup iterations
-constexpr size_t BENCHMARK_ITERATIONS = 1000;    // Benchmark iterations
-constexpr float MIN_SPEEDUP_THRESHOLD = 1.0f;    // Minimum acceptable SIMD speedup (must be faster than scalar)
+constexpr size_t ENTITY_COUNT = 10000; // Test scale: 10K entities
+constexpr size_t WARMUP_ITERATIONS = 100; // Warmup iterations
+constexpr size_t BENCHMARK_ITERATIONS = 1000; // Benchmark iterations
+constexpr float MIN_SPEEDUP_THRESHOLD = 1.0f; // Minimum acceptable SIMD speedup (must be faster than scalar)
 
 // ============================================================================
 // PLATFORM DETECTION UTILITIES

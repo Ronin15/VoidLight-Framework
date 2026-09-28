@@ -22,11 +22,11 @@ namespace VoidLight {
  * - Skill progression (future)
  */
 enum class HarvestType : uint8_t {
-    Gathering = 0,  // Herbs, flowers, bushes (fastest, no tool needed)
-    Chopping = 1,   // Trees → wood (requires axe)
-    Mining = 2,     // Ore/gem deposits (requires pickaxe)
-    Quarrying = 3,  // Stone, limestone (requires pickaxe)
-    Fishing = 4,    // Water resources (requires fishing rod, future)
+    Gathering = 0, // Herbs, flowers, bushes (fastest, no tool needed)
+    Chopping = 1, // Trees → wood (requires axe)
+    Mining = 2, // Ore/gem deposits (requires pickaxe)
+    Quarrying = 3, // Stone, limestone (requires pickaxe)
+    Fishing = 4, // Water resources (requires fishing rod, future)
     COUNT
 };
 

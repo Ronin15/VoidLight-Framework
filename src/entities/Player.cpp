@@ -58,7 +58,7 @@ ResourceQuantitySnapshot collectInventoryResourceSnapshot(
     addTrackedResource(snapshot, edm, inventoryIndex, explicitHandle);
 
     const size_t maxSlots = edm.getInventoryData(inventoryIndex).maxSlots;
-    slotScratch.resize(maxSlots);  // Reuses capacity across calls (clear() semantics)
+    slotScratch.resize(maxSlots); // Reuses capacity across calls (clear() semantics)
     const size_t slotCount = edm.getInventorySlots(inventoryIndex, slotScratch);
     for (size_t i = 0; i < slotCount; ++i) {
         addTrackedResource(snapshot, edm, inventoryIndex, slotScratch[i].resourceHandle);
@@ -101,11 +101,11 @@ bool isSupportedConsumableEffect(const Consumable& consumable) {
 } // namespace
 
 Player::Player() : Entity() {
-  // Register with EntityDataManager FIRST - data must exist before any state
-  // setup This establishes the single source of truth for all entity data
+    // Register with EntityDataManager FIRST - data must exist before any state
+    // setup This establishes the single source of truth for all entity data
     auto& edm = EntityDataManager::Instance();
     if (edm.isInitialized()) {
-    // Use default half-sizes, will be updated in ensurePhysicsBodyRegistered
+        // Use default half-sizes, will be updated in ensurePhysicsBodyRegistered
         EntityHandle handle =
             edm.registerPlayer(getID(), m_initialPosition, 16.0f, 16.0f);
         setHandle(handle);
@@ -116,41 +116,41 @@ Player::Player() : Entity() {
     m_textureID =
         "player"; // Texture ID as loaded by TextureManager from res/img directory
 
-  // Animation properties
-    m_currentFrame = 1;    // Start with first frame
-    m_currentRow = 1;      // In TextureManager::drawFrame, rows start at 1
-    m_numFrames = 2;       // Number of frames in the animation
-    m_animSpeed = 100;     // Animation speed in milliseconds
+    // Animation properties
+    m_currentFrame = 1; // Start with first frame
+    m_currentRow = 1; // In TextureManager::drawFrame, rows start at 1
+    m_numFrames = 2; // Number of frames in the animation
+    m_animSpeed = 100; // Animation speed in milliseconds
     m_spriteSheetRows = 1; // Number of rows in the sprite sheet
     m_animationAccumulator = 0.0f; // deltaTime accumulator for animation timing
-    m_flip = SDL_FLIP_NONE;        // Default flip direction
+    m_flip = SDL_FLIP_NONE; // Default flip direction
 
-  // Set width and height based on texture dimensions if the texture is loaded
+    // Set width and height based on texture dimensions if the texture is loaded
     loadDimensionsFromTexture();
 
-  // Initialize animation system
+    // Initialize animation system
     initializeAnimationMap();
 
-  // Setup state manager and add states
+    // Setup state manager and add states
     setupStates();
 
-  // Setup inventory system - NOTE: Do NOT call setupInventory() here
-  // because it can trigger shared_this() during construction.
-  // Call setupInventory() after construction completes.
-  // Set default state (now safe - EntityDataManager handle is valid)
+    // Setup inventory system - NOTE: Do NOT call setupInventory() here
+    // because it can trigger shared_this() during construction.
+    // Call setupInventory() after construction completes.
+    // Set default state (now safe - EntityDataManager handle is valid)
     changeState("idle");
 
-  // PLAYER_DEBUG("Player created");
+    // PLAYER_DEBUG("Player created");
 }
 
 // Helper method to get dimensions from the loaded texture
 void Player::loadDimensionsFromTexture() {
-  // Default dimensions in case texture loading fails
+    // Default dimensions in case texture loading fails
     m_width = 128;
-    m_height = 128;    // Set height equal to the sprite sheet row height
+    m_height = 128; // Set height equal to the sprite sheet row height
     m_frameWidth = 64; // Default frame width (width/numFrames)
 
-  // Cache TextureManager reference for better performance
+    // Cache TextureManager reference for better performance
     const TextureManager& texMgr = TextureManager::Instance();
 
     float width = 0.0f;
@@ -170,18 +170,18 @@ void Player::loadDimensionsFromTexture() {
         PLAYER_DEBUG(
             std::format("Original texture dimensions: {}x{}", width, height));
 
-    // Store original dimensions for full sprite sheet
+        // Store original dimensions for full sprite sheet
         m_width = static_cast<int>(width);
         m_height = static_cast<int>(height);
 
-    // Calculate frame dimensions based on sprite sheet layout
-        m_frameWidth = m_width / m_numFrames;           // Width per frame
+        // Calculate frame dimensions based on sprite sheet layout
+        m_frameWidth = m_width / m_numFrames; // Width per frame
         int frameHeight = m_height / m_spriteSheetRows; // Height per row
 
-    // Update height to be the height of a single frame
+        // Update height to be the height of a single frame
         m_height = frameHeight;
 
-    // Sync new dimensions to collision body if already registered
+        // Sync new dimensions to collision body if already registered
         Vector2D newHalfSize(m_frameWidth * 0.5f, m_height * 0.5f);
         CollisionManager::Instance().updateCollisionBodySize(getID(),
             newHalfSize);
@@ -199,7 +199,7 @@ void Player::loadDimensionsFromTexture() {
 }
 
 void Player::setupStates() {
-  // Create and add states
+    // Create and add states
     m_stateManager.addState("idle", std::make_unique<PlayerIdleState>(*this));
     m_stateManager.addState("running",
         std::make_unique<PlayerRunningState>(*this));
@@ -210,8 +210,8 @@ void Player::setupStates() {
 }
 
 Player::~Player() {
-  // Don't call virtual functions from destructors
-  // Instead of calling clean(), directly handle cleanup here
+    // Don't call virtual functions from destructors
+    // Instead of calling clean(), directly handle cleanup here
 
     PLAYER_DEBUG("Cleaning up player resources");
     PLAYER_DEBUG("Player resources cleaned!");
@@ -230,20 +230,20 @@ std::string Player::getCurrentStateName() const {
 }
 
 void Player::update(float deltaTime) {
-  // Store position for render interpolation (must be first!)
+    // Store position for render interpolation (must be first!)
     storePositionForInterpolation();
 
-  // State machine handles input and sets velocity
+    // State machine handles input and sets velocity
     m_stateManager.update(deltaTime);
 
-  // MOVEMENT INTEGRATION: Apply velocity to position (same as AIManager does
-  // for NPCs) This is the core physics step that makes the player move Use
-  // getPosition()/getVelocity() to read from EntityDataManager (single source
-  // of truth)
+    // MOVEMENT INTEGRATION: Apply velocity to position (same as AIManager does
+    // for NPCs) This is the core physics step that makes the player move Use
+    // getPosition()/getVelocity() to read from EntityDataManager (single source
+    // of truth)
     Vector2D currentVel = getVelocity();
 
-  // Apply knockback impulse (decays over multiple frames).
-  // Main-thread: can call EDM directly without going through BehaviorContext.
+    // Apply knockback impulse (decays over multiple frames).
+    // Main-thread: can call EDM directly without going through BehaviorContext.
     auto& edm = EntityDataManager::Instance();
     const size_t playerIdx = edm.getIndex(m_handle);
     if (playerIdx != SIZE_MAX) {
@@ -260,34 +260,34 @@ void Player::update(float deltaTime) {
 
     Vector2D newPos = getPosition() + (currentVel * deltaTime);
 
-  // WORLD BOUNDS CONSTRAINT: Clamp player position to stay within world
-  // boundaries PERFORMANCE: Use cached bounds instead of calling
-  // WorldManager::Instance() every frame Auto-invalidate cache when world
-  // version changes (new world loaded/generated)
+    // WORLD BOUNDS CONSTRAINT: Clamp player position to stay within world
+    // boundaries PERFORMANCE: Use cached bounds instead of calling
+    // WorldManager::Instance() every frame Auto-invalidate cache when world
+    // version changes (new world loaded/generated)
     const uint64_t currentWorldVersion =
         WorldManager::Instance().getWorldVersion();
     if (!m_worldBoundsCached || m_cachedWorldVersion != currentWorldVersion) {
         refreshWorldBoundsCache();
     }
 
-  // Always clamp if bounds are valid (maxX > minX)
+    // Always clamp if bounds are valid (maxX > minX)
     if (m_cachedWorldMaxX > m_cachedWorldMinX &&
         m_cachedWorldMaxY > m_cachedWorldMinY) {
-    // Account for player half-size to prevent center from going out of bounds
+        // Account for player half-size to prevent center from going out of bounds
         const float halfWidth = m_frameWidth * 0.5f;
         const float halfHeight = m_height * 0.5f;
 
-    // Store original position before clamping
+        // Store original position before clamping
         const float originalX = newPos.getX();
         const float originalY = newPos.getY();
 
-    // Clamp position to world bounds (with player size offset)
+        // Clamp position to world bounds (with player size offset)
         const float clampedX = std::clamp(originalX, m_cachedWorldMinX + halfWidth,
             m_cachedWorldMaxX - halfWidth);
         const float clampedY = std::clamp(originalY, m_cachedWorldMinY + halfHeight,
             m_cachedWorldMaxY - halfHeight);
 
-    // Update position and stop velocity if we hit a boundary
+        // Update position and stop velocity if we hit a boundary
         if (clampedX != originalX) {
             newPos.setX(clampedX);
             currentVel.setX(0.0f); // Stop horizontal movement at edge
@@ -297,16 +297,16 @@ void Player::update(float deltaTime) {
             currentVel.setY(0.0f); // Stop vertical movement at edge
         }
 
-    // Write velocity back if it was modified by boundary collision
+        // Write velocity back if it was modified by boundary collision
         if (clampedX != originalX || clampedY != originalY) {
             setVelocity(currentVel);
         }
     }
 
-  // Write position using movement method (preserves previousPosition for interpolation)
+    // Write position using movement method (preserves previousPosition for interpolation)
     updatePositionFromMovement(newPos);
 
-  // Update collision body with new position and velocity
+    // Update collision body with new position and velocity
     auto& cm = CollisionManager::Instance();
     cm.updateCollisionBodyPosition(m_id, newPos);
     cm.updateCollisionBodyVelocity(m_id, currentVel);
@@ -315,13 +315,13 @@ void Player::update(float deltaTime) {
 void Player::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
     float cameraX, float cameraY,
     float interpolationAlpha) {
-  // Get GPU texture for player
+    // Get GPU texture for player
     auto gpuTextureData = TextureManager::Instance().getGPUTextureData(m_textureID);
     if (!gpuTextureData || !gpuTextureData->texture) {
         return;
     }
 
-  // Get entity batch and vertex pool
+    // Get entity batch and vertex pool
     auto& entityBatch = gpuRenderer.getEntityBatch();
     auto& vertexPool = gpuRenderer.getEntityVertexPool();
 
@@ -330,7 +330,7 @@ void Player::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
         return;
     }
 
-  // Get texture dimensions
+    // Get texture dimensions
     float texWidth = gpuTextureData->width;
     float texHeight = gpuTextureData->height;
 
@@ -339,31 +339,31 @@ void Player::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
         texWidth, texHeight,
         static_cast<float>(gpuRenderer.getSceneTexture()->getHeight()));
 
-  // Get interpolated position
+    // Get interpolated position
     Vector2D interpPos = getInterpolatedPosition(interpolationAlpha);
 
-  // Convert world coords to screen coords
+    // Convert world coords to screen coords
     float renderX = interpPos.getX() - cameraX - (m_frameWidth / 2.0f);
     float renderY = interpPos.getY() - cameraY - (m_height / 2.0f);
 
-  // Source rect from sprite sheet
+    // Source rect from sprite sheet
     float srcX = static_cast<float>(m_frameWidth * m_currentFrame);
     float srcY = static_cast<float>(m_height * (m_currentRow - 1));
     float srcW = static_cast<float>(m_frameWidth);
     float srcH = static_cast<float>(m_height);
 
-  // Calculate UV coordinates
+    // Calculate UV coordinates
     float u0 = srcX / texWidth;
     float v0 = srcY / texHeight;
     float u1 = (srcX + srcW) / texWidth;
     float v1 = (srcY + srcH) / texHeight;
 
-  // Handle horizontal flip by swapping U coordinates
+    // Handle horizontal flip by swapping U coordinates
     if (m_flip == SDL_FLIP_HORIZONTAL) {
         std::swap(u0, u1);
     }
 
-  // Draw the sprite using UV coordinates
+    // Draw the sprite using UV coordinates
     entityBatch.drawUV(u0, v0, u1, v1,
         renderX, renderY,
         static_cast<float>(m_frameWidth), static_cast<float>(m_height),
@@ -381,48 +381,48 @@ void Player::renderGPU(VoidLight::GPURenderer& gpuRenderer,
         return;
     }
 
-  // Get scene texture for ortho matrix dimensions
+    // Get scene texture for ortho matrix dimensions
     auto* sceneTexture = gpuRenderer.getSceneTexture();
     if (!sceneTexture) {
         return;
     }
 
-  // Create orthographic projection
+    // Create orthographic projection
     float orthoMatrix[16];
     VoidLight::GPURenderer::createOrthoMatrix(
         0.0f, static_cast<float>(sceneTexture->getWidth()),
         0.0f, static_cast<float>(sceneTexture->getHeight()),
         orthoMatrix);
 
-  // Push view-projection matrix
+    // Push view-projection matrix
     gpuRenderer.pushViewProjection(scenePass, orthoMatrix);
 
-  // Render using the sprite alpha pipeline (supports transparency)
+    // Render using the sprite alpha pipeline (supports transparency)
     entityBatch.render(scenePass, gpuRenderer.getSpriteAlphaPipeline(),
         vertexPool.getGPUBuffer());
 }
 
 void Player::clean() {
-  // Clean up any resources
+    // Clean up any resources
     PLAYER_DEBUG("Cleaning up player resources");
 
-  // Destroy EDM inventory
+    // Destroy EDM inventory
     auto& edm = EntityDataManager::Instance();
     if (edm.isInitialized() && m_inventoryIndex != INVALID_INVENTORY_INDEX) {
         edm.destroyInventory(m_inventoryIndex);
         m_inventoryIndex = INVALID_INVENTORY_INDEX;
     }
 
-  // Unregister from EntityDataManager
+    // Unregister from EntityDataManager
     if (edm.isInitialized()) {
         edm.unregisterEntity(getID());
     }
 }
 
 void Player::ensurePhysicsBodyRegistered() {
-  // EDM-CENTRIC: Set collision layers directly in EDM
-  // Movables are managed entirely by EDM - no CollisionManager storage entry
-  // needed
+    // EDM-CENTRIC: Set collision layers directly in EDM
+    // Movables are managed entirely by EDM - no CollisionManager storage entry
+    // needed
     if (!hasValidHandle())
         return;
 
@@ -433,28 +433,28 @@ void Player::ensurePhysicsBodyRegistered() {
 
     auto& hot = edm.getHotDataByIndex(edmIdx);
 
-  // Player collides with everything except pets (pets pass through player)
-  // Layer_Player is already set in registerPlayer(), just set mask
+    // Player collides with everything except pets (pets pass through player)
+    // Layer_Player is already set in registerPlayer(), just set mask
     hot.collisionMask = 0xFFFF & ~VoidLight::CollisionLayer::Layer_Pet;
     hot.setCollisionEnabled(true);
 }
 
 void Player::setVelocity(const Vector2D& velocity) {
-  // Update EntityDataManager (single source of truth) via base class
-  // EDM-CENTRIC: No CollisionManager entry for movables
+    // Update EntityDataManager (single source of truth) via base class
+    // EDM-CENTRIC: No CollisionManager entry for movables
     Entity::setVelocity(velocity);
 }
 
 void Player::setPosition(const Vector2D& position) {
-  // Update EntityDataManager (single source of truth) via base class
-  // EDM-CENTRIC: No CollisionManager entry for movables
+    // Update EntityDataManager (single source of truth) via base class
+    // EDM-CENTRIC: No CollisionManager entry for movables
     Entity::setPosition(position);
 }
 
 void Player::initializeInventory() {
-  // Create EDM inventory with 20 slots (forces meaningful inventory decisions)
+    // Create EDM inventory with 20 slots (forces meaningful inventory decisions)
     auto& edm = EntityDataManager::Instance();
-    m_inventoryIndex = edm.createInventory(20, false);  // Player inventory is not world resource storage.
+    m_inventoryIndex = edm.createInventory(20, false); // Player inventory is not world resource storage.
 
     if (m_inventoryIndex == INVALID_INVENTORY_INDEX) {
         PLAYER_ERROR("Failed to create player inventory");
@@ -462,7 +462,7 @@ void Player::initializeInventory() {
     }
     edm.setCharacterInventoryIndex(m_handle, m_inventoryIndex);
 
-  // Give player some starting resources using ResourceTemplateManager
+    // Give player some starting resources using ResourceTemplateManager
     const auto& templateManager = ResourceTemplateManager::Instance();
 
     m_goldHandle = templateManager.getHandleById("gold_coins");
@@ -482,7 +482,7 @@ void Player::initializeInventory() {
 
 void Player::onResourceChanged(VoidLight::ResourceHandle resourceHandle,
     int oldQuantity, int newQuantity) {
-  // Use EventManager hub to trigger a ResourceChange (no registration needed)
+    // Use EventManager hub to trigger a ResourceChange (no registration needed)
     EventManager::Instance().triggerResourceChange(
         getHandle(), resourceHandle, oldQuantity, newQuantity, "player_action",
         EventManager::DispatchMode::Deferred);
@@ -641,14 +641,14 @@ Player::getEquippedItem(const std::string& slotName) const {
 
 // Crafting and consumption
 bool Player::canCraft(const std::string&) const {
-  // Simplified crafting check - in a real game you'd have a proper recipe
-  // system
-    return false;   // Not implemented yet
+    // Simplified crafting check - in a real game you'd have a proper recipe
+    // system
+    return false; // Not implemented yet
 }
 
 bool Player::craftItem(const std::string&) {
-  // Simplified crafting - in a real game you'd have a proper recipe system
-    return false;   // Not implemented yet
+    // Simplified crafting - in a real game you'd have a proper recipe system
+    return false; // Not implemented yet
 }
 
 bool Player::consumeItem(VoidLight::ResourceHandle itemHandle) {
@@ -713,9 +713,9 @@ void Player::refreshWorldBoundsCache() {
 // Animation abstraction methods
 
 void Player::initializeAnimationMap() {
-  // Default animation configuration mapping names to sprite sheet details
-  // Current player sprite sheet: 1 row, 2 frames (shared for idle/running)
-  // Can be extended when player sprite sheet is expanded with more rows
+    // Default animation configuration mapping names to sprite sheet details
+    // Current player sprite sheet: 1 row, 2 frames (shared for idle/running)
+    // Can be extended when player sprite sheet is expanded with more rows
     m_animationMap = {
         {"idle", {0, 2, 150, true}}, // Row 0, 2 frames, 150ms, looping
         {"running",
@@ -730,7 +730,7 @@ void Player::initializeAnimationMap() {
 }
 
 void Player::playAnimation(const std::string& animName) {
-  // Skip if already playing this animation - prevents jitter on state re-entry
+    // Skip if already playing this animation - prevents jitter on state re-entry
     if (m_currentAnimationName == animName) {
         return;
     }
@@ -743,7 +743,7 @@ void Player::playAnimation(const std::string& animName) {
         m_animSpeed = config.speed;
         m_animationLoops = config.loop;
         m_currentFrame = 0;
-        m_animationAccumulator = 0.0f;     // Reset deltaTime accumulator
+        m_animationAccumulator = 0.0f; // Reset deltaTime accumulator
         m_currentAnimationName = animName; // Track current animation
     } else {
         PLAYER_WARN(std::format("Player animation not found: {}", animName));
@@ -794,13 +794,13 @@ void Player::takeDamage(float damage, const Vector2D& knockback) {
 
     charData.health = std::max(0.0f, charData.health - damage);
 
-  // Apply knockback via transform
+    // Apply knockback via transform
     if (knockback.length() > 0.001f) {
         auto& transform = EntityDataManager::Instance().getTransform(m_handle);
         transform.position = transform.position + knockback;
     }
 
-  // Handle death or hurt
+    // Handle death or hurt
     if (charData.health <= 0.0f) {
         die();
     } else {
@@ -833,8 +833,8 @@ void Player::die() {
 
     changeState("dying");
 
-  // Note: Game over / respawn logic would be handled by GamePlayState or
-  // similar
+    // Note: Game over / respawn logic would be handled by GamePlayState or
+    // similar
 }
 
 void Player::setMaxHealth(float maxHealth) {

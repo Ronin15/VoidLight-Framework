@@ -21,7 +21,7 @@
  */
 class ResourceChangeEvent : public Event {
 public:
-  /**
+    /**
    * @brief Constructs a resource change event
    * @param ownerHandle Handle of entity that owns the inventory
    * @param resourceHandle Handle of the resource that changed
@@ -37,7 +37,7 @@ public:
 
     ~ResourceChangeEvent() override = default;
 
-  // Event interface implementation
+    // Event interface implementation
     void update() override {}
     void execute() override {}
     void reset() override {
@@ -56,7 +56,7 @@ public:
     EventTypeId getTypeId() const override { return EventTypeId::ResourceChange; }
     static const std::string EVENT_TYPE;
 
-  // Resource change data
+    // Resource change data
     EntityHandle getOwnerHandle() const { return m_ownerHandle; }
     VoidLight::ResourceHandle getResourceHandle() const {
         return m_resourceHandle;
@@ -66,7 +66,7 @@ public:
     int getQuantityChange() const { return m_newQuantity - m_oldQuantity; }
     const std::string& getChangeReason() const { return m_changeReason; }
 
-  // Convenience methods
+    // Convenience methods
     bool isIncrease() const { return m_newQuantity > m_oldQuantity; }
     bool isDecrease() const { return m_newQuantity < m_oldQuantity; }
     bool isResourceAdded() const {
@@ -76,7 +76,7 @@ public:
         return m_oldQuantity > 0 && m_newQuantity == 0;
     }
 
-  // Pooling support - set all fields for reuse
+    // Pooling support - set all fields for reuse
     void set(EntityHandle ownerHandle, VoidLight::ResourceHandle resourceHandle,
         int oldQuantity, int newQuantity, const std::string& changeReason) {
         m_ownerHandle = ownerHandle;
@@ -89,9 +89,9 @@ public:
 private:
     EntityHandle m_ownerHandle; // Handle of entity that owns the inventory
     VoidLight::ResourceHandle
-        m_resourceHandle;       // Handle of the resource that changed
-    int m_oldQuantity;          // Previous quantity
-    int m_newQuantity;          // New quantity
+        m_resourceHandle; // Handle of the resource that changed
+    int m_oldQuantity; // Previous quantity
+    int m_newQuantity; // New quantity
     std::string m_changeReason; // Reason for the change
 };
 

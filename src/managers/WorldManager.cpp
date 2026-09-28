@@ -80,7 +80,7 @@ void WorldManager::clean() {
     {
         std::lock_guard<std::shared_mutex> lock(m_worldMutex);
 
-    // Unsubscribe TileRenderer from season events before cleanup
+        // Unsubscribe TileRenderer from season events before cleanup
         if (m_tileRenderer) {
             m_tileRenderer->unsubscribeFromSeasonEvents();
         }
@@ -103,7 +103,7 @@ void WorldManager::prepareForStateTransition() {
         return;
     }
 
-  // TileRenderer's season handler is persistent — no unsubscribe needed.
+    // TileRenderer's season handler is persistent — no unsubscribe needed.
 }
 
 bool WorldManager::loadNewWorld(
@@ -133,7 +133,7 @@ bool WorldManager::loadNewWorld(
         {
             std::lock_guard<std::shared_mutex> lock(m_worldMutex);
 
-      // Unload current world if it exists
+            // Unload current world if it exists
             WORLD_MANAGER_INFO_IF(
                 m_currentWorld,
                 std::format("Unloading current world: {}", m_currentWorld->worldId));
@@ -149,11 +149,11 @@ bool WorldManager::loadNewWorld(
         {
             std::lock_guard<std::shared_mutex> lock(m_worldMutex);
 
-      // Set new world
+            // Set new world
             m_currentWorld = std::move(newWorld);
 
-      // Register world with WorldResourceManager and set as active immediately
-      // (Must set active BEFORE initializing resources so spatial queries work)
+            // Register world with WorldResourceManager and set as active immediately
+            // (Must set active BEFORE initializing resources so spatial queries work)
             auto& wrm = WorldResourceManager::Instance();
             if (!wrm.createWorld(m_currentWorld->worldId)) {
                 WORLD_MANAGER_WARN(std::format(
@@ -163,12 +163,12 @@ bool WorldManager::loadNewWorld(
             }
             wrm.setActiveWorld(m_currentWorld->worldId);
 
-      // Initialize world resources based on world data
+            // Initialize world resources based on world data
             initializeWorldResources();
             populateWorldEntities();
 
-      // Season handler is persistent — survives state transitions.
-      // Only wire up on first world load (handler not yet registered).
+            // Season handler is persistent — survives state transitions.
+            // Only wire up on first world load (handler not yet registered).
             if (m_tileRenderer && !m_tileRenderer->isSubscribedToSeasons() &&
                 EventManager::Instance().isInitialized()) {
                 setupEventHandlers();
@@ -177,12 +177,12 @@ bool WorldManager::loadNewWorld(
             WORLD_MANAGER_INFO(std::format("Successfully loaded new world: {}",
                 m_currentWorld->worldId));
 
-      // Schedule world loaded event for next frame using ThreadSystem
-      // Don't fire event while holding world mutex - use low priority to avoid
-      // blocking critical tasks
+            // Schedule world loaded event for next frame using ThreadSystem
+            // Don't fire event while holding world mutex - use low priority to avoid
+            // blocking critical tasks
             std::string worldIdCopy = m_currentWorld->worldId;
-      // Schedule world loaded event for next frame using ThreadSystem to avoid
-      // deadlocks Use high priority to ensure it executes quickly for tests
+            // Schedule world loaded event for next frame using ThreadSystem to avoid
+            // deadlocks Use high priority to ensure it executes quickly for tests
             WORLD_MANAGER_INFO(std::format(
                 "Enqueuing WorldLoadedEvent task for world: {}", worldIdCopy));
             VoidLight::ThreadSystem::Instance().enqueueTask(
@@ -218,8 +218,8 @@ void WorldManager::unloadWorld() {
     std::lock_guard<std::mutex> operationLock(m_loadMutex);
     std::optional<std::string> unloadedWorldId;
 
-  // Take exclusive lock to ensure atomic unload operation
-  // This prevents render thread from accessing world data during deallocation
+    // Take exclusive lock to ensure atomic unload operation
+    // This prevents render thread from accessing world data during deallocation
     {
         std::lock_guard<std::shared_mutex> lock(m_worldMutex);
 
@@ -230,8 +230,8 @@ void WorldManager::unloadWorld() {
         fireWorldUnloadedEvent(*unloadedWorldId);
     }
 
-  // Public unload is main/test-thread. loadNewWorld's worker uses
-  // unloadWorldLocked and must not drain here.
+    // Public unload is main/test-thread. loadNewWorld's worker uses
+    // unloadWorldLocked and must not drain here.
     if (EntityDataManager::Instance().isInitialized()) {
         EntityDataManager::Instance().processDestructionQueue();
     }
@@ -243,7 +243,7 @@ void WorldManager::clearPopulatedNpcs(const std::string& worldId) {
 }
 
 std::optional<std::string> WorldManager::unloadWorldLocked() {
-  // Internal method - caller must already hold m_worldMutex.
+    // Internal method - caller must already hold m_worldMutex.
     if (!m_currentWorld) {
         return std::nullopt;
     }
@@ -251,9 +251,9 @@ std::optional<std::string> WorldManager::unloadWorldLocked() {
     std::string worldId = m_currentWorld->worldId;
     WORLD_MANAGER_INFO(std::format("Unloading world: {}", worldId));
 
-  // Clear chunk cache to prevent stale textures when new world loads
-  // Uses deferred clearing (thread-safe) - actual clear happens on render
-  // thread
+    // Clear chunk cache to prevent stale textures when new world loads
+    // Uses deferred clearing (thread-safe) - actual clear happens on render
+    // thread
     if (m_tileRenderer) {
         m_tileRenderer->clearChunkCache();
     }
@@ -343,7 +343,7 @@ bool WorldManager::handleHarvestResource(int entityId, int targetX,
     const VoidLight::Tile& tile = m_currentWorld->grid[targetY][targetX];
 
     if (tile.obstacleType == VoidLight::ObstacleType::NONE) {
-    // This is expected for EDM-based harvestables that don't have tile obstacles
+        // This is expected for EDM-based harvestables that don't have tile obstacles
         WORLD_MANAGER_DEBUG(std::format(
             "No tile obstacle at position: ({}, {}) - EDM harvestable only", targetX, targetY));
         return false;
@@ -356,9 +356,9 @@ bool WorldManager::handleHarvestResource(int entityId, int targetX,
         return false;
     }
 
-  // Notify WorldResourceManager about resource depletion
-  // This is a placeholder - actual resource tracking would need proper resource
-  // handles
+    // Notify WorldResourceManager about resource depletion
+    // This is a placeholder - actual resource tracking would need proper resource
+    // handles
 
     WORLD_MANAGER_INFO(std::format("Resource harvested at ({}, {}) by entity {}",
         targetX, targetY, entityId));
@@ -402,7 +402,7 @@ bool WorldManager::applyTileUpdateLocked(int x, int y,
 
     const VoidLight::Tile& oldTile = m_currentWorld->grid[y][x];
 
-  // Skip invalidation entirely if tile data hasn't changed
+    // Skip invalidation entirely if tile data hasn't changed
     if (oldTile.biome == newTile.biome &&
         oldTile.obstacleType == newTile.obstacleType &&
         oldTile.decorationType == newTile.decorationType &&
@@ -472,12 +472,12 @@ bool WorldManager::applyTileUpdateLocked(int x, int y,
 
 void WorldManager::fireTileChangedEvent(int x, int y,
     const VoidLight::Tile& tile) {
-  // Increment world version for change tracking by other systems
-  // (PathfinderManager, etc.)
+    // Increment world version for change tracking by other systems
+    // (PathfinderManager, etc.)
     m_worldVersion.fetch_add(1, std::memory_order_release);
 
     try {
-    // Use tile information to determine change type based on tile properties
+        // Use tile information to determine change type based on tile properties
         std::string changeType = "tile_modified";
         if (tile.isWater) {
             changeType = "water_tile_changed";
@@ -487,7 +487,7 @@ void WorldManager::fireTileChangedEvent(int x, int y,
             changeType = "mountain_tile_changed";
         }
 
-    // Trigger world tile changed through EventManager (no registration)
+        // Trigger world tile changed through EventManager (no registration)
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerTileChanged(x, y, changeType,
             EventManager::DispatchMode::Deferred);
@@ -501,19 +501,19 @@ void WorldManager::fireTileChangedEvent(int x, int y,
 }
 
 void WorldManager::fireWorldLoadedEvent(const std::string& worldId) {
-  // Increment world version when world is loaded (major change for other
-  // systems)
+    // Increment world version when world is loaded (major change for other
+    // systems)
     m_worldVersion.fetch_add(1, std::memory_order_release);
 
     try {
-    // Get world dimensions
+        // Get world dimensions
         int width, height;
         if (!getWorldDimensions(width, height)) {
             width = 0;
             height = 0;
         }
 
-    // Trigger a world loaded event via EventManager (no registration)
+        // Trigger a world loaded event via EventManager (no registration)
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerWorldLoaded(worldId, width, height,
             EventManager::DispatchMode::Deferred);
@@ -529,16 +529,16 @@ void WorldManager::fireWorldLoadedEvent(const std::string& worldId) {
 
 void WorldManager::fireWorldUnloadedEvent(const std::string& worldId) {
     try {
-    // Trigger world unloaded via EventManager (no registration).
-    // MUST be Immediate: world replacement (loadNewWorld over an existing world)
-    // relies on WorldUnloaded handlers firing synchronously BEFORE the new world
-    // is activated, so old-world state is torn down before new-world state is
-    // built. This is the documented invariant ("do not rely only on deferred
-    // WorldUnloaded after transition cleanup has begun") and is asserted by
-    // WorldManagerTests (TestWorldReplacementUnloadsBeforeActivatingNewWorld).
-    // The current World handlers are confirmation-only and safe to run inline;
-    // if heavier handlers are ever added, sequence the unload on the main thread
-    // ahead of the worker load rather than switching to Deferred.
+        // Trigger world unloaded via EventManager (no registration).
+        // MUST be Immediate: world replacement (loadNewWorld over an existing world)
+        // relies on WorldUnloaded handlers firing synchronously BEFORE the new world
+        // is activated, so old-world state is torn down before new-world state is
+        // built. This is the documented invariant ("do not rely only on deferred
+        // WorldUnloaded after transition cleanup has begun") and is asserted by
+        // WorldManagerTests (TestWorldReplacementUnloadsBeforeActivatingNewWorld).
+        // The current World handlers are confirmation-only and safe to run inline;
+        // if heavier handlers are ever added, sequence the unload on the main thread
+        // ahead of the worker load rather than switching to Deferred.
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerWorldUnloaded(worldId,
             EventManager::DispatchMode::Immediate);
@@ -570,7 +570,7 @@ bool WorldManager::getWorldBounds(float& minX, float& minY, float& maxX,
     float& maxY) const {
     int width, height;
     if (!getWorldDimensions(width, height)) {
-    // Set default bounds if no world is loaded
+        // Set default bounds if no world is loaded
         minX = 0.0f;
         minY = 0.0f;
         maxX = 1000.0f;
@@ -578,7 +578,7 @@ bool WorldManager::getWorldBounds(float& minX, float& minY, float& maxX,
         return false;
     }
 
-  // World bounds in pixel coordinates - convert from tile count to pixels
+    // World bounds in pixel coordinates - convert from tile count to pixels
     minX = 0.0f;
     minY = 0.0f;
     maxX = static_cast<float>(width) *
@@ -765,13 +765,13 @@ VoidLight::TileRenderer::TileRenderer()
     m_gpuDecoBuffer.reserve(512);
     m_gpuObstacleBuffer.reserve(512);
 
-  // Load world object definitions from JSON
+    // Load world object definitions from JSON
     loadWorldObjects();
 
-  // Get atlas pointer and pre-load source rect coords from JSON
+    // Get atlas pointer and pre-load source rect coords from JSON
     initAtlasCoords();
 
-  // Initialize cached texture pointers/coords for current season
+    // Initialize cached texture pointers/coords for current season
     updateCachedTextureIDs();
 }
 
@@ -790,12 +790,12 @@ void VoidLight::TileRenderer::loadWorldObjects() {
         return;
     }
 
-  // Parse version
+    // Parse version
     if (root.hasKey("version") && root["version"].isString()) {
         m_worldObjects.version = root["version"].asString();
     }
 
-  // Helper to parse a single object definition from a key-value pair
+    // Helper to parse a single object definition from a key-value pair
     auto parseObjectDef = [](const std::string& id, const JsonValue& obj) -> WorldObjectDef {
         WorldObjectDef def;
         def.id = id;
@@ -820,7 +820,7 @@ void VoidLight::TileRenderer::loadWorldObjects() {
         return def;
     };
 
-  // Helper to parse a category (object format: { "key": { ... }, ... })
+    // Helper to parse a category (object format: { "key": { ... }, ... })
     auto parseCategory = [&parseObjectDef](const JsonValue& root, const std::string& category,
                              std::unordered_map<std::string, WorldObjectDef>& target) {
         if (!root.hasKey(category) || !root[category].isObject()) {
@@ -834,7 +834,7 @@ void VoidLight::TileRenderer::loadWorldObjects() {
         }
     };
 
-  // Parse all categories (object format for tool compatibility)
+    // Parse all categories (object format for tool compatibility)
     parseCategory(root, "biomes", m_worldObjects.biomes);
     parseCategory(root, "obstacles", m_worldObjects.obstacles);
     parseCategory(root, "decorations", m_worldObjects.decorations);
@@ -867,7 +867,7 @@ void VoidLight::TileRenderer::invalidateChunk(int, int) {
 }
 
 void VoidLight::TileRenderer::clearChunkCache() {
-  // GPU path renders directly from world data each frame.
+    // GPU path renders directly from world data each frame.
 }
 
 VoidLight::TileRenderer::~TileRenderer() { unsubscribeFromSeasonEvents(); }
@@ -883,7 +883,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
     m_atlasGPUOwner = gpuTex->texture;
     m_atlasGPUPtr = m_atlasGPUOwner.get();
 
-  // Load atlas.json for source rect coordinates
+    // Load atlas.json for source rect coordinates
     JsonReader atlasReader;
     if (!atlasReader.loadFromFile(ResourcePath::resolve("res/data/atlas.json"))) {
         WORLD_MANAGER_WARN("Could not load atlas.json - using individual textures");
@@ -900,7 +900,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
 
     const auto& regions = atlasRoot["regions"].asObject();
 
-  // Load world_objects.json to get texture IDs for each object type
+    // Load world_objects.json to get texture IDs for each object type
     JsonReader worldReader;
     if (!worldReader.loadFromFile(ResourcePath::resolve("res/data/world_objects.json"))) {
         WORLD_MANAGER_WARN("Could not load world_objects.json - using individual textures");
@@ -910,7 +910,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
 
     const auto& worldRoot = worldReader.getRoot();
 
-  // Helper to get coords from atlas regions
+    // Helper to get coords from atlas regions
     auto getCoords = [&regions](const std::string& id) -> AtlasCoords {
         auto it = regions.find(id);
         if (it == regions.end()) {
@@ -924,7 +924,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
             .h = static_cast<float>(r["h"].asNumber())};
     };
 
-  // Helper to get textureId from world_objects.json
+    // Helper to get textureId from world_objects.json
     auto getTextureId = [&worldRoot](const std::string& category, const std::string& key) -> std::string {
         if (!worldRoot.hasKey(category)) return "";
         const auto& cat = worldRoot[category];
@@ -934,7 +934,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
         return obj["textureId"].asString();
     };
 
-  // Helper to check if object is seasonal
+    // Helper to check if object is seasonal
     auto isSeasonal = [&worldRoot](const std::string& category, const std::string& key) -> bool {
         if (!worldRoot.hasKey(category)) return false;
         const auto& cat = worldRoot[category];
@@ -944,18 +944,18 @@ void VoidLight::TileRenderer::initAtlasCoords() {
         return obj["seasonal"].asBool();
     };
 
-  // Season prefixes
+    // Season prefixes
     static const char* seasonPrefixes[] = {"spring_", "summer_", "fall_", "winter_"};
 
-  // Pre-load coords for all seasons
+    // Pre-load coords for all seasons
     for (int s = 0; s < 4; ++s) {
         const std::string prefix = seasonPrefixes[s];
         auto& coords = m_seasonalCoords[s];
 
-    // Biomes - get textureId from JSON, apply seasonal prefix
+        // Biomes - get textureId from JSON, apply seasonal prefix
         auto loadBiome = [&](AtlasCoords& target, const std::string& key) {
             std::string texId = getTextureId("biomes", key);
-            if (texId.empty()) texId = "biome_" + key;  // Fallback
+            if (texId.empty()) texId = "biome_" + key; // Fallback
             target = isSeasonal("biomes", key) ? getCoords(prefix + texId) : getCoords(texId);
         };
 
@@ -969,7 +969,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
         loadBiome(coords.biome_celestial, "celestial");
         loadBiome(coords.biome_ocean, "ocean");
 
-    // Obstacles - get textureId from JSON
+        // Obstacles - get textureId from JSON
         auto loadObstacle = [&](AtlasCoords& target, const std::string& key) {
             std::string texId = getTextureId("obstacles", key);
             if (texId.empty()) texId = "obstacle_" + key;
@@ -980,7 +980,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
         loadObstacle(coords.obstacle_tree, "tree");
         loadObstacle(coords.obstacle_rock, "rock");
 
-    // Buildings - get textureId from JSON
+        // Buildings - get textureId from JSON
         auto loadBuilding = [&](AtlasCoords& target, const std::string& key) {
             std::string texId = getTextureId("buildings", key);
             if (texId.empty()) texId = "building_" + key;
@@ -992,20 +992,20 @@ void VoidLight::TileRenderer::initAtlasCoords() {
         loadBuilding(coords.building_large, "large");
         loadBuilding(coords.building_cityhall, "cityhall");
 
-    // Ore deposits (non-seasonal)
+        // Ore deposits (non-seasonal)
         loadObstacle(coords.obstacle_iron_deposit, "iron_deposit");
         loadObstacle(coords.obstacle_gold_deposit, "gold_deposit");
         loadObstacle(coords.obstacle_copper_deposit, "copper_deposit");
         loadObstacle(coords.obstacle_mithril_deposit, "mithril_deposit");
         loadObstacle(coords.obstacle_limestone_deposit, "limestone_deposit");
         loadObstacle(coords.obstacle_coal_deposit, "coal_deposit");
-    // Gem deposits (non-seasonal)
+        // Gem deposits (non-seasonal)
         loadObstacle(coords.obstacle_emerald_deposit, "emerald_deposit");
         loadObstacle(coords.obstacle_ruby_deposit, "ruby_deposit");
         loadObstacle(coords.obstacle_sapphire_deposit, "sapphire_deposit");
         loadObstacle(coords.obstacle_diamond_deposit, "diamond_deposit");
 
-    // Decorations - special handling for seasonal availability
+        // Decorations - special handling for seasonal availability
         auto loadDecoration = [&](AtlasCoords& target, const std::string& key) {
             if (!worldRoot.hasKey("decorations")) {
                 target = {.x = 0, .y = 0, .w = 0, .h = 0};
@@ -1018,7 +1018,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
             }
             const auto& obj = decorations[key];
 
-      // Check if this decoration has season restrictions
+            // Check if this decoration has season restrictions
             if (obj.hasKey("seasons")) {
                 const auto& seasons = obj["seasons"].asArray();
                 bool availableThisSeason = false;
@@ -1040,7 +1040,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
 
             std::string texId = obj.hasKey("textureId") ? obj["textureId"].asString() : key;
 
-      // Check for fallback seasons
+            // Check for fallback seasons
             if (obj.hasKey("fallbackSeasons")) {
                 const auto& fallbacks = obj["fallbackSeasons"];
                 const char* seasonNames[] = {"spring", "summer", "fall", "winter"};
@@ -1051,7 +1051,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
                 }
             }
 
-      // Check for seasonal textures override
+            // Check for seasonal textures override
             if (obj.hasKey("seasonTextures")) {
                 const auto& seasonTex = obj["seasonTextures"];
                 const char* seasonNames[] = {"spring", "summer", "fall", "winter"};
@@ -1062,7 +1062,7 @@ void VoidLight::TileRenderer::initAtlasCoords() {
                 }
             }
 
-      // Apply seasonal prefix if marked seasonal
+            // Apply seasonal prefix if marked seasonal
             bool seasonal = obj.hasKey("seasonal") && obj["seasonal"].asBool();
             target = seasonal ? getCoords(prefix + texId) : getCoords(texId);
         };
@@ -1100,7 +1100,7 @@ void VoidLight::TileRenderer::subscribeToSeasonEvents() {
         [this](const EventData& data) { onSeasonChange(data); });
     m_subscribedToSeasons = true;
 
-  // Initialize with current season from GameTime
+    // Initialize with current season from GameTime
     m_currentSeason = GameTimeManager::Instance().getSeason();
     WORLD_MANAGER_INFO(std::format(
         "TileRenderer subscribed to season events, current season: {}",
@@ -1123,7 +1123,7 @@ void VoidLight::TileRenderer::onSeasonChange(const EventData& data) {
         return;
     }
 
-  // Match TimeController pattern - use static_pointer_cast + getTimeEventType()
+    // Match TimeController pattern - use static_pointer_cast + getTimeEventType()
     const auto timeEvent = std::static_pointer_cast<TimeEvent>(data.event);
     if (timeEvent->getTimeEventType() != TimeEventType::SeasonChanged) {
         return;
@@ -1136,7 +1136,7 @@ void VoidLight::TileRenderer::onSeasonChange(const EventData& data) {
         WORLD_MANAGER_INFO(std::format("TileRenderer: Season changed to {}",
             seasonEvent->getSeasonName()));
         setCurrentSeason(newSeason); // This updates m_currentSeason AND refreshes
-                                 // cached texture IDs
+        // cached texture IDs
     }
 }
 
@@ -1145,7 +1145,7 @@ VoidLight::TileRenderer::getAtlasGPUTexture() const {
     if (!m_useAtlas) {
         return nullptr;
     }
-  // Get GPU texture from TextureManager
+    // Get GPU texture from TextureManager
     if (!m_atlasGPUPtr) {
         if (auto atlasData = TextureManager::Instance().getGPUTextureData("atlas");
             atlasData && atlasData->texture) {
@@ -1162,8 +1162,8 @@ void VoidLight::TileRenderer::recordGPUTiles(
     float viewportWidth, float viewportHeight, float zoom,
     Season season) {
 
-  // GPU rendering doesn't require chunk grid (m_gridInitialized)
-  // It only requires atlas coords to be loaded (m_useAtlas)
+    // GPU rendering doesn't require chunk grid (m_gridInitialized)
+    // It only requires atlas coords to be loaded (m_useAtlas)
     if (!m_useAtlas) {
         return;
     }
@@ -1173,11 +1173,11 @@ void VoidLight::TileRenderer::recordGPUTiles(
             return;
         }
 
-    // 2D grid dimensions
+        // 2D grid dimensions
         const int worldHeight = static_cast<int>(worldData->grid.size());
         const int worldWidth = static_cast<int>(worldData->grid[0].size());
 
-    // Calculate visible tile range (with padding for partially visible tiles)
+        // Calculate visible tile range (with padding for partially visible tiles)
         const float effectiveViewWidth = viewportWidth / zoom;
         const float effectiveViewHeight = viewportHeight / zoom;
 
@@ -1188,22 +1188,22 @@ void VoidLight::TileRenderer::recordGPUTiles(
         const int endTileY = std::min(worldHeight,
             static_cast<int>((cameraY + effectiveViewHeight) / TILE_SIZE) + VIEWPORT_PADDING + 1);
 
-    // Early exit if no visible tiles
+        // Early exit if no visible tiles
         if (startTileX >= endTileX || startTileY >= endTileY) {
             return;
         }
 
-    // Pre-fetch seasonal coords (avoids per-tile lookups)
+        // Pre-fetch seasonal coords (avoids per-tile lookups)
         const auto& sc = m_seasonalCoords[static_cast<int>(season)];
 
-    // Render at 1x scale.
-    // Zoom is handled in the composite shader, not by scaling tile positions
-        const float scaledTileSize = TILE_SIZE;  // 1x scale, no zoom multiplier
-        const float baseCameraX = cameraX;       // No zoom multiplier
+        // Render at 1x scale.
+        // Zoom is handled in the composite shader, not by scaling tile positions
+        const float scaledTileSize = TILE_SIZE; // 1x scale, no zoom multiplier
+        const float baseCameraX = cameraX; // No zoom multiplier
         const float baseCameraY = cameraY;
         const float startScreenX = startTileX * scaledTileSize - baseCameraX;
 
-  // Debug: Log tile rendering params on viewport change (uses member vars to avoid static)
+        // Debug: Log tile rendering params on viewport change (uses member vars to avoid static)
         if (viewportWidth != m_lastGPUViewportW || viewportHeight != m_lastGPUViewportH) {
             WORLD_MANAGER_INFO(std::format(
                 "GPU tile params: viewport={}x{}, zoom={}, tileSize={}, "
@@ -1215,59 +1215,59 @@ void VoidLight::TileRenderer::recordGPUTiles(
             m_lastGPUViewportH = viewportHeight;
         }
 
-  // Build biome lookup table for O(1) access (enum value -> coords pointer)
-  // Avoids switch overhead in inner loop
+        // Build biome lookup table for O(1) access (enum value -> coords pointer)
+        // Avoids switch overhead in inner loop
         const AtlasCoords* biomeLUT[8] = {
             &sc.biome_desert, &sc.biome_forest, &sc.biome_plains, &sc.biome_mountain,
             &sc.biome_swamp, &sc.biome_haunted, &sc.biome_celestial, &sc.biome_ocean};
 
-  // Build obstacle lookup table (enum value -> coords pointer)
-  // Index 0 = NONE (unused), indices 1-14 match ObstacleType enum values
+        // Build obstacle lookup table (enum value -> coords pointer)
+        // Index 0 = NONE (unused), indices 1-14 match ObstacleType enum values
         const AtlasCoords* obstacleLUT[15] = {
-            &sc.biome_default,          // NONE (never used)
-            &sc.obstacle_rock,          // ROCK
-            &sc.obstacle_tree,          // TREE
-            &sc.obstacle_water,         // WATER
-            &sc.building_hut,           // BUILDING
-            &sc.obstacle_iron_deposit,  // IRON_DEPOSIT
-            &sc.obstacle_gold_deposit,  // GOLD_DEPOSIT
+            &sc.biome_default, // NONE (never used)
+            &sc.obstacle_rock, // ROCK
+            &sc.obstacle_tree, // TREE
+            &sc.obstacle_water, // WATER
+            &sc.building_hut, // BUILDING
+            &sc.obstacle_iron_deposit, // IRON_DEPOSIT
+            &sc.obstacle_gold_deposit, // GOLD_DEPOSIT
             &sc.obstacle_copper_deposit, // COPPER_DEPOSIT
             &sc.obstacle_mithril_deposit, // MITHRIL_DEPOSIT
             &sc.obstacle_limestone_deposit, // LIMESTONE_DEPOSIT
-            &sc.obstacle_coal_deposit,  // COAL_DEPOSIT
+            &sc.obstacle_coal_deposit, // COAL_DEPOSIT
             &sc.obstacle_emerald_deposit, // EMERALD_DEPOSIT
-            &sc.obstacle_ruby_deposit,  // RUBY_DEPOSIT
+            &sc.obstacle_ruby_deposit, // RUBY_DEPOSIT
             &sc.obstacle_sapphire_deposit, // SAPPHIRE_DEPOSIT
             &sc.obstacle_diamond_deposit // DIAMOND_DEPOSIT
         };
 
-  // Build decoration lookup table (enum value -> coords pointer)
-  // Index 0 = NONE (null), indices 1-16 match DecorationType enum values
+        // Build decoration lookup table (enum value -> coords pointer)
+        // Index 0 = NONE (null), indices 1-16 match DecorationType enum values
         const AtlasCoords* decorationLUT[17] = {
-            nullptr,                          // NONE
-            &sc.decoration_flower_blue,       // FLOWER_BLUE
-            &sc.decoration_flower_pink,       // FLOWER_PINK
-            &sc.decoration_flower_white,      // FLOWER_WHITE
-            &sc.decoration_flower_yellow,     // FLOWER_YELLOW
-            &sc.decoration_mushroom_purple,   // MUSHROOM_PURPLE
-            &sc.decoration_mushroom_tan,      // MUSHROOM_TAN
-            &sc.decoration_grass_small,       // GRASS_SMALL
-            &sc.decoration_grass_large,       // GRASS_LARGE
-            &sc.decoration_bush,              // BUSH
-            &sc.decoration_stump_small,       // STUMP_SMALL
-            &sc.decoration_stump_medium,      // STUMP_MEDIUM
-            &sc.decoration_rock_small,        // ROCK_SMALL
-            &sc.decoration_dead_log_hz,       // DEAD_LOG_HZ
+            nullptr, // NONE
+            &sc.decoration_flower_blue, // FLOWER_BLUE
+            &sc.decoration_flower_pink, // FLOWER_PINK
+            &sc.decoration_flower_white, // FLOWER_WHITE
+            &sc.decoration_flower_yellow, // FLOWER_YELLOW
+            &sc.decoration_mushroom_purple, // MUSHROOM_PURPLE
+            &sc.decoration_mushroom_tan, // MUSHROOM_TAN
+            &sc.decoration_grass_small, // GRASS_SMALL
+            &sc.decoration_grass_large, // GRASS_LARGE
+            &sc.decoration_bush, // BUSH
+            &sc.decoration_stump_small, // STUMP_SMALL
+            &sc.decoration_stump_medium, // STUMP_MEDIUM
+            &sc.decoration_rock_small, // ROCK_SMALL
+            &sc.decoration_dead_log_hz, // DEAD_LOG_HZ
             &sc.decoration_dead_log_vertical, // DEAD_LOG_VERTICAL
-            &sc.decoration_lily_pad,          // LILY_PAD
-            &sc.decoration_water_flower       // WATER_FLOWER
+            &sc.decoration_lily_pad, // LILY_PAD
+            &sc.decoration_water_flower // WATER_FLOWER
         };
 
-  // Clear reusable member buffers (avoids per-frame allocations)
+        // Clear reusable member buffers (avoids per-frame allocations)
         m_gpuDecoBuffer.clear();
         m_gpuObstacleBuffer.clear();
 
-  // PASS 1: Render biomes, collect decorations + obstacles
+        // PASS 1: Render biomes, collect decorations + obstacles
         for (int tileY = startTileY; tileY < endTileY; ++tileY) {
             const auto& row = worldData->grid[tileY];
             const float screenY = tileY * scaledTileSize - baseCameraY;
@@ -1276,7 +1276,7 @@ void VoidLight::TileRenderer::recordGPUTiles(
             for (int tileX = startTileX; tileX < endTileX; ++tileX) {
                 const auto& tile = row[tileX];
 
-      // Draw biome tile immediately
+                // Draw biome tile immediately
                 const AtlasCoords* biomeCoords = tile.isWater
                     ? &sc.obstacle_water
                     : biomeLUT[static_cast<int>(tile.biome)];
@@ -1285,7 +1285,7 @@ void VoidLight::TileRenderer::recordGPUTiles(
                     biomeCoords->x, biomeCoords->y, biomeCoords->w, biomeCoords->h,
                     screenX, screenY, scaledTileSize, scaledTileSize);
 
-      // Collect decoration (if any, not blocked by non-water obstacle)
+                // Collect decoration (if any, not blocked by non-water obstacle)
                 const auto decoIdx = static_cast<size_t>(tile.decorationType);
                 if (decoIdx != 0 &&
                     (tile.obstacleType == ObstacleType::NONE ||
@@ -1301,14 +1301,14 @@ void VoidLight::TileRenderer::recordGPUTiles(
                     }
                 }
 
-      // Collect obstacle for Y-sorting
+                // Collect obstacle for Y-sorting
                 if (tile.obstacleType != ObstacleType::NONE &&
                     tile.obstacleType != ObstacleType::WATER) {
 
-        // Handle buildings specially to preserve current world draw semantics.
+                    // Handle buildings specially to preserve current world draw semantics.
                     if (tile.obstacleType == ObstacleType::BUILDING) {
                         if (tile.isTopLeftOfBuilding) {
-            // Get building coords by size
+                            // Get building coords by size
                             const AtlasCoords* buildingCoords = nullptr;
                             switch (tile.buildingSize) {
                                 case 0:
@@ -1322,8 +1322,8 @@ void VoidLight::TileRenderer::recordGPUTiles(
                             if (buildingCoords && buildingCoords->w > 0) {
                                 const float spriteW = static_cast<float>(buildingCoords->w);
                                 const float spriteH = static_cast<float>(buildingCoords->h);
-              // Buildings render at tile position without offsets.
-              // sortY = bottom of building (tile.buildingSize tiles down)
+                                // Buildings render at tile position without offsets.
+                                // sortY = bottom of building (tile.buildingSize tiles down)
                                 const float sortY = screenY + (tile.buildingSize * scaledTileSize);
 
                                 m_gpuObstacleBuffer.push_back({{screenX, screenY,
@@ -1333,12 +1333,12 @@ void VoidLight::TileRenderer::recordGPUTiles(
                                     sortY});
                             }
                         }
-          // Skip to next tile (don't render non-top-left building tiles)
+                        // Skip to next tile (don't render non-top-left building tiles)
                         screenX += scaledTileSize;
                         continue;
                     }
 
-        // Regular obstacles
+                    // Regular obstacles
                     const auto obstacleIdx = static_cast<int>(tile.obstacleType);
                     const AtlasCoords* obstacleCoords = obstacleLUT[obstacleIdx];
 
@@ -1353,7 +1353,7 @@ void VoidLight::TileRenderer::recordGPUTiles(
                                 static_cast<float>(obstacleCoords->x), static_cast<float>(obstacleCoords->y),
                                 static_cast<float>(obstacleCoords->w), static_cast<float>(obstacleCoords->h),
                                 spriteW, spriteH},
-                            screenY + scaledTileSize  // sortY = tile bottom
+                            screenY + scaledTileSize // sortY = tile bottom
                         });
                     }
                 }
@@ -1362,16 +1362,16 @@ void VoidLight::TileRenderer::recordGPUTiles(
             }
         }
 
-  // PASS 2: Render collected decorations, then sorted obstacles
+        // PASS 2: Render collected decorations, then sorted obstacles
 
-  // Decorations (no sorting needed, just deferred to render after all biomes)
+        // Decorations (no sorting needed, just deferred to render after all biomes)
         for (const auto& deco : m_gpuDecoBuffer) {
             spriteBatch.draw(
                 deco.srcX, deco.srcY, deco.srcW, deco.srcH,
                 deco.screenX, deco.screenY, deco.dstW, deco.dstH);
         }
 
-  // Obstacles (Y-sorted for correct overlap)
+        // Obstacles (Y-sorted for correct overlap)
         if (!m_gpuObstacleBuffer.empty()) {
             std::sort(m_gpuObstacleBuffer.begin(), m_gpuObstacleBuffer.end(),
                 [](const GPUYSortedSprite& a, const GPUYSortedSprite& b) {
@@ -1386,7 +1386,7 @@ void VoidLight::TileRenderer::recordGPUTiles(
                     obs.screenX, obs.screenY, obs.dstW, obs.dstH);
             }
         }
-    // Batch end() is called by GPUSceneRecorder, not here
+        // Batch end() is called by GPUSceneRecorder, not here
     });
 }
 
@@ -1402,10 +1402,10 @@ void WorldManager::recordGPU(VoidLight::SpriteBatch& spriteBatch,
         return;
     }
 
-  // Get current season
+    // Get current season
     auto season = getCurrentSeason();
 
-  // Delegate to TileRenderer - batch recording is already begin()-ed by GPUSceneRecorder
+    // Delegate to TileRenderer - batch recording is already begin()-ed by GPUSceneRecorder
     m_tileRenderer->recordGPUTiles(spriteBatch, cameraX, cameraY,
         viewWidth, viewHeight, zoom, season);
 }

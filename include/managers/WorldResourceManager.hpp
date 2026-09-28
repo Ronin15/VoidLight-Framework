@@ -90,7 +90,7 @@ struct SpatialIndex {
     std::unordered_map<size_t, uint64_t> entityToCell;
 
     SpatialIndex() {
-        cells.reserve(INITIAL_CAPACITY / 4);  // ~125 cells expected
+        cells.reserve(INITIAL_CAPACITY / 4); // ~125 cells expected
         entityToCell.reserve(INITIAL_CAPACITY);
     }
 

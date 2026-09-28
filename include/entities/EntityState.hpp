@@ -14,4 +14,4 @@ public:
     virtual ~EntityState() = default;
 };
 
-#endif  // ENTITY_STATE_HPP
+#endif // ENTITY_STATE_HPP

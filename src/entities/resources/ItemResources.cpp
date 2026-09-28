@@ -10,7 +10,7 @@
 Item::Item(VoidLight::ResourceHandle handle, const std::string& id,
     const std::string& name, ResourceType type)
     : Resource(handle, id, name, ResourceCategory::Item, type) {
-  // Items are moderately stackable
+    // Items are moderately stackable
     setMaxStackSize(50);
     setConsumable(false);
 }
@@ -24,7 +24,7 @@ void Item::setDurability(int durability, int maxDurability) {
 Consumable::Consumable(VoidLight::ResourceHandle handle,
     const std::string& id, const std::string& name)
     : Item(handle, id, name, ResourceType::Consumable) {
-  // Consumables are highly stackable
+    // Consumables are highly stackable
     setMaxStackSize(100);
     setConsumable(true);
 }
@@ -47,7 +47,7 @@ std::string Consumable::consumableEffectToString(ConsumableEffect effect) {
 QuestItem::QuestItem(VoidLight::ResourceHandle handle, const std::string& id,
     const std::string& name, const std::string& questId)
     : Item(handle, id, name, ResourceType::QuestItem), m_questId(questId) {
-  // Quest items are not stackable and not consumable
+    // Quest items are not stackable and not consumable
     setMaxStackSize(1);
     setConsumable(false);
 }

@@ -402,7 +402,7 @@ BOOST_AUTO_TEST_CASE(TestHandleInput) {
     manager.handleInput();
 
     BOOST_CHECK(!state1Ptr->wasHandleInputCalled()); // Bottom state should not handle input
-    BOOST_CHECK(state2Ptr->wasHandleInputCalled());  // Top state should handle input
+    BOOST_CHECK(state2Ptr->wasHandleInputCalled()); // Top state should handle input
 }
 
 BOOST_AUTO_TEST_CASE(TestHandleInputEmptyStack) {

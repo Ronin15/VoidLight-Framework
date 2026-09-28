@@ -88,8 +88,8 @@ BOOST_AUTO_TEST_SUITE(PathfindingAlgorithmTests)
 
 BOOST_FIXTURE_TEST_CASE(TestSimplePathfinding, PathfindingGridFixture) {
     // Create a simple open area for pathfinding
-    Vector2D start(48.0f, 48.0f);   // Grid position (1, 1) - should be open
-    Vector2D goal(304.0f, 304.0f);  // Grid position (9, 9) - should be open
+    Vector2D start(48.0f, 48.0f); // Grid position (1, 1) - should be open
+    Vector2D goal(304.0f, 304.0f); // Grid position (9, 9) - should be open
 
     std::vector<Vector2D> path;
     PathfindingResult result = grid.findPath(start, goal, path);
@@ -163,7 +163,7 @@ BOOST_FIXTURE_TEST_CASE(TestHierarchicalLongDistance, PathfindingGridFixture) {
     // This fixture only builds a 5x5 coarse grid, so the production
     // edge-aware selector intentionally keeps border-adjacent requests on the
     // direct path even when the hierarchical API itself succeeds.
-    Vector2D start(48.0f, 48.0f);     // near (1,1)
+    Vector2D start(48.0f, 48.0f); // near (1,1)
     Vector2D farGoal(560.0f, 560.0f); // near (17,17)
 
     std::vector<Vector2D> path;
@@ -176,8 +176,8 @@ BOOST_FIXTURE_TEST_CASE(TestHierarchicalLongDistance, PathfindingGridFixture) {
 
 BOOST_FIXTURE_TEST_CASE(TestDirectShortDistance, PathfindingGridFixture) {
     // Short-distance path should be fine with direct method
-    Vector2D start(96.0f, 96.0f);   // near (3,3)
-    Vector2D goal(128.0f, 128.0f);  // near (4,4)
+    Vector2D start(96.0f, 96.0f); // near (3,3)
+    Vector2D goal(128.0f, 128.0f); // near (4,4)
 
     std::vector<Vector2D> path;
     PathfindingResult result = grid.findPath(start, goal, path);
@@ -290,7 +290,7 @@ BOOST_FIXTURE_TEST_CASE(TestPathfindingIterationLimits, PathfindingGridFixture) 
     // Test with very low iteration limits
     grid.setMaxIterations(100);
 
-    Vector2D start(128.0f, 128.0f);      // Grid (4,4) - safely inside boundary
+    Vector2D start(128.0f, 128.0f); // Grid (4,4) - safely inside boundary
     Vector2D distantGoal(448.0f, 448.0f); // Grid (14,14) - safely inside boundary, far away goal
 
     std::vector<Vector2D> path;
@@ -355,7 +355,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(PathfindingEdgeCaseTests)
 
 BOOST_FIXTURE_TEST_CASE(TestNearestOpenCellFinding, PathfindingGridFixture) {
-    const Vector2D blockedCorner(16.0f, 16.0f);  // Inside a blocked perimeter cell
+    const Vector2D blockedCorner(16.0f, 16.0f); // Inside a blocked perimeter cell
     BOOST_CHECK(grid.isWorldBlocked(blockedCorner));
 
     const Vector2D snapped = grid.snapToNearestOpenWorld(blockedCorner, 128.0f);
@@ -398,8 +398,8 @@ BOOST_FIXTURE_TEST_CASE(TestExtremeDistances, PathfindingGridFixture) {
     PathfindingResult shortResult = grid.findPath(closeStart, closeGoal, shortPath);
 
     // Test maximum distance within grid (respecting boundary requirements: 3 tiles = 96px from edge)
-    Vector2D farStart(128.0f, 128.0f);  // Grid (4,4) - safely inside boundary
-    Vector2D farGoal(480.0f, 480.0f);   // Grid (15,15) - safely inside boundary
+    Vector2D farStart(128.0f, 128.0f); // Grid (4,4) - safely inside boundary
+    Vector2D farGoal(480.0f, 480.0f); // Grid (15,15) - safely inside boundary
 
     std::vector<Vector2D> longPath;
     PathfindingResult longResult = grid.findPath(farStart, farGoal, longPath);
@@ -427,8 +427,8 @@ BOOST_AUTO_TEST_SUITE(PathSmoothingTests)
 
 BOOST_FIXTURE_TEST_CASE(TestLineOfSightDetection, PathfindingGridFixture) {
     // Test line of sight functionality with known obstacle patterns
-    Vector2D start(64.0f, 64.0f);    // Grid (2,2)
-    Vector2D goal(256.0f, 256.0f);   // Grid (8,8)
+    Vector2D start(64.0f, 64.0f); // Grid (2,2)
+    Vector2D goal(256.0f, 256.0f); // Grid (8,8)
 
     std::vector<Vector2D> path;
     PathfindingResult result = grid.findPath(start, goal, path);
@@ -674,10 +674,10 @@ BOOST_FIXTURE_TEST_CASE(TestWorldBoundsHandling, PathfindingGridFixture) {
 
 BOOST_FIXTURE_TEST_CASE(TestSnapToNearestOpen, PathfindingGridFixture) {
     Vector2D testPositions[] = {
-        {160.0f, 160.0f},  // Open interior
-        {16.0f, 16.0f},    // Blocked corner
-        {320.0f, 160.0f},  // Central wall column
-        {500.0f, 500.0f}   // Far interior
+        {160.0f, 160.0f}, // Open interior
+        {16.0f, 16.0f}, // Blocked corner
+        {320.0f, 160.0f}, // Central wall column
+        {500.0f, 500.0f} // Far interior
     };
 
     for (const auto& pos : testPositions) {

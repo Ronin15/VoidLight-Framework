@@ -46,11 +46,11 @@ int main(int, char*[]) {
     GAMEENGINE_INFO(std::format("Initializing {}", GAME_NAME));
     THREADSYSTEM_INFO("Initializing Thread System");
 
-  // Initialize the thread system with default capacity
-  // Cache ThreadSystem reference for better performance
+    // Initialize the thread system with default capacity
+    // Cache ThreadSystem reference for better performance
     VoidLight::ThreadSystem& threadSystem = VoidLight::ThreadSystem::Instance();
 
-  // Initialize thread system first
+    // Initialize thread system first
     try {
         if (!threadSystem.init()) {
             THREADSYSTEM_CRITICAL("Failed to initialize thread system");
@@ -64,15 +64,15 @@ int main(int, char*[]) {
     THREADSYSTEM_INFO(std::format("Thread system initialized with {} worker threads and capacity for {} parallel tasks",
         threadSystem.getThreadCount(), threadSystem.getQueueCapacity()));
 
-  // Cache GameEngine reference
+    // Cache GameEngine reference
     GameEngine& gameEngine = GameEngine::Instance();
 
-  // Initialize GameEngine (SDL, ResourcePath, settings, window, and all managers)
+    // Initialize GameEngine (SDL, ResourcePath, settings, window, and all managers)
     if (!gameEngine.init(GAME_NAME)) {
         GAMEENGINE_CRITICAL(std::format("Init {} Failed", GAME_NAME));
 
-    // CRITICAL: Always clean up on init failure to prevent memory corruption
-    // during static destruction of partially initialized managers
+        // CRITICAL: Always clean up on init failure to prevent memory corruption
+        // during static destruction of partially initialized managers
         GAMEENGINE_INFO("Cleaning up after initialization failure");
         gameEngine.clean();
 
@@ -84,36 +84,36 @@ int main(int, char*[]) {
             ? "software frame limiting"
             : "hardware VSync"));
 
-  // Register all concrete game states now that the engine and its managers are
-  // fully initialized, then push the initial state before starting main loop.
+    // Register all concrete game states now that the engine and its managers are
+    // fully initialized, then push the initial state before starting main loop.
     registerInitialStates(*gameEngine.getGameStateManager());
     gameEngine.getGameStateManager()->pushState(GameStateId::LOGO);
 
-  // Suppress hitch detection for first few frames while engine stabilizes
+    // Suppress hitch detection for first few frames while engine stabilizes
     VoidLight::FrameProfiler::Instance().suppressFrames(10);
 
     GAMEENGINE_INFO("Starting Main Loop");
 
-  // Get TimestepManager reference for main loop
+    // Get TimestepManager reference for main loop
     TimestepManager& ts = gameEngine.getTimestepManager();
 
     VOIDLIGHT_DEBUG_ONLY(
-  // Update performance tracking (DEBUG only)
+        // Update performance tracking (DEBUG only)
         static constexpr size_t PERF_SAMPLE_COUNT = 10;
         std::array<double, PERF_SAMPLE_COUNT> updateSamples{};
         size_t sampleIndex = 0;
         size_t intervalUpdateIterations = 0;
         auto lastPerfLogTime = std::chrono::high_resolution_clock::now();)
 
-  // Main game loop - classic fixed timestep pattern
-  // Updates drain accumulator, THEN render reads alpha - no race conditions
+    // Main game loop - classic fixed timestep pattern
+    // Updates drain accumulator, THEN render reads alpha - no race conditions
     while (gameEngine.isRunning()) {
         PROFILE_FRAME_BEGIN();
 
-    // Start frame timing (adds delta to accumulator)
+        // Start frame timing (adds delta to accumulator)
         ts.startFrame();
 
-    // Process SDL events (must be on main thread)
+        // Process SDL events (must be on main thread)
         {
             PROFILE_PHASE(VoidLight::FramePhase::Events);
             gameEngine.handleEvents();
@@ -122,7 +122,7 @@ int main(int, char*[]) {
             break;
         }
 
-    // Fixed timestep updates - run until accumulator is drained
+        // Fixed timestep updates - run until accumulator is drained
         VOIDLIGHT_DEBUG_ONLY(
             auto updateStart = std::chrono::high_resolution_clock::now();
             size_t updateIterations = 0;)
@@ -159,26 +159,26 @@ int main(int, char*[]) {
                 intervalUpdateIterations = 0;
             })
 
-    // Render with interpolation alpha (calculated from remaining accumulator)
+        // Render with interpolation alpha (calculated from remaining accumulator)
         {
             PROFILE_PHASE(VoidLight::FramePhase::Render);
             gameEngine.render();
         }
 
-    // Present (vsync wait) - separate from render for accurate profiling
+        // Present (vsync wait) - separate from render for accurate profiling
         {
             PROFILE_PHASE(VoidLight::FramePhase::Present);
             gameEngine.present();
         }
 
-    // End-of-frame cleanup (entity destruction queue, deferred work)
-    // Runs after render/present while GPU finishes — uses idle CPU time
+        // End-of-frame cleanup (entity destruction queue, deferred work)
+        // Runs after render/present while GPU finishes — uses idle CPU time
         gameEngine.processBackgroundTasks();
 
-    // End frame (VSync or software frame limiting)
+        // End frame (VSync or software frame limiting)
         ts.endFrame();
 
-        PROFILE_FRAME_END();  // Hitch check + console log happens here
+        PROFILE_FRAME_END(); // Hitch check + console log happens here
     }
 
     GAMEENGINE_INFO(std::format("Game {} shutting down", GAME_NAME));

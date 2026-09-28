@@ -6,7 +6,7 @@
 #ifndef COLLISION_INFO_HPP
 #define COLLISION_INFO_HPP
 
-#include "entities/EntityHandle.hpp"  // EntityID
+#include "entities/EntityHandle.hpp" // EntityID
 #include "utils/Vector2D.hpp"
 
 namespace VoidLight {
@@ -23,7 +23,7 @@ struct CollisionInfo {
     // - Movable-static: indexA is EDM index (movable), indexB is storage index (static)
     size_t indexA{SIZE_MAX};
     size_t indexB{SIZE_MAX};
-    bool isMovableMovable{true};  // false = movable-static collision
+    bool isMovableMovable{true}; // false = movable-static collision
 
     // Stamped once during resolution by CollisionManager; avoids repeated isProjectileCollision() calls.
     bool projectileInvolved{false};

@@ -125,9 +125,9 @@ void Camera::setPosition(float x, float y) {
     Vector2D const oldPosition = m_position;
     m_position.setX(x);
     m_position.setY(y);
-    m_targetPosition = m_position;      // Update target position to avoid interpolation
-    m_previousPosition = m_position;    // Prevents interpolation sliding (matches Entity pattern)
-    m_lastRenderedCenter = m_position;  // Sync coordinate conversions with new position
+    m_targetPosition = m_position; // Update target position to avoid interpolation
+    m_previousPosition = m_position; // Prevents interpolation sliding (matches Entity pattern)
+    m_lastRenderedCenter = m_position; // Sync coordinate conversions with new position
 
     // Fire position changed event if enabled
     if (m_eventFiringEnabled) {

@@ -17,13 +17,13 @@ public:
         const std::string& name, ResourceType type);
     ~Currency() override = default;
 
-  // Currency-specific properties
+    // Currency-specific properties
     float getExchangeRate() const { return m_exchangeRate; }
     void setExchangeRate(float rate) { m_exchangeRate = rate; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
 protected:
     float m_exchangeRate{1.0f}; // Exchange rate to base currency (gold)
@@ -60,9 +60,9 @@ public:
     int getClarity() const { return m_clarity; }
     void setClarity(int clarity) { m_clarity = clarity; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
     static std::string gemTypeToString(GemType type);
 
@@ -84,9 +84,9 @@ public:
     int getReputation() const { return m_reputation; }
     void setReputation(int reputation) { m_reputation = reputation; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
 private:
     std::string m_factionId;
@@ -102,9 +102,9 @@ public:
         const std::string& name);
     ~CraftingCurrency() override = default;
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 };
 
 #endif // CURRENCY_RESOURCES_HPP

@@ -68,7 +68,7 @@ BOOST_FIXTURE_TEST_CASE(LoadSpriteVertexShader, ShaderTestFixture) {
     BOOST_REQUIRE(device->isInitialized());
 
     ShaderInfo info{};
-    info.numUniformBuffers = 1;  // ViewProjection UBO
+    info.numUniformBuffers = 1; // ViewProjection UBO
 
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/sprite.vert",
@@ -84,7 +84,7 @@ BOOST_FIXTURE_TEST_CASE(LoadSpriteFragmentShader, ShaderTestFixture) {
     BOOST_REQUIRE(device->isInitialized());
 
     ShaderInfo info{};
-    info.numSamplers = 1;  // Texture sampler
+    info.numSamplers = 1; // Texture sampler
 
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/sprite.frag",
@@ -149,7 +149,7 @@ BOOST_FIXTURE_TEST_CASE(LoadCompositeFragmentShader, ShaderTestFixture) {
 
     ShaderInfo info{};
     info.numSamplers = 1;
-    info.numUniformBuffers = 1;  // Composite UBO
+    info.numUniformBuffers = 1; // Composite UBO
 
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/composite.frag",

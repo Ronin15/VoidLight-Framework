@@ -20,17 +20,17 @@ public:
         const std::string& name, ResourceType type);
     ~Item() override = default;
 
-  // Item-specific properties
+    // Item-specific properties
     int getDurability() const { return m_durability; }
     int getMaxDurability() const { return m_maxDurability; }
     void setDurability(int durability, int maxDurability);
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
 protected:
-    int m_durability{100};    // Current durability
+    int m_durability{100}; // Current durability
     int m_maxDurability{100}; // Maximum durability
 };
 
@@ -62,15 +62,15 @@ public:
     void setEffectPower(int power) { m_effectPower = power; }
     void setEffectDuration(int duration) { m_effectDuration = duration; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
     static std::string consumableEffectToString(ConsumableEffect effect);
 
 private:
     ConsumableEffect m_effect{ConsumableEffect::HealHP};
-    int m_effectPower{10};   // Strength of the effect
+    int m_effectPower{10}; // Strength of the effect
     int m_effectDuration{0}; // Duration in seconds (0 = instant)
 };
 
@@ -88,9 +88,9 @@ public:
 
     void setQuestId(const std::string& questId) { m_questId = questId; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
 private:
     std::string m_questId{""}; // Associated quest ID (empty = general quest item)

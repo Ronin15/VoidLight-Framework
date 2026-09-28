@@ -42,14 +42,14 @@ public:
     void update(float deltaTime);
     void handleInput();
 
-  /**
+    /**
    * Record vertices before the scene pass.
    * Scene vertices come from the highest stacked state with hasGPUScene();
    * UI vertices come from the top state. Overlay scene uses interpolation 1.
    */
     void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer, float interpolationAlpha);
 
-  /**
+    /**
    * Issue GPU draw calls during scene pass.
    * Delegates to the highest stacked state with hasGPUScene().
    */
@@ -57,7 +57,7 @@ public:
         SDL_GPURenderPass* scenePass,
         float interpolationAlpha);
 
-  /**
+    /**
    * Render UI/overlays during swapchain pass.
    * Delegates to the top state's renderGPUUI().
    */
@@ -69,22 +69,22 @@ public:
     void removeState(GameStateId stateId);
     void clearAllStates();
 
-  // Frame data pushed from GameEngine - avoids states calling GameEngine::Instance()
+    // Frame data pushed from GameEngine - avoids states calling GameEngine::Instance()
     void setCurrentFPS(float fps) { m_currentFPS = fps; }
     float getCurrentFPS() const { return m_currentFPS; }
 
 private:
-  // Full-screen replace only (no underlying state left on the stack).
+    // Full-screen replace only (no underlying state left on the stack).
     void clearUIForFullScreenReplace();
     std::shared_ptr<GameState> findGPUSceneOwner() const;
 
-  // All registered states, available for activation
+    // All registered states, available for activation
     std::unordered_map<GameStateId, std::shared_ptr<GameState>> m_registeredStates;
-  // The stack of active states
+    // The stack of active states
     std::vector<std::shared_ptr<GameState>> m_activeStates;
 
     float m_lastDeltaTime{0.0f}; // Store deltaTime from update to pass to render
-    float m_currentFPS{0.0f};    // Current FPS pushed from GameEngine
+    float m_currentFPS{0.0f}; // Current FPS pushed from GameEngine
 };
 
-#endif  // GAME_STATE_MANAGER_HPP
+#endif // GAME_STATE_MANAGER_HPP

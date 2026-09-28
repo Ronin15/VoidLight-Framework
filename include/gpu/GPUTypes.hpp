@@ -5,7 +5,7 @@
 #define GPU_TYPES_HPP
 
 #include <cstdint>
-#include <cstddef>  // for offsetof
+#include <cstddef> // for offsetof
 
 namespace VoidLight {
 
@@ -13,9 +13,9 @@ namespace VoidLight {
  * Vertex format for textured sprites.
  */
 struct SpriteVertex {
-    float x, y;           // Position (8 bytes)
-    float u, v;           // Texture coords (8 bytes)
-    uint8_t r, g, b, a;   // Color packed (4 bytes)
+    float x, y; // Position (8 bytes)
+    float u, v; // Texture coords (8 bytes)
+    uint8_t r, g, b, a; // Color packed (4 bytes)
     // Total: 20 bytes per vertex
 };
 
@@ -25,8 +25,8 @@ static_assert(sizeof(SpriteVertex) == 20, "SpriteVertex must be 20 bytes");
  * Vertex format for colored primitives and particles.
  */
 struct ColorVertex {
-    float x, y;           // Position (8 bytes)
-    uint8_t r, g, b, a;   // Color packed (4 bytes)
+    float x, y; // Position (8 bytes)
+    uint8_t r, g, b, a; // Color packed (4 bytes)
     // Total: 12 bytes per vertex
 };
 
@@ -36,7 +36,7 @@ static_assert(sizeof(ColorVertex) == 12, "ColorVertex must be 12 bytes");
  * View-projection uniform buffer data.
  */
 struct ViewProjectionUBO {
-    float viewProjection[16];  // 4x4 matrix
+    float viewProjection[16]; // 4x4 matrix
 };
 
 /**
@@ -52,7 +52,7 @@ struct CompositeUBO {
     float ambientR;
     float ambientG;
     float ambientB;
-    float ambientAlpha;  // Blend strength: 0 = no tint, 1 = full tint
+    float ambientAlpha; // Blend strength: 0 = no tint, 1 = full tint
 };
 
 // Verify CompositeUBO layout matches std140 shader expectations

@@ -47,17 +47,17 @@ constexpr std::array<const char*, 8> kWeatherTypeNames = {
 } // namespace
 
 EventDemoState::EventDemoState() {
-  // Initialize member variables that need explicit initialization
+    // Initialize member variables that need explicit initialization
 }
 
 EventDemoState::~EventDemoState() {
-  // Don't call virtual functions from destructors
+    // Don't call virtual functions from destructors
 
     try {
-    // Note: Proper cleanup should already have happened in exit()
-    // This destructor is just a safety measure in case exit() wasn't called
+        // Note: Proper cleanup should already have happened in exit()
+        // This destructor is just a safety measure in case exit() wasn't called
 
-    // Cleanup any resources if needed
+        // Cleanup any resources if needed
         cleanupSpawnedNPCs();
 
         GAMESTATE_INFO("Exiting EventDemoState in destructor...");
@@ -70,39 +70,39 @@ EventDemoState::~EventDemoState() {
 }
 
 bool EventDemoState::enter() {
-  // Cache GameEngine reference at function start
+    // Cache GameEngine reference at function start
     auto& gameEngine = GameEngine::Instance();
 
     GAMESTATE_INFO("Entering EventDemoState...");
 
-  // Reset transition flag when entering state
+    // Reset transition flag when entering state
     m_transitioningToLoading = false;
 
-  // Check if world needs to be loaded
+    // Check if world needs to be loaded
     if (!m_initialized && !m_worldLoaded) {
         GAMESTATE_INFO("World not loaded yet - will transition to LoadingState on "
                        "first update");
         m_needsLoading = true;
         m_worldLoaded = true; // Mark as loaded to prevent loop on re-entry
-        return true;          // Will transition to loading screen in update()
+        return true; // Will transition to loading screen in update()
     }
 
-  // Resume after Loading (or menu) now that this state owns the exclusive window.
+    // Resume after Loading (or menu) now that this state owns the exclusive window.
     gameEngine.setGlobalPause(false);
 
-  // Check if already initialized (resuming after LoadingState)
+    // Check if already initialized (resuming after LoadingState)
     if (m_initialized) {
         GAMESTATE_INFO("Already initialized - resuming EventDemoState");
         return true; // Skip all loading logic
     }
 
-  // World is loaded - proceed with normal initialization
+    // World is loaded - proceed with normal initialization
     GAMESTATE_INFO("World already loaded - initializing event demo");
 
     try {
         auto& worldManager = WorldManager::Instance();
 
-    // Update world dimensions from loaded world
+        // Update world dimensions from loaded world
         float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
         if (worldManager.getWorldBounds(minX, minY, maxX, maxY)) {
             m_worldWidth = std::max(0.0f, maxX - minX);
@@ -110,54 +110,54 @@ bool EventDemoState::enter() {
             GAMESTATE_INFO(std::format("World dimensions: {} x {} pixels",
                 m_worldWidth, m_worldHeight));
         } else {
-      // Fallback to screen dimensions if world bounds unavailable
+            // Fallback to screen dimensions if world bounds unavailable
             m_worldWidth = gameEngine.getWidthInPixels();
             m_worldHeight = gameEngine.getHeightInPixels();
         }
 
-    // Initialize state-owned event subscriptions.
+        // Initialize state-owned event subscriptions.
         registerEventHandlers();
 
-    // Create player
+        // Create player
         m_player = std::make_shared<Player>();
         m_player->ensurePhysicsBodyRegistered();
         m_player->initializeInventory(); // Initialize inventory after construction
         m_player->setPosition(Vector2D(m_worldWidth / 2, m_worldHeight / 2));
 
-    // Cache AIManager reference for better performance
+        // Cache AIManager reference for better performance
         AIManager& aiMgr = AIManager::Instance();
 
-    // Set player reference in AIManager for distance optimization
+        // Set player reference in AIManager for distance optimization
         aiMgr.setPlayerHandle(m_player->getHandle());
 
-    // Setup achievement thresholds for demonstration
+        // Setup achievement thresholds for demonstration
         setupResourceAchievements();
 
-    // Initialize timing
+        // Initialize timing
         m_totalDemoTime = 0.0f;
         m_lastEventTriggerTime = -1.0f;
 
-    // Register controllers (following GamePlayState pattern)
+        // Register controllers (following GamePlayState pattern)
         m_controllers.add<WeatherController>();
         m_controllers.add<DayNightController>();
         m_controllers.subscribeAll();
 
-    // Enable automatic weather changes via GameTimeManager
+        // Enable automatic weather changes via GameTimeManager
         auto& gameTimeMgr = GameTimeManager::Instance();
         gameTimeMgr.enableAutoWeather(true);
         gameTimeMgr.setWeatherCheckInterval(4.0f);
         gameTimeMgr.setTimeScale(60.0f);
 
-    // Add initial log entry
+        // Add initial log entry
         addLogEntry("Event Demo System Initialized");
 
-    // Create simple UI components using auto-detecting methods
+        // Create simple UI components using auto-detecting methods
         auto& ui = UIManager::Instance();
         ui.createTitleAtTop(
             "event_title", "Event Demo State",
             UIConstants::DEFAULT_TITLE_HEIGHT); // Use standard title height
 
-    // Status label at top
+        // Status label at top
         const int statusY = UIConstants::INFO_FIRST_LINE_Y;
         ui.createLabel("event_status",
             {UIConstants::INFO_LABEL_MARGIN_X, statusY, 400,
@@ -168,7 +168,7 @@ bool EventDemoState::enter() {
                 UIConstants::INFO_LABEL_MARGIN_X, statusY, 400,
                 UIConstants::INFO_LABEL_HEIGHT});
 
-    // Controls label
+        // Controls label
         const int controlsY = statusY + UIConstants::INFO_LABEL_HEIGHT +
             UIConstants::INFO_LINE_SPACING;
         ui.createLabel(
@@ -183,11 +183,11 @@ bool EventDemoState::enter() {
                 -2 * UIConstants::INFO_LABEL_MARGIN_X,
                 UIConstants::INFO_LABEL_HEIGHT});
 
-    // Create event log component using auto-detected dimensions
+        // Create event log component using auto-detected dimensions
         ui.createEventLog("event_log", {10, ui.getHeightInPixels() - 200, 730, 180},
             7);
-    // Set auto-repositioning: anchored to bottom with percentage-based width
-    // for responsiveness
+        // Set auto-repositioning: anchored to bottom with percentage-based width
+        // for responsiveness
         UIPositioning eventLogPos;
         eventLogPos.mode = UIPositionMode::BOTTOM_ALIGNED;
         eventLogPos.offsetX = 10;
@@ -198,13 +198,13 @@ bool EventDemoState::enter() {
 
         ui.addEventLogEntry("event_log", "Event Demo System Initialized");
 
-    // Create right-aligned inventory panel for resource demo visualization
-    // Using TOP_RIGHT positioning - UIManager handles all resize repositioning
+        // Create right-aligned inventory panel for resource demo visualization
+        // Using TOP_RIGHT positioning - UIManager handles all resize repositioning
         constexpr int inventoryWidth = 280;
         constexpr int inventoryHeight = 400;
         constexpr int panelMarginRight = 20; // 20px from right edge
-        constexpr int panelMarginTop = 170;  // 170px from top
-        constexpr int childInset = 10;       // Children are 10px inside panel
+        constexpr int panelMarginTop = 170; // 170px from top
+        constexpr int childInset = 10; // Children are 10px inside panel
         constexpr int childWidth = inventoryWidth - (childInset * 2); // 260px
 
         int const windowWidth = ui.getWidthInPixels();
@@ -217,7 +217,7 @@ bool EventDemoState::enter() {
         ui.setComponentPositioning(
             "inventory_panel", {UIPositionMode::TOP_RIGHT, panelMarginRight, panelMarginTop, inventoryWidth, inventoryHeight});
 
-    // Title: 25px below panel top, inset by 10px
+        // Title: 25px below panel top, inset by 10px
         ui.createTitle("inventory_title",
             {inventoryX + childInset, inventoryY + 25, childWidth, 35},
             "Player Inventory");
@@ -227,7 +227,7 @@ bool EventDemoState::enter() {
                 panelMarginRight + childInset,
                 panelMarginTop + 25, childWidth, 35});
 
-    // Status label: 75px below panel top
+        // Status label: 75px below panel top
         ui.createLabel("inventory_status",
             {inventoryX + childInset, inventoryY + 75, childWidth, 25},
             "Capacity: 0/50");
@@ -237,7 +237,7 @@ bool EventDemoState::enter() {
                 panelMarginRight + childInset,
                 panelMarginTop + 75, childWidth, 25});
 
-    // Inventory list: 110px below panel top
+        // Inventory list: 110px below panel top
         ui.createList("inventory_list",
             {inventoryX + childInset, inventoryY + 110, childWidth, 270});
         ui.setComponentVisible("inventory_list", false);
@@ -246,8 +246,8 @@ bool EventDemoState::enter() {
                 panelMarginRight + childInset,
                 panelMarginTop + 110, childWidth, 270});
 
-    // --- DATA BINDING SETUP ---
-    // Bind the inventory capacity label to a function that gets the data
+        // --- DATA BINDING SETUP ---
+        // Bind the inventory capacity label to a function that gets the data
         ui.bindText("inventory_status", [this]() -> std::string {
             if (!m_player) {
                 return "Capacity: 0/0";
@@ -260,8 +260,8 @@ bool EventDemoState::enter() {
             return std::format("Capacity: {}/{}", inv.usedSlots, inv.maxSlots);
         });
 
-    // Bind the inventory list - populates provided buffers (zero-allocation
-    // pattern)
+        // Bind the inventory list - populates provided buffers (zero-allocation
+        // pattern)
         ui.bindList(
             "inventory_list",
             [this](std::vector<std::string>& items,
@@ -284,7 +284,7 @@ bool EventDemoState::enter() {
                     return;
                 }
 
-          // Build sorted list using reusable buffer provided by UIManager
+                // Build sorted list using reusable buffer provided by UIManager
                 sortedResources.reserve(allResources.size());
                 for (const auto& [resourceHandle, quantity] : allResources) {
                     if (quantity > 0) {
@@ -308,17 +308,17 @@ bool EventDemoState::enter() {
                 }
             });
 
-    // Initialize camera for world navigation (world is already loaded by
-    // LoadingState)
+        // Initialize camera for world navigation (world is already loaded by
+        // LoadingState)
         initializeCamera();
 
-    // Create GPU scene renderer for coordinated GPU rendering
+        // Create GPU scene renderer for coordinated GPU rendering
         m_gpuSceneRecorder = std::make_unique<VoidLight::GPUSceneRecorder>();
 
-    // Pre-allocate status buffer to avoid per-frame allocations
+        // Pre-allocate status buffer to avoid per-frame allocations
         m_statusBuffer.reserve(64);
 
-    // Mark as fully initialized to prevent re-entering loading logic
+        // Mark as fully initialized to prevent re-entering loading logic
         m_initialized = true;
 
         GAMESTATE_INFO("EventDemoState initialized successfully");
@@ -337,7 +337,7 @@ bool EventDemoState::enter() {
 bool EventDemoState::exit() {
     GAMESTATE_INFO("Exiting EventDemoState...");
 
-  // Get manager references for cleanup
+    // Get manager references for cleanup
     AIManager& aiMgr = AIManager::Instance();
     EntityDataManager& edm = EntityDataManager::Instance();
     CollisionManager& collisionMgr = CollisionManager::Instance();
@@ -350,22 +350,22 @@ bool EventDemoState::exit() {
 
     try {
         if (m_transitioningToLoading) {
-      // Transitioning to LoadingState - do cleanup but preserve m_worldLoaded
-      // flag This prevents infinite loop when returning from LoadingState
+            // Transitioning to LoadingState - do cleanup but preserve m_worldLoaded
+            // flag This prevents infinite loop when returning from LoadingState
 
-      // Reset the flag after using it
+            // Reset the flag after using it
             m_transitioningToLoading = false;
 
-      // Reset player
+            // Reset player
             m_player.reset();
 
-      // Clear spawned NPCs (data-driven via NPCRenderController)
+            // Clear spawned NPCs (data-driven via NPCRenderController)
             aiMgr.destroyAllNPCsForStateTransition();
 
-      // Clear controllers
+            // Clear controllers
             m_controllers.clear();
 
-      // Unregister our specific handlers via tokens before EventManager cleanup.
+            // Unregister our specific handlers via tokens before EventManager cleanup.
             unregisterEventHandlers();
 
             aiMgr.prepareForStateTransition();
@@ -373,13 +373,13 @@ bool EventDemoState::exit() {
             bgSimMgr.prepareForStateTransition();
             worldMgr.prepareForStateTransition();
 
-      // Unload before WRM/EventManager transition cleanup so persistent
-      // world-unload handlers observe the same cleared-world contract as
-      // GamePlayState.
+            // Unload before WRM/EventManager transition cleanup so persistent
+            // world-unload handlers observe the same cleared-world contract as
+            // GamePlayState.
             if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
                 worldMgr.unloadWorld();
-        // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
-        // infinite loop when LoadingState returns to this state
+                // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
+                // infinite loop when LoadingState returns to this state
             }
 
             if (wrm.isInitialized()) {
@@ -408,38 +408,38 @@ bool EventDemoState::exit() {
                 m_player->setCamera(nullptr);
             }
 
-      // Clean up camera and GPU scene renderer
+            // Clean up camera and GPU scene renderer
             m_camera.reset();
 
-      // UI: full-screen replace clears via GameStateManager after exit();
-      // LoadingState::enter() rebuilds the loading screen.
+            // UI: full-screen replace clears via GameStateManager after exit();
+            // LoadingState::enter() rebuilds the loading screen.
 
-      // Reset initialized flag so state re-initializes after loading
+            // Reset initialized flag so state re-initializes after loading
             m_initialized = false;
 
-      // Keep m_worldLoaded = true to remember we've already been through
-      // loading
+            // Keep m_worldLoaded = true to remember we've already been through
+            // loading
             GAMESTATE_INFO(
                 "EventDemoState cleanup for LoadingState transition complete");
             return true;
         }
 
-    // Full exit (going to main menu, other states, or shutting down)
+        // Full exit (going to main menu, other states, or shutting down)
 
         if (m_player) {
             m_player->setCamera(nullptr);
         }
 
-    // Reset player
+        // Reset player
         m_player.reset();
 
-    // Clear spawned NPCs (data-driven via NPCRenderController)
+        // Clear spawned NPCs (data-driven via NPCRenderController)
         aiMgr.destroyAllNPCsForStateTransition();
 
-    // Clear controllers
+        // Clear controllers
         m_controllers.clear();
 
-    // Unregister our specific handlers via tokens before EventManager cleanup.
+        // Unregister our specific handlers via tokens before EventManager cleanup.
         unregisterEventHandlers();
 
         aiMgr.prepareForStateTransition();
@@ -447,11 +447,11 @@ bool EventDemoState::exit() {
         bgSimMgr.prepareForStateTransition();
         worldMgr.prepareForStateTransition();
 
-    // Unload before WRM/EventManager transition cleanup so persistent
-    // world-unload handlers and WRM reverse lookups are still available.
+        // Unload before WRM/EventManager transition cleanup so persistent
+        // world-unload handlers and WRM reverse lookups are still available.
         if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
             worldMgr.unloadWorld();
-      // Reset m_worldLoaded when doing full exit (going to main menu, etc.)
+            // Reset m_worldLoaded when doing full exit (going to main menu, etc.)
             m_worldLoaded = false;
         }
 
@@ -461,7 +461,7 @@ bool EventDemoState::exit() {
 
         eventMgr.prepareForStateTransition();
 
-    // Clean collision state before other systems
+        // Clean collision state before other systems
         if (collisionMgr.isInitialized() && !collisionMgr.isShutdown()) {
             collisionMgr.prepareForStateTransition();
         }
@@ -473,20 +473,20 @@ bool EventDemoState::exit() {
         edm.prepareForStateTransition();
         VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
-    // Simple particle cleanup - let prepareForStateTransition handle everything
+        // Simple particle cleanup - let prepareForStateTransition handle everything
         if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
             particleMgr.prepareForStateTransition(); // This handles weather effects
-                                               // and cleanup
+            // and cleanup
         }
 
         WorldManager::Instance().setActiveCamera(nullptr);
 
-    // Clean up camera and GPU scene renderer first to stop world rendering
+        // Clean up camera and GPU scene renderer first to stop world rendering
         m_camera.reset();
 
-    // UI: full-screen replace clears via GameStateManager after exit().
+        // UI: full-screen replace clears via GameStateManager after exit().
 
-    // Reset initialization flag for next fresh start
+        // Reset initialization flag for next fresh start
         m_initialized = false;
 
         GAMESTATE_INFO("EventDemoState cleanup complete");
@@ -510,36 +510,36 @@ void EventDemoState::unregisterEventHandlers() {
         }
         m_handlerTokens.clear();
     } catch (...) {
-    // Swallow errors during cleanup to avoid exit() failure
+        // Swallow errors during cleanup to avoid exit() failure
     }
 }
 
 void EventDemoState::update(float deltaTime) {
-  // Check if we need to transition to loading screen (do this in update, not
-  // enter)
+    // Check if we need to transition to loading screen (do this in update, not
+    // enter)
     if (m_needsLoading) {
         m_needsLoading = false; // Clear flag
 
         GAMESTATE_INFO("Transitioning to LoadingState for world generation");
 
-    // Create world configuration for event demo (HUGE world)
+        // Create world configuration for event demo (HUGE world)
         VoidLight::WorldGenerationConfig config;
         config.width = 500; // Massive 500x500 world
         config.height = 500;
         config.seed = static_cast<int>(std::time(nullptr));
-        config.elevationFrequency = 0.018f;  // Lower frequency = larger biome regions
+        config.elevationFrequency = 0.018f; // Lower frequency = larger biome regions
         config.humidityFrequency = 0.012f;
         config.waterLevel = 0.28f;
         config.mountainLevel = 0.72f;
 
-    // Configure LoadingState and transition to it
+        // Configure LoadingState and transition to it
         auto* loadingState = dynamic_cast<LoadingState*>(
             mp_stateManager->getState(GameStateId::LOADING).get());
         if (loadingState) {
             loadingState->configure(GameStateId::EVENT_DEMO, config);
-      // Set flag before transitioning to preserve m_worldLoaded in exit()
+            // Set flag before transitioning to preserve m_worldLoaded in exit()
             m_transitioningToLoading = true;
-      // Use changeState (called from update) to properly exit and re-enter
+            // Use changeState (called from update) to properly exit and re-enter
             mp_stateManager->changeState(GameStateId::LOADING);
         } else {
             GAMESTATE_ERROR("LoadingState not found in GameStateManager");
@@ -548,34 +548,34 @@ void EventDemoState::update(float deltaTime) {
         return; // Don't continue with rest of update
     }
 
-  // Update timing
+    // Update timing
     m_totalDemoTime += deltaTime;
 
-  // Update player
+    // Update player
     if (m_player) {
         m_player->update(deltaTime);
     }
 
-  // Update NPC animations (velocity-based, data-driven)
+    // Update NPC animations (velocity-based, data-driven)
     m_npcRenderCtrl.update(deltaTime);
 
-  // Cache NPC count for render() (avoids EDM query in render path)
+    // Cache NPC count for render() (avoids EDM query in render path)
     m_cachedNPCCount = EntityDataManager::Instance().getEntityCount(EntityKind::NPC);
 
-  // Update camera (follows player automatically)
+    // Update camera (follows player automatically)
     updateCamera(deltaTime);
 
-  // AI Manager is updated globally by GameEngine for optimal performance
-  // Entity updates are handled by AIManager::update() in GameEngine
+    // AI Manager is updated globally by GameEngine for optimal performance
+    // Entity updates are handled by AIManager::update() in GameEngine
 
-  // Update UI (moved from render path for consistent frame timing)
+    // Update UI (moved from render path for consistent frame timing)
     auto& uiMgr = UIManager::Instance();
     if (!uiMgr.isShutdown()) {
         uiMgr.update(deltaTime);
     }
 
-  // Note: EventManager is updated globally by GameEngine in the main update
-  // loop for optimal performance and consistency with other global systems
+    // Note: EventManager is updated globally by GameEngine in the main update
+    // loop for optimal performance and consistency with other global systems
 }
 
 void EventDemoState::registerEventHandlers() {
@@ -604,30 +604,30 @@ void EventDemoState::registerEventHandlers() {
 }
 
 void EventDemoState::handleInput() {
-  // Loading-intent enter() returns before controllers exist. The next frame
-  // still delivers handleInput() before update() transitions to LoadingState.
+    // Loading-intent enter() returns before controllers exist. The next frame
+    // still delivers handleInput() before update() transitions to LoadingState.
     if (!m_initialized) {
         return;
     }
 
-  // Get manager references at function start
+    // Get manager references at function start
     const InputManager& inputMgr = InputManager::Instance();
     ParticleManager& particleMgr = ParticleManager::Instance();
     EntityDataManager& edm = EntityDataManager::Instance();
 
-  // Manual event triggers (keys 1-6)
-  // [1] Weather - cycle through weather types
+    // Manual event triggers (keys 1-6)
+    // [1] Weather - cycle through weather types
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_1) &&
         (m_totalDemoTime - m_lastEventTriggerTime) >= 0.2f) {
         triggerWeatherDemo();
         m_lastEventTriggerTime = m_totalDemoTime;
     }
 
-  // Cache NPC count once for all limit checks
+    // Cache NPC count once for all limit checks
     const size_t npcCount = edm.getEntityCount(EntityKind::NPC);
     constexpr size_t NPC_LIMIT = 5000;
 
-  // [2] NPC Spawn
+    // [2] NPC Spawn
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_2) &&
         (m_totalDemoTime - m_lastEventTriggerTime) >= 0.2f) {
         if (npcCount < NPC_LIMIT) {
@@ -638,7 +638,7 @@ void EventDemoState::handleInput() {
         }
     }
 
-  // [4] Mass NPC Spawn with varied behaviors
+    // [4] Mass NPC Spawn with varied behaviors
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_4) &&
         (m_totalDemoTime - m_lastEventTriggerTime) >= 0.2f) {
         if (npcCount < NPC_LIMIT) {
@@ -649,20 +649,20 @@ void EventDemoState::handleInput() {
         }
     }
 
-  // [5] Events Reset
+    // [5] Events Reset
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_5)) {
         resetAllEvents();
         addLogEntry("Events reset");
     }
 
-  // [6] Resource Demo
+    // [6] Resource Demo
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_6) &&
         (m_totalDemoTime - m_lastEventTriggerTime) >= 0.2f) {
         triggerResourceDemo();
         m_lastEventTriggerTime = m_totalDemoTime;
     }
 
-  // [R] Full Reset
+    // [R] Full Reset
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
         resetAllEvents();
         m_totalDemoTime = 0.0f;
@@ -670,14 +670,14 @@ void EventDemoState::handleInput() {
         addLogEntry("Demo reset");
     }
 
-  // [C] Convenience Methods Demo
+    // [C] Convenience Methods Demo
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_C) &&
         (m_totalDemoTime - m_lastEventTriggerTime) >= 0.2f) {
         triggerConvenienceMethodsDemo();
         m_lastEventTriggerTime = m_totalDemoTime;
     }
 
-  // Particle effect toggles
+    // Particle effect toggles
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_F)) {
         particleMgr.toggleFireEffect();
         addLogEntry("Fire toggled");
@@ -693,12 +693,12 @@ void EventDemoState::handleInput() {
         addLogEntry("Sparks toggled");
     }
 
-  // Inventory toggle
+    // Inventory toggle
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_I)) {
         toggleInventoryDisplay();
     }
 
-  // Camera zoom controls
+    // Camera zoom controls
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_LEFTBRACKET) && m_camera) {
         m_camera->zoomIn();
     }
@@ -706,19 +706,19 @@ void EventDemoState::handleInput() {
         m_camera->zoomOut();
     }
 
-  // Back to main menu
+    // Back to main menu
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_B)) {
         mp_stateManager->changeState(GameStateId::MAIN_MENU);
     }
 }
 
 void EventDemoState::triggerWeatherDemo() {
-  // Cycle through weather types
+    // Cycle through weather types
     WeatherType newWeather = m_weatherSequence[m_currentWeatherIndex];
     std::string customType = m_customWeatherTypes[m_currentWeatherIndex];
     m_currentWeatherIndex = (m_currentWeatherIndex + 1) % m_weatherSequence.size();
 
-  // Use EventManager hub to change weather
+    // Use EventManager hub to change weather
     auto& eventMgr = EventManager::Instance();
     if (newWeather == WeatherType::Custom && !customType.empty()) {
         eventMgr.changeWeather(customType, m_weatherTransitionTime,
@@ -756,7 +756,7 @@ void EventDemoState::triggerNPCSpawnDemo() {
     spawnX = std::max(100.0f, std::min(spawnX, m_worldWidth - 100.0f));
     spawnY = std::max(100.0f, std::min(spawnY, m_worldHeight - 100.0f));
 
-  // Use EventManager to spawn NPC via the unified event hub
+    // Use EventManager to spawn NPC via the unified event hub
     EventManager::Instance().spawnNPC(npcType, spawnX, spawnY);
     addLogEntry(std::format("Spawned: {}", npcType));
 }
@@ -773,7 +773,7 @@ void EventDemoState::triggerResourceDemo() {
         return;
     }
 
-  // Cache manager references for better performance
+    // Cache manager references for better performance
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
     const auto& templateManager = ResourceTemplateManager::Instance();
@@ -783,28 +783,28 @@ void EventDemoState::triggerResourceDemo() {
         return;
     }
 
-  // Realistic resource discovery: Query system for different categories/types
+    // Realistic resource discovery: Query system for different categories/types
     ResourcePtr selectedResource = nullptr;
     int quantity = 1;
 
     switch (m_resourceDemonstrationStep % 6) {
         case 0: {
-    // Discovery pattern: Find currency resources
+            // Discovery pattern: Find currency resources
             auto currencyResources =
                 templateManager.getResourcesByCategory(ResourceCategory::Currency);
             if (!currencyResources.empty()) {
-      // Real game logic: pick the first currency resource found
+                // Real game logic: pick the first currency resource found
                 selectedResource = currencyResources[0];
                 quantity = 50;
             }
             break;
         }
         case 1: {
-    // Discovery pattern: Find consumable items
+            // Discovery pattern: Find consumable items
             auto consumables =
                 templateManager.getResourcesByType(ResourceType::Consumable);
             if (!consumables.empty()) {
-      // Real game logic: find a consumable with reasonable value
+                // Real game logic: find a consumable with reasonable value
                 auto it = std::find_if(
                     consumables.begin(), consumables.end(), [](const auto& resource) {
                         return resource->getValue() > 0 && resource->getValue() < 100;
@@ -817,11 +817,11 @@ void EventDemoState::triggerResourceDemo() {
             break;
         }
         case 2: {
-    // Discovery pattern: Find raw materials
+            // Discovery pattern: Find raw materials
             auto materials =
                 templateManager.getResourcesByType(ResourceType::RawResource);
             if (!materials.empty()) {
-      // Real game logic: find stackable materials
+                // Real game logic: find stackable materials
                 auto it = std::find_if(
                     materials.begin(), materials.end(), [](const auto& resource) {
                         return resource->isStackable() && resource->getMaxStackSize() >= 50;
@@ -834,7 +834,7 @@ void EventDemoState::triggerResourceDemo() {
             break;
         }
         case 3: {
-    // Discovery pattern: Find processed crafting materials
+            // Discovery pattern: Find processed crafting materials
             auto craftingComponents =
                 templateManager.getResourcesByType(ResourceType::CraftingComponent);
             if (!craftingComponents.empty()) {
@@ -844,7 +844,7 @@ void EventDemoState::triggerResourceDemo() {
             break;
         }
         case 4: {
-    // Discovery pattern: Find equipment
+            // Discovery pattern: Find equipment
             auto equipment =
                 templateManager.getResourcesByType(ResourceType::Equipment);
             if (!equipment.empty()) {
@@ -854,10 +854,10 @@ void EventDemoState::triggerResourceDemo() {
             break;
         }
         case 5: {
-    // Discovery pattern: Find valuable gems
+            // Discovery pattern: Find valuable gems
             auto gems = templateManager.getResourcesByType(ResourceType::Gem);
             if (!gems.empty()) {
-      // Real game logic: find high-value gems
+                // Real game logic: find high-value gems
                 auto it =
                     std::find_if(gems.begin(), gems.end(), [](const auto& resource) {
                         return resource->getValue() > 500;
@@ -880,35 +880,35 @@ void EventDemoState::triggerResourceDemo() {
         return;
     }
 
-  // Use the discovered resource
+    // Use the discovered resource
     auto handle = selectedResource->getHandle();
     std::string resourceName = selectedResource->getName();
     int currentQuantity = edm.getInventoryQuantity(invIdx, handle);
 
-  // Get UIManager reference for marking bindings dirty after inventory changes
+    // Get UIManager reference for marking bindings dirty after inventory changes
     auto& ui = UIManager::Instance();
 
     if (m_resourceIsAdding) {
-    // Add resources to player inventory
+        // Add resources to player inventory
         bool success = edm.addToInventory(invIdx, handle, quantity);
         if (success) {
             int newQuantity = edm.getInventoryQuantity(invIdx, handle);
             addLogEntry(std::format("+{} {} ({} total)", quantity, resourceName,
                 newQuantity));
 
-      // Trigger resource change via EventManager (deferred by default)
+            // Trigger resource change via EventManager (deferred by default)
             eventMgr.triggerResourceChange(m_player->getHandle(), handle,
                 currentQuantity, newQuantity,
                 "event_demo");
 
-      // Mark inventory UI bindings dirty so they refresh
+            // Mark inventory UI bindings dirty so they refresh
             ui.markBindingDirty("inventory_status");
             ui.markBindingDirty("inventory_list");
         } else {
             addLogEntry(std::format("Failed: {} (full)", resourceName));
         }
     } else {
-    // Remove resources from player inventory
+        // Remove resources from player inventory
         int removeQuantity = std::min(quantity, currentQuantity);
 
         if (removeQuantity > 0) {
@@ -918,12 +918,12 @@ void EventDemoState::triggerResourceDemo() {
                 addLogEntry(std::format("-{} {} ({} left)", removeQuantity,
                     resourceName, newQuantity));
 
-        // Trigger resource change via EventManager (deferred by default)
+                // Trigger resource change via EventManager (deferred by default)
                 eventMgr.triggerResourceChange(m_player->getHandle(), handle,
                     currentQuantity, newQuantity,
                     "event_demo");
 
-        // Mark inventory UI bindings dirty so they refresh
+                // Mark inventory UI bindings dirty so they refresh
                 ui.markBindingDirty("inventory_status");
                 ui.markBindingDirty("inventory_list");
             } else {
@@ -934,12 +934,12 @@ void EventDemoState::triggerResourceDemo() {
         }
     }
 
-  // Progress through different discovery patterns and alternate between adding
-  // and removing
+    // Progress through different discovery patterns and alternate between adding
+    // and removing
     m_resourceDemonstrationStep++;
     if (m_resourceDemonstrationStep % 6 == 0) {
         m_resourceIsAdding = !m_resourceIsAdding; // Switch between adding and
-                                              // removing after full cycle
+        // removing after full cycle
         addLogEntry(std::format("Mode: {}", m_resourceIsAdding ? "Adding" : "Removing"));
     }
 }
@@ -950,7 +950,7 @@ void EventDemoState::triggerMassNPCSpawnDemo() {
         return;
     }
 
-  // Check NPC limit
+    // Check NPC limit
     if (EntityDataManager::Instance().getEntityCount(EntityKind::NPC) >= 5000) {
         addLogEntry("NPC limit reached (5000)");
         return;
@@ -958,13 +958,13 @@ void EventDemoState::triggerMassNPCSpawnDemo() {
 
     Vector2D playerPos = m_player->getPosition();
 
-  // Spawn 200 NPCs via event system - random races, rotating through 6 behaviors
+    // Spawn 200 NPCs via event system - random races, rotating through 6 behaviors
     EventManager::Instance().spawnNPC(
-        "Farmer",                                             // npcType
-        playerPos.getX(), playerPos.getY(),                   // center position
-        200,                                                  // count
-        1500.0f,                                              // spawnRadius
-        "Random",                                             // npcRace
+        "Farmer", // npcType
+        playerPos.getX(), playerPos.getY(), // center position
+        200, // count
+        1500.0f, // spawnRadius
+        "Random", // npcRace
         {"Idle", "Wander", "Patrol", "Chase", "Flee", "Follow"} // aiBehaviors
     );
 
@@ -976,15 +976,15 @@ void EventDemoState::triggerConvenienceMethodsDemo() {
 
     m_convenienceDemoCounter++;
 
-  // Cache EventManager reference for multiple calls
+    // Cache EventManager reference for multiple calls
     auto& eventMgr = EventManager::Instance();
 
-  // Demonstrate trigger methods (dispatch-only architecture)
-  // Weather change
+    // Demonstrate trigger methods (dispatch-only architecture)
+    // Weather change
     eventMgr.changeWeather("Foggy", 2.5f, EventManager::DispatchMode::Deferred);
     m_currentWeather = WeatherType::Foggy;
 
-  // Spawn NPCs via trigger
+    // Spawn NPCs via trigger
     Vector2D playerPos = m_player ? m_player->getPosition() : Vector2D(400, 300);
     eventMgr.spawnNPC("Guard", playerPos.getX() + 100, playerPos.getY());
     eventMgr.spawnNPC("GeneralMerchant", playerPos.getX() - 100, playerPos.getY());
@@ -995,7 +995,7 @@ void EventDemoState::triggerConvenienceMethodsDemo() {
 void EventDemoState::resetAllEvents() {
     cleanupSpawnedNPCs();
 
-  // Trigger clear weather via EventManager
+    // Trigger clear weather via EventManager
     EventManager::Instance().changeWeather("Clear", 1.0f,
         EventManager::DispatchMode::Deferred);
 
@@ -1010,8 +1010,8 @@ void EventDemoState::resetAllEvents() {
 }
 
 void EventDemoState::onNPCSpawned(const EventData& data) {
-  // NPCSpawnEvent::execute() handles the actual spawning
-  // This handler just logs the event for the demo UI
+    // NPCSpawnEvent::execute() handles the actual spawning
+    // This handler just logs the event for the demo UI
     if (!data.event) return;
 
     auto npcEvent = std::dynamic_pointer_cast<NPCSpawnEvent>(data.event);
@@ -1025,14 +1025,14 @@ void EventDemoState::onNPCSpawned(const EventData& data) {
 }
 
 void EventDemoState::onResourceChanged(const EventData& data) {
-  // Extract ResourceChangeEvent from EventData
+    // Extract ResourceChangeEvent from EventData
     try {
         if (!data.event) {
             GAMESTATE_ERROR("ResourceChangeEvent data is null");
             return;
         }
 
-    // Cast to ResourceChangeEvent to access its data
+        // Cast to ResourceChangeEvent to access its data
         auto resourceEvent =
             std::dynamic_pointer_cast<ResourceChangeEvent>(data.event);
         if (!resourceEvent) {
@@ -1040,13 +1040,13 @@ void EventDemoState::onResourceChanged(const EventData& data) {
             return;
         }
 
-    // Get the resource change data
+        // Get the resource change data
         VoidLight::ResourceHandle handle = resourceEvent->getResourceHandle();
         int oldQty = resourceEvent->getOldQuantity();
         int newQty = resourceEvent->getNewQuantity();
         std::string source = resourceEvent->getChangeReason();
 
-    // Process different aspects of resource changes
+        // Process different aspects of resource changes
         processResourceAchievements(handle, oldQty, newQty);
         checkResourceWarnings(handle, newQty);
         logResourceAnalytics(handle, oldQty, newQty, source);
@@ -1061,11 +1061,11 @@ void EventDemoState::addLogEntry(const std::string& entry) {
         return;
 
     try {
-    // Send to UI event log component (no timestamp - keeps messages concise)
+        // Send to UI event log component (no timestamp - keeps messages concise)
         auto& ui = UIManager::Instance();
         ui.addEventLogEntry("event_log", entry);
 
-    // Also log to console for debugging with timestamp
+        // Also log to console for debugging with timestamp
         GAMESTATE_DEBUG(std::format("EventDemo [{}s]: {}",
             static_cast<int>(m_totalDemoTime), entry));
     } catch (const std::exception& e) {
@@ -1082,13 +1082,13 @@ std::string EventDemoState::getCurrentWeatherString() const {
 }
 
 void EventDemoState::cleanupSpawnedNPCs() {
-  // Data-driven cleanup via NPCRenderController (handles AI unregistration and EDM destruction)
+    // Data-driven cleanup via NPCRenderController (handles AI unregistration and EDM destruction)
     AIManager::Instance().destroyAllNPCsForStateTransition();
 }
 
 void EventDemoState::setupResourceAchievements() {
-  // Set up achievement thresholds for different resource types for
-  // demonstration
+    // Set up achievement thresholds for different resource types for
+    // demonstration
     const auto& templateManager = ResourceTemplateManager::Instance();
 
     if (!templateManager.isInitialized()) {
@@ -1097,7 +1097,7 @@ void EventDemoState::setupResourceAchievements() {
         return;
     }
 
-  // Find some common resources and set thresholds
+    // Find some common resources and set thresholds
     auto currencies =
         templateManager.getResourcesByCategory(ResourceCategory::Currency);
     auto materials =
@@ -1105,7 +1105,7 @@ void EventDemoState::setupResourceAchievements() {
     auto consumables =
         templateManager.getResourcesByType(ResourceType::Consumable);
 
-  // Set achievement thresholds
+    // Set achievement thresholds
     for (const auto& resource : currencies) {
         m_achievementThresholds[resource->getHandle()] =
             100; // First 100 currency units
@@ -1134,11 +1134,11 @@ void EventDemoState::processResourceAchievements(
     int threshold = thresholdIt->second;
     bool wasUnlocked = m_achievementsUnlocked[handle];
 
-  // Check if we crossed the achievement threshold
+    // Check if we crossed the achievement threshold
     if (!wasUnlocked && oldQty < threshold && newQty >= threshold) {
         m_achievementsUnlocked[handle] = true;
 
-    // Get resource name for achievement message
+        // Get resource name for achievement message
         auto resourceTemplate =
             ResourceTemplateManager::Instance().getResourceTemplate(handle);
         std::string resourceName =
@@ -1146,14 +1146,14 @@ void EventDemoState::processResourceAchievements(
 
         addLogEntry(std::format("Achievement: {} {}", threshold, resourceName));
 
-    // In a real game, this could trigger UI popups, sound effects, save to
-    // profile, etc.
+        // In a real game, this could trigger UI popups, sound effects, save to
+        // profile, etc.
     }
 }
 
 void EventDemoState::checkResourceWarnings(VoidLight::ResourceHandle handle,
     int newQty) {
-  // Check for low resource warnings
+    // Check for low resource warnings
     auto resourceTemplate =
         ResourceTemplateManager::Instance().getResourceTemplate(handle);
     if (!resourceTemplate)
@@ -1161,18 +1161,18 @@ void EventDemoState::checkResourceWarnings(VoidLight::ResourceHandle handle,
 
     const std::string& resourceName = resourceTemplate->getName();
 
-  // Warning for low quantities of important resources (player-facing)
+    // Warning for low quantities of important resources (player-facing)
     if (resourceTemplate->getType() == ResourceType::Consumable && newQty <= 2 &&
         newQty > 0) {
         addLogEntry(std::format("Low: {} ({})", resourceName, newQty));
     }
 
-  // Warning when resources are completely depleted (player-facing)
+    // Warning when resources are completely depleted (player-facing)
     if (newQty == 0) {
         addLogEntry(std::format("Out of {}", resourceName));
     }
 
-  // Warning for high-value resources reaching storage limits (player-facing)
+    // Warning for high-value resources reaching storage limits (player-facing)
     if (resourceTemplate->isStackable() &&
         resourceTemplate->getMaxStackSize() > 0) {
         int maxStack = resourceTemplate->getMaxStackSize();
@@ -1194,7 +1194,7 @@ void EventDemoState::logResourceAnalytics(VoidLight::ResourceHandle handle,
     const std::string& resourceName = resourceTemplate->getName();
     int const change = newQty - oldQty;
 
-  // Create detailed analytics entry (console only)
+    // Create detailed analytics entry (console only)
     std::string analyticsEntry =
         std::format("ANALYTICS: [{}] {} changed by {} (value: {} coins)", source,
             resourceName, change, resourceTemplate->getValue() * change);
@@ -1202,57 +1202,57 @@ void EventDemoState::logResourceAnalytics(VoidLight::ResourceHandle handle,
     m_resourceLog.push_back(analyticsEntry);
     GAMESTATE_DEBUG(analyticsEntry);
 
-  // Keep log size manageable
+    // Keep log size manageable
     if (m_resourceLog.size() > 50) {
         m_resourceLog.erase(m_resourceLog.begin());
     }
 
-  // In a real game, this could:
-  // - Send data to analytics servers
-  // - Update economy balancing metrics
-  // - Track player behavior patterns
-  // - Generate reports for game designers
+    // In a real game, this could:
+    // - Send data to analytics servers
+    // - Update economy balancing metrics
+    // - Track player behavior patterns
+    // - Generate reports for game designers
 }
 
 void EventDemoState::initializeCamera() {
     const auto& gameEngine = GameEngine::Instance();
 
-  // Initialize camera at player's position to avoid any interpolation jitter
+    // Initialize camera at player's position to avoid any interpolation jitter
     Vector2D playerPosition = m_player ? m_player->getPosition() : Vector2D(0, 0);
 
-  // Create camera starting at player position
+    // Create camera starting at player position
     m_camera = std::make_unique<VoidLight::Camera>(
         playerPosition.getX(), playerPosition.getY(), // Start at player position
         static_cast<float>(gameEngine.getWidthInPixels()),
         static_cast<float>(gameEngine.getHeightInPixels()));
 
-  // Configure camera to follow player
+    // Configure camera to follow player
     if (m_player) {
-    // Match GamePlayState: disable camera event firing for consistency
+        // Match GamePlayState: disable camera event firing for consistency
         m_camera->setEventFiringEnabled(false);
 
-    // Set target and enable follow mode
+        // Set target and enable follow mode
         m_camera->setTarget(std::static_pointer_cast<Entity>(m_player));
         m_camera->setMode(VoidLight::Camera::Mode::Follow);
 
-    // Camera follow tuning lives in Camera::Config defaults — uniform across states.
+        // Camera follow tuning lives in Camera::Config defaults — uniform across states.
 
-    // Provide camera to player for screen-to-world coordinate conversion
+        // Provide camera to player for screen-to-world coordinate conversion
         m_player->setCamera(m_camera.get());
 
-    // Camera auto-synchronizes world bounds on update
+        // Camera auto-synchronizes world bounds on update
     }
 
-  // Register camera with WorldManager for chunk texture updates
+    // Register camera with WorldManager for chunk texture updates
     WorldManager::Instance().setActiveCamera(m_camera.get());
 }
 
 void EventDemoState::updateCamera(float deltaTime) {
     if (m_camera) {
-    // Sync viewport with current window size (handles resize events)
+        // Sync viewport with current window size (handles resize events)
         m_camera->syncViewportWithEngine();
 
-    // Update camera position and following logic
+        // Update camera position and following logic
         m_camera->update(deltaTime);
     }
 }
@@ -1274,28 +1274,28 @@ void EventDemoState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
     float interpolationAlpha) {
     if (!m_camera || !m_gpuSceneRecorder) { return; }
 
-  // Begin scene-data recording before the engine-owned scene pass opens
+    // Begin scene-data recording before the engine-owned scene pass opens
     auto ctx = m_gpuSceneRecorder->beginRecording(gpuRenderer, *m_camera, interpolationAlpha);
     if (!ctx) { return; }
 
-  // Record world tiles to sprite batch
+    // Record world tiles to sprite batch
     auto& worldMgr = WorldManager::Instance();
     worldMgr.recordGPU(*ctx.spriteBatch, ctx.cameraX, ctx.cameraY,
         ctx.viewWidth, ctx.viewHeight, ctx.zoom);
 
-  // Record NPCs and projectiles to sprite batch (atlas-based)
+    // Record NPCs and projectiles to sprite batch (atlas-based)
     m_npcRenderCtrl.recordGPU(ctx);
     m_projectileRenderCtrl.recordGPU(ctx);
 
-  // End sprite batch recording (finalizes atlas-based sprites)
+    // End sprite batch recording (finalizes atlas-based sprites)
     m_gpuSceneRecorder->endSpriteBatch();
 
-  // Record player (entity batch - separate texture)
+    // Record player (entity batch - separate texture)
     if (m_player) {
         m_player->recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
     }
 
-  // Record particles
+    // Record particles
     auto& particleMgr = ParticleManager::Instance();
     particleMgr.recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
 
@@ -1305,7 +1305,7 @@ void EventDemoState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
 void EventDemoState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
     auto& uiMgr = UIManager::Instance();
     {
-    // Lazy weather string caching — only recompute on weather type change
+        // Lazy weather string caching — only recompute on weather type change
         if (m_currentWeather != m_lastCachedWeatherType) {
             m_cachedWeatherStr = getCurrentWeatherString();
             m_lastCachedWeatherType = m_currentWeather;
@@ -1337,15 +1337,15 @@ void EventDemoState::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
     float) {
     if (!m_camera || !m_gpuSceneRecorder) { return; }
 
-  // Render previously recorded scene data into the engine-owned scene pass
+    // Render previously recorded scene data into the engine-owned scene pass
     m_gpuSceneRecorder->renderRecordedScene(gpuRenderer, scenePass);
 
-  // Render player (entity batch)
+    // Render player (entity batch)
     if (m_player) {
         m_player->renderGPU(gpuRenderer, scenePass);
     }
 
-  // Render particles
+    // Render particles
     auto& particleMgr = ParticleManager::Instance();
     particleMgr.renderGPU(gpuRenderer, scenePass);
 }

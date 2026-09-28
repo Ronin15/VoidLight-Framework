@@ -20,9 +20,9 @@
 class CollisionObstacleChangedEvent : public Event {
 public:
     enum class ChangeType {
-        ADDED,      // New obstacle added
-        REMOVED,    // Existing obstacle removed
-        MODIFIED    // Existing obstacle properties changed
+        ADDED, // New obstacle added
+        REMOVED, // Existing obstacle removed
+        MODIFIED // Existing obstacle properties changed
     };
 
     /**

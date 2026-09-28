@@ -53,7 +53,7 @@ EventManager& EventManager::Instance() {
 }
 
 EventManager::EventManager() {
-  // Pre-allocate handler vectors to avoid reallocation during registration
+    // Pre-allocate handler vectors to avoid reallocation during registration
     for (auto& handlerVec : m_handlersByType) {
         handlerVec.reserve(16);
     }
@@ -77,26 +77,26 @@ bool EventManager::init() {
         return true;
     }
 
-  // Reset shutdown flag to allow re-initialization after clean()
+    // Reset shutdown flag to allow re-initialization after clean()
     m_isShutdown = false;
 
     EVENT_INFO("Initializing EventManager (central event processing hub)");
 
-  // Initialize handler containers
+    // Initialize handler containers
     for (auto& handlerContainer : m_handlersByType) {
         handlerContainer.clear();
         constexpr size_t HANDLER_CONTAINER_CAPACITY = 32;
         handlerContainer.reserve(HANDLER_CONTAINER_CAPACITY);
     }
 
-  // Clear any deferred work queued before initialization/reset.
+    // Clear any deferred work queued before initialization/reset.
     clearPendingDispatchQueues();
 
-  // Clear event pools after draining queued events so stale work cannot leak
-  // into the next state or reinitialize into the next pool set.
+    // Clear event pools after draining queued events so stale work cannot leak
+    // into the next state or reinitialize into the next pool set.
     clearEventPools();
 
-  // Configure event pools for trigger methods
+    // Configure event pools for trigger methods
     m_weatherPool.setCreator([]() {
         return std::make_shared<WeatherEvent>("trigger_weather", WeatherType::Clear);
     });
@@ -112,7 +112,7 @@ bool EventManager::init() {
             EntityHandle{}, VoidLight::ResourceHandle{}, 0, 0, "");
     });
 
-  // Hot-path event pools
+    // Hot-path event pools
     m_particleEffectPool.setCreator([]() {
         return std::make_shared<ParticleEffectEvent>("pool_particle",
             ParticleEffectType::Fire, 0.0f,
@@ -140,42 +140,42 @@ void EventManager::clean() {
         return;
     }
 
-  // Set shutdown flags EARLY to prevent new work
+    // Set shutdown flags EARLY to prevent new work
     m_isShutdown = true;
     m_initialized.store(false, std::memory_order_release);
 
-  // Combat-prep worker batches are the only async EventManager work, and they
-  // are joined synchronously inside drainDispatchQueueWithBudget() before it
-  // returns on the main thread, so no outstanding batch can exist here.
+    // Combat-prep worker batches are the only async EventManager work, and they
+    // are joined synchronously inside drainDispatchQueueWithBudget() before it
+    // returns on the main thread, so no outstanding batch can exist here.
 
     EVENT_INFO_IF(!m_isShutdown, "Cleaning up EventManager");
 
-  // Clear all handlers
+    // Clear all handlers
     clearAllHandlers();
 
-  // Clear any deferred work queued before shutdown.
+    // Clear any deferred work queued before shutdown.
     clearPendingDispatchQueues();
 
-  // Clear event pools after draining queued events to avoid carrying stale
-  // combat state across shutdown and subsequent init().
+    // Clear event pools after draining queued events to avoid carrying stale
+    // combat state across shutdown and subsequent init().
     clearEventPools();
 }
 
 void EventManager::prepareForStateTransition() {
     EVENT_INFO("Preparing EventManager for state transition...");
 
-  // Combat-prep worker batches are joined synchronously in
-  // drainDispatchQueueWithBudget() on the main thread, so no async batch is
-  // outstanding at transition time.
+    // Combat-prep worker batches are joined synchronously in
+    // drainDispatchQueueWithBudget() on the main thread, so no async batch is
+    // outstanding at transition time.
 
-  // Clear transient handlers (state-level). Persistent handlers (manager-level,
-  // registered via registerPersistentHandler) survive across transitions.
+    // Clear transient handlers (state-level). Persistent handlers (manager-level,
+    // registered via registerPersistentHandler) survive across transitions.
     clearTransientHandlers();
 
-  // Clear any deferred work queued before the next state takes over.
+    // Clear any deferred work queued before the next state takes over.
     clearPendingDispatchQueues();
 
-  // Clear event pools after queued events have been released and discarded.
+    // Clear event pools after queued events have been released and discarded.
     clearEventPools();
 
     EVENT_INFO("EventManager prepared for state transition");
@@ -188,12 +188,12 @@ void EventManager::update() {
         return;
     }
 
-  // Skip update when globally paused
+    // Skip update when globally paused
     if (m_globallyPaused.load(std::memory_order_acquire)) {
         return;
     }
 
-  // Process the deferred dispatch queue
+    // Process the deferred dispatch queue
     drainDispatchQueueWithBudget();
 }
 
@@ -202,7 +202,7 @@ void EventManager::drainAllDeferredEvents() {
         return;
     }
 
-  // Process until queue is empty (max 100 iterations for safety)
+    // Process until queue is empty (max 100 iterations for safety)
     constexpr int MAX_ITERATIONS = 100;
     for (int i = 0; i < MAX_ITERATIONS; ++i) {
         size_t pendingCount = 0;
@@ -279,7 +279,7 @@ bool EventManager::removeHandler(const HandlerToken& token) {
         entries.begin(), entries.end(),
         [&token](const HandlerEntry& entry) { return entry.id == token.id; });
     if (it != entries.end()) {
-    // Swap-and-pop: O(1) removal without leaving holes
+        // Swap-and-pop: O(1) removal without leaving holes
         if (it != entries.end() - 1) {
             *it = std::move(entries.back());
         }
@@ -639,7 +639,7 @@ bool EventManager::dispatchEvent(EventTypeId typeId, EventData& eventData,
         return !m_handlersByType[static_cast<size_t>(typeId)].empty();
     }
 
-  // Deferred dispatch
+    // Deferred dispatch
     enqueueDispatch(typeId, std::move(eventData));
     return true;
 }
@@ -693,7 +693,7 @@ void EventManager::enqueueBatch(std::vector<DeferredEvent>&& events) const {
 
     std::lock_guard<std::mutex> lock(m_dispatchMutex);
 
-  // Drop oldest queued events if we'd exceed the queue limit.
+    // Drop oldest queued events if we'd exceed the queue limit.
     size_t droppedCount = 0;
     while (getPendingQueueSizeUnsafe() + events.size() > m_maxDispatchQueue &&
         getPendingQueueSizeUnsafe() > 0) {
@@ -701,8 +701,8 @@ void EventManager::enqueueBatch(std::vector<DeferredEvent>&& events) const {
         ++droppedCount;
     }
 
-  // If the incoming batch itself is larger than the queue cap, keep only the newest
-  // tail that fits and release the overflowed pooled events immediately.
+    // If the incoming batch itself is larger than the queue cap, keep only the newest
+    // tail that fits and release the overflowed pooled events immediately.
     if (events.size() > m_maxDispatchQueue) {
         const size_t overflowCount = events.size() - m_maxDispatchQueue;
         for (size_t i = 0; i < overflowCount; ++i) {
@@ -712,7 +712,7 @@ void EventManager::enqueueBatch(std::vector<DeferredEvent>&& events) const {
         droppedCount += overflowCount;
     }
 
-  // One final guard in case the queue still cannot fit the incoming tail.
+    // One final guard in case the queue still cannot fit the incoming tail.
     while (getPendingQueueSizeUnsafe() + events.size() > m_maxDispatchQueue &&
         getPendingQueueSizeUnsafe() > 0) {
         dropOldestPendingUnsafe();
@@ -736,13 +736,13 @@ void EventManager::enqueueBatch(std::vector<DeferredEvent>&& events) const {
 
 void EventManager::dispatchPendingEvent(const PendingDispatch& pendingDispatch,
     std::string_view errorContext) const {
-  // Copy the handler list under the lock, then invoke outside it. A handler
-  // can itself trigger another Immediate-mode dispatch (e.g. CollisionManager
-  // rebuilding static colliders on WorldLoaded), which would otherwise
-  // re-enter this non-recursive shared_mutex on the same thread -- UB per
-  // shared_mutex::lock_shared()'s precondition. Local (not a reused member):
-  // this is the function in the reentrant chain, so a shared buffer would be
-  // clobbered mid-use by the very reentrant call this avoids.
+    // Copy the handler list under the lock, then invoke outside it. A handler
+    // can itself trigger another Immediate-mode dispatch (e.g. CollisionManager
+    // rebuilding static colliders on WorldLoaded), which would otherwise
+    // re-enter this non-recursive shared_mutex on the same thread -- UB per
+    // shared_mutex::lock_shared()'s precondition. Local (not a reused member):
+    // this is the function in the reentrant chain, so a shared buffer would be
+    // clobbered mid-use by the very reentrant call this avoids.
     std::vector<HandlerEntry> typeHandlers;
     {
         std::shared_lock<std::shared_mutex> lock(m_handlersMutex);
@@ -791,11 +791,11 @@ EventManager::prepareCombatEvent(const PendingDispatch& pendingDispatch) const {
     const EntityHandle attackerHandle = damageEvent->getSource();
     preparedCombat.targetHandle = targetHandle;
     preparedCombat.attackerHandle = attackerHandle;
-  // Caches the EDM SoA index in a worker (prepareCombatBatch) for reuse on the
-  // main thread in commitPreparedCombatEvent. SAFE ONLY because EDM destruction
-  // is deferred and the SoA free-list bumps generation in place rather than
-  // compacting, so an index stays stable between prepare and commit. If EDM ever
-  // switches to synchronous/compacting destruction this cache must be revisited.
+    // Caches the EDM SoA index in a worker (prepareCombatBatch) for reuse on the
+    // main thread in commitPreparedCombatEvent. SAFE ONLY because EDM destruction
+    // is deferred and the SoA free-list bumps generation in place rather than
+    // compacting, so an index stays stable between prepare and commit. If EDM ever
+    // switches to synchronous/compacting destruction this cache must be revisited.
     const size_t targetIdx = edm.getIndex(targetHandle);
     preparedCombat.targetIdx = targetIdx;
     preparedCombat.damage = damageEvent->getDamage();
@@ -849,10 +849,10 @@ void EventManager::commitPreparedCombatEvent(const PendingDispatch& pendingDispa
     const bool destroyOnLethal = preparedCombat.valid
         ? preparedCombat.destroyOnLethal
         : !targetHandle.isPlayer();
-  // Reuses the index cached by prepareCombatEvent on a worker. Valid here only
-  // because EDM defers destruction and bumps generation in place without
-  // compacting (see prepareCombatEvent) — the index cannot have shifted between
-  // the worker prepare pass and this main-thread commit.
+    // Reuses the index cached by prepareCombatEvent on a worker. Valid here only
+    // because EDM defers destruction and bumps generation in place without
+    // compacting (see prepareCombatEvent) — the index cannot have shifted between
+    // the worker prepare pass and this main-thread commit.
     const size_t targetIdx = preparedCombat.valid
         ? preparedCombat.targetIdx
         : edm.getIndex(targetHandle);
@@ -912,8 +912,8 @@ void EventManager::commitPreparedCombatEvent(const PendingDispatch& pendingDispa
 }
 
 void EventManager::drainDispatchQueueWithBudget() {
-  // Extract all pending events under lock - worker threads may be enqueueing
-  // events concurrently (e.g., WorldManager::loadNewWorld on worker thread)
+    // Extract all pending events under lock - worker threads may be enqueueing
+    // events concurrently (e.g., WorldManager::loadNewWorld on worker thread)
     {
         std::lock_guard<std::mutex> lock(m_dispatchMutex);
         const size_t pendingCount = getPendingQueueSizeUnsafe();
@@ -944,9 +944,9 @@ void EventManager::drainDispatchQueueWithBudget() {
             size_t combatIndex = 0;
             while (nonCombatIndex < m_localNonCombatBuffer.size() &&
                 combatIndex < m_localCombatDispatchBuffer.size()) {
-        // Non-combat entries are not read again after the merge, so move them.
-        // Combat entries are still consumed by prepareCombatBatch() (and the
-        // all-combat path) from m_localCombatDispatchBuffer, so they are copied.
+                // Non-combat entries are not read again after the merge, so move them.
+                // Combat entries are still consumed by prepareCombatBatch() (and the
+                // all-combat path) from m_localCombatDispatchBuffer, so they are copied.
                 if (m_localNonCombatBuffer[nonCombatIndex].sequence <
                     m_localCombatDispatchBuffer[combatIndex].sequence) {
                     m_localDispatchBuffer.emplace_back(
@@ -973,7 +973,7 @@ void EventManager::drainDispatchQueueWithBudget() {
                 std::make_move_iterator(m_localNonCombatBuffer.end()));
         }
     }
-  // Lock released - process events without holding lock
+    // Lock released - process events without holding lock
 
     const size_t eventCount =
         m_localNonCombatBuffer.size() + m_localCombatDispatchBuffer.size();
@@ -1000,13 +1000,13 @@ void EventManager::drainDispatchQueueWithBudget() {
     size_t actualBatchCount = 1;
     bool actualWasThreaded = false;
 
-  // Per-path timing: single-threaded feeds threshold learning, batch feeds hill-climbing
+    // Per-path timing: single-threaded feeds threshold learning, batch feeds hill-climbing
     std::chrono::steady_clock::time_point combatPrepStart;
     std::chrono::steady_clock::time_point combatPrepEnd;
 
     if (combatEventCount > 0) {
         if (useThreading) {
-      // Compute batch strategy (not timed — only actual work is timed)
+            // Compute batch strategy (not timed — only actual work is timed)
             auto& threadSystem = VoidLight::ThreadSystem::Instance();
             size_t optimalWorkerCount = budgetMgr.getOptimalWorkers(
                 VoidLight::SystemType::Event, combatEventCount);
@@ -1019,7 +1019,7 @@ void EventManager::drainDispatchQueueWithBudget() {
                 m_combatPrepFutures.clear();
                 m_combatPrepFutures.reserve(batchCount);
 
-        // Start timing batch work (enqueue + wait) — feeds hill-climbing
+                // Start timing batch work (enqueue + wait) — feeds hill-climbing
                 combatPrepStart = std::chrono::steady_clock::now();
 
                 for (size_t batchIndex = 0; batchIndex < batchCount; ++batchIndex) {
@@ -1055,7 +1055,7 @@ void EventManager::drainDispatchQueueWithBudget() {
         }
 
         if (!actualWasThreaded) {
-      // Single-threaded — timing feeds threshold learning
+            // Single-threaded — timing feeds threshold learning
             combatPrepStart = std::chrono::steady_clock::now();
             prepareCombatBatch(0, combatEventCount);
             combatPrepEnd = std::chrono::steady_clock::now();
@@ -1063,13 +1063,13 @@ void EventManager::drainDispatchQueueWithBudget() {
     }
 
     {
-    // Snapshot handler lists under the lock, then dispatch without holding
-    // it. A handler can trigger further Immediate-mode dispatch (e.g.
-    // CollisionManager rebuilding static colliders on WorldLoaded), which
-    // would otherwise re-enter this non-recursive shared_mutex on this
-    // thread mid-loop. Reused member buffer is safe here: this function has
-    // exactly one caller (update(), main-thread, once per frame) and is not
-    // itself reentrant.
+        // Snapshot handler lists under the lock, then dispatch without holding
+        // it. A handler can trigger further Immediate-mode dispatch (e.g.
+        // CollisionManager rebuilding static colliders on WorldLoaded), which
+        // would otherwise re-enter this non-recursive shared_mutex on this
+        // thread mid-loop. Reused member buffer is safe here: this function has
+        // exactly one caller (update(), main-thread, once per frame) and is not
+        // itself reentrant.
         {
             std::shared_lock<std::shared_mutex> handlerLock(m_handlersMutex);
             m_handlersSnapshotBuffer = m_handlersByType;
@@ -1129,7 +1129,7 @@ void EventManager::drainDispatchQueueWithBudget() {
     }
 
     VOIDLIGHT_DEBUG_ONLY(
-      // Periodic debug logging (~35 seconds at 60fps)
+        // Periodic debug logging (~35 seconds at 60fps)
         static thread_local uint64_t logFrameCounter = 0;
         if (++logFrameCounter % 2100 == 0 && eventCount > 0) {
         EVENT_DEBUG(std::format("Dispatch: {} events ({} combat) [{}, {:.2f}ms prep]",
@@ -1138,7 +1138,7 @@ void EventManager::drainDispatchQueueWithBudget() {
                                 combatPrepMs));
         })
 
-  // Release pooled events back to pools (after all processing complete)
+    // Release pooled events back to pools (after all processing complete)
     if (allCombatEvents) {
         for (const auto& pd : m_localCombatDispatchBuffer) {
             releaseEventToPool(pd.typeId, pd.data.event);
@@ -1190,7 +1190,7 @@ void EventManager::releaseEventToPool(EventTypeId typeId, const EventPtr& event)
             }
             break;
         default:
-      // Non-pooled event types
+            // Non-pooled event types
             break;
     }
 }

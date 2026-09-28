@@ -16,7 +16,7 @@
 #include "managers/EventManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "entities/EntityHandle.hpp"
 #include "utils/Vector2D.hpp"
 #include <cmath>
@@ -794,9 +794,9 @@ BOOST_AUTO_TEST_CASE(TestSetSimulationTier) {
 
 BOOST_AUTO_TEST_CASE(TestUpdateSimulationTiers) {
     // Create entities at various distances
-    EntityHandle near = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");     // Close
-    EntityHandle mid = edm->createNPCWithRaceClass(Vector2D(2000.0f, 2000.0f), "Human", "Guard");    // Medium
-    EntityHandle far = edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard");  // Far
+    EntityHandle near = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // Close
+    EntityHandle mid = edm->createNPCWithRaceClass(Vector2D(2000.0f, 2000.0f), "Human", "Guard"); // Medium
+    EntityHandle far = edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard"); // Far
 
     // Update tiers with reference point at origin
     Vector2D refPoint(0.0f, 0.0f);
@@ -836,9 +836,9 @@ BOOST_AUTO_TEST_CASE(TestGetBackgroundIndices) {
 }
 
 BOOST_AUTO_TEST_CASE(TestEntityCountByTier) {
-    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");      // Will be active
-    edm->createNPCWithRaceClass(Vector2D(5000.0f, 5000.0f), "Human", "Guard");    // Will be background
-    edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard");  // Will be hibernated
+    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // Will be active
+    edm->createNPCWithRaceClass(Vector2D(5000.0f, 5000.0f), "Human", "Guard"); // Will be background
+    edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard"); // Will be hibernated
 
     edm->updateSimulationTiers(Vector2D(0.0f, 0.0f), 1500.0f, 10000.0f);
 
@@ -867,8 +867,8 @@ BOOST_FIXTURE_TEST_SUITE(QueryTests, EntityDataManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestQueryEntitiesInRadius) {
     // Create entities at known positions
-    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");   // In radius
-    edm->createNPCWithRaceClass(Vector2D(150.0f, 150.0f), "Human", "Guard");   // In radius
+    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // In radius
+    edm->createNPCWithRaceClass(Vector2D(150.0f, 150.0f), "Human", "Guard"); // In radius
     edm->createNPCWithRaceClass(Vector2D(1000.0f, 1000.0f), "Human", "Guard"); // Out of radius
 
     std::vector<EntityHandle> found;
@@ -1188,7 +1188,7 @@ BOOST_AUTO_TEST_CASE(TestPrepareForStateTransitionClearsKindIndices) {
     // Create entities of different kinds
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(99999, Vector2D(300.0f, 300.0f));  // Use unique ID to avoid collision
+    edm->registerPlayer(99999, Vector2D(300.0f, 300.0f)); // Use unique ID to avoid collision
     // Note: DroppedItems are now in static pool, not tracked by getIndicesByKind()
     edm->createDroppedItem(Vector2D(400.0f, 400.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
@@ -1396,7 +1396,7 @@ BOOST_AUTO_TEST_CASE(TestNPCRenderDataInitialization) {
     // Verify initial state
     BOOST_CHECK_EQUAL(renderData.currentFrame, 0);
     BOOST_CHECK(approxEqual(renderData.animationAccumulator, 0.0f));
-    BOOST_CHECK_EQUAL(renderData.flipMode, 0);  // SDL_FLIP_NONE
+    BOOST_CHECK_EQUAL(renderData.flipMode, 0); // SDL_FLIP_NONE
 
     // Verify atlas coordinates were loaded
     BOOST_CHECK_GE(renderData.atlasX, 0);

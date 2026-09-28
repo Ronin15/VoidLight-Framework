@@ -38,11 +38,11 @@ enum class TransitionType {
 std::ostream& operator<<(std::ostream& os, const TransitionType& type);
 
 struct TransitionParams {
-    float duration{1.0f};        // Duration in seconds
+    float duration{1.0f}; // Duration in seconds
     std::string transitionEffect; // Effect resource ID
-    bool playSound{true};        // Whether to play transition sound
-    std::string soundEffect;     // Sound effect ID
-    float soundVolume{1.0f};     // 0.0 to 1.0
+    bool playSound{true}; // Whether to play transition sound
+    std::string soundEffect; // Sound effect ID
+    float soundVolume{1.0f}; // 0.0 to 1.0
 
     // Color for fade transitions
     float colorR{0.0f};

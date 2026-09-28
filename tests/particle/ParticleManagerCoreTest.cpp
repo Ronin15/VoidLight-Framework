@@ -24,7 +24,7 @@ void registerParticleEffectForwarder() {
 // Test fixture for ParticleManager core functionality
 struct ParticleManagerCoreFixture {
     ParticleManagerCoreFixture() {
-    // Get ParticleManager instance
+        // Get ParticleManager instance
         manager = &ParticleManager::Instance();
 
         if (EventManager::Instance().isInitialized()) {
@@ -32,14 +32,14 @@ struct ParticleManagerCoreFixture {
         }
         BOOST_REQUIRE(EventManager::Instance().init());
 
-    // Ensure clean state for each test
+        // Ensure clean state for each test
         if (manager->isInitialized()) {
             manager->clean();
         }
     }
 
     ~ParticleManagerCoreFixture() {
-    // Clean up after each test
+        // Clean up after each test
         if (manager->isInitialized()) {
             manager->clean();
         }
@@ -53,28 +53,28 @@ struct ParticleManagerCoreFixture {
 
 // Test basic initialization
 BOOST_FIXTURE_TEST_CASE(TestInitialization, ParticleManagerCoreFixture) {
-  // Initially should not be initialized
+    // Initially should not be initialized
     BOOST_CHECK(!manager->isInitialized());
     BOOST_CHECK(!manager->isShutdown());
 
-  // Initialize should succeed
+    // Initialize should succeed
     bool initResult = manager->init();
     BOOST_CHECK(initResult);
     BOOST_CHECK(manager->isInitialized());
     BOOST_CHECK(!manager->isShutdown());
 
-  // Should start with no particles
+    // Should start with no particles
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), 0);
 }
 
 // Test double initialization handling
 BOOST_FIXTURE_TEST_CASE(TestDoubleInitialization, ParticleManagerCoreFixture) {
-  // First initialization
+    // First initialization
     bool firstInit = manager->init();
     BOOST_CHECK(firstInit);
     BOOST_CHECK(manager->isInitialized());
 
-  // Second initialization should still return true but not break anything
+    // Second initialization should still return true but not break anything
     bool secondInit = manager->init();
     BOOST_CHECK(secondInit);
     BOOST_CHECK(manager->isInitialized());
@@ -83,16 +83,16 @@ BOOST_FIXTURE_TEST_CASE(TestDoubleInitialization, ParticleManagerCoreFixture) {
 
 // Test cleanup functionality
 BOOST_FIXTURE_TEST_CASE(TestCleanup, ParticleManagerCoreFixture) {
-  // Initialize first
+    // Initialize first
     BOOST_REQUIRE(manager->init());
     BOOST_CHECK(manager->isInitialized());
 
-  // Clean should mark as shutdown
+    // Clean should mark as shutdown
     manager->clean();
     BOOST_CHECK(!manager->isInitialized());
     BOOST_CHECK(manager->isShutdown());
 
-  // Should have no active particles after cleanup
+    // Should have no active particles after cleanup
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), 0);
 }
 
@@ -101,14 +101,14 @@ BOOST_FIXTURE_TEST_CASE(TestPrepareForStateTransition,
     ParticleManagerCoreFixture) {
     BOOST_REQUIRE(manager->init());
 
-  // Should not be paused initially
+    // Should not be paused initially
     BOOST_CHECK(!manager->isGloballyPaused());
 
-  // Prepare for state transition
+    // Prepare for state transition
     manager->prepareForStateTransition();
 
-  // Should be resumed after preparation (method temporarily pauses then
-  // resumes)
+    // Should be resumed after preparation (method temporarily pauses then
+    // resumes)
     BOOST_CHECK(!manager->isGloballyPaused());
     BOOST_CHECK(manager->isInitialized()); // Should still be initialized
 }
@@ -118,10 +118,10 @@ BOOST_FIXTURE_TEST_CASE(TestBuiltInEffectsRegistration,
     ParticleManagerCoreFixture) {
     BOOST_REQUIRE(manager->init());
 
-  // Register built-in effects
+    // Register built-in effects
     manager->registerBuiltInEffects();
 
-  // Try to play some built-in effects to verify they're registered
+    // Try to play some built-in effects to verify they're registered
     Vector2D testPosition(100, 100);
 
     uint32_t rainEffect =
@@ -144,7 +144,7 @@ BOOST_FIXTURE_TEST_CASE(TestEffectIdGeneration, ParticleManagerCoreFixture) {
 
     Vector2D testPosition(100, 100);
 
-  // Generate multiple effect IDs
+    // Generate multiple effect IDs
     uint32_t id1 =
         manager->playEffect(ParticleEffectType::Rain, testPosition, 0.5f);
     uint32_t id2 =
@@ -152,7 +152,7 @@ BOOST_FIXTURE_TEST_CASE(TestEffectIdGeneration, ParticleManagerCoreFixture) {
     uint32_t id3 =
         manager->playEffect(ParticleEffectType::Fog, testPosition, 0.5f);
 
-  // All IDs should be different and non-zero
+    // All IDs should be different and non-zero
     BOOST_CHECK_NE(id1, 0);
     BOOST_CHECK_NE(id2, 0);
     BOOST_CHECK_NE(id3, 0);
@@ -168,27 +168,27 @@ BOOST_FIXTURE_TEST_CASE(TestEffectStartStop, ParticleManagerCoreFixture) {
 
     Vector2D testPosition(100, 100);
 
-  // Start an effect
+    // Start an effect
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Rain, testPosition, 0.5f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Effect should be playing
+    // Effect should be playing
     BOOST_CHECK(manager->isEffectPlaying(effectId));
 
-  // Stop the effect
+    // Stop the effect
     manager->stopEffect(effectId);
 
-  // Effect should no longer be playing
+    // Effect should no longer be playing
     BOOST_CHECK(!manager->isEffectPlaying(effectId));
 
-  // Stopping non-existent effect should not crash
+    // Stopping non-existent effect should not crash
     manager->stopEffect(99999);
 }
 
 // Test global pause/resume
 BOOST_FIXTURE_TEST_CASE(TestGlobalPauseResume, ParticleManagerCoreFixture) {
-  // Test pause/resume functionality by checking update behavior
+    // Test pause/resume functionality by checking update behavior
     manager->registerBuiltInEffects();
 
     Vector2D testPosition(100, 100);
@@ -196,19 +196,19 @@ BOOST_FIXTURE_TEST_CASE(TestGlobalPauseResume, ParticleManagerCoreFixture) {
         manager->playEffect(ParticleEffectType::Rain, testPosition, 0.5f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update to create some particles
+    // Update to create some particles
     manager->update(0.1f);
     size_t initialCount = manager->getActiveParticleCount();
 
-  // Pause globally
+    // Pause globally
     manager->setGlobalPause(true);
     BOOST_CHECK(manager->isGloballyPaused());
 
-  // Update while paused should not change particle count
+    // Update while paused should not change particle count
     manager->update(0.1f);
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), initialCount);
 
-  // Resume
+    // Resume
     manager->setGlobalPause(false);
     BOOST_CHECK(!manager->isGloballyPaused());
 }
@@ -217,10 +217,10 @@ BOOST_FIXTURE_TEST_CASE(TestGlobalPauseResume, ParticleManagerCoreFixture) {
 BOOST_FIXTURE_TEST_CASE(TestGlobalVisibility, ParticleManagerCoreFixture) {
     BOOST_REQUIRE(manager->init());
 
-  // Should be visible initially
+    // Should be visible initially
     BOOST_CHECK(manager->isGloballyVisible());
 
-  // Set invisible
+    // Set invisible
     manager->setGlobalVisibility(false);
 }
 
@@ -229,12 +229,12 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventProperties,
     ParticleManagerCoreFixture) {
     BOOST_REQUIRE(manager->init());
 
-  // Test event construction and property access
+    // Test event construction and property access
     Vector2D testPosition(150.0f, 250.0f);
     ParticleEffectEvent event("TestEvent", ParticleEffectType::Fire, testPosition,
         1.2f, 3.0f, "testGroup", "testSound");
 
-  // Verify all properties are set correctly
+    // Verify all properties are set correctly
     BOOST_CHECK_EQUAL(event.getName(), "TestEvent");
     BOOST_CHECK_EQUAL(event.getType(), "ParticleEffect");
     BOOST_CHECK_EQUAL(event.getTypeName(), "ParticleEffectEvent");
@@ -250,7 +250,7 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventProperties,
     BOOST_CHECK_EQUAL(event.getGroupTag(), "testGroup");
     BOOST_CHECK_EQUAL(event.getSoundEffect(), "testSound");
 
-  // Test setters
+    // Test setters
     event.setPosition(Vector2D(200.0f, 300.0f));
     BOOST_CHECK_EQUAL(event.getPosition().getX(), 200.0f);
     BOOST_CHECK_EQUAL(event.getPosition().getY(), 300.0f);
@@ -273,17 +273,17 @@ BOOST_FIXTURE_TEST_CASE(TestTriggerParticleEffectIntegration,
     manager->registerBuiltInEffects();
     registerParticleEffectForwarder();
 
-  // This is how production code triggers particle effects
+    // This is how production code triggers particle effects
     bool result = EventManager::Instance().triggerParticleEffect(
         "Fire", 150.0f, 250.0f, 1.2f, 3.0f, "testGroup",
         EventManager::DispatchMode::Immediate);
 
     BOOST_CHECK(result);
 
-  // Update manager to process effects
+    // Update manager to process effects
     manager->update(0.1f);
 
-  // Verify effect system is working
+    // Verify effect system is working
     BOOST_CHECK_GE(manager->getActiveParticleCount(), 0);
 }
 
@@ -294,7 +294,7 @@ BOOST_FIXTURE_TEST_CASE(TestTriggerDifferentEffectTypes,
     manager->registerBuiltInEffects();
     registerParticleEffectForwarder();
 
-  // Test all built-in effect types via production API
+    // Test all built-in effect types via production API
     std::vector<std::string> effectNames = {"Fire", "Smoke", "Sparks",
         "Rain", "Snow", "Fog"};
 
@@ -306,7 +306,7 @@ BOOST_FIXTURE_TEST_CASE(TestTriggerDifferentEffectTypes,
             "Failed to trigger effect: " + effectName);
     }
 
-  // Update and verify effects are running
+    // Update and verify effects are running
     manager->update(0.1f);
     BOOST_CHECK_GE(manager->getActiveParticleCount(), 0);
 }
@@ -337,17 +337,17 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventConditions,
     ParticleEffectEvent event("ConditionTest", ParticleEffectType::Smoke,
         200.0f, 300.0f, 1.5f, 5.0f);
 
-  // Conditions should pass when manager is initialized
+    // Conditions should pass when manager is initialized
     BOOST_CHECK(event.checkConditions());
 
-  // Event should be active by default
+    // Event should be active by default
     BOOST_CHECK(event.isActive());
 
-  // Deactivating event should fail conditions
+    // Deactivating event should fail conditions
     event.setActive(false);
     BOOST_CHECK(!event.checkConditions());
 
-  // Reactivating should pass again
+    // Reactivating should pass again
     event.setActive(true);
     BOOST_CHECK(event.checkConditions());
 }
@@ -360,17 +360,17 @@ BOOST_FIXTURE_TEST_CASE(TestParticleEffectEventResetClean,
     ParticleEffectEvent event("ResetTest", ParticleEffectType::Fire,
         100.0f, 100.0f, 1.0f, 2.0f, "group1", "sound1");
 
-  // Verify initial state
+    // Verify initial state
     BOOST_CHECK_EQUAL(event.getGroupTag(), "group1");
     BOOST_CHECK_EQUAL(event.getDuration(), 2.0f);
 
-  // Reset should clear state for pool reuse
+    // Reset should clear state for pool reuse
     event.reset();
     BOOST_CHECK(!event.isEffectActive());
     BOOST_CHECK_EQUAL(event.getGroupTag(), ""); // Cleared
     BOOST_CHECK_EQUAL(event.getDuration(), -1.0f); // Reset to default
 
-  // Create another event and test clean
+    // Create another event and test clean
     ParticleEffectEvent event2("CleanTest", ParticleEffectType::Smoke,
         200.0f, 200.0f);
     event2.clean();
@@ -384,27 +384,27 @@ BOOST_FIXTURE_TEST_CASE(TestTriggerEffectExtremeValues,
     manager->registerBuiltInEffects();
     registerParticleEffectForwarder();
 
-  // Extreme positions - should not crash
+    // Extreme positions - should not crash
     BOOST_CHECK(EventManager::Instance().triggerParticleEffect(
         "Fire", -1000.0f, 1000.0f, 0.1f, 0.1f, "",
         EventManager::DispatchMode::Immediate));
 
-  // Very high intensity - should not crash
+    // Very high intensity - should not crash
     BOOST_CHECK(EventManager::Instance().triggerParticleEffect(
         "Sparks", 0.0f, 0.0f, 10.0f, 1.0f, "",
         EventManager::DispatchMode::Immediate));
 
-  // Infinite duration (-1) - should not crash
+    // Infinite duration (-1) - should not crash
     BOOST_CHECK(EventManager::Instance().triggerParticleEffect(
         "Rain", 100.0f, 100.0f, 1.0f, -1.0f, "",
         EventManager::DispatchMode::Immediate));
 
-  // Zero duration - should not crash
+    // Zero duration - should not crash
     BOOST_CHECK(EventManager::Instance().triggerParticleEffect(
         "Snow", 100.0f, 100.0f, 1.0f, 0.0f, "",
         EventManager::DispatchMode::Immediate));
 
-  // Update and verify no crashes
+    // Update and verify no crashes
     manager->update(0.1f);
     BOOST_CHECK(manager->isInitialized());
 }
@@ -416,7 +416,7 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleParticleEffectEvents,
     manager->registerBuiltInEffects();
     registerParticleEffectForwarder();
 
-  // Dispatch multiple effects through EventManager
+    // Dispatch multiple effects through EventManager
     EventManager::Instance().triggerParticleEffect(
         "Fire", 100.0f, 100.0f, 1.0f, -1.0f, "",
         EventManager::DispatchMode::Immediate);
@@ -427,10 +427,10 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleParticleEffectEvents,
         "Sparks", 300.0f, 300.0f, 1.0f, -1.0f, "",
         EventManager::DispatchMode::Immediate);
 
-  // Update manager to process effects
+    // Update manager to process effects
     manager->update(0.1f);
 
-  // Verify effects are running (particle count may vary based on timing)
+    // Verify effects are running (particle count may vary based on timing)
     BOOST_CHECK_GE(manager->getActiveParticleCount(), 0);
 }
 
@@ -441,32 +441,32 @@ BOOST_FIXTURE_TEST_CASE(TestBasicParticleCreation, ParticleManagerCoreFixture) {
 
     Vector2D testPosition(100, 100);
 
-  // Start with no particles
+    // Start with no particles
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), 0);
 
-  // Start an effect
+    // Start an effect
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Rain, testPosition, 1.0f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update to allow particle emission
+    // Update to allow particle emission
     manager->update(0.1f); // 100ms update
 
-  // Should have some particles now (Rain effect emits particles)
+    // Should have some particles now (Rain effect emits particles)
     size_t particleCount = manager->getActiveParticleCount();
     BOOST_CHECK_GT(particleCount, 0);
 
-  // Update again to see particles aging
+    // Update again to see particles aging
     manager->update(0.1f);
 
-  // Particles should still exist (they have longer lifetimes)
+    // Particles should still exist (they have longer lifetimes)
     BOOST_CHECK_GT(manager->getActiveParticleCount(), 0);
 }
 
 // Test update without initialization
 BOOST_FIXTURE_TEST_CASE(TestUpdateWithoutInitialization,
     ParticleManagerCoreFixture) {
-  // Should not crash when updating without initialization
+    // Should not crash when updating without initialization
     BOOST_CHECK_NO_THROW(manager->update(0.016f));
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), 0);
 }
@@ -478,15 +478,15 @@ BOOST_FIXTURE_TEST_CASE(TestOperationsWhenPaused, ParticleManagerCoreFixture) {
 
     Vector2D testPosition(100, 100);
 
-  // Start an effect and create some particles
+    // Start an effect and create some particles
     manager->playEffect(ParticleEffectType::Rain, testPosition, 1.0f);
     manager->update(0.1f);
     size_t initialParticleCount = manager->getActiveParticleCount();
 
-  // Pause globally
+    // Pause globally
     manager->setGlobalPause(true);
 
-  // Update should not affect particle count when paused
+    // Update should not affect particle count when paused
     manager->update(0.1f);
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), initialParticleCount);
 }
@@ -495,18 +495,18 @@ BOOST_FIXTURE_TEST_CASE(TestOperationsWhenPaused, ParticleManagerCoreFixture) {
 BOOST_FIXTURE_TEST_CASE(TestMaxParticleCapacity, ParticleManagerCoreFixture) {
     BOOST_REQUIRE(manager->init());
 
-  // Should have some reasonable default capacity
+    // Should have some reasonable default capacity
     size_t maxCapacity = manager->getMaxParticleCapacity();
     BOOST_CHECK_GT(maxCapacity, 1000); // Should be at least 1000
     BOOST_CHECK_LE(
         maxCapacity,
         200000); // Should be reasonable (updated for new higher limits)
 
-  // Test that setMaxParticles doesn't crash
+    // Test that setMaxParticles doesn't crash
     manager->setMaxParticles(5000);
     size_t newCapacity = manager->getMaxParticleCapacity();
-  // Capacity should be at least the requested amount (may be more due to vector
-  // growth)
+    // Capacity should be at least the requested amount (may be more due to vector
+    // growth)
     BOOST_CHECK_GE(newCapacity, 5000);
 }
 
@@ -515,40 +515,40 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceStats, ParticleManagerCoreFixture) {
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Ensure manager is not paused from previous tests
+    // Ensure manager is not paused from previous tests
     manager->setGlobalPause(false);
     BOOST_CHECK(!manager->isGloballyPaused());
     BOOST_CHECK(manager->isInitialized());
 
-  // Reset stats
+    // Reset stats
     manager->resetPerformanceStats();
     ParticlePerformanceStats stats = manager->getPerformanceStats();
 
-  // Should start with zero stats
+    // Should start with zero stats
     BOOST_CHECK_EQUAL(stats.updateCount, 0);
     BOOST_CHECK_EQUAL(stats.renderCount, 0);
     BOOST_CHECK_EQUAL(stats.totalUpdateTime, 0.0);
     BOOST_CHECK_EQUAL(stats.totalRenderTime, 0.0);
 
-  // Create some particles and update multiple times to ensure emission
+    // Create some particles and update multiple times to ensure emission
     Vector2D testPosition(100, 100);
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Rain, testPosition, 1.0f);
     BOOST_CHECK_NE(effectId, 0);
     BOOST_CHECK(manager->isEffectPlaying(effectId));
 
-  // Update 2401 times to ensure we hit the performance recording threshold
-  // Performance stats are only recorded every 2400 frames in debug builds
-  // (see ParticleManager.cpp line ~843)
+    // Update 2401 times to ensure we hit the performance recording threshold
+    // Performance stats are only recorded every 2400 frames in debug builds
+    // (see ParticleManager.cpp line ~843)
     for (int i = 0; i < 2401; ++i) {
         manager->update(0.016f);
     }
 
-  // Verify particles were actually created
+    // Verify particles were actually created
     size_t particleCount = manager->getActiveParticleCount();
     BOOST_CHECK_GT(particleCount, 0);
 
-  // Stats should have been updated after 2400+ frames
+    // Stats should have been updated after 2400+ frames
     stats = manager->getPerformanceStats();
     BOOST_CHECK_GT(stats.updateCount, 0);
     BOOST_CHECK_GT(stats.totalUpdateTime, 0.0);
@@ -565,25 +565,25 @@ BOOST_FIXTURE_TEST_CASE(TestParticlePositionTracking, ParticleManagerCoreFixture
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Create some particles
+    // Create some particles
     Vector2D testPosition(200, 200);
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Rain, testPosition, 1.0f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update multiple times to ensure particles are created
+    // Update multiple times to ensure particles are created
     for (int i = 0; i < 10; ++i) {
         manager->update(0.016f);
     }
 
-  // Verify particles were created
+    // Verify particles were created
     size_t particleCount = manager->getActiveParticleCount();
     BOOST_CHECK_GT(particleCount, 0);
 
-  // Update again - previous positions should be tracked
+    // Update again - previous positions should be tracked
     manager->update(0.016f);
 
-  // Still should have particles (rain is continuous)
+    // Still should have particles (rain is continuous)
     BOOST_CHECK_GT(manager->getActiveParticleCount(), 0);
 }
 
@@ -593,25 +593,25 @@ BOOST_FIXTURE_TEST_CASE(TestParticleUpdateWithVaryingDeltaTime, ParticleManagerC
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Create some particles
+    // Create some particles
     Vector2D testPosition(100, 100);
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Smoke, testPosition, 1.0f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Initial updates to create particles
+    // Initial updates to create particles
     for (int i = 0; i < 5; ++i) {
-        manager->update(0.016f);  // 60 FPS
+        manager->update(0.016f); // 60 FPS
     }
 
-  // Update with different delta times (simulating frame rate variation)
-    manager->update(0.033f);  // 30 FPS
-    manager->update(0.008f);  // 120 FPS
-    manager->update(0.016f);  // 60 FPS
+    // Update with different delta times (simulating frame rate variation)
+    manager->update(0.033f); // 30 FPS
+    manager->update(0.008f); // 120 FPS
+    manager->update(0.016f); // 60 FPS
 
-  // Particles should still exist and be valid
+    // Particles should still exist and be valid
     size_t countAfterVarying = manager->getActiveParticleCount();
-  // Count might change due to particle creation/death, but shouldn't crash
+    // Count might change due to particle creation/death, but shouldn't crash
     BOOST_CHECK_GE(countAfterVarying, 0);
 }
 
@@ -621,37 +621,37 @@ BOOST_FIXTURE_TEST_CASE(TestInterpolationStateAcrossPauseResume, ParticleManager
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Create some particles
+    // Create some particles
     Vector2D testPosition(150, 150);
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Fire, testPosition, 1.0f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update to create particles
+    // Update to create particles
     for (int i = 0; i < 10; ++i) {
         manager->update(0.016f);
     }
 
     BOOST_CHECK_GT(manager->getActiveParticleCount(), 0);
 
-  // Pause
+    // Pause
     manager->setGlobalPause(true);
     BOOST_CHECK(manager->isGloballyPaused());
 
-  // Updates while paused shouldn't change particle count significantly
+    // Updates while paused shouldn't change particle count significantly
     manager->update(0.016f);
     manager->update(0.016f);
 
-  // Resume
+    // Resume
     manager->setGlobalPause(false);
     BOOST_CHECK(!manager->isGloballyPaused());
 
-  // Continue updating - should work normally
+    // Continue updating - should work normally
     for (int i = 0; i < 5; ++i) {
         manager->update(0.016f);
     }
 
-  // Particles should still be valid
+    // Particles should still be valid
     BOOST_CHECK_GE(manager->getActiveParticleCount(), 0);
 }
 
@@ -661,18 +661,18 @@ BOOST_FIXTURE_TEST_CASE(TestParticleAlphaFading, ParticleManagerCoreFixture) {
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Create smoke particles (which fade over time)
+    // Create smoke particles (which fade over time)
     Vector2D testPosition(100, 100);
     uint32_t effectId =
-        manager->playEffect(ParticleEffectType::Smoke, testPosition, 0.5f);  // Short duration
+        manager->playEffect(ParticleEffectType::Smoke, testPosition, 0.5f); // Short duration
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update to create and age particles
+    // Update to create and age particles
     for (int i = 0; i < 50; ++i) {
         manager->update(0.016f);
     }
 
-  // Some particles should exist (continuous emission)
+    // Some particles should exist (continuous emission)
     BOOST_CHECK_GE(manager->getActiveParticleCount(), 0);
 }
 
@@ -682,7 +682,7 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsInterpolation, ParticleManagerCoreFix
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Create multiple effects at different positions
+    // Create multiple effects at different positions
     Vector2D pos1(100, 100);
     Vector2D pos2(300, 300);
     Vector2D pos3(500, 500);
@@ -695,16 +695,16 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsInterpolation, ParticleManagerCoreFix
     BOOST_CHECK_NE(effect2, 0);
     BOOST_CHECK_NE(effect3, 0);
 
-  // Update all effects together
+    // Update all effects together
     for (int i = 0; i < 20; ++i) {
         manager->update(0.016f);
     }
 
-  // Should have particles from multiple effects
+    // Should have particles from multiple effects
     size_t totalParticles = manager->getActiveParticleCount();
     BOOST_CHECK_GT(totalParticles, 0);
 
-  // All effects should still be playing
+    // All effects should still be playing
     BOOST_CHECK(manager->isEffectPlaying(effect1));
     BOOST_CHECK(manager->isEffectPlaying(effect2));
     BOOST_CHECK(manager->isEffectPlaying(effect3));
@@ -716,18 +716,18 @@ BOOST_FIXTURE_TEST_CASE(TestParticleScaleInterpolation, ParticleManagerCoreFixtu
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Create an effect that uses scale changes
+    // Create an effect that uses scale changes
     Vector2D testPosition(200, 200);
     uint32_t effectId =
         manager->playEffect(ParticleEffectType::Fire, testPosition, 1.0f);
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update to create particles and let them age (scale should change)
+    // Update to create particles and let them age (scale should change)
     for (int i = 0; i < 30; ++i) {
         manager->update(0.016f);
     }
 
-  // Particles should exist
+    // Particles should exist
     BOOST_CHECK_GT(manager->getActiveParticleCount(), 0);
 }
 
@@ -737,27 +737,27 @@ BOOST_FIXTURE_TEST_CASE(TestRapidEffectLifecycle, ParticleManagerCoreFixture) {
     manager->registerBuiltInEffects();
     manager->setGlobalPause(false);
 
-  // Rapidly create and stop effects
+    // Rapidly create and stop effects
     for (int cycle = 0; cycle < 10; ++cycle) {
         Vector2D pos(static_cast<float>(cycle * 50), static_cast<float>(cycle * 50));
         uint32_t effectId = manager->playEffect(ParticleEffectType::Smoke, pos, 0.5f);
         BOOST_CHECK_NE(effectId, 0);
 
-    // Update a few times
+        // Update a few times
         for (int i = 0; i < 5; ++i) {
             manager->update(0.016f);
         }
 
-    // Stop the effect
+        // Stop the effect
         manager->stopEffect(effectId);
     }
 
-  // Final updates to ensure stability
+    // Final updates to ensure stability
     for (int i = 0; i < 10; ++i) {
         manager->update(0.016f);
     }
 
-  // Should not crash and manager should be in valid state
+    // Should not crash and manager should be in valid state
     BOOST_CHECK(manager->isInitialized());
     BOOST_CHECK(!manager->isShutdown());
 }
@@ -774,22 +774,22 @@ BOOST_FIXTURE_TEST_CASE(TestPlayIndependentEffect, ParticleManagerCoreFixture) {
 
     Vector2D position(100.0f, 100.0f);
 
-  // Play an independent effect
+    // Play an independent effect
     uint32_t effectId = manager->playIndependentEffect(
         ParticleEffectType::Fire, position, 1.0f, -1.0f, "testGroup");
 
-  // Should return valid effect ID
+    // Should return valid effect ID
     BOOST_CHECK_NE(effectId, 0);
 
-  // Should be marked as independent
+    // Should be marked as independent
     BOOST_CHECK(manager->isIndependentEffect(effectId));
 
-  // Should be in the active independent effects list
+    // Should be in the active independent effects list
     auto activeEffects = manager->getActiveIndependentEffects();
     BOOST_CHECK(std::find(activeEffects.begin(), activeEffects.end(), effectId) !=
         activeEffects.end());
 
-  // Clean up
+    // Clean up
     manager->stopIndependentEffect(effectId);
 }
 
@@ -800,19 +800,19 @@ BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffect, ParticleManagerCoreFixture) {
 
     Vector2D position(200.0f, 200.0f);
 
-  // Create independent effect
+    // Create independent effect
     uint32_t effectId = manager->playIndependentEffect(
         ParticleEffectType::Smoke, position, 1.0f, -1.0f, "group1");
     BOOST_CHECK_NE(effectId, 0);
     BOOST_CHECK(manager->isEffectPlaying(effectId));
 
-  // Stop the effect
+    // Stop the effect
     manager->stopIndependentEffect(effectId);
 
-  // Should no longer be playing
+    // Should no longer be playing
     BOOST_CHECK(!manager->isEffectPlaying(effectId));
 
-  // Should no longer be in active list
+    // Should no longer be in active list
     auto activeEffects = manager->getActiveIndependentEffects();
     BOOST_CHECK(std::find(activeEffects.begin(), activeEffects.end(), effectId) ==
         activeEffects.end());
@@ -846,7 +846,7 @@ BOOST_FIXTURE_TEST_CASE(TestStopAllIndependentEffects, ParticleManagerCoreFixtur
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create multiple independent effects with different groups
+    // Create multiple independent effects with different groups
     uint32_t effect1 = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "groupA");
     uint32_t effect2 = manager->playIndependentEffect(
@@ -858,20 +858,20 @@ BOOST_FIXTURE_TEST_CASE(TestStopAllIndependentEffects, ParticleManagerCoreFixtur
     BOOST_CHECK_NE(effect2, 0);
     BOOST_CHECK_NE(effect3, 0);
 
-  // Verify all are playing
+    // Verify all are playing
     BOOST_CHECK(manager->isEffectPlaying(effect1));
     BOOST_CHECK(manager->isEffectPlaying(effect2));
     BOOST_CHECK(manager->isEffectPlaying(effect3));
 
-  // Stop all independent effects
+    // Stop all independent effects
     manager->stopAllIndependentEffects();
 
-  // None should be playing now
+    // None should be playing now
     BOOST_CHECK(!manager->isEffectPlaying(effect1));
     BOOST_CHECK(!manager->isEffectPlaying(effect2));
     BOOST_CHECK(!manager->isEffectPlaying(effect3));
 
-  // Active list should be empty
+    // Active list should be empty
     auto activeEffects = manager->getActiveIndependentEffects();
     BOOST_CHECK(activeEffects.empty());
 }
@@ -881,7 +881,7 @@ BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffectsByGroup, ParticleManagerCoreFi
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create effects in two groups
+    // Create effects in two groups
     uint32_t effectA1 = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "combat");
     uint32_t effectA2 = manager->playIndependentEffect(
@@ -893,17 +893,17 @@ BOOST_FIXTURE_TEST_CASE(TestStopIndependentEffectsByGroup, ParticleManagerCoreFi
     BOOST_CHECK(manager->isEffectPlaying(effectA2));
     BOOST_CHECK(manager->isEffectPlaying(effectB1));
 
-  // Stop only combat group
+    // Stop only combat group
     manager->stopIndependentEffectsByGroup("combat");
 
-  // Combat effects should be stopped
+    // Combat effects should be stopped
     BOOST_CHECK(!manager->isEffectPlaying(effectA1));
     BOOST_CHECK(!manager->isEffectPlaying(effectA2));
 
-  // Ambient effect should still be playing
+    // Ambient effect should still be playing
     BOOST_CHECK(manager->isEffectPlaying(effectB1));
 
-  // Clean up
+    // Clean up
     manager->stopIndependentEffect(effectB1);
 }
 
@@ -918,7 +918,7 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) 
         ParticleEffectType::Fire, position, 1.0f, -1.0f, "test");
     BOOST_CHECK_NE(effectId, 0);
 
-  // Update to create particles
+    // Update to create particles
     for (int i = 0; i < 5; ++i) {
         manager->update(0.016f);
     }
@@ -926,27 +926,27 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffect, ParticleManagerCoreFixture) 
     const size_t countBeforePause = manager->getActiveParticleCount();
     BOOST_CHECK_GT(countBeforePause, 0);
 
-  // Pause the effect
+    // Pause the effect
     manager->pauseIndependentEffect(effectId, true);
 
-  // Update again - particle count shouldn't increase from this effect
+    // Update again - particle count shouldn't increase from this effect
     for (int i = 0; i < 5; ++i) {
         manager->update(0.016f);
     }
 
-  // Effect should still be playing (paused != stopped)
+    // Effect should still be playing (paused != stopped)
     BOOST_CHECK(manager->isEffectPlaying(effectId));
     BOOST_CHECK_EQUAL(manager->getActiveParticleCount(), countBeforePause);
 
-  // Resume the effect
+    // Resume the effect
     manager->pauseIndependentEffect(effectId, false);
 
-  // Should continue working normally
+    // Should continue working normally
     manager->update(0.016f);
     BOOST_CHECK(manager->isEffectPlaying(effectId));
     BOOST_CHECK_GT(manager->getActiveParticleCount(), countBeforePause);
 
-  // Clean up
+    // Clean up
     manager->stopIndependentEffect(effectId);
 }
 
@@ -955,33 +955,33 @@ BOOST_FIXTURE_TEST_CASE(TestPauseAllIndependentEffects, ParticleManagerCoreFixtu
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create multiple effects
+    // Create multiple effects
     uint32_t effect1 = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "group1");
     uint32_t effect2 = manager->playIndependentEffect(
         ParticleEffectType::Smoke, {200.0f, 200.0f}, 1.0f, -1.0f, "group2");
 
-  // Update to create particles
+    // Update to create particles
     for (int i = 0; i < 5; ++i) {
         manager->update(0.016f);
     }
 
-  // Pause all independent effects
+    // Pause all independent effects
     manager->pauseAllIndependentEffects(true);
 
-  // Effects should still exist but be paused
+    // Effects should still exist but be paused
     BOOST_CHECK(manager->isEffectPlaying(effect1));
     BOOST_CHECK(manager->isEffectPlaying(effect2));
 
-  // Resume all
+    // Resume all
     manager->pauseAllIndependentEffects(false);
 
-  // Should continue working
+    // Should continue working
     manager->update(0.016f);
     BOOST_CHECK(manager->isEffectPlaying(effect1));
     BOOST_CHECK(manager->isEffectPlaying(effect2));
 
-  // Clean up
+    // Clean up
     manager->stopAllIndependentEffects();
 }
 
@@ -990,28 +990,28 @@ BOOST_FIXTURE_TEST_CASE(TestPauseIndependentEffectsByGroup, ParticleManagerCoreF
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create effects in two groups
+    // Create effects in two groups
     uint32_t effectA = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "explosions");
     uint32_t effectB = manager->playIndependentEffect(
         ParticleEffectType::Smoke, {200.0f, 200.0f}, 1.0f, -1.0f, "environment");
 
-  // Update to create particles
+    // Update to create particles
     for (int i = 0; i < 5; ++i) {
         manager->update(0.016f);
     }
 
-  // Pause only explosions group
+    // Pause only explosions group
     manager->pauseIndependentEffectsByGroup("explosions", true);
 
-  // Both should still be playing
+    // Both should still be playing
     BOOST_CHECK(manager->isEffectPlaying(effectA));
     BOOST_CHECK(manager->isEffectPlaying(effectB));
 
-  // Resume explosions group
+    // Resume explosions group
     manager->pauseIndependentEffectsByGroup("explosions", false);
 
-  // Clean up
+    // Clean up
     manager->stopAllIndependentEffects();
 }
 
@@ -1020,25 +1020,25 @@ BOOST_FIXTURE_TEST_CASE(TestIsIndependentEffectDistinction, ParticleManagerCoreF
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create a regular effect
+    // Create a regular effect
     Vector2D position(100.0f, 100.0f);
     uint32_t regularEffect =
         manager->playEffect(ParticleEffectType::Rain, position, 1.0f);
 
-  // Create an independent effect
+    // Create an independent effect
     uint32_t independentEffect = manager->playIndependentEffect(
         ParticleEffectType::Fire, position, 1.0f, -1.0f, "combat");
 
     BOOST_CHECK_NE(regularEffect, 0);
     BOOST_CHECK_NE(independentEffect, 0);
 
-  // Regular effect should NOT be marked as independent
+    // Regular effect should NOT be marked as independent
     BOOST_CHECK(!manager->isIndependentEffect(regularEffect));
 
-  // Independent effect SHOULD be marked as independent
+    // Independent effect SHOULD be marked as independent
     BOOST_CHECK(manager->isIndependentEffect(independentEffect));
 
-  // Clean up
+    // Clean up
     manager->stopEffect(regularEffect);
     manager->stopIndependentEffect(independentEffect);
 }
@@ -1048,11 +1048,11 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffects, ParticleManagerCoreFixt
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Initially no independent effects
+    // Initially no independent effects
     auto initialEffects = manager->getActiveIndependentEffects();
     BOOST_CHECK(initialEffects.empty());
 
-  // Create several independent effects
+    // Create several independent effects
     uint32_t effect1 = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "group1");
     uint32_t effect2 = manager->playIndependentEffect(
@@ -1060,11 +1060,11 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffects, ParticleManagerCoreFixt
     uint32_t effect3 = manager->playIndependentEffect(
         ParticleEffectType::Sparks, {300.0f, 300.0f}, 1.0f, -1.0f, "group2");
 
-  // Get active effects
+    // Get active effects
     auto activeEffects = manager->getActiveIndependentEffects();
     BOOST_CHECK_EQUAL(activeEffects.size(), 3);
 
-  // Verify all effects are in the list
+    // Verify all effects are in the list
     BOOST_CHECK(std::find(activeEffects.begin(), activeEffects.end(), effect1) !=
         activeEffects.end());
     BOOST_CHECK(std::find(activeEffects.begin(), activeEffects.end(), effect2) !=
@@ -1072,16 +1072,16 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffects, ParticleManagerCoreFixt
     BOOST_CHECK(std::find(activeEffects.begin(), activeEffects.end(), effect3) !=
         activeEffects.end());
 
-  // Stop one effect
+    // Stop one effect
     manager->stopIndependentEffect(effect2);
 
-  // Should now have 2 effects
+    // Should now have 2 effects
     activeEffects = manager->getActiveIndependentEffects();
     BOOST_CHECK_EQUAL(activeEffects.size(), 2);
     BOOST_CHECK(std::find(activeEffects.begin(), activeEffects.end(), effect2) ==
         activeEffects.end());
 
-  // Clean up
+    // Clean up
     manager->stopAllIndependentEffects();
 }
 
@@ -1090,7 +1090,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffectsByGroup, ParticleManagerC
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create effects in different groups
+    // Create effects in different groups
     uint32_t effectA1 = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "combat");
     uint32_t effectA2 = manager->playIndependentEffect(
@@ -1099,7 +1099,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffectsByGroup, ParticleManagerC
         ParticleEffectType::Sparks, {200.0f, 200.0f}, 1.0f, -1.0f, "ambient");
 
 
-  // Get combat group effects
+    // Get combat group effects
     auto combatEffects = manager->getActiveIndependentEffectsByGroup("combat");
     BOOST_CHECK_EQUAL(combatEffects.size(), 2);
     BOOST_CHECK(std::find(combatEffects.begin(), combatEffects.end(), effectA1) !=
@@ -1107,17 +1107,17 @@ BOOST_FIXTURE_TEST_CASE(TestGetActiveIndependentEffectsByGroup, ParticleManagerC
     BOOST_CHECK(std::find(combatEffects.begin(), combatEffects.end(), effectA2) !=
         combatEffects.end());
 
-  // Get ambient group effects
+    // Get ambient group effects
     auto ambientEffects = manager->getActiveIndependentEffectsByGroup("ambient");
     BOOST_CHECK_EQUAL(ambientEffects.size(), 1);
     BOOST_CHECK(std::find(ambientEffects.begin(), ambientEffects.end(), effectB1) !=
         ambientEffects.end());
 
-  // Get non-existent group
+    // Get non-existent group
     auto emptyEffects = manager->getActiveIndependentEffectsByGroup("nonexistent");
     BOOST_CHECK(emptyEffects.empty());
 
-  // Clean up
+    // Clean up
     manager->stopAllIndependentEffects();
 }
 
@@ -1126,19 +1126,19 @@ BOOST_FIXTURE_TEST_CASE(TestIndependentEffectDuration, ParticleManagerCoreFixtur
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create effect with short duration
+    // Create effect with short duration
     uint32_t effectId = manager->playIndependentEffect(
         ParticleEffectType::Sparks, {100.0f, 100.0f}, 1.0f, 0.5f, "timed");
 
     BOOST_CHECK_NE(effectId, 0);
     BOOST_CHECK(manager->isEffectPlaying(effectId));
 
-  // Update for longer than duration (0.5 seconds = 500ms)
-    for (int i = 0; i < 40; ++i) {  // 40 * 16ms = 640ms > 500ms
+    // Update for longer than duration (0.5 seconds = 500ms)
+    for (int i = 0; i < 40; ++i) { // 40 * 16ms = 640ms > 500ms
         manager->update(0.016f);
     }
 
-  // Effect should have expired
+    // Effect should have expired
     BOOST_CHECK(!manager->isEffectPlaying(effectId));
 }
 
@@ -1149,7 +1149,7 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsSameGroup, ParticleManagerCoreFixture
 
     const std::string groupName = "explosion_cluster";
 
-  // Create many effects with same group
+    // Create many effects with same group
     std::vector<uint32_t> effects;
     for (int i = 0; i < 10; ++i) {
         uint32_t effectId = manager->playIndependentEffect(
@@ -1160,19 +1160,19 @@ BOOST_FIXTURE_TEST_CASE(TestMultipleEffectsSameGroup, ParticleManagerCoreFixture
         effects.push_back(effectId);
     }
 
-  // All should be in the group
+    // All should be in the group
     auto groupEffects = manager->getActiveIndependentEffectsByGroup(groupName);
     BOOST_CHECK_EQUAL(groupEffects.size(), 10);
 
-  // Stop by group should stop all
+    // Stop by group should stop all
     manager->stopIndependentEffectsByGroup(groupName);
 
-  // All should be stopped
+    // All should be stopped
     for (uint32_t effectId : effects) {
         BOOST_CHECK(!manager->isEffectPlaying(effectId));
     }
 
-  // Group should be empty
+    // Group should be empty
     groupEffects = manager->getActiveIndependentEffectsByGroup(groupName);
     BOOST_CHECK(groupEffects.empty());
 }
@@ -1182,22 +1182,22 @@ BOOST_FIXTURE_TEST_CASE(TestIndependentEffectInfiniteDuration, ParticleManagerCo
     BOOST_REQUIRE(manager->init());
     manager->registerBuiltInEffects();
 
-  // Create effect with infinite duration
+    // Create effect with infinite duration
     uint32_t effectId = manager->playIndependentEffect(
         ParticleEffectType::Fire, {100.0f, 100.0f}, 1.0f, -1.0f, "persistent");
 
     BOOST_CHECK_NE(effectId, 0);
     BOOST_CHECK(manager->isEffectPlaying(effectId));
 
-  // Update for a long time
+    // Update for a long time
     for (int i = 0; i < 100; ++i) {
         manager->update(0.016f);
     }
 
-  // Should still be playing (infinite duration)
+    // Should still be playing (infinite duration)
     BOOST_CHECK(manager->isEffectPlaying(effectId));
 
-  // Must be manually stopped
+    // Must be manually stopped
     manager->stopIndependentEffect(effectId);
     BOOST_CHECK(!manager->isEffectPlaying(effectId));
 }

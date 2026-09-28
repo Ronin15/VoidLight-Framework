@@ -193,7 +193,7 @@ private:
     [[nodiscard]] bool loadShaders();
     [[nodiscard]] bool createPipelines();
     [[nodiscard]] bool createSceneTexture();
-    void cleanupPartialInit();  // Clean up resources on init failure
+    void cleanupPartialInit(); // Clean up resources on init failure
     void resetFrameState();
 
     // Device reference
@@ -234,14 +234,14 @@ private:
 
     // Vertex pools
     GPUVertexPool m_spriteVertexPool;
-    GPUVertexPool m_entityVertexPool;  // For entity sprites (player, NPCs) with separate textures
+    GPUVertexPool m_entityVertexPool; // For entity sprites (player, NPCs) with separate textures
     GPUVertexPool m_particleVertexPool;
     GPUVertexPool m_primitiveVertexPool;
-    GPUVertexPool m_uiVertexPool;  // For UI sprites (text, icons) rendered to swapchain
+    GPUVertexPool m_uiVertexPool; // For UI sprites (text, icons) rendered to swapchain
 
     // Sprite batches
-    SpriteBatch m_spriteBatch;      // World tiles (atlas)
-    SpriteBatch m_entityBatch;      // Entities (player, NPCs)
+    SpriteBatch m_spriteBatch; // World tiles (atlas)
+    SpriteBatch m_entityBatch; // Entities (player, NPCs)
 
     // Viewport (initialized from window size in init())
     uint32_t m_viewportWidth{0};

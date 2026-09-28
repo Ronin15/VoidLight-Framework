@@ -101,7 +101,7 @@ BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsAllSevenSystemTypes) {
         BOOST_CHECK(!mgr.isThresholdActive(sys));
     }
 
-    mgr.prepareForStateTransition();  // clean exit
+    mgr.prepareForStateTransition(); // clean exit
 }
 
 BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsBatchMultiplier) {

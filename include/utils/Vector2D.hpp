@@ -112,4 +112,4 @@ private:
     float m_y{0.0f};
 };
 
-#endif  // VECTOR_2D_HPP
+#endif // VECTOR_2D_HPP

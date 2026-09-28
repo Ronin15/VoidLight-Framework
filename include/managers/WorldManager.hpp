@@ -24,11 +24,11 @@
 #include "managers/EventManager.hpp"
 
 namespace VoidLight {
-class Camera;  // Forward declaration for camera pointer storage
+class Camera; // Forward declaration for camera pointer storage
 
-class GPURenderer;  // Forward declaration for GPU rendering
-class GPUTexture;   // Forward declaration for GPU texture
-class SpriteBatch;  // Forward declaration for sprite batch
+class GPURenderer; // Forward declaration for GPU rendering
+class GPUTexture; // Forward declaration for GPU texture
+class SpriteBatch; // Forward declaration for sprite batch
 
 // World object definition loaded from JSON
 struct WorldObjectDef {
@@ -38,7 +38,7 @@ struct WorldObjectDef {
     bool seasonal{false};
     bool blocking{false};
     bool harvestable{false};
-    int buildingSize{0};  // For buildings: 1=hut, 2=house, 3=large, 4=cityhall
+    int buildingSize{0}; // For buildings: 1=hut, 2=house, 3=large, 4=cityhall
 };
 
 // World objects data loaded from world_objects.json
@@ -53,12 +53,12 @@ struct WorldObjectsData {
 
 class TileRenderer {
 private:
-    static constexpr float TILE_SIZE = 32.0f;  // Use float for smooth movement
+    static constexpr float TILE_SIZE = 32.0f; // Use float for smooth movement
     static constexpr int VIEWPORT_PADDING = 2;
-    static constexpr int SPRITE_OVERHANG = 64;  // Padding for sprites extending beyond tile bounds (2 tiles)
+    static constexpr int SPRITE_OVERHANG = 64; // Padding for sprites extending beyond tile bounds (2 tiles)
 
     // Chunk-based rendering - smaller chunks = faster per-chunk render, more chunks total
-    static constexpr int CHUNK_SIZE = 16;  // 16x16 tiles per chunk (256 tiles vs 1024)
+    static constexpr int CHUNK_SIZE = 16; // 16x16 tiles per chunk (256 tiles vs 1024)
 
 public:
     TileRenderer();
@@ -175,20 +175,20 @@ private:
         AtlasCoords decoration_water_flower;
     };
 
-    SeasonalTileCoords m_seasonalCoords[4];  // Indexed by Season enum (Spring=0, Summer=1, Fall=2, Winter=3)
-    bool m_useAtlas{false};                  // True if atlas loaded successfully
+    SeasonalTileCoords m_seasonalCoords[4]; // Indexed by Season enum (Spring=0, Summer=1, Fall=2, Winter=3)
+    bool m_useAtlas{false}; // True if atlas loaded successfully
 
     std::shared_ptr<GPUTexture> m_atlasGPUOwner{};
-    GPUTexture* m_atlasGPUPtr{nullptr};  // GPU atlas texture pointer
+    GPUTexture* m_atlasGPUPtr{nullptr}; // GPU atlas texture pointer
 
     // GPU rendering buffers (member variables to avoid static in threaded code)
     struct GPUSprite {
-        float screenX, screenY;         // Destination position
-        float srcX, srcY, srcW, srcH;   // Atlas source rect
-        float dstW, dstH;               // Destination dimensions
+        float screenX, screenY; // Destination position
+        float srcX, srcY, srcW, srcH; // Atlas source rect
+        float dstW, dstH; // Destination dimensions
     };
     struct GPUYSortedSprite : GPUSprite {
-        float sortY;                    // Y value for sorting (bottom of sprite)
+        float sortY; // Y value for sorting (bottom of sprite)
     };
     std::vector<GPUSprite> m_gpuDecoBuffer;
     std::vector<GPUYSortedSprite> m_gpuObstacleBuffer;
@@ -354,7 +354,7 @@ private:
     void populateWorldEntities();
     void destroyHarvestablesForWorld(const std::string& worldId);
     void clearPopulatedEntities(const std::string& worldId);
-    std::optional<std::string> unloadWorldLocked();  // Assumes caller already holds lock
+    std::optional<std::string> unloadWorldLocked(); // Assumes caller already holds lock
     bool applyTileUpdateLocked(int x, int y, const VoidLight::Tile& newTile);
 
     std::unique_ptr<VoidLight::WorldData> m_currentWorld;

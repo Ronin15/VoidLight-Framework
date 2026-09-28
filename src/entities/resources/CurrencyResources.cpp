@@ -10,7 +10,7 @@
 Currency::Currency(VoidLight::ResourceHandle handle, const std::string& id,
     const std::string& name, ResourceType type)
     : Resource(handle, id, name, ResourceCategory::Currency, type) {
-  // Currencies are highly stackable
+    // Currencies are highly stackable
     setMaxStackSize(9999999);
     setConsumable(false);
 }
@@ -27,7 +27,7 @@ Gold::Gold(VoidLight::ResourceHandle handle, const std::string& id,
 Gem::Gem(VoidLight::ResourceHandle handle, const std::string& id,
     const std::string& name, GemType gemType)
     : Currency(handle, id, name, ResourceType::Gem), m_gemType(gemType) {
-  // Set default values based on gem type
+    // Set default values based on gem type
     switch (gemType) {
         case GemType::Ruby:
             setValue(10.0f);

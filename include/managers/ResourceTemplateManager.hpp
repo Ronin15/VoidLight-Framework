@@ -27,12 +27,12 @@ struct ResourceStats {
     std::atomic<uint64_t> resourcesCreated{0};
     std::atomic<uint64_t> resourcesDestroyed{0};
 
-  // Custom copy constructor
+    // Custom copy constructor
     ResourceStats() = default;
     ResourceStats(const ResourceStats& other)
         : templatesLoaded(other.templatesLoaded.load()), resourcesCreated(other.resourcesCreated.load()), resourcesDestroyed(other.resourcesDestroyed.load()) {}
 
-  // Custom assignment operator
+    // Custom assignment operator
     ResourceStats& operator=(const ResourceStats& other) {
         if (this != &other) {
             templatesLoaded = other.templatesLoaded.load();
@@ -56,12 +56,12 @@ class ResourceTemplateManager {
 public:
     static ResourceTemplateManager& Instance();
 
-  // Core functionality
+    // Core functionality
     [[nodiscard]] bool init();
     bool isInitialized() const { return m_initialized.load(); }
     void clean();
 
-  // Resource template management
+    // Resource template management
     bool registerResourceTemplate(const ResourcePtr& resource);
     bool removeResourceTemplate(
         VoidLight::ResourceHandle handle); // Remove and release handle
@@ -79,13 +79,13 @@ public:
     getResourcesByCategory(ResourceCategory category) const;
     std::vector<ResourcePtr> getResourcesByType(ResourceType type) const;
 
-  // Fast property access (cache-optimized, no shared_ptr dereferencing)
+    // Fast property access (cache-optimized, no shared_ptr dereferencing)
     int getMaxStackSize(VoidLight::ResourceHandle handle) const;
     float getValue(VoidLight::ResourceHandle handle) const;
     ResourceCategory getCategory(VoidLight::ResourceHandle handle) const;
     ResourceType getType(VoidLight::ResourceHandle handle) const;
 
-  // Cache-friendly bulk operations for better performance
+    // Cache-friendly bulk operations for better performance
     std::vector<int> getMaxStackSizes(
         const std::vector<VoidLight::ResourceHandle>& handles) const;
     std::vector<float>
@@ -97,24 +97,24 @@ public:
         std::vector<ResourceCategory>& categories,
         std::vector<ResourceType>& types) const;
 
-  // Handle management
+    // Handle management
     VoidLight::ResourceHandle generateHandle();
     bool isValidHandle(VoidLight::ResourceHandle handle) const;
     void releaseHandle(
         VoidLight::ResourceHandle handle); // Mark handle as freed for reuse
 
-  // Statistics
+    // Statistics
     ResourceStats getStats() const;
     void resetStats() { m_stats.reset(); }
 
-  // Resource creation
+    // Resource creation
     ResourcePtr createResource(VoidLight::ResourceHandle handle) const;
 
-  // JSON loading methods
+    // JSON loading methods
     [[nodiscard]] bool loadResourcesFromJson(const std::string& filename);
     [[nodiscard]] bool loadResourcesFromJsonString(const std::string& jsonString);
 
-  // Query methods
+    // Query methods
     size_t getResourceTemplateCount() const;
     bool hasResourceTemplate(VoidLight::ResourceHandle handle) const;
     size_t getMemoryUsage() const;
@@ -123,39 +123,39 @@ private:
     ResourceTemplateManager() = default;
     ~ResourceTemplateManager();
 
-  // Prevent copying
+    // Prevent copying
     ResourceTemplateManager(const ResourceTemplateManager&) = delete;
     ResourceTemplateManager& operator=(const ResourceTemplateManager&) = delete;
 
-  // Internal data
+    // Internal data
     std::unordered_map<VoidLight::ResourceHandle, ResourcePtr>
         m_resourceTemplates;
 
-  // SoA optimization for frequently accessed properties (cache-friendly)
+    // SoA optimization for frequently accessed properties (cache-friendly)
     std::unordered_map<VoidLight::ResourceHandle, int> m_maxStackSizes;
     std::unordered_map<VoidLight::ResourceHandle, float> m_values;
     std::unordered_map<VoidLight::ResourceHandle, ResourceCategory>
         m_categories;
     std::unordered_map<VoidLight::ResourceHandle, ResourceType> m_types;
 
-  // Category and type indexes for fast filtering
+    // Category and type indexes for fast filtering
     std::unordered_map<ResourceCategory,
         std::vector<VoidLight::ResourceHandle>>
         m_categoryIndex;
     std::unordered_map<ResourceType, std::vector<VoidLight::ResourceHandle>>
         m_typeIndex;
 
-  // Name index for O(1) name-based lookups
+    // Name index for O(1) name-based lookups
     std::unordered_map<std::string, VoidLight::ResourceHandle> m_nameIndex;
 
-  // ID index for O(1) JSON ID-based lookups (primary identifier)
+    // ID index for O(1) JSON ID-based lookups (primary identifier)
     std::unordered_map<std::string, VoidLight::ResourceHandle> m_idIndex;
 
-  // Handle generation with proper generation tracking
+    // Handle generation with proper generation tracking
     std::atomic<VoidLight::ResourceHandle::HandleId> m_nextHandleId{
         1}; // Start from 1, 0 is invalid
 
-  // Generation tracking for reused handles - prevents stale handle bugs
+    // Generation tracking for reused handles - prevents stale handle bugs
     std::unordered_map<VoidLight::ResourceHandle::HandleId,
         VoidLight::ResourceHandle::Generation>
         m_handleGenerations;
@@ -168,11 +168,11 @@ private:
     std::atomic<bool> m_initialized{false};
     bool m_isShutdown{false};
 
-  // Thread safety
+    // Thread safety
     mutable std::shared_mutex m_resourceMutex;
     mutable std::mutex m_indexMutex;
 
-  // Helper methods
+    // Helper methods
     void updateIndexes(VoidLight::ResourceHandle handle,
         ResourceCategory category, ResourceType type);
     void updateNameIndex(VoidLight::ResourceHandle handle,
@@ -183,10 +183,10 @@ private:
     bool checkForDuplicateName(const std::string& name,
         VoidLight::ResourceHandle currentHandle) const;
 
-  // Internal registration method (no locking - assumes lock is already held)
+    // Internal registration method (no locking - assumes lock is already held)
     bool registerResourceTemplateInternal(const ResourcePtr& resource);
 
-  // Default resource creation
+    // Default resource creation
     [[nodiscard]] bool createDefaultResources();
 };
 

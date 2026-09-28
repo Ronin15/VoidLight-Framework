@@ -34,7 +34,7 @@ void WeatherController::onTimeEvent(const EventData& data) {
     // We registered for EventTypeId::Time, so we know it's a TimeEvent
     const auto* timeEvent = static_cast<const TimeEvent*>(data.event.get());
     if (timeEvent->getTimeEventType() != TimeEventType::WeatherCheck) {
-        return;  // Not a weather check event, ignore
+        return; // Not a weather check event, ignore
     }
 
     // Safe static_cast - we verified the subtype via enum

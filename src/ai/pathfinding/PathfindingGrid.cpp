@@ -27,7 +27,7 @@ PathfindingGrid::PathfindingGrid(int width, int height, float cellSize,
     bool createCoarseGrid)
     : m_w(width), m_h(height), m_cell(cellSize), m_offset(worldOffset) {
 
-  // Validate grid dimensions to prevent 0x0 grids
+    // Validate grid dimensions to prevent 0x0 grids
     if (m_w <= 0 || m_h <= 0) {
         throw std::invalid_argument(std::format(
             "PathfindingGrid dimensions must be positive: {}x{}", width, height));
@@ -41,7 +41,7 @@ PathfindingGrid::PathfindingGrid(int width, int height, float cellSize,
     m_blocked.assign(static_cast<size_t>(m_w * m_h), 0);
     m_weight.assign(static_cast<size_t>(m_w * m_h), 1.0f);
 
-  // Initialize coarse grid for hierarchical pathfinding (4x larger cells)
+    // Initialize coarse grid for hierarchical pathfinding (4x larger cells)
     if (createCoarseGrid) {
         initializeCoarseGrid();
     }
@@ -293,23 +293,23 @@ void PathfindingGrid::markDirtyRegion(int cellX, int cellY, int width,
     int height) {
     std::lock_guard<std::mutex> lock(m_dirtyRegionMutex);
 
-  // Clamp to grid bounds
+    // Clamp to grid bounds
     cellX = std::clamp(cellX, 0, m_w - 1);
     cellY = std::clamp(cellY, 0, m_h - 1);
     width = std::clamp(width, 1, m_w - cellX);
     height = std::clamp(height, 1, m_h - cellY);
 
-  // Check for overlaps with existing dirty regions and merge if possible
+    // Check for overlaps with existing dirty regions and merge if possible
     for (auto& region : m_dirtyRegions) {
-    // Check if new region overlaps or is adjacent to existing region
+        // Check if new region overlaps or is adjacent to existing region
         int r1x1 = cellX, r1y1 = cellY, r1x2 = cellX + width, r1y2 = cellY + height;
         int r2x1 = region.x, r2y1 = region.y, r2x2 = region.x + region.width,
             r2y2 = region.y + region.height;
 
-    // Expand bounds by 1 to merge adjacent regions
+        // Expand bounds by 1 to merge adjacent regions
         if (!(r1x2 < r2x1 - 1 || r1x1 > r2x2 + 1 || r1y2 < r2y1 - 1 ||
                 r1y1 > r2y2 + 1)) {
-      // Merge: compute bounding box of both regions
+            // Merge: compute bounding box of both regions
             int mergedX1 = std::min(r1x1, r2x1);
             int mergedY1 = std::min(r1y1, r2y1);
             int mergedX2 = std::max(r1x2, r2x2);
@@ -323,15 +323,15 @@ void PathfindingGrid::markDirtyRegion(int cellX, int cellY, int width,
         }
     }
 
-  // No overlap found, add as new dirty region
+    // No overlap found, add as new dirty region
     m_dirtyRegions.push_back({cellX, cellY, width, height});
 
-  // Limit dirty regions to prevent unbounded growth (merge if too many)
+    // Limit dirty regions to prevent unbounded growth (merge if too many)
     constexpr size_t MAX_DIRTY_REGIONS = 32;
     if (m_dirtyRegions.size() > MAX_DIRTY_REGIONS) {
-    // Find two closest regions and merge them
-    // Simple heuristic: merge first two regions (could be improved)
-    // Note: size() > 32 guarantees size() >= 2, so no additional check needed
+        // Find two closest regions and merge them
+        // Simple heuristic: merge first two regions (could be improved)
+        // Note: size() > 32 guarantees size() >= 2, so no additional check needed
         auto& r1 = m_dirtyRegions[0];
         auto& r2 = m_dirtyRegions[1];
 
@@ -345,7 +345,7 @@ void PathfindingGrid::markDirtyRegion(int cellX, int cellY, int width,
         r1.width = mergedX2 - mergedX1;
         r1.height = mergedY2 - mergedY1;
 
-    // Remove second region
+        // Remove second region
         m_dirtyRegions.erase(m_dirtyRegions.begin() + 1);
     }
 }
@@ -360,16 +360,16 @@ void PathfindingGrid::rebuildDirtyRegions() {
         regions.swap(m_dirtyRegions); // Move regions out for processing
     }
 
-  // Rebuild each dirty region using the row-range rebuild
+    // Rebuild each dirty region using the row-range rebuild
     for (const auto& region : regions) {
         int rowStart = region.y;
         int rowEnd = std::min(region.y + region.height, m_h);
 
-    // Rebuild rows in this region
+        // Rebuild rows in this region
         rebuildFromWorld(rowStart, rowEnd);
     }
 
-  // Update coarse grid after all dirty regions rebuilt
+    // Update coarse grid after all dirty regions rebuilt
     if (m_coarseGrid) {
         updateCoarseGrid();
     }
@@ -390,14 +390,14 @@ float PathfindingGrid::calculateDirtyPercent() const {
         return 0.0f;
     }
 
-  // Calculate total dirty cells (with overlap handling)
+    // Calculate total dirty cells (with overlap handling)
     int totalDirtyCells =
         std::accumulate(m_dirtyRegions.begin(), m_dirtyRegions.end(), 0,
             [](int sum, const auto& region) {
                 return sum + region.width * region.height;
             });
 
-  // Simple approximation (may overcount overlaps, but conservative)
+    // Simple approximation (may overcount overlaps, but conservative)
     int const totalCells = m_w * m_h;
     return std::min(100.0f,
         (static_cast<float>(totalDirtyCells) / totalCells) * 100.0f);
@@ -412,8 +412,8 @@ void PathfindingGrid::smoothPath(std::vector<Vector2D>& path) {
     if (path.size() <= 2)
         return; // Can't smooth paths with 2 or fewer nodes
 
-  // thread_local buffer to avoid per-path allocation (thread-safe for
-  // multi-threaded pathfinding)
+    // thread_local buffer to avoid per-path allocation (thread-safe for
+    // multi-threaded pathfinding)
     thread_local std::vector<Vector2D> smoothed;
     smoothed.clear();
     if (smoothed.capacity() < path.size()) {
@@ -423,7 +423,7 @@ void PathfindingGrid::smoothPath(std::vector<Vector2D>& path) {
 
     size_t i = 0;
     while (i < path.size() - 1) {
-    // Look ahead for line-of-sight optimization
+        // Look ahead for line-of-sight optimization
         size_t farthest = i + 1;
         for (size_t j = i + 2; j < path.size(); j++) {
             if (hasLineOfSight(path[i], path[j])) {
@@ -433,7 +433,7 @@ void PathfindingGrid::smoothPath(std::vector<Vector2D>& path) {
             }
         }
 
-    // Add the farthest reachable point
+        // Add the farthest reachable point
         if (farthest != i + 1) {
             smoothed.push_back(path[farthest]);
             i = farthest;
@@ -443,14 +443,14 @@ void PathfindingGrid::smoothPath(std::vector<Vector2D>& path) {
         }
     }
 
-  // Always keep goal - check if coordinates are different
+    // Always keep goal - check if coordinates are different
     if (smoothed.empty() || smoothed.back().getX() != path.back().getX() ||
         smoothed.back().getY() != path.back().getY()) {
         smoothed.push_back(path.back());
     }
 
-  // Copy results into caller's path (reusing its capacity) instead of moving,
-  // so the thread_local scratch buffer retains its capacity across calls.
+    // Copy results into caller's path (reusing its capacity) instead of moving,
+    // so the thread_local scratch buffer retains its capacity across calls.
     path.assign(smoothed.begin(), smoothed.end());
 }
 
@@ -459,7 +459,7 @@ bool PathfindingGrid::hasLineOfSight(const Vector2D& start,
     auto [sx, sy] = worldToGrid(start);
     auto [ex, ey] = worldToGrid(end);
 
-  // Simple Bresenham-like line check
+    // Simple Bresenham-like line check
     int dx = abs(ex - sx), dy = abs(ey - sy);
     int x = sx, y = sy;
     int xStep = (ex > sx) ? 1 : -1;
@@ -501,7 +501,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
     auto [sx_raw, sy_raw] = worldToGrid(start);
     auto [gx_raw, gy_raw] = worldToGrid(goal);
 
-  // Validate original grid indices before any clamping
+    // Validate original grid indices before any clamping
     if (!inBounds(sx_raw, sy_raw)) {
         PATHFIND_ERROR(std::format("findPath: INVALID_START - grid coords ({},{}) "
                                    "out of bounds (0,0) to ({},{})",
@@ -509,8 +509,8 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         VOIDLIGHT_STATS_ONLY(
             m_stats.totalRequests++;
             m_stats.invalidStarts++;)
-    // Invalid start warnings removed - covered in PathfinderManager status
-    // reporting
+        // Invalid start warnings removed - covered in PathfinderManager status
+        // reporting
         return PathfindingResult::INVALID_START;
     }
     if (!inBounds(gx_raw, gy_raw)) {
@@ -520,20 +520,20 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         VOIDLIGHT_STATS_ONLY(
             m_stats.totalRequests++;
             m_stats.invalidGoals++;)
-    // Invalid goal warnings removed - covered in PathfinderManager status
-    // reporting
+        // Invalid goal warnings removed - covered in PathfinderManager status
+        // reporting
         return PathfindingResult::INVALID_GOAL;
     }
 
-  // Start from validated indices and then clamp to keep away from exact edges
+    // Start from validated indices and then clamp to keep away from exact edges
     int sx = sx_raw;
     int sy = sy_raw;
     int gx = gx_raw;
     int gy = gy_raw;
 
-  // Clamp grid coordinates to ensure they're away from exact boundaries
-  // This prevents problematic boundary pathfinding even if world-space clamping
-  // fails
+    // Clamp grid coordinates to ensure they're away from exact boundaries
+    // This prevents problematic boundary pathfinding even if world-space clamping
+    // fails
     const int GRID_MARGIN =
         2; // Reduced margin; avoid over-restricting valid goals near edges
     int const xLow = std::min(GRID_MARGIN, std::max(0, m_w - 1 - GRID_MARGIN));
@@ -545,36 +545,36 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
     sx = std::clamp(sx, xLow, xHigh);
     sy = std::clamp(sy, yLow, yHigh);
 
-  // Enhanced goal validation: try a small nudge but do not early-return
-  // Let the later broader nudge (radius 20) handle difficult endpoints
+    // Enhanced goal validation: try a small nudge but do not early-return
+    // Let the later broader nudge (radius 20) handle difficult endpoints
     if (isBlocked(gx, gy)) {
         int nearGx = gx, nearGy = gy;
         if (findNearestOpen(gx, gy, 8, nearGx, nearGy)) {
             gx = nearGx;
             gy = nearGy;
         }
-    // else: keep as-is; broader nudge below will attempt again
+        // else: keep as-is; broader nudge below will attempt again
     }
 
-  // Quick reachability test - if goal is in a completely isolated area, reject
-  // early
+    // Quick reachability test - if goal is in a completely isolated area, reject
+    // early
     int dxGoal = std::abs(sx - gx), dyGoal = std::abs(sy - gy);
     int directDistance = std::max(dxGoal, dyGoal);
 
-  // For very long distances, do a lightweight connectivity check (less
-  // restrictive) Use dynamic threshold scaled to world size (defaults to 800 if
-  // manager unavailable)
+    // For very long distances, do a lightweight connectivity check (less
+    // restrictive) Use dynamic threshold scaled to world size (defaults to 800 if
+    // manager unavailable)
     float connectivityThresholdCells = 800.0f;
     try {
-    // Get dynamic threshold in pixels, convert to grid cells
+        // Get dynamic threshold in pixels, convert to grid cells
         connectivityThresholdCells =
             PathfinderManager::Instance().getConnectivityThreshold() / m_cell;
     } catch (...) {
-    // Fallback to static threshold if PathfinderManager not available
+        // Fallback to static threshold if PathfinderManager not available
     }
 
     if (directDistance > static_cast<int>(connectivityThresholdCells)) {
-    // Sample a few points along the direct line to check for major barriers
+        // Sample a few points along the direct line to check for major barriers
         int samples = std::min(8, directDistance / 8);
         int blockedSamples = 0;
 
@@ -583,7 +583,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
             int const mx = sx + static_cast<int>((gx - sx) * t);
             int const my = sy + static_cast<int>((gy - sy) * t);
 
-      // Check if this sample point has any open neighbors (basic connectivity)
+            // Check if this sample point has any open neighbors (basic connectivity)
             bool hasOpenNeighbor = false;
             for (int dx = -1; dx <= 1 && !hasOpenNeighbor; dx++) {
                 for (int dy = -1; dy <= 1 && !hasOpenNeighbor; dy++) {
@@ -598,19 +598,19 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
                 blockedSamples++;
         }
 
-    // If more than 90% of samples lack open neighbors, it's probably
-    // unreachable, but do not early-return: allow A* to attempt within
-    // iteration limits.
+        // If more than 90% of samples lack open neighbors, it's probably
+        // unreachable, but do not early-return: allow A* to attempt within
+        // iteration limits.
         if (blockedSamples > (samples * 9) / 10) {
             PATHFIND_DEBUG(
                 "Connectivity check: likely unreachable, proceeding conservatively");
         }
     }
-  // Nudge start/goal if blocked (common after collision resolution)
+    // Nudge start/goal if blocked (common after collision resolution)
     int nsx = sx, nsy = sy, ngx = gx, ngy = gy;
-  // Adaptive nudge with increasing radii for large/congested worlds
-  // Try progressively larger radii: 48 -> 96 -> 128 for start, 64 -> 96 -> 128
-  // for goal
+    // Adaptive nudge with increasing radii for large/congested worlds
+    // Try progressively larger radii: 48 -> 96 -> 128 for start, 64 -> 96 -> 128
+    // for goal
     bool const startOk = !isBlocked(sx, sy) ||
         findNearestOpen(sx, sy, 48, nsx, nsy) ||
         findNearestOpen(sx, sy, 96, nsx, nsy) ||
@@ -628,20 +628,20 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
     gx = ngx;
     gy = ngy;
 
-  // Early unreachability detection using coarse grid (for large worlds)
+    // Early unreachability detection using coarse grid (for large worlds)
     if (m_coarseGrid && directDistance > 512) {
-    // Quick connectivity test on coarse grid to fail fast for unreachable paths
-    // Coarse grid already configured with reduced iteration budget (see
-    // initializeCoarseGrid)
+        // Quick connectivity test on coarse grid to fail fast for unreachable paths
+        // Coarse grid already configured with reduced iteration budget (see
+        // initializeCoarseGrid)
         std::vector<Vector2D> coarsePath;
         coarsePath.reserve(directDistance / 4 +
             10); // Reserve estimated path length
         auto coarseResult = m_coarseGrid->findPath(gridToWorld(sx, sy),
             gridToWorld(gx, gy), coarsePath);
 
-    // Only fail early if coarse grid definitively finds NO_PATH_FOUND (not
-    // TIMEOUT) TIMEOUT means needs more exploration, so continue to fine-grid
-    // pathfinding
+        // Only fail early if coarse grid definitively finds NO_PATH_FOUND (not
+        // TIMEOUT) TIMEOUT means needs more exploration, so continue to fine-grid
+        // pathfinding
         if (coarseResult == PathfindingResult::NO_PATH_FOUND) {
             PATHFIND_DEBUG("Early detection: coarse grid indicates unreachable path "
                            "(disconnected regions)");
@@ -650,7 +650,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         }
     }
 
-  // Early success: if start equals goal after nudging
+    // Early success: if start equals goal after nudging
     if (sx == gx && sy == gy) {
         outPath.push_back(gridToWorld(gx, gy));
         VOIDLIGHT_STATS_ONLY(
@@ -663,11 +663,11 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         return PathfindingResult::SUCCESS;
     }
 
-  // Line-of-sight shortcut: Check direct path for simple terrain
+    // Line-of-sight shortcut: Check direct path for simple terrain
     Vector2D worldStart = gridToWorld(sx, sy);
     Vector2D worldGoal = gridToWorld(gx, gy);
     if (hasLineOfSight(worldStart, worldGoal)) {
-    // Direct path available - create simple 2-point path
+        // Direct path available - create simple 2-point path
         outPath.push_back(worldStart);
         outPath.push_back(worldGoal);
         VOIDLIGHT_STATS_ONLY(
@@ -683,8 +683,8 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
     const int W = m_w, H = m_h;
     auto idx = [&](int x, int y) { return y * W + x; };
     auto h = [&](int x, int y) {
-    // OPTIMIZED HEURISTIC: More focused search with perfect admissible
-    // heuristic
+        // OPTIMIZED HEURISTIC: More focused search with perfect admissible
+        // heuristic
         int dx = std::abs(x - gx);
         int dy = std::abs(y - gy);
         int dmin = std::min(dx, dy);
@@ -692,10 +692,10 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         float const baseDistance =
             m_costDiagonal * dmin + m_costStraight * (dmax - dmin);
 
-    // LARGE-WORLD OPTIMIZATION: Slightly weight heuristic for long distances
-    // Increases goal-directedness for paths >500 cells while maintaining
-    // admissibility This reduces wasted exploration in open areas of large
-    // worlds
+        // LARGE-WORLD OPTIMIZATION: Slightly weight heuristic for long distances
+        // Increases goal-directedness for paths >500 cells while maintaining
+        // admissibility This reduces wasted exploration in open areas of large
+        // worlds
         if (directDistance > 500) {
             return baseDistance *
                 1.001f; // Very conservative weight to maintain optimality
@@ -703,18 +703,18 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         return baseDistance;
     };
 
-  // Keep baseDistance for iteration calculations
+    // Keep baseDistance for iteration calculations
     int const baseDistance = directDistance;
 
-  // Allow full grid access for reliable pathfinding
+    // Allow full grid access for reliable pathfinding
 
-  // A* pathfinding using thread-local object pooling for memory optimization
+    // A* pathfinding using thread-local object pooling for memory optimization
     thread_local NodePool nodePool;
     int const gridSize = m_w * m_h;
     nodePool.ensureCapacity(gridSize);
     nodePool.reset();
 
-  // Use pooled containers
+    // Use pooled containers
     auto& open = nodePool.openQueue;
     auto& gScore = nodePool.gScoreBuffer;
     auto& fScore = nodePool.fScoreBuffer;
@@ -734,24 +734,24 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
 
     int iterations = 0;
     const int dirs = m_allowDiagonal ? 8 : 4;
-  // Direction tables
+    // Direction tables
     constexpr int dx8[8] = {1, -1, 0, 0, 1, 1, -1, -1};
     constexpr int dy8[8] = {0, 0, 1, -1, 1, -1, 1, -1};
 
-  // PERFORMANCE TUNING: Tighter iteration budget to cap worst-case CPU
+    // PERFORMANCE TUNING: Tighter iteration budget to cap worst-case CPU
     int baseIters = std::max(4000, baseDistance * 40);
     int dynamicMaxIters = std::min(m_maxIterations, baseIters + 6000);
 
-  // Performance-focused: Reasonable queue limits to balance memory and success
-  // rate
+    // Performance-focused: Reasonable queue limits to balance memory and success
+    // rate
 
-  // Memory protection for very complex pathfinding scenarios
-  // Increased queue size limit for better success rate with complex paths
+    // Memory protection for very complex pathfinding scenarios
+    // Increased queue size limit for better success rate with complex paths
     const size_t maxAbsoluteQueueSize = 30000;
 
     while (!open.empty() && iterations++ < dynamicMaxIters) {
-    // Only terminate on truly excessive memory usage, not normal pathfinding
-    // complexity
+        // Only terminate on truly excessive memory usage, not normal pathfinding
+        // complexity
         if (open.size() > maxAbsoluteQueueSize) {
             PATHFIND_DEBUG(std::format("Emergency termination: queue size {} "
                                        "exceeded emergency limit (max: {})",
@@ -759,13 +759,13 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
             break;
         }
 
-    // EARLY SUCCESS: Check if we're very close to the goal for quick
-    // termination
+        // EARLY SUCCESS: Check if we're very close to the goal for quick
+        // termination
         if (iterations > 100 && iterations % 500 == 0) {
             NodePool::Node topNode = open.top();
             int distToGoal = std::abs(topNode.x - gx) + std::abs(topNode.y - gy);
             if (distToGoal <= 2) {
-        // Very close to goal, increase iteration allowance for final push
+                // Very close to goal, increase iteration allowance for final push
                 dynamicMaxIters = std::min(m_maxIterations, iterations + 1000);
             }
         }
@@ -773,13 +773,13 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         NodePool::Node cur = open.top();
         open.pop();
 
-    // Compute and cache current node's linear index once
+        // Compute and cache current node's linear index once
         const int cIndex = idx(cur.x, cur.y);
         if (closed[cIndex])
             continue;
         closed[cIndex] = 1;
         if (cur.x == gx && cur.y == gy) {
-      // reconstruct
+            // reconstruct
             std::vector<Vector2D> rev;
             rev.reserve(directDistance + 20); // Reserve estimated path length
             int cx = cur.x, cy = cur.y;
@@ -794,10 +794,10 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
             rev.push_back(gridToWorld(sx, sy));
             outPath.assign(rev.rbegin(), rev.rend());
 
-      // Apply path smoothing to reduce unnecessary waypoints
+            // Apply path smoothing to reduce unnecessary waypoints
             smoothPath(outPath);
 
-      // Update statistics instead of individual logging
+            // Update statistics instead of individual logging
             VOIDLIGHT_STATS_ONLY(
                 m_stats.totalRequests++;
                 m_stats.successfulPaths++;
@@ -808,28 +808,28 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
 
             return PathfindingResult::SUCCESS;
         }
-    // Cache current node gScore for reuse across neighbors
+        // Cache current node gScore for reuse across neighbors
         const float gCur = gScore[static_cast<size_t>(cIndex)];
 
         for (int i = 0; i < dirs; ++i) {
             const int nx = cur.x + dx8[i];
             const int ny = cur.y + dy8[i];
 
-      // EMERGENCY FIX: Only check bounds, no ROI restrictions
+            // EMERGENCY FIX: Only check bounds, no ROI restrictions
             const bool outsideBounds = (nx < 0 || nx >= W || ny < 0 || ny >= H);
 
             if (outsideBounds)
                 continue; // Only reject actual out-of-bounds cells
 
-      // Compute neighbor's linear index relative to current node to avoid idx()
-      // calls
+            // Compute neighbor's linear index relative to current node to avoid idx()
+            // calls
             const int nIndexInt = cIndex + dx8[i] + dy8[i] * W;
             const size_t nIndex = static_cast<size_t>(nIndexInt);
             if (closed[nIndex] || isBlocked(nx, ny))
                 continue;
 
-      // No-corner-cutting: if moving diagonally, both orthogonal neighbors must
-      // be open
+            // No-corner-cutting: if moving diagonally, both orthogonal neighbors must
+            // be open
             if (m_allowDiagonal && i >= 4) {
                 const int ox = cur.x + dx8[i];
                 const int oy = cur.y;
@@ -843,7 +843,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
             const float weight = (m_weight[nIndex] > 0.0f) ? m_weight[nIndex] : 1.0f;
             const float tentative = gCur + step * weight;
 
-      // Only add to queue if we found a better path
+            // Only add to queue if we found a better path
             if (tentative < gScore[nIndex]) {
                 parent[nIndex] = cIndex;
                 gScore[nIndex] = tentative;
@@ -853,7 +853,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         }
     }
 
-  // Determine termination reason: exhausted search vs. iteration cap
+    // Determine termination reason: exhausted search vs. iteration cap
     bool exhaustedQueue = open.empty();
     bool const hitIterationCap =
         !exhaustedQueue; // loop ended due to iteration count
@@ -865,7 +865,7 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
         VOIDLIGHT_STATS_ONLY(m_stats.timeouts++;)
         return PathfindingResult::TIMEOUT;
     }
-  // No path found within explored region
+    // No path found within explored region
     return PathfindingResult::NO_PATH_FOUND;
 }
 
@@ -885,8 +885,8 @@ PathfindingGrid::cloneWithResetWeights(float defaultWeight) const {
     clone->m_costDiagonal = m_costDiagonal;
 
     if (m_coarseGrid) {
-    // Coarse grid's own weights are untouched by resetWeights() today too --
-    // preserve its blocked/config state as-is, just give it a new identity.
+        // Coarse grid's own weights are untouched by resetWeights() today too --
+        // preserve its blocked/config state as-is, just give it a new identity.
         clone->m_coarseGrid = std::make_unique<PathfindingGrid>(
             m_coarseGrid->m_w, m_coarseGrid->m_h, m_coarseGrid->m_cell,
             m_coarseGrid->m_offset, /*createCoarseGrid=*/false);
@@ -930,7 +930,7 @@ void PathfindingGrid::addWeightCircle(const Vector2D& worldCenter,
 // ===== Hierarchical Pathfinding Implementation =====
 
 void PathfindingGrid::initializeCoarseGrid() {
-  // Skip coarse grid initialization if main grid is too small
+    // Skip coarse grid initialization if main grid is too small
     if (m_w < static_cast<int>(COARSE_GRID_MULTIPLIER) ||
         m_h < static_cast<int>(COARSE_GRID_MULTIPLIER)) {
         PATHFIND_INFO(std::format("Grid too small for hierarchical pathfinding "
@@ -940,13 +940,13 @@ void PathfindingGrid::initializeCoarseGrid() {
         return;
     }
 
-  // Create coarse grid with 4x larger cells for long-distance pathfinding
+    // Create coarse grid with 4x larger cells for long-distance pathfinding
     float const coarseCellSize = m_cell * COARSE_GRID_MULTIPLIER;
     int coarseWidth = std::max(1, static_cast<int>(m_w / COARSE_GRID_MULTIPLIER));
     int coarseHeight =
         std::max(1, static_cast<int>(m_h / COARSE_GRID_MULTIPLIER));
 
-  // Validate coarse grid dimensions
+    // Validate coarse grid dimensions
     if (coarseWidth <= 0 || coarseHeight <= 0) {
         PATHFIND_WARN(std::format("Invalid coarse grid dimensions: {}x{}",
             coarseWidth, coarseHeight));
@@ -957,9 +957,9 @@ void PathfindingGrid::initializeCoarseGrid() {
     try {
         m_coarseGrid = std::make_unique<PathfindingGrid>(
             coarseWidth, coarseHeight, coarseCellSize, m_offset, false);
-    // Set more aggressive settings for coarse grid (speed over precision)
-    // Allow generous iteration budget on coarse grid (still far cheaper than
-    // fine)
+        // Set more aggressive settings for coarse grid (speed over precision)
+        // Allow generous iteration budget on coarse grid (still far cheaper than
+        // fine)
         m_coarseGrid->setMaxIterations(std::max(1000, m_maxIterations / 2));
         m_coarseGrid->setAllowDiagonal(true); // Always allow diagonal for speed
 
@@ -978,13 +978,13 @@ void PathfindingGrid::updateCoarseGrid() {
         return;
     }
 
-  // Downsample fine grid to coarse grid (4x4 fine cells -> 1 coarse cell)
+    // Downsample fine grid to coarse grid (4x4 fine cells -> 1 coarse cell)
     int coarseW = m_coarseGrid->getWidth();
     int coarseH = m_coarseGrid->getHeight();
 
     for (int cy = 0; cy < coarseH; ++cy) {
         for (int cx = 0; cx < coarseW; ++cx) {
-      // Sample 4x4 region in fine grid with improved strategy
+            // Sample 4x4 region in fine grid with improved strategy
             int blockedCount = 0;
             int totalCount = 0;
             float avgWeight = 0.0f;
@@ -993,7 +993,7 @@ void PathfindingGrid::updateCoarseGrid() {
             int const fineStartX = cx * static_cast<int>(COARSE_GRID_MULTIPLIER);
             int const fineStartY = cy * static_cast<int>(COARSE_GRID_MULTIPLIER);
 
-      // Sample the 4x4 region
+            // Sample the 4x4 region
             for (int fy = fineStartY;
                 fy < fineStartY + static_cast<int>(COARSE_GRID_MULTIPLIER) &&
                 fy < m_h;
@@ -1016,17 +1016,17 @@ void PathfindingGrid::updateCoarseGrid() {
                 }
             }
 
-      // IMPROVED: Mark coarse cell as blocked if >50% of fine cells are blocked
-      // Better reflects dense obstacles and improves refinement reliability
+            // IMPROVED: Mark coarse cell as blocked if >50% of fine cells are blocked
+            // Better reflects dense obstacles and improves refinement reliability
             bool const coarseBlocked =
                 (totalCount > 0) &&
                 (static_cast<float>(blockedCount) / static_cast<float>(totalCount) >
                     0.50f);
 
-      // Update coarse grid cell using safe setter methods
+            // Update coarse grid cell using safe setter methods
             m_coarseGrid->setBlocked(cx, cy, coarseBlocked);
             if (sampleCount > 0) {
-        // Increase weight for areas with some obstacles (but not fully blocked)
+                // Increase weight for areas with some obstacles (but not fully blocked)
                 float const blockageRatio = (totalCount > 0)
                     ? static_cast<float>(blockedCount) /
                         static_cast<float>(totalCount)
@@ -1048,14 +1048,14 @@ bool PathfindingGrid::shouldUseHierarchicalPathfinding(
         return false; // No coarse grid available
     }
 
-  // Use dynamic threshold from PathfinderManager (scaled to world size)
-  // Falls back to static threshold if manager not available
+    // Use dynamic threshold from PathfinderManager (scaled to world size)
+    // Falls back to static threshold if manager not available
     float threshold = HIERARCHICAL_DISTANCE_THRESHOLD;
     try {
-    // Get dynamic threshold calculated for current world size
+        // Get dynamic threshold calculated for current world size
         threshold = PathfinderManager::Instance().getHierarchicalThreshold();
     } catch (...) {
-    // Fallback to static threshold if PathfinderManager not available
+        // Fallback to static threshold if PathfinderManager not available
     }
 
     float const distance = (goal - start).length();
@@ -1063,16 +1063,16 @@ bool PathfindingGrid::shouldUseHierarchicalPathfinding(
         return false;
     }
 
-  // Edge-aware gating: avoid hierarchical near borders or blocked coarse cells
-  // Map start/goal to coarse grid coordinates
+    // Edge-aware gating: avoid hierarchical near borders or blocked coarse cells
+    // Map start/goal to coarse grid coordinates
     auto sg = m_coarseGrid->worldToGrid(start);
     auto gg = m_coarseGrid->worldToGrid(goal);
 
-  // Coarse grid interior threshold (cells)
+    // Coarse grid interior threshold (cells)
     const int edgeBand =
         2; // within 2 coarse cells of border, prefer direct pathfinding
 
-  // Fetch dimensions
+    // Fetch dimensions
     const int cw = m_coarseGrid->m_w;
     const int ch = m_coarseGrid->m_h;
 
@@ -1081,12 +1081,12 @@ bool PathfindingGrid::shouldUseHierarchicalPathfinding(
             gy >= (ch - edgeBand));
     };
 
-  // If either start/goal is near border, skip hierarchical
+    // If either start/goal is near border, skip hierarchical
     if (nearBorder(sg.first, sg.second) || nearBorder(gg.first, gg.second)) {
         return false;
     }
 
-  // If either coarse cell is blocked, skip hierarchical
+    // If either coarse cell is blocked, skip hierarchical
     if (m_coarseGrid->inBounds(sg.first, sg.second) &&
         m_coarseGrid->isBlocked(sg.first, sg.second)) {
         return false;
@@ -1104,13 +1104,13 @@ PathfindingGrid::findPathHierarchical(const Vector2D& start,
     const Vector2D& goal,
     std::vector<Vector2D>& outPath) {
     if (!m_coarseGrid) {
-    // Fallback to regular pathfinding
+        // Fallback to regular pathfinding
         return findPath(start, goal, outPath);
     }
 
-  // Note: Coarse grid is updated in rebuildFromWorld() and should be current
+    // Note: Coarse grid is updated in rebuildFromWorld() and should be current
 
-  // Step 1: Find coarse path on low-resolution grid
+    // Step 1: Find coarse path on low-resolution grid
     std::vector<Vector2D> coarsePath;
     auto [sx, sy] = worldToGrid(start);
     auto [gx, gy] = worldToGrid(goal);
@@ -1120,7 +1120,7 @@ PathfindingGrid::findPathHierarchical(const Vector2D& start,
     auto coarseResult = m_coarseGrid->findPath(start, goal, coarsePath);
 
     if (coarseResult != PathfindingResult::SUCCESS) {
-    // Coarse pathfinding failed, try direct pathfinding as fallback
+        // Coarse pathfinding failed, try direct pathfinding as fallback
         PATHFIND_DEBUG(std::format(
             "Coarse pathfinding result: {}, attempting direct pathfinding",
             static_cast<int>(coarseResult)));
@@ -1128,19 +1128,19 @@ PathfindingGrid::findPathHierarchical(const Vector2D& start,
     }
 
     if (coarsePath.size() < 2) {
-    // Coarse path too short (start == goal?), use direct pathfinding
+        // Coarse path too short (start == goal?), use direct pathfinding
         return findPath(start, goal, outPath);
     }
 
-  // Step 2: Refine coarse path segments on fine grid
+    // Step 2: Refine coarse path segments on fine grid
     const auto refineResult = refineCoarsePath(coarsePath, start, goal, outPath);
 
-  // Step 3: Validate refined path has no disconnected segments
-  // When segment refinement fails, refineCoarsePath() inserts direct waypoints
-  // which can create large gaps. Detect and fallback to direct A* if needed.
+    // Step 3: Validate refined path has no disconnected segments
+    // When segment refinement fails, refineCoarsePath() inserts direct waypoints
+    // which can create large gaps. Detect and fallback to direct A* if needed.
     if (outPath.size() >= 2) {
-    // Allow gaps up to 8x coarse cell size (accounts for diagonal + refinement
-    // skips) Larger tolerance prevents unnecessary fallbacks to direct A*
+        // Allow gaps up to 8x coarse cell size (accounts for diagonal + refinement
+        // skips) Larger tolerance prevents unnecessary fallbacks to direct A*
         float const maxAllowedGap = m_cell * COARSE_GRID_MULTIPLIER * 8.0f;
         bool hasDisconnectedSegment = false;
 
@@ -1172,23 +1172,23 @@ PathfindingGrid::refineCoarsePath(const std::vector<Vector2D>& coarsePath,
     outPath.clear();
     outPath.reserve(coarsePath.size() * 4); // Estimate refined path size
 
-  // Add start point
+    // Add start point
     outPath.push_back(start);
 
-  // Refine each segment of the coarse path
+    // Refine each segment of the coarse path
     Vector2D currentPoint = start;
 
     bool loggedFailure = false;
     for (size_t i = 1; i < coarsePath.size(); ++i) {
         Vector2D segmentGoal = coarsePath[i];
 
-    // Check if we can directly connect to this coarse waypoint
+        // Check if we can directly connect to this coarse waypoint
         if (hasLineOfSight(currentPoint, segmentGoal)) {
-      // Direct line of sight - no need for detailed pathfinding
+            // Direct line of sight - no need for detailed pathfinding
             outPath.push_back(segmentGoal);
             currentPoint = segmentGoal;
         } else {
-      // Need detailed pathfinding for this segment
+            // Need detailed pathfinding for this segment
             std::vector<Vector2D> segmentPath;
             auto result = findPath(currentPoint, segmentGoal, segmentPath);
 
@@ -1200,7 +1200,7 @@ PathfindingGrid::refineCoarsePath(const std::vector<Vector2D>& coarsePath,
                 outPath.push_back(segmentGoal);
                 currentPoint = segmentGoal;
             } else {
-        // Add refined segment (skip first point to avoid duplicates)
+                // Add refined segment (skip first point to avoid duplicates)
                 for (size_t j = 1; j < segmentPath.size(); ++j) {
                     outPath.push_back(segmentPath[j]);
                 }
@@ -1209,12 +1209,12 @@ PathfindingGrid::refineCoarsePath(const std::vector<Vector2D>& coarsePath,
         }
     }
 
-  // Ensure we end at the exact goal
+    // Ensure we end at the exact goal
     if (outPath.empty() || (outPath.back() - goal).length() > m_cell * 0.5f) {
         outPath.push_back(goal);
     }
 
-  // Apply path smoothing to the final result
+    // Apply path smoothing to the final result
     smoothPath(outPath);
 
     return PathfindingResult::SUCCESS;

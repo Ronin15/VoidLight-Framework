@@ -133,7 +133,7 @@ BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar) {
     destroyed.reserve(33);
 
     for (int i = 0; i < TOTAL_NPCS; ++i) {
-        if ((i + 1) % 3 == 0)   // 3rd, 6th, 9th, ... (1-based)
+        if ((i + 1) % 3 == 0) // 3rd, 6th, 9th, ... (1-based)
         {
             destroyed.push_back(handles[i]);
             edm.destroyEntity(handles[i]);
@@ -174,7 +174,7 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction) {
     auto& edm = EntityDataManager::Instance();
 
     constexpr int TOTAL_NPCS = 100;
-    constexpr uint8_t INITIAL_FRAMES = 20;   // > 8 so none expire during the loop
+    constexpr uint8_t INITIAL_FRAMES = 20; // > 8 so none expire during the loop
     constexpr float IMPULSE_X = 100.0f;
     constexpr float IMPULSE_Y = 50.0f;
     constexpr int DECAY_FRAMES = 8;
@@ -232,7 +232,7 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction) {
     BOOST_CHECK_EQUAL(edm.knockbackActiveCount(), 67u);
 
     for (int i = 0; i < TOTAL_NPCS; ++i) {
-        if ((i + 1) % 3 == 0) { continue; }   // destroyed
+        if ((i + 1) % 3 == 0) { continue; } // destroyed
 
         const size_t idx = edm.getIndex(handles[i]);
         BOOST_REQUIRE(idx != SIZE_MAX);

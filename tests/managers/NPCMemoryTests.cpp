@@ -142,7 +142,7 @@ BOOST_AUTO_TEST_CASE(TestMemoryDataPreallocated) {
     auto [handle, index] = createTestNPC();
 
     // Memory data should exist for the entity (pre-allocated with entity)
-    BOOST_CHECK(index < 1000000);  // Valid index
+    BOOST_CHECK(index < 1000000); // Valid index
     BOOST_CHECK(edm->hasMemoryData(index));
 
     // Verify default emotional state on a freshly created NPC
@@ -239,7 +239,7 @@ BOOST_AUTO_TEST_CASE(TestInlineMemoryCircularBuffer) {
         entry.type = MemoryType::ThreatSpotted;
         entry.timestamp = static_cast<float>(i);
         entry.flags = MemoryEntry::FLAG_VALID;
-        edm->addMemory(index, entry, false);  // No overflow
+        edm->addMemory(index, entry, false); // No overflow
     }
 
     auto& memData = edm->getMemoryData(index);
@@ -258,7 +258,7 @@ BOOST_AUTO_TEST_CASE(TestMemoryOverflow) {
         entry.type = MemoryType::WitnessedCombat;
         entry.timestamp = static_cast<float>(i);
         entry.flags = MemoryEntry::FLAG_VALID;
-        edm->addMemory(index, entry, true);  // Use overflow
+        edm->addMemory(index, entry, true); // Use overflow
     }
 
     auto& memData = edm->getMemoryData(index);
@@ -473,7 +473,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleCombatEvents) {
     auto& memData = edm->getMemoryData(index);
     BOOST_CHECK(approxEqual(memData.totalDamageReceived, 45.0f));
     BOOST_CHECK_EQUAL(memData.combatEncounters, 3);
-    BOOST_CHECK(approxEqual(memData.lastCombatTime, 0.0f));  // Delta semantics: always reset to 0
+    BOOST_CHECK(approxEqual(memData.lastCombatTime, 0.0f)); // Delta semantics: always reset to 0
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -582,7 +582,7 @@ BOOST_AUTO_TEST_CASE(TestPersonalityTraitsClearing) {
 
 BOOST_AUTO_TEST_CASE(TestPersonalityRandomization) {
     PersonalityTraits traits;
-    std::mt19937 rng{42};  // Fixed seed for reproducibility
+    std::mt19937 rng{42}; // Fixed seed for reproducibility
 
     traits.randomize(rng);
 
@@ -600,7 +600,7 @@ BOOST_AUTO_TEST_CASE(TestEffectiveResilienceCalculation) {
     PersonalityTraits traits;
 
     // Test with neutral personality (all 0.5)
-    float classResilience = 0.8f;  // Guard-like high resilience
+    float classResilience = 0.8f; // Guard-like high resilience
     float effective = traits.getEffectiveResilience(classResilience);
 
     // 60% class (0.48) + 40% personality average (0.2) = 0.68
@@ -661,12 +661,12 @@ BOOST_AUTO_TEST_CASE(TestClassInfoHasResilience) {
     // Guards should have high resilience
     const ClassInfo* guardClass = edm->getClassInfo("Guard");
     BOOST_REQUIRE(guardClass != nullptr);
-    BOOST_CHECK(guardClass->emotionalResilience > 0.6f);  // Guards are stoic
+    BOOST_CHECK(guardClass->emotionalResilience > 0.6f); // Guards are stoic
 
     // Merchants should have low resilience
     const ClassInfo* merchantClass = edm->getClassInfo("GeneralMerchant");
     BOOST_REQUIRE(merchantClass != nullptr);
-    BOOST_CHECK(merchantClass->emotionalResilience < 0.4f);  // Merchants panic easily
+    BOOST_CHECK(merchantClass->emotionalResilience < 0.4f); // Merchants panic easily
 }
 
 BOOST_AUTO_TEST_CASE(TestCharacterDataInheritsResilience) {

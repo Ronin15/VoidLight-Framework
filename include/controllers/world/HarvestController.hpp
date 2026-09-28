@@ -146,10 +146,10 @@ private:
     float m_harvestTimer{0.0f};
     float m_harvestDuration{0.0f};
     EntityHandle m_currentTarget{};
-    size_t m_targetStaticIndex{0};  // EDM static pool index
+    size_t m_targetStaticIndex{0}; // EDM static pool index
     VoidLight::HarvestType m_currentType{VoidLight::HarvestType::Gathering};
-    Vector2D m_harvestStartPos{};   // Player position when harvest started
-    Vector2D m_targetPosition{};    // Target harvestable position
+    Vector2D m_harvestStartPos{}; // Player position when harvest started
+    Vector2D m_targetPosition{}; // Target harvestable position
 
     // Reusable buffers to avoid per-frame allocations
     std::vector<size_t> m_harvestableIndicesBuffer;

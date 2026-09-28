@@ -27,7 +27,7 @@
 #include "controllers/ControllerBase.hpp"
 #include "controllers/IUpdatable.hpp"
 #include "entities/EntityHandle.hpp"
-#include "managers/EntityDataManager.hpp"  // For INVALID_INVENTORY_INDEX
+#include "managers/EntityDataManager.hpp" // For INVALID_INVENTORY_INDEX
 #include "utils/ResourceHandle.hpp"
 #include <memory>
 #include <string>
@@ -41,25 +41,25 @@ class InputManager;
  * @brief Result of a trade operation
  */
 enum class TradeResult {
-    Success,              // Trade completed successfully
-    InsufficientFunds,    // Buyer doesn't have enough gold/currency
-    InsufficientStock,    // Seller doesn't have the item
-    InvalidNPC,           // NPC handle invalid or not a merchant
-    InvalidItem,          // Item handle invalid
-    InventoryFull,        // Buyer's inventory is full
-    NPCRefused            // NPC refused trade (relationship too low)
+    Success, // Trade completed successfully
+    InsufficientFunds, // Buyer doesn't have enough gold/currency
+    InsufficientStock, // Seller doesn't have the item
+    InvalidNPC, // NPC handle invalid or not a merchant
+    InvalidItem, // Item handle invalid
+    InventoryFull, // Buyer's inventory is full
+    NPCRefused // NPC refused trade (relationship too low)
 };
 
 /**
  * @brief Type of social interaction for memory recording
  */
 enum class InteractionType {
-    Trade,        // Bought or sold items
-    Gift,         // Gave item to NPC
-    Greeting,     // Basic social interaction
-    Help,         // Helped the NPC (quest, rescue)
-    Theft,        // Stole from NPC (negative)
-    Insult        // Negative social interaction
+    Trade, // Bought or sold items
+    Gift, // Gave item to NPC
+    Greeting, // Basic social interaction
+    Help, // Helped the NPC (quest, rescue)
+    Theft, // Stole from NPC (negative)
+    Insult // Negative social interaction
 };
 
 /**

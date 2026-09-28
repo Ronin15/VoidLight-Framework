@@ -34,32 +34,32 @@ std::ostream& operator<<(std::ostream& os, const WeatherType& type) {
 // Helper for getting current game time (hour of day)
 // Helper for getting current game time of day (0-24)
 static float getCurrentGameTime() {
-  // Use the GameTime system for simulated game time
-  // Add safety check to prevent segfault if GameTime not initialized
+    // Use the GameTime system for simulated game time
+    // Add safety check to prevent segfault if GameTime not initialized
     try {
         return GameTimeManager::Instance().getGameHour();
     } catch (...) {
-    // Return default time if GameTime is not available
+        // Return default time if GameTime is not available
         return 12.0f; // Default to noon
     }
 }
 
 // Helper for getting current player position
 static Vector2D getPlayerPosition() {
-  // This would typically come from the player entity
-  // For now, return a placeholder position
+    // This would typically come from the player entity
+    // For now, return a placeholder position
     return Vector2D(0.0f, 0.0f);
 }
 
 // Helper for getting current season
 static int
 getCurrentSeason() { // Use the GameTime system for simulated game seasons
-  // 0=spring, 1=summer, 2=fall, 3=winter
-  // Add safety check to prevent segfault if GameTime not initialized
+    // 0=spring, 1=summer, 2=fall, 3=winter
+    // Add safety check to prevent segfault if GameTime not initialized
     try {
         return GameTimeManager::Instance().getCurrentSeason();
     } catch (...) {
-    // Return default season if GameTime is not available
+        // Return default season if GameTime is not available
         return 0; // Default to spring
     }
 }
@@ -67,7 +67,7 @@ getCurrentSeason() { // Use the GameTime system for simulated game seasons
 WeatherEvent::WeatherEvent(const std::string& name, WeatherType type)
     : m_name(name), m_weatherType(type) {
 
-  // Set default parameters based on weather type
+    // Set default parameters based on weather type
     switch (type) {
         case WeatherType::Clear:
             m_params.intensity = 0.0f;
@@ -126,103 +126,103 @@ WeatherEvent::WeatherEvent(const std::string& name,
     const std::string& customType)
     : m_name(name), m_weatherType(WeatherType::Custom), m_customType(customType) {
 
-  // Default parameters for custom weather
+    // Default parameters for custom weather
     m_params.intensity = 0.5f;
     m_params.visibility = 0.8f;
     m_params.windSpeed = 0.3f;
 }
 
 void WeatherEvent::update() {
-  // Skip update if not active or on cooldown
+    // Skip update if not active or on cooldown
     if (!m_active || m_onCooldown) {
         return;
     }
 
-  // Update transition if in progress
+    // Update transition if in progress
     if (m_inTransition) {
-    // Transition logic would be implemented here
-    // This would gradually blend between weather states
+        // Transition logic would be implemented here
+        // This would gradually blend between weather states
     }
 
-  // Update frame counter for frequency control
+    // Update frame counter for frequency control
     m_frameCounter++;
     if (m_updateFrequency > 1 && m_frameCounter % m_updateFrequency != 0) {
         return;
     }
 
-  // Reset frame counter to prevent overflow
+    // Reset frame counter to prevent overflow
     if (m_frameCounter >= 10000) {
         m_frameCounter = 0;
     }
 }
 
 void WeatherEvent::execute() {
-  // Mark as triggered
+    // Mark as triggered
     m_hasTriggered = true;
 
-  // Start cooldown if set
+    // Start cooldown if set
     if (m_cooldownTime > 0.0f) {
         m_onCooldown = true;
         m_cooldownTimer = 0.0f;
     }
 
-  // Begin transition to this weather
+    // Begin transition to this weather
     m_inTransition = true;
     m_transitionProgress = 0.0f;
 
-  // Log weather change - actual ParticleManager triggering is done by handlers
-  // (events are data carriers, handlers do the work)
+    // Log weather change - actual ParticleManager triggering is done by handlers
+    // (events are data carriers, handlers do the work)
     EVENT_INFO(std::format("Weather changing to: {} (Intensity: {:.2f}, Visibility: {:.2f})",
         getWeatherTypeString(), m_params.intensity, m_params.visibility));
 
-  // Play sound effects if specified
+    // Play sound effects if specified
     EVENT_INFO_IF(!m_params.soundEffect.empty(),
         std::format("Playing sound effect: {}", m_params.soundEffect));
 }
 
 void WeatherEvent::reset() {
-  // Base event state
+    // Base event state
     m_onCooldown = false;
     m_cooldownTimer = 0.0f;
     m_hasTriggered = false;
 
-  // Weather specific state
+    // Weather specific state
     m_weatherType = WeatherType::Clear;
     m_customType.clear();
     m_params = WeatherParams{};
 
-  // Conditions
+    // Conditions
     m_conditions.clear();
 
-  // Time-based parameters
+    // Time-based parameters
     m_startHour = -1.0f;
     m_endHour = -1.0f;
     m_season = -1;
 
-  // Geographic parameters
+    // Geographic parameters
     m_regionName.clear();
     m_useGeographicBounds = false;
     m_boundX1 = m_boundY1 = m_boundX2 = m_boundY2 = 0.0f;
 
-  // Transition state
+    // Transition state
     m_inTransition = false;
     m_transitionProgress = 0.0f;
 }
 
 void WeatherEvent::clean() {
-  // Clean up any resources specific to this weather event
+    // Clean up any resources specific to this weather event
     m_conditions.clear();
 
-  // Reset time conditions
+    // Reset time conditions
     m_startHour = -1.0f;
     m_endHour = -1.0f;
     m_season = -1;
 
-  // Reset location conditions
+    // Reset location conditions
     m_regionName.clear();
     m_useGeographicBounds = false;
 
-  // Reset state
+    // Reset state
     m_inTransition = false;
     m_transitionProgress = 0.0f;
     m_hasTriggered = false;
@@ -323,56 +323,56 @@ void WeatherEvent::setWeatherType(const std::string& weatherTypeStr) {
 }
 
 bool WeatherEvent::checkConditions() {
-  // If there are no conditions at all, return false
+    // If there are no conditions at all, return false
     if (m_conditions.empty() && !m_useGeographicBounds && m_startHour < 0 &&
         m_season < 0 && m_regionName.empty()) {
         return false;
     }
 
-  // Check custom conditions first - if any fail, return false
+    // Check custom conditions first - if any fail, return false
     if (!std::all_of(m_conditions.begin(), m_conditions.end(),
             [](const auto& condition) { return condition(); })) {
         return false;
     }
 
-  // If we only have custom conditions (no environmental ones),
-  // and all have passed (we've reached this point), return true
+    // If we only have custom conditions (no environmental ones),
+    // and all have passed (we've reached this point), return true
     if (!m_conditions.empty() && !m_useGeographicBounds && m_startHour < 0 &&
         m_season < 0 && m_regionName.empty()) {
         return true;
     }
 
-  // Check time condition
+    // Check time condition
     if (m_startHour >= 0 && !checkTimeCondition()) {
         return false;
     }
 
-  // Check location condition
+    // Check location condition
     if ((m_useGeographicBounds || !m_regionName.empty()) &&
         !checkLocationCondition()) {
         return false;
     }
 
-  // Check season if specified
+    // Check season if specified
     if (m_season >= 0) {
         try {
             if (m_season != getCurrentSeason()) {
                 return false;
             }
         } catch (...) {
-      // If GameTime is not available, ignore season check
+            // If GameTime is not available, ignore season check
             EVENT_WARN("GameTime not available for season check - ignoring season condition");
         }
     }
 
-  // All conditions passed
+    // All conditions passed
     return true;
 }
 
 void WeatherEvent::addTimeCondition(std::function<bool()> condition) {
-  // Clear existing conditions first to make tests more predictable
+    // Clear existing conditions first to make tests more predictable
     m_conditions.clear();
-  // Add the new condition
+    // Add the new condition
     m_conditions.push_back(std::move(condition));
 }
 
@@ -381,8 +381,8 @@ void WeatherEvent::addLocationCondition(std::function<bool()> condition) {
 }
 
 void WeatherEvent::addRandomChanceCondition(float probability) {
-  // Create a condition that returns true with the given probability
-  // Use thread-safe random generation instead of static variables
+    // Create a condition that returns true with the given probability
+    // Use thread-safe random generation instead of static variables
     m_conditions.push_back([probability]() {
         thread_local std::random_device rd;
         thread_local std::mt19937 gen(rd());
@@ -411,11 +411,11 @@ void WeatherEvent::setBoundingArea(float x1, float y1, float x2, float y2) {
 }
 
 void WeatherEvent::forceWeatherChange(WeatherType, float) {
-  // This would typically call into a game system that manages weather
+    // This would typically call into a game system that manages weather
 }
 
 void WeatherEvent::forceWeatherChange(const std::string&, float) {
-  // This would typically call into a game system that manages weather
+    // This would typically call into a game system that manages weather
 }
 
 bool WeatherEvent::checkTimeCondition() const {
@@ -426,10 +426,10 @@ bool WeatherEvent::checkTimeCondition() const {
     float currentHour = getCurrentGameTime();
 
     if (m_startHour <= m_endHour) {
-    // Simple case: start time is before end time
+        // Simple case: start time is before end time
         return currentHour >= m_startHour && currentHour <= m_endHour;
     } else {
-    // Wrapping case: start time is after end time (spans midnight)
+        // Wrapping case: start time is after end time (spans midnight)
         return currentHour >= m_startHour || currentHour <= m_endHour;
     }
 }
@@ -439,12 +439,12 @@ bool WeatherEvent::checkLocationCondition() const {
         return true; // No location restriction
     }
 
-  // Enforce region gating if specified
+    // Enforce region gating if specified
     if (!m_regionName.empty() && !isInRegion()) {
         return false;
     }
 
-  // Then check bounding area if enabled
+    // Then check bounding area if enabled
     if (m_useGeographicBounds && !isInBounds()) {
         return false;
     }
@@ -453,13 +453,13 @@ bool WeatherEvent::checkLocationCondition() const {
 }
 
 bool WeatherEvent::isInRegion() const {
-  // No region restriction
+    // No region restriction
     if (m_regionName.empty()) {
         return true;
     }
 
-  // If WorldManager is unavailable, permit by default to avoid false negatives
-  // in contexts where the world isn't loaded yet
+    // If WorldManager is unavailable, permit by default to avoid false negatives
+    // in contexts where the world isn't loaded yet
     bool worldAvailable = false;
     try {
         const auto& worldManager = WorldManager::Instance();
@@ -471,7 +471,7 @@ bool WeatherEvent::isInRegion() const {
         return true;
     }
 
-  // Determine player tile position (current helper returns 0,0)
+    // Determine player tile position (current helper returns 0,0)
     Vector2D playerPos = getPlayerPosition();
     int tx = static_cast<int>(playerPos.getX());
     int ty = static_cast<int>(playerPos.getY());
@@ -481,7 +481,7 @@ bool WeatherEvent::isInRegion() const {
         return false;
     }
 
-  // Map biome to canonical uppercase string
+    // Map biome to canonical uppercase string
     auto biomeToString = [](VoidLight::Biome b) -> std::string {
         switch (b) {
             case VoidLight::Biome::DESERT: return "DESERT";
@@ -497,7 +497,7 @@ bool WeatherEvent::isInRegion() const {
 
     std::string currentRegion = biomeToString(*tileBiome);
 
-  // Normalize m_regionName to uppercase for comparison
+    // Normalize m_regionName to uppercase for comparison
     std::string desired = m_regionName;
     std::transform(desired.begin(), desired.end(), desired.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
 

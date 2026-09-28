@@ -437,11 +437,11 @@ struct EventManagerScalingFixture {
 
         // Test progression: realistic event counts for actual games
         std::vector<std::tuple<int, int, int>> testCases = {
-            {3, 1, 10},         // Small game: 3 types, 1 handler, 10 events
-            {3, 2, 25},         // Medium game: 3 types, 2 handlers each, 25 events
-            {3, 3, 50},         // Large game: 3 types, 3 handlers each, 50 events
-            {3, 4, 100},        // Very large game: 3 types, 4 handlers each, 100 events
-            {3, 5, 200},        // Massive game: 3 types, 5 handlers each, 200 events
+            {3, 1, 10}, // Small game: 3 types, 1 handler, 10 events
+            {3, 2, 25}, // Medium game: 3 types, 2 handlers each, 25 events
+            {3, 3, 50}, // Large game: 3 types, 3 handlers each, 50 events
+            {3, 4, 100}, // Very large game: 3 types, 4 handlers each, 100 events
+            {3, 5, 200}, // Massive game: 3 types, 5 handlers each, 200 events
         };
 
         for (const auto& [numTypes, numHandlers, numEvents] : testCases) {
@@ -618,7 +618,7 @@ BOOST_AUTO_TEST_CASE(ConcurrencyTest) {
     // FIXED: Keep total at 4000 events, divide by thread count
     const int totalEvents = 4000;
     int eventsPerThread = totalEvents / numThreads;
-    fixture.runConcurrencyTest(numThreads, eventsPerThread);  // 4000 total events
+    fixture.runConcurrencyTest(numThreads, eventsPerThread); // 4000 total events
 }
 
 // High-scale threading verification test
@@ -638,7 +638,7 @@ BOOST_AUTO_TEST_CASE(ThreadingVerificationTest) {
 
     // Register handlers that do some actual work (simulate real game handlers)
     auto handlerCallCount = std::make_shared<std::atomic<int>>(0);
-    volatile int workSink = 0;  // Prevent optimization
+    volatile int workSink = 0; // Prevent optimization
 
     // Heavy handler that simulates real work (e.g., updating UI, game state)
     auto heavyHandler = [handlerCallCount, &workSink](const EventData&) {
@@ -773,7 +773,7 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
               << std::setw(15) << "Verdict" << std::endl;
     std::cout << std::string(73, '-') << std::endl;
 
-    const int numHandlersPerType = 3;  // Realistic handler count
+    const int numHandlersPerType = 3; // Realistic handler count
     const int numMeasurements = 3;
 
     auto runBenchmark = [&](int numTriggers, bool useThreading) -> double {

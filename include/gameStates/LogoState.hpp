@@ -39,7 +39,7 @@ private:
 
     float m_stateTimer{0.0f};
 
-  // Cached layout calculations (computed once in enter())
+    // Cached layout calculations (computed once in enter())
     int m_windowWidth{0};
     int m_windowHeight{0};
     int m_bannerSize{0};
@@ -47,7 +47,7 @@ private:
     int m_sdlSize{0};
     int m_cppSize{0};
 
-  // Cached positions
+    // Cached positions
     int m_bannerX{0}, m_bannerY{0};
     int m_engineX{0}, m_engineY{0};
     int m_cppX{0}, m_cppY{0};
@@ -56,9 +56,9 @@ private:
     int m_subtitleY{0};
     int m_versionY{0};
 
-  // Scene logo sprite batches. Store the owning texture handle and materialize
-  // the raw SDL_GPUTexture* only at the GPU submission boundary in
-  // renderGPUScene().
+    // Scene logo sprite batches. Store the owning texture handle and materialize
+    // the raw SDL_GPUTexture* only at the GPU submission boundary in
+    // renderGPUScene().
     struct GPUDrawCommand {
         std::shared_ptr<VoidLight::GPUTexture> texture{};
         uint32_t vertexOffset{0};
@@ -66,8 +66,8 @@ private:
     };
     std::vector<GPUDrawCommand> m_drawCommands;
 
-  // UI text batches are submitted by GPURenderer during the swapchain pass.
+    // UI text batches are submitted by GPURenderer during the swapchain pass.
     std::vector<VoidLight::UITextDrawBatch> m_textDrawBatches;
 };
 
-#endif  // LOGO_STATE_HPP
+#endif // LOGO_STATE_HPP

@@ -25,7 +25,7 @@ class GPUSceneRecorder;
 
 class GamePlayState : public GameState {
 public:
-    GamePlayState();  // Defined in .cpp for unique_ptr with forward-declared types
+    GamePlayState(); // Defined in .cpp for unique_ptr with forward-declared types
     ~GamePlayState() override;
     bool enter() override;
     void update(float deltaTime) override;
@@ -52,75 +52,75 @@ private:
     std::shared_ptr<Player> mp_Player{nullptr}; // Player object
     bool m_initialized{false}; // Flag to track if state is already initialized (for pause/resume)
 
-  // Camera for world navigation and player following
+    // Camera for world navigation and player following
     std::unique_ptr<VoidLight::Camera> m_camera{nullptr};
 
-  // GPU scene recorder for coordinated scene-data recording
+    // GPU scene recorder for coordinated scene-data recording
     std::unique_ptr<VoidLight::GPUSceneRecorder> m_gpuSceneRecorder{nullptr};
 
-  // Track whether world has been loaded (prevents re-entering LoadingState)
+    // Track whether world has been loaded (prevents re-entering LoadingState)
     bool m_worldLoaded{false};
 
-  // Track if we need to transition to loading screen on first update
+    // Track if we need to transition to loading screen on first update
     bool m_needsLoading{false};
 
-  // FPS counter (toggled with F2)
+    // FPS counter (toggled with F2)
     bool m_fpsVisible{false};
     std::string m_fpsBuffer{};
     float m_lastDisplayedFPS{-1.0f};
 
-  // --- Controllers (owned by ControllerRegistry) ---
+    // --- Controllers (owned by ControllerRegistry) ---
     ControllerRegistry m_controllers;
 
-  // Data-driven NPC/projectile rendering (direct members, not registry-owned).
-  // Intentional asymmetry: these are NOT IUpdatable and are driven explicitly from
-  // update()/render() because their per-frame work needs ordering the registry's
-  // updateAll() does not provide. ResourceRenderController lives in m_controllers
-  // instead because it requires a camera argument (resourceCtrl->update(dt, *m_camera))
-  // and so cannot participate in the parameterless updateAll() pass either.
+    // Data-driven NPC/projectile rendering (direct members, not registry-owned).
+    // Intentional asymmetry: these are NOT IUpdatable and are driven explicitly from
+    // update()/render() because their per-frame work needs ordering the registry's
+    // updateAll() does not provide. ResourceRenderController lives in m_controllers
+    // instead because it requires a camera argument (resourceCtrl->update(dt, *m_camera))
+    // and so cannot participate in the parameterless updateAll() pass either.
     NPCRenderController m_npcRenderCtrl{};
     ProjectileRenderController m_projectileRenderCtrl{};
 
-  // --- Time UI display buffer ---
-    std::string m_statusBuffer{};  // Reusable buffer for status text (zero allocation)
-    bool m_statusBarDirty{true};   // Flag to rebuild status bar only when events fire
+    // --- Time UI display buffer ---
+    std::string m_statusBuffer{}; // Reusable buffer for status text (zero allocation)
+    bool m_statusBarDirty{true}; // Flag to rebuild status bar only when events fire
 
-  // Inventory UI methods
+    // Inventory UI methods
     void spawnStarterGearChest();
     bool tryOpenNearbyMerchantTrade();
     void toggleInventoryDisplay();
     void registerEventHandlers();
     void unregisterEventHandlers();
 
-  // Camera management methods
+    // Camera management methods
     void initializeCamera();
     void updateCamera(float deltaTime);
-  // Camera auto-manages world bounds; no state-level setup needed
+    // Camera auto-manages world bounds; no state-level setup needed
 
-  // Reusable buffer for nearby entity queries (avoids per-interaction allocation)
+    // Reusable buffer for nearby entity queries (avoids per-interaction allocation)
     std::vector<EntityHandle> m_nearbyHandlesBuffer;
 
     EventManager::HandlerToken m_dayNightEventToken;
     bool m_dayNightSubscribed{false};
 
-  // Day/night event handlers and update
+    // Day/night event handlers and update
     void onTimePeriodChanged(const EventData& data);
-  // Ambient particle effects (dust motes, fireflies) - managed per time period
+    // Ambient particle effects (dust motes, fireflies) - managed per time period
     void updateAmbientParticles(TimePeriod period);
     void stopAmbientParticles();
     void onWeatherChanged(const EventData& data);
     uint32_t m_ambientDustEffectId{0};
     uint32_t m_ambientFireflyEffectId{0};
-    TimePeriod m_lastAmbientPeriod{TimePeriod::Day};  // Track to avoid particle thrashing
-    bool m_ambientParticlesActive{false};  // Whether ambient particles are currently running
+    TimePeriod m_lastAmbientPeriod{TimePeriod::Day}; // Track to avoid particle thrashing
+    bool m_ambientParticlesActive{false}; // Whether ambient particles are currently running
     EventManager::HandlerToken m_weatherEventToken;
     bool m_weatherSubscribed{false};
     EventManager::HandlerToken m_harvestEventToken;
     bool m_harvestSubscribed{false};
     EventManager::HandlerToken m_stanceChangedEventToken;
     bool m_stanceChangedSubscribed{false};
-    TimePeriod m_currentTimePeriod{TimePeriod::Day};  // Track current period for weather changes
-    WeatherType m_lastWeatherType{WeatherType::Clear};  // Track to avoid redundant weather processing
+    TimePeriod m_currentTimePeriod{TimePeriod::Day}; // Track current period for weather changes
+    WeatherType m_lastWeatherType{WeatherType::Clear}; // Track to avoid redundant weather processing
 };
 
 #endif // GAME_PLAY_STATE_HPP

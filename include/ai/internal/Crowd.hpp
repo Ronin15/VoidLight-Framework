@@ -8,7 +8,7 @@
 #define AI_INTERNAL_CROWD_HPP
 
 #include "core/Logger.hpp"
-#include "entities/EntityHandle.hpp"  // EntityID
+#include "entities/EntityHandle.hpp" // EntityID
 #include "utils/Vector2D.hpp"
 #include <cstdint>
 #include <vector>
@@ -46,7 +46,7 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center, f
 void InvalidateSpatialCache(uint64_t frameNumber);
 
 VOIDLIGHT_STATS_ONLY(
-// Crowd query stats (aggregated across worker threads)
+    // Crowd query stats (aggregated across worker threads)
     CrowdStats GetCrowdStats();
     void ResetCrowdStats();)
 

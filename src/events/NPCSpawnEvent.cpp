@@ -19,8 +19,8 @@
 
 // Helper function to get player position
 static Vector2D getPlayerPosition() {
-  // Try to get player position from current game state
-  // For now, return center of screen as placeholder
+    // Try to get player position from current game state
+    // For now, return center of screen as placeholder
     return Vector2D(GameEngine::Instance().getWidthInPixels() / 2.0f,
         GameEngine::Instance().getHeightInPixels() / 2.0f);
 }
@@ -34,7 +34,7 @@ NPCSpawnEvent::NPCSpawnEvent(const std::string& name,
     const std::string& npcType)
     : m_name(name) {
 
-  // Initialize with basic parameters
+    // Initialize with basic parameters
     m_spawnParams.npcType = npcType;
     m_spawnParams.count = 1;
     m_spawnParams.spawnRadius = 0.0f;
@@ -45,75 +45,75 @@ NPCSpawnEvent::NPCSpawnEvent(const std::string& name,
     : m_name(name), m_spawnParams(params) {}
 
 void NPCSpawnEvent::update() {
-  // Skip update if not active or on cooldown
+    // Skip update if not active or on cooldown
     if (!m_active || m_onCooldown) {
         return;
     }
 
-  // Clean up any dead entities from the tracked list
+    // Clean up any dead entities from the tracked list
     cleanDeadEntities();
 
-  // Check respawn conditions if applicable
+    // Check respawn conditions if applicable
     if (m_canRespawn && areAllEntitiesDead()) {
         m_respawnTimer += 0.016f; // Assume ~60fps for now
     }
 
-  // Update frame counter for frequency control
+    // Update frame counter for frequency control
     m_frameCounter++;
     if (m_updateFrequency > 1 && m_frameCounter % m_updateFrequency != 0) {
         return;
     }
 
-  // Reset frame counter to prevent overflow
+    // Reset frame counter to prevent overflow
     if (m_frameCounter >= 10000) {
         m_frameCounter = 0;
     }
 }
 
 void NPCSpawnEvent::execute() {
-  // Check spawn count limits
+    // Check spawn count limits
     if (m_maxSpawnCount >= 0 && m_currentSpawnCount >= m_maxSpawnCount) {
         EVENT_INFO(std::format("NPCSpawnEvent: {} - Max spawn count reached ({})",
             m_name, m_maxSpawnCount));
         return;
     }
 
-  // Mark as triggered
+    // Mark as triggered
     m_hasTriggered = true;
 
-  // Start cooldown if set
+    // Start cooldown if set
     if (m_cooldownTime > 0.0f) {
         m_onCooldown = true;
         m_cooldownTimer = 0.0f;
     }
 
-  // Determine spawn position from spawn points or default
+    // Determine spawn position from spawn points or default
     float spawnX = 0.0f, spawnY = 0.0f;
     if (!m_spawnPoints.empty()) {
         spawnX = m_spawnPoints[0].getX();
         spawnY = m_spawnPoints[0].getY();
     }
 
-  // Actually spawn the NPCs
+    // Actually spawn the NPCs
     auto handles = spawnNPCs(m_spawnParams, spawnX, spawnY);
 
-  // Update counters
+    // Update counters
     m_currentSpawnCount += static_cast<int>(handles.size());
     m_totalSpawned += static_cast<int>(handles.size());
 
-  // Reset respawn timer
+    // Reset respawn timer
     m_respawnTimer = 0.0f;
 }
 
 void NPCSpawnEvent::reset() {
-  // Core event flags/timers
+    // Core event flags/timers
     m_onCooldown = false;
     m_cooldownTimer = 0.0f;
     m_hasTriggered = false;
     m_respawnTimer = 0.0f;
 
-  // Clear dynamic state accumulated during dispatch/use
-  // Important when this event is reused from an EventPool
+    // Clear dynamic state accumulated during dispatch/use
+    // Important when this event is reused from an EventPool
     m_spawnPoints.clear();
     m_areaType = SpawnAreaType::Points;
     m_areaX1 = m_areaY1 = m_areaX2 = m_areaY2 = 0.0f;
@@ -127,28 +127,28 @@ void NPCSpawnEvent::reset() {
     m_canRespawn = false;
     m_respawnTime = 0.0f;
 
-  // Clear any transient conditions
+    // Clear any transient conditions
     m_conditions.clear();
 
-  // Reset area constraints
+    // Reset area constraints
     m_constrainToArea = false;
     m_constraintMinX = m_constraintMinY = m_constraintMaxX = m_constraintMaxY =
         0.0f;
 
-  // Clear spawned-entity tracking and counters
+    // Clear spawned-entity tracking and counters
     clearSpawnedEntities();
     m_currentSpawnCount = 0;
     m_totalSpawned = 0;
 }
 
 void NPCSpawnEvent::clean() {
-  // Clean up any resources specific to this spawn event
+    // Clean up any resources specific to this spawn event
     m_conditions.clear();
     clearSpawnedEntities();
 }
 
 void NPCSpawnEvent::onMessage(const std::string& message) {
-  // NPCSpawnEvent now serves as event coordination demonstration
+    // NPCSpawnEvent now serves as event coordination demonstration
     EVENT_INFO(std::format("NPCSpawnEvent received message: {}", message));
     EVENT_INFO("  - Event demonstrates messaging system coordination");
     EVENT_INFO("  - Actual entity management handled by GameStates");
@@ -166,7 +166,7 @@ void NPCSpawnEvent::addSpawnPoint(const Vector2D& point) {
 void NPCSpawnEvent::clearSpawnPoints() {
     m_spawnPoints.clear();
 
-  // Default to circle around origin if no points defined
+    // Default to circle around origin if no points defined
     if (m_areaType == SpawnAreaType::Points) {
         m_areaType = SpawnAreaType::Circle;
         m_areaCenter = Vector2D(0, 0);
@@ -189,43 +189,43 @@ void NPCSpawnEvent::setSpawnArea(float centerX, float centerY, float radius) {
 }
 
 bool NPCSpawnEvent::checkConditions() {
-  // For demo events, only allow triggering through explicit spawn requests
-  // This prevents auto-triggering while still allowing manual triggers
+    // For demo events, only allow triggering through explicit spawn requests
+    // This prevents auto-triggering while still allowing manual triggers
     if (m_name.starts_with("demo_")) {
         return false; // Demo events should only respond to onMessage, not
-                  // auto-trigger
+        // auto-trigger
     }
 
-  // If this is a one-time event that has already triggered, return false
+    // If this is a one-time event that has already triggered, return false
     if (m_oneTimeEvent && m_hasTriggered) {
         return false;
     }
 
-  // If respawn is enabled, check if all entities are dead and respawn timer
-  // elapsed
+    // If respawn is enabled, check if all entities are dead and respawn timer
+    // elapsed
     if (m_canRespawn) {
         if (!areAllEntitiesDead() || !checkRespawnCondition()) {
             return false;
         }
     }
 
-  // Check max spawn count
+    // Check max spawn count
     if (m_maxSpawnCount >= 0 && m_currentSpawnCount >= m_maxSpawnCount) {
         return false;
     }
 
-  // Check all custom conditions using STL algorithm
+    // Check all custom conditions using STL algorithm
     if (!std::all_of(m_conditions.begin(), m_conditions.end(),
             [](const auto& condition) { return condition(); })) {
         return false;
     }
 
-  // Check proximity if enabled
+    // Check proximity if enabled
     if (m_useProximityTrigger && !checkProximityCondition()) {
         return false;
     }
 
-  // Check time of day if enabled
+    // Check time of day if enabled
     if (m_useTimeOfDay && !checkTimeCondition()) {
         return false;
     }
@@ -269,12 +269,12 @@ void NPCSpawnEvent::clearSpawnedEntities() {
 }
 
 bool NPCSpawnEvent::areAllEntitiesDead() const {
-  // If no entities were spawned, consider them "all dead"
+    // If no entities were spawned, consider them "all dead"
     if (m_spawnedEntities.empty()) {
         return true;
     }
 
-  // Check if all spawned entities are gone using STL algorithm
+    // Check if all spawned entities are gone using STL algorithm
     return std::none_of(
         m_spawnedEntities.begin(), m_spawnedEntities.end(),
         [](const auto& weakEntity) { return weakEntity.lock() != nullptr; });
@@ -293,7 +293,7 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
     spawnedHandles.reserve(static_cast<size_t>(params.count));
     auto& edm = EntityDataManager::Instance();
 
-  // Check if we're spawning random class and/or race
+    // Check if we're spawning random class and/or race
     bool isRandomClass = params.npcType.empty() || params.npcType == "Random";
     bool isRandomRace = params.npcRace == "Random";
 
@@ -316,7 +316,7 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
         }
     }
 
-  // Get world bounds if worldWide spawning is enabled
+    // Get world bounds if worldWide spawning is enabled
     float worldMinX = 0.0f, worldMinY = 0.0f, worldMaxX = 0.0f, worldMaxY = 0.0f;
     bool useWorldBounds = params.worldWide;
     if (useWorldBounds) {
@@ -334,7 +334,7 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
         useWorldBounds ? "across world" : std::format("at ({}, {})", x, y)));
 
     try {
-    // Pre-create distributions for world-wide spawning (outside loop for efficiency)
+        // Pre-create distributions for world-wide spawning (outside loop for efficiency)
         std::uniform_real_distribution<float> worldXDist(worldMinX, worldMaxX);
         std::uniform_real_distribution<float> worldYDist(worldMinY, worldMaxY);
 
@@ -342,10 +342,10 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
             Vector2D spawnPos;
 
             if (useWorldBounds) {
-        // World-wide spawning: random position within world bounds
+                // World-wide spawning: random position within world bounds
                 spawnPos = Vector2D(worldXDist(gen), worldYDist(gen));
             } else {
-        // Original behavior: offset from provided position
+                // Original behavior: offset from provided position
                 std::uniform_real_distribution<float> offsetDist(-params.spawnRadius,
                     params.spawnRadius);
                 float offsetX = params.spawnRadius > 0 ? offsetDist(gen) : 0.0f;
@@ -353,7 +353,7 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
                 spawnPos = Vector2D(x + offsetX, y + offsetY);
             }
 
-      // Adjust to navigable position
+            // Adjust to navigable position
             if (params.useAreaRect) {
                 spawnPos = PathfinderManager::Instance().adjustSpawnToNavigableInRect(
                     spawnPos, VoidLight::TILE_SIZE, VoidLight::TILE_SIZE, 150.0f,
@@ -368,7 +368,7 @@ NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
                     spawnPos, VoidLight::TILE_SIZE, VoidLight::TILE_SIZE, 150.0f);
             }
 
-      // Determine race and class for this NPC
+            // Determine race and class for this NPC
             std::string race;
             std::string npcClass;
 
@@ -416,19 +416,19 @@ bool NPCSpawnEvent::checkProximityCondition() const {
     Vector2D playerPos = getPlayerPosition();
     Vector2D centerPos;
 
-  // Determine center position based on spawn area type
+    // Determine center position based on spawn area type
     switch (m_areaType) {
         case SpawnAreaType::Points:
             if (m_spawnPoints.empty()) {
                 centerPos = Vector2D(0.0f, 0.0f);
             } else {
-      // Use the first point as reference
+                // Use the first point as reference
                 centerPos = m_spawnPoints[0];
             }
             break;
 
         case SpawnAreaType::Rectangle:
-    // Use center of rectangle
+            // Use center of rectangle
             centerPos.setX((m_areaX1 + m_areaX2) / 2.0f);
             centerPos.setY((m_areaY1 + m_areaY2) / 2.0f);
             break;
@@ -438,7 +438,7 @@ bool NPCSpawnEvent::checkProximityCondition() const {
             break;
     }
 
-  // Calculate distance from player to center
+    // Calculate distance from player to center
     float dx = playerPos.getX() - centerPos.getX();
     float dy = playerPos.getY() - centerPos.getY();
     float distSquared = dx * dx + dy * dy;
@@ -451,14 +451,14 @@ bool NPCSpawnEvent::checkTimeCondition() const {
         return true; // No time restriction
     }
 
-  // Get the current game time from the GameTime system
+    // Get the current game time from the GameTime system
     float currentHour = GameTimeManager::Instance().getGameHour();
 
     if (m_startHour <= m_endHour) {
-    // Simple case: start time is before end time
+        // Simple case: start time is before end time
         return currentHour >= m_startHour && currentHour <= m_endHour;
     } else {
-    // Wrapping case: start time is after end time (spans midnight)
+        // Wrapping case: start time is after end time (spans midnight)
         return currentHour >= m_startHour || currentHour <= m_endHour;
     }
 }
@@ -475,14 +475,14 @@ Vector2D NPCSpawnEvent::getRandomSpawnPosition() const {
     switch (m_areaType) {
         case SpawnAreaType::Points:
             if (m_spawnPoints.empty()) {
-      // Fallback to origin if no points defined
+                // Fallback to origin if no points defined
                 return Vector2D(0.0f, 0.0f);
             } else {
-      // Pick a random point from the list
+                // Pick a random point from the list
                 std::uniform_int_distribution<size_t> dist(0, m_spawnPoints.size() - 1);
                 size_t index = dist(gen);
 
-      // If spawn radius is set, randomize around the point
+                // If spawn radius is set, randomize around the point
                 if (m_spawnParams.spawnRadius > 0.0f) {
                     return getRandomPointAroundPoint(m_spawnPoints[index],
                         m_spawnParams.spawnRadius);
@@ -498,7 +498,7 @@ Vector2D NPCSpawnEvent::getRandomSpawnPosition() const {
             return getRandomPointInCircle();
     }
 
-  // Fallback
+    // Fallback
     return Vector2D(0, 0);
 }
 
@@ -510,7 +510,7 @@ Vector2D NPCSpawnEvent::getRandomPointInRectangle() const {
 }
 
 Vector2D NPCSpawnEvent::getRandomPointInCircle() const {
-  // Generate random angle and distance from center
+    // Generate random angle and distance from center
     std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * 3.14159f);
     std::uniform_real_distribution<float> distRadius(0.0f, m_areaRadius);
 
@@ -525,7 +525,7 @@ Vector2D NPCSpawnEvent::getRandomPointInCircle() const {
 
 Vector2D NPCSpawnEvent::getRandomPointAroundPoint(const Vector2D& center,
     float radius) const {
-  // Generate random angle and distance from center
+    // Generate random angle and distance from center
     std::uniform_real_distribution<float> distAngle(0.0f, 2.0f * 3.14159f);
     std::uniform_real_distribution<float> distRadius(0.0f, radius);
 
@@ -539,19 +539,19 @@ Vector2D NPCSpawnEvent::getRandomPointAroundPoint(const Vector2D& center,
 }
 
 Vector2D NPCSpawnEvent::getPlayerPosition() const {
-  // This would typically get the player position from the game state
-  // For now, use the helper function
+    // This would typically get the player position from the game state
+    // For now, use the helper function
     return ::getPlayerPosition();
 }
 
 EntityPtr NPCSpawnEvent::spawnSingleNPC(const Vector2D&) {
-  // Base implementation returns nullptr - override in test mocks for actual
-  // spawning
+    // Base implementation returns nullptr - override in test mocks for actual
+    // spawning
     return nullptr;
 }
 
 void NPCSpawnEvent::cleanDeadEntities() {
-  // NPCSpawnEvent no longer tracks entities - just reset counters
+    // NPCSpawnEvent no longer tracks entities - just reset counters
     m_spawnedEntities.clear();
-  // Keep m_currentSpawnCount for demonstration purposes
+    // Keep m_currentSpawnCount for demonstration purposes
 }

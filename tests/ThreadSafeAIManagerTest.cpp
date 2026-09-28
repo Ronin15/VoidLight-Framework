@@ -36,7 +36,7 @@ public:
 
     [[nodiscard]] EntityHandle getHandle() const { return m_handle; }
 
-  // Check if entity was processed (position or velocity changed)
+    // Check if entity was processed (position or velocity changed)
     bool wasUpdated() const {
         if (!m_handle.isValid()) return false;
 
@@ -158,7 +158,7 @@ BOOST_AUTO_TEST_CASE(BasicEntityRegistration) {
     AIManager::Instance().assignBehavior(handle, "Wander");
     BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
 
-  // Clean up
+    // Clean up
     destroyTestEntity(handle);
 }
 
@@ -188,7 +188,7 @@ BOOST_AUTO_TEST_CASE(MainThreadBehaviorAssignmentBeforeThreadedUpdate) {
     primeAIThreadingDecision(allHandles.size());
     updateAI(0.016f, Vector2D(200.0f, 200.0f));
 
-  // Clean up
+    // Clean up
     destroyTestEntities(allHandles);
 }
 
@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(MultipleEntityUpdate) {
     std::vector<std::shared_ptr<TestNPC>> npcs;
     std::vector<EntityHandle> handles;
 
-  // Create and register entities
+    // Create and register entities
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         Vector2D pos(i * 20.0f, i * 20.0f);
         auto npc = TestNPC::create(pos);
@@ -208,15 +208,15 @@ BOOST_AUTO_TEST_CASE(MultipleEntityUpdate) {
         handles.push_back(handle);
     }
 
-  // Run AI update
+    // Run AI update
     updateAI(0.016f);
 
-  // Check that entities have behaviors assigned
+    // Check that entities have behaviors assigned
     for (const auto& handle : handles) {
         BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
     }
 
-  // Clean up
+    // Clean up
     destroyTestEntities(handles);
 }
 
@@ -225,7 +225,7 @@ BOOST_AUTO_TEST_CASE(MainThreadBehaviorReassignmentBeforeUpdate) {
     std::vector<std::shared_ptr<TestNPC>> npcs;
     std::vector<EntityHandle> handles;
 
-  // Create entities
+    // Create entities
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         Vector2D pos(i * 20.0f, i * 20.0f);
         auto npc = TestNPC::create(pos);
@@ -244,12 +244,12 @@ BOOST_AUTO_TEST_CASE(MainThreadBehaviorReassignmentBeforeUpdate) {
     primeAIThreadingDecision(handles.size());
     updateAI(0.016f, Vector2D(200.0f, 200.0f));
 
-  // Verify all entities have behaviors
+    // Verify all entities have behaviors
     for (const auto& handle : handles) {
         BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
     }
 
-  // Clean up
+    // Clean up
     destroyTestEntities(handles);
 }
 
@@ -261,12 +261,12 @@ BOOST_AUTO_TEST_CASE(MessageSending) {
     AIManager::Instance().assignBehavior(handle, "Idle");
     const size_t initialUpdates = AIManager::Instance().getBehaviorUpdateCount();
 
-  // Legacy string message API was removed - message system now uses BehaviorMessage queue
+    // Legacy string message API was removed - message system now uses BehaviorMessage queue
 
-  // Update to process messages
+    // Update to process messages
     updateAI(0.016f);
 
-  // Clean up
+    // Clean up
     destroyTestEntity(handle);
 
     BOOST_CHECK_GT(AIManager::Instance().getBehaviorUpdateCount(), initialUpdates);
@@ -282,10 +282,10 @@ BOOST_AUTO_TEST_CASE(RapidAssignmentUnassignment) {
         BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
 
         AIManager::Instance().unassignBehavior(handle);
-    // After unassign, hasBehavior should return false
+        // After unassign, hasBehavior should return false
     }
 
-  // Clean up
+    // Clean up
     destroyTestEntity(handle);
 }
 
@@ -297,17 +297,17 @@ BOOST_AUTO_TEST_CASE(GlobalPause) {
 
     AIManager::Instance().assignBehavior(handle, "Wander");
 
-  // Pause and update - entity should not be updated
+    // Pause and update - entity should not be updated
     AIManager::Instance().setGlobalPause(true);
     BOOST_CHECK(AIManager::Instance().isGloballyPaused());
 
     updateAI(0.016f);
 
-  // Resume
+    // Resume
     AIManager::Instance().setGlobalPause(false);
     BOOST_CHECK(!AIManager::Instance().isGloballyPaused());
 
-  // Clean up
+    // Clean up
     destroyTestEntity(handle);
 }
 
@@ -329,15 +329,15 @@ BOOST_AUTO_TEST_CASE(DifferentBehaviorTypes) {
         handles.push_back(handle);
     }
 
-  // Update all
+    // Update all
     updateAI(0.016f);
 
-  // Verify behaviors still assigned
+    // Verify behaviors still assigned
     for (const auto& handle : handles) {
         BOOST_CHECK(AIManager::Instance().hasBehavior(handle));
     }
 
-  // Clean up
+    // Clean up
     destroyTestEntities(handles);
 }
 
@@ -347,7 +347,7 @@ BOOST_AUTO_TEST_CASE(HighEntityCount) {
     std::vector<std::shared_ptr<TestNPC>> npcs;
     std::vector<EntityHandle> handles;
 
-  // Create many entities
+    // Create many entities
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         float x = static_cast<float>(i % 50) * 20.0f;
         float y = static_cast<float>(i / 50) * 20.0f;
@@ -360,12 +360,12 @@ BOOST_AUTO_TEST_CASE(HighEntityCount) {
 
     primeAIThreadingDecision(handles.size());
 
-  // Update enough frames to exercise the learned WorkerBudget threaded path.
+    // Update enough frames to exercise the learned WorkerBudget threaded path.
     for (int frame = 0; frame < 12; ++frame) {
         updateAI(0.016f);
     }
 
-  // Verify no crashes and entities have behaviors
+    // Verify no crashes and entities have behaviors
     int assignedCount = 0;
     for (const auto& handle : handles) {
         if (AIManager::Instance().hasBehavior(handle)) {
@@ -375,7 +375,7 @@ BOOST_AUTO_TEST_CASE(HighEntityCount) {
 
     BOOST_CHECK_EQUAL(assignedCount, NUM_ENTITIES);
 
-  // Clean up
+    // Clean up
     destroyTestEntities(handles);
 }
 

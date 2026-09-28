@@ -6,7 +6,7 @@
 #ifndef ENTITY_HPP
 #define ENTITY_HPP
 
-#include "entities/EntityHandle.hpp"  // EntityKind, SimulationTier, EntityHandle
+#include "entities/EntityHandle.hpp" // EntityKind, SimulationTier, EntityHandle
 #include "utils/UniqueID.hpp"
 #include "utils/Vector2D.hpp"
 #include <SDL3/SDL.h>
@@ -38,10 +38,10 @@ using EntityWeakPtr = std::weak_ptr<Entity>;
  * Unified struct used by NPC and Player for named animations
  */
 struct AnimationConfig {
-    int row;           // Sprite sheet row (0-based)
-    int frameCount;    // Number of frames in animation
-    int speed;         // Milliseconds per frame
-    bool loop{true};   // Whether animation loops (default true, Player uses false for attacks)
+    int row; // Sprite sheet row (0-based)
+    int frameCount; // Number of frames in animation
+    int speed; // Milliseconds per frame
+    bool loop{true}; // Whether animation loops (default true, Player uses false for attacks)
 
     AnimationConfig() : row(0), frameCount(1), speed(100), loop(true) {}
     AnimationConfig(int r, int fc, int s)
@@ -61,12 +61,12 @@ struct AnimationConfig {
  */
 class Entity : public std::enable_shared_from_this<Entity> {
 public:
-  /**
+    /**
    * @brief Construct a new Entity object and assign it a unique ID.
    */
     Entity() : m_id(VoidLight::UniqueID::generate()) {}
 
-  /**
+    /**
    * @brief Virtual destructor
    *
    * IMPORTANT: Do NOT call shared_from_this() or any method that uses it
@@ -76,7 +76,7 @@ public:
    */
     virtual ~Entity() = default;
 
-  /**
+    /**
    * @brief Update the entity's state.
    *
    * This method is called once per frame for each entity. It should
@@ -87,7 +87,7 @@ public:
    */
     virtual void update(float deltaTime) = 0;
 
-  /**
+    /**
    * @brief Clean up the entity's resources before destruction
    *
    * This method is called explicitly before an entity is destroyed.
@@ -98,7 +98,7 @@ public:
    */
     virtual void clean() = 0;
 
-  /**
+    /**
    * @brief Get the entity's kind for fast type checking without RTTI
    *
    * Use this instead of dynamic_cast in hot paths (e.g., collision filtering,
@@ -108,7 +108,7 @@ public:
    */
     [[nodiscard]] virtual EntityKind getKind() const = 0;
 
-  /**
+    /**
    * @brief Helper to get a shared_ptr to this object
    *
    * IMPORTANT: Never call this in constructors or destructors!
@@ -120,7 +120,7 @@ public:
    */
     EntityPtr shared_this() { return shared_from_this(); }
 
-  /**
+    /**
    * @brief Helper to get a weak_ptr to this object
    *
    * IMPORTANT: Never call this in constructors or destructors!
@@ -132,34 +132,34 @@ public:
    */
     EntityWeakPtr weak_this() { return shared_from_this(); }
 
-  // Accessor methods
+    // Accessor methods
     EntityID getID() const { return m_id; }
 
-  /**
+    /**
    * @brief Get entity handle for EntityDataManager access
    * @return EntityHandle (may be invalid if not registered)
    */
     [[nodiscard]] EntityHandle getHandle() const { return m_handle; }
 
-  /**
+    /**
    * @brief Check if entity is registered with EntityDataManager
    */
     [[nodiscard]] bool hasValidHandle() const { return m_handle.isValid(); }
 
-  /**
+    /**
    * @brief Check if entity is in Active simulation tier (should be rendered/updated)
    * @return true if in Active tier, false if Background/Hibernated or no valid handle
    */
     [[nodiscard]] bool isInActiveTier() const;
 
-  // Transform accessors - redirect to EntityDataManager when handle is valid
-  // Phase 4: EntityDataManager is the single source of truth for transforms
+    // Transform accessors - redirect to EntityDataManager when handle is valid
+    // Phase 4: EntityDataManager is the single source of truth for transforms
     Vector2D getPosition() const;
     Vector2D getPreviousPosition() const;
     Vector2D getVelocity() const;
     Vector2D getAcceleration() const;
 
-  /**
+    /**
    * @brief Get interpolated position for smooth rendering.
    *
    * Uses linear interpolation between previous and current position
@@ -173,7 +173,7 @@ public:
    */
     Vector2D getInterpolatedPosition(float alpha) const;
 
-  /**
+    /**
    * @brief Store current position for interpolation before updating.
    *
    * Call this at the START of update() before modifying position.
@@ -181,7 +181,7 @@ public:
    */
     void storePositionForInterpolation();
 
-  /**
+    /**
    * @brief Update position from movement (preserves interpolation state).
    *
    * Use this for smooth movement updates (physics integration, AI movement).
@@ -200,9 +200,9 @@ public:
     float getAnimationAccumulator() const { return m_animationAccumulator; }
     const std::string& getCurrentAnimationName() const { return m_currentAnimationName; }
 
-  // Setter methods - redirect to EntityDataManager when handle is valid
+    // Setter methods - redirect to EntityDataManager when handle is valid
 
-  /**
+    /**
    * @brief Set entity position directly (teleport).
    *
    * This resets both current and previous position to prevent
@@ -211,13 +211,13 @@ public:
    */
     virtual void setPosition(const Vector2D& position);
 
-  /**
+    /**
    * @brief Set entity velocity.
    * Redirects to EntityDataManager when handle is valid.
    */
     virtual void setVelocity(const Vector2D& velocity);
 
-  /**
+    /**
    * @brief Set entity acceleration.
    * Redirects to EntityDataManager when handle is valid.
    */
@@ -231,11 +231,11 @@ public:
     virtual void setAnimSpeed(int speed) { m_animSpeed = speed; }
     virtual void setAnimationAccumulator(float acc) { m_animationAccumulator = acc; }
 
-  // Used for rendering flipping - to be implemented by derived classes
+    // Used for rendering flipping - to be implemented by derived classes
     virtual void setFlip(SDL_FlipMode) {}
     virtual SDL_FlipMode getFlip() const { return SDL_FLIP_NONE; }
 
-  /**
+    /**
    * @brief Play a named animation from the animation map
    *
    * Looks up the animation config by name and sets the sprite sheet row,
@@ -246,12 +246,12 @@ public:
    */
     virtual void playAnimation(const std::string& animName);
 
-  // Note: initializeAnimationMap() is implemented separately in Player and NPC
-  // as a private non-virtual method called from their respective constructors.
-  // No base class virtual is needed since it's never called polymorphically.
+    // Note: initializeAnimationMap() is implemented separately in Player and NPC
+    // as a private non-virtual method called from their respective constructors.
+    // No base class virtual is needed since it's never called polymorphically.
 
 protected:
-  /**
+    /**
    * @brief Set the entity handle after registration with EntityDataManager
    *
    * Called by derived classes after they register with EntityDataManager.
@@ -259,7 +259,7 @@ protected:
    */
     void setHandle(EntityHandle handle) { m_handle = handle; }
 
-  /**
+    /**
    * @brief Register entity with EntityDataManager (for test entities)
    *
    * Convenience method for derived classes (especially test entities) that need to
@@ -275,7 +275,7 @@ protected:
         float halfHeight = 16.0f, EntityKind kind = EntityKind::NPC);
 
     const EntityID m_id;
-    EntityHandle m_handle;  // Handle for EntityDataManager access (Phase 4)
+    EntityHandle m_handle; // Handle for EntityDataManager access (Phase 4)
 
     int m_width{0};
     int m_height{0};
@@ -285,12 +285,12 @@ protected:
     int m_numFrames{0};
     int m_animSpeed{0};
 
-  // Animation abstraction - maps animation names to sprite sheet configurations
+    // Animation abstraction - maps animation names to sprite sheet configurations
     std::unordered_map<std::string, AnimationConfig> m_animationMap;
-    bool m_animationLoops{true};  // Whether current animation loops or plays once
+    bool m_animationLoops{true}; // Whether current animation loops or plays once
 
-  // Animation timing - uses deltaTime accumulation for synchronized timing with physics
-    std::string m_currentAnimationName;      // Current animation name (for skip-if-same optimization)
-    float m_animationAccumulator{0.0f};      // Accumulates deltaTime for frame advancement
+    // Animation timing - uses deltaTime accumulation for synchronized timing with physics
+    std::string m_currentAnimationName; // Current animation name (for skip-if-same optimization)
+    float m_animationAccumulator{0.0f}; // Accumulates deltaTime for frame advancement
 };
-#endif  // ENTITY_HPP
+#endif // ENTITY_HPP

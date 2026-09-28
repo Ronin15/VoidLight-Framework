@@ -24,7 +24,7 @@ namespace VoidLight {
 class GPUVertexPool {
 public:
     static constexpr size_t FRAME_COUNT = 3;
-    static constexpr size_t DEFAULT_VERTEX_CAPACITY = 150000;  // 4K + zoom headroom
+    static constexpr size_t DEFAULT_VERTEX_CAPACITY = 150000; // 4K + zoom headroom
 
     GPUVertexPool() = default;
     ~GPUVertexPool() = default;

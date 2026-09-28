@@ -18,13 +18,13 @@ class Entity;
  * @brief Event types for camera-related changes
  */
 enum class CameraEventType {
-    CameraMoved,        // Camera position changed
-    CameraModeChanged,  // Camera mode changed (Free, Follow, Fixed)
-    CameraTargetChanged,// Camera target entity changed
+    CameraMoved, // Camera position changed
+    CameraModeChanged, // Camera mode changed (Free, Follow, Fixed)
+    CameraTargetChanged, // Camera target entity changed
     CameraShakeStarted, // Camera shake effect started
-    CameraShakeEnded,   // Camera shake effect ended
-    ViewportChanged,    // Camera viewport size changed
-    CameraZoomChanged   // Camera zoom level changed
+    CameraShakeEnded, // Camera shake effect ended
+    ViewportChanged, // Camera viewport size changed
+    CameraZoomChanged // Camera zoom level changed
 };
 
 /**

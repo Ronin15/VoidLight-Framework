@@ -115,7 +115,7 @@ struct BehaviorTestFixture {
         BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
 
         // Initialize managers in proper order (matches CollisionPathfindingIntegrationTests)
-        BOOST_REQUIRE(GameTimeManager::Instance().init());  // Required for combat timing in behaviors
+        BOOST_REQUIRE(GameTimeManager::Instance().init()); // Required for combat timing in behaviors
         BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(WorldManager::Instance().init());
@@ -349,7 +349,7 @@ BOOST_AUTO_TEST_CASE(TestWanderBehavior) {
 BOOST_AUTO_TEST_CASE(TestChaseBehavior) {
     // Test: NPC chases an opponent who attacked them (memory-based targeting)
     auto chaser = TestNPC::create(200.0f, 200.0f);
-    auto opponent = TestNPC::create(500.0f, 500.0f);  // The attacker
+    auto opponent = TestNPC::create(500.0f, 500.0f); // The attacker
 
     auto& edm = EntityDataManager::Instance();
     EntityHandle chaserHandle = chaser->getHandle();
@@ -390,8 +390,8 @@ BOOST_AUTO_TEST_CASE(TestChaseBehavior) {
         if (chaserIdx != SIZE_MAX) {
             edm.initMemoryData(chaserIdx);
             auto& memData = edm.getMemoryData(chaserIdx);
-            memData.lastAttacker = opponentHandle;  // Opponent attacked us - chase them!
-            memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+            memData.lastAttacker = opponentHandle; // Opponent attacked us - chase them!
+            memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
             memData.setValid(true);
         }
     }
@@ -453,7 +453,7 @@ BOOST_AUTO_TEST_CASE(TestKnockbackOverridesChaseMovement) {
     edm.initMemoryData(targetIdx);
     auto& memData = edm.getMemoryData(targetIdx);
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+    memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
     memData.setValid(true);
 
     updateAI(0.016f, attacker->getPosition());
@@ -1515,7 +1515,7 @@ BOOST_AUTO_TEST_CASE(TestCivilianAttacked_NearbyGuardGoesHostile) {
 
     // Civilian and guard close together
     auto civilian = TestNPC::create(200.0f, 200.0f);
-    auto guard = TestNPC::create(250.0f, 250.0f);  // ~70 units away
+    auto guard = TestNPC::create(250.0f, 250.0f); // ~70 units away
 
     EntityHandle civilianHandle = civilian->getHandle();
     EntityHandle guardHandle = guard->getHandle();
@@ -1552,7 +1552,7 @@ BOOST_AUTO_TEST_CASE(TestGuardCallsForHelp_NearbyGuardGoesHostile) {
 
     // Two guards near each other (within 250 radius)
     auto guard1 = TestNPC::create(300.0f, 300.0f);
-    auto guard2 = TestNPC::create(350.0f, 350.0f);  // ~70 units away
+    auto guard2 = TestNPC::create(350.0f, 350.0f); // ~70 units away
 
     EntityHandle guard1Handle = guard1->getHandle();
     EntityHandle guard2Handle = guard2->getHandle();
@@ -1806,7 +1806,7 @@ BOOST_AUTO_TEST_CASE(TestGuardToAttackTransitionStatePreserved) {
 
     // Start with Guard behavior
     AIManager::Instance().assignBehavior(handle, "Guard");
-    updateAI(0.016f);  // Allow behavior to initialize
+    updateAI(0.016f); // Allow behavior to initialize
 
     size_t edmIdx = edm.getIndex(handle);
     BOOST_REQUIRE_NE(edmIdx, SIZE_MAX);
@@ -1819,7 +1819,7 @@ BOOST_AUTO_TEST_CASE(TestGuardToAttackTransitionStatePreserved) {
 
     // Now transition to Attack behavior
     AIManager::Instance().assignBehavior(handle, "Attack");
-    updateAI(0.016f);  // Process the transition
+    updateAI(0.016f); // Process the transition
 
     // CRITICAL CHECK: Attack behavior state must be valid after transition
     BOOST_CHECK(edm.hasBehaviorData(edmIdx));
@@ -1852,7 +1852,7 @@ BOOST_AUTO_TEST_CASE(TestAllBehaviorTransitionsPreserveState) {
         {"Chase", "Attack"},
         {"Attack", "Flee"},
         {"Flee", "Guard"},
-        {"Guard", "Attack"},  // Critical transition
+        {"Guard", "Attack"}, // Critical transition
         {"Attack", "Follow"},
         {"Follow", "Idle"}};
 
@@ -1907,7 +1907,7 @@ BOOST_AUTO_TEST_CASE(TestRapidBehaviorTransitionsStability) {
     for (int cycle = 0; cycle < 3; ++cycle) {
         for (const auto& behavior : behaviors) {
             AIManager::Instance().assignBehavior(handle, behavior);
-            updateAI(0.016f);  // Single update between transitions
+            updateAI(0.016f); // Single update between transitions
 
             size_t edmIdx = edm.getIndex(handle);
             BOOST_REQUIRE_NE(edmIdx, SIZE_MAX);
@@ -2149,9 +2149,9 @@ BOOST_AUTO_TEST_CASE(TestWanderSwitchesToFleeWhenAttacked) {
     // Simulate being attacked - set lastCombatTime=0 to indicate "just happened"
     // (delta-based semantics: starts at 0, increments each frame via emotional decay)
     auto& memData = edm.getMemoryData(entityIdx);
-    memData.setValid(true);  // Mark memory as valid so isUnderRecentAttack() can read it
+    memData.setValid(true); // Mark memory as valid so isUnderRecentAttack() can read it
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+    memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
 
     // Run behavior updates
     for (int i = 0; i < 5; ++i) {
@@ -2192,9 +2192,9 @@ BOOST_AUTO_TEST_CASE(TestIdleSwitchesToFleeWhenAttacked) {
     // Simulate being attacked - set lastCombatTime=0 to indicate "just happened"
     // (delta-based semantics: starts at 0, increments each frame via emotional decay)
     auto& memData = edm.getMemoryData(entityIdx);
-    memData.setValid(true);  // Mark memory as valid so isUnderRecentAttack() can read it
+    memData.setValid(true); // Mark memory as valid so isUnderRecentAttack() can read it
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+    memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
 
     // Run behavior updates
     for (int i = 0; i < 5; ++i) {
@@ -2521,7 +2521,7 @@ BOOST_AUTO_TEST_CASE(TestFollowRaiseAlertCowardFlees) {
     aiMgr.assignBehavior(entityHandle, "Follow");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.2f;  // Cowardly (< 0.4 threshold)
+    memData.personality.bravery = 0.2f; // Cowardly (< 0.4 threshold)
     updateAI(0.016f);
 
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
@@ -2544,7 +2544,7 @@ BOOST_AUTO_TEST_CASE(TestFollowRaiseAlertBraveStands) {
     aiMgr.assignBehavior(entityHandle, "Follow");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.7f;  // Brave (>= 0.4 threshold)
+    memData.personality.bravery = 0.7f; // Brave (>= 0.4 threshold)
     updateAI(0.016f);
 
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
@@ -2651,8 +2651,8 @@ BOOST_AUTO_TEST_CASE(TestGuardFleesWhenOverwhelmed) {
     aiMgr.assignBehavior(entityHandle, "Guard");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.1f;  // Very cowardly (0.1 + 0.1 bonus = 0.2 < 0.3)
-    memData.emotions.fear = 0.8f;        // High fear (> 0.7)
+    memData.personality.bravery = 0.1f; // Very cowardly (0.1 + 0.1 bonus = 0.2 < 0.3)
+    memData.emotions.fear = 0.8f; // High fear (> 0.7)
 
     // Force HOSTILE alert so the flee check triggers
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
@@ -2676,8 +2676,8 @@ BOOST_AUTO_TEST_CASE(TestGuardStandsWhenBrave) {
     aiMgr.assignBehavior(entityHandle, "Guard");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.5f;  // Brave (0.5 + 0.1 bonus = 0.6 >= 0.3)
-    memData.emotions.fear = 0.8f;        // High fear
+    memData.personality.bravery = 0.5f; // Brave (0.5 + 0.1 bonus = 0.6 >= 0.3)
+    memData.emotions.fear = 0.8f; // High fear
 
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
     updateAI(0.016f);

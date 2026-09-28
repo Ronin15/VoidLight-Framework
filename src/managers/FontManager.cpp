@@ -14,18 +14,18 @@
 
 // Font sizing configuration constants
 namespace {
-  // Universal height-based font sizing (all platforms)
+// Universal height-based font sizing (all platforms)
 constexpr float HEIGHT_RATIO = 90.0f;
 
-  // Font size ratios for different text types
-constexpr float UI_FONT_RATIO = 0.875f;     // 87.5% of base
-constexpr float TITLE_FONT_RATIO = 1.5f;    // 150% of base
-constexpr float TOOLTIP_FONT_RATIO = 0.6f;  // 60% of base
+// Font size ratios for different text types
+constexpr float UI_FONT_RATIO = 0.875f; // 87.5% of base
+constexpr float TITLE_FONT_RATIO = 1.5f; // 150% of base
+constexpr float TOOLTIP_FONT_RATIO = 0.6f; // 60% of base
 
-  // Font size bounds for edge case protection
+// Font size bounds for edge case protection
 constexpr int MAX_FONT_SIZE = 100;
 
-  // Minimum readable sizes for specific font types (ensure good readability)
+// Minimum readable sizes for specific font types (ensure good readability)
 constexpr int MIN_BASE_FONT_SIZE = 18;
 constexpr int MIN_UI_FONT_SIZE = 16;
 constexpr int MIN_TITLE_FONT_SIZE = 24;
@@ -37,7 +37,7 @@ bool FontManager::init() {
         FONT_CRITICAL(std::format("Font system initialization failed: {}", SDL_GetError()));
         return false;
     } else {
-    // Reset shutdown flag when reinitializing
+        // Reset shutdown flag when reinitializing
         m_isShutdown = false;
         FONT_INFO("Font system initialized with quality hints!");
         return true;
@@ -153,7 +153,7 @@ std::vector<std::string> FontManager::wrapTextToLines(const std::string& text,
         return wrappedLines;
     }
 
-  // First split by explicit newlines
+    // First split by explicit newlines
     std::vector<std::string> lines;
     std::string currentLine;
     for (char c : text) {
@@ -168,7 +168,7 @@ std::vector<std::string> FontManager::wrapTextToLines(const std::string& text,
         lines.push_back(currentLine);
     }
 
-  // Now wrap each line if it's too wide
+    // Now wrap each line if it's too wide
     for (const auto& line : lines) {
         if (line.empty()) {
             wrappedLines.push_back("");
@@ -195,13 +195,13 @@ std::vector<std::string> FontManager::wrapTextToLines(const std::string& text,
                         wrappedLines.push_back(workingLine);
                         workingLine = word;
                     } else {
-            // Single word is too long, just add it
+                        // Single word is too long, just add it
                         wrappedLines.push_back(word);
                         workingLine.clear();
                     }
                 }
             } else {
-        // If measurement fails, just add the word
+                // If measurement fails, just add the word
                 workingLine = testLine;
             }
         }
@@ -237,7 +237,7 @@ bool FontManager::measureTextWithWrapping(const std::string& text, const std::st
     int const lineHeight = TTF_GetFontHeight(font);
     int maxLineWidth = 0;
 
-  // Measure each wrapped line to get the actual maximum width
+    // Measure each wrapped line to get the actual maximum width
     for (const auto& line : wrappedLines) {
         int lineWidth = 0;
         if (!line.empty()) {
@@ -257,7 +257,7 @@ bool FontManager::isFontLoaded(const std::string& fontID) const {
 }
 
 void FontManager::clearFont(const std::string& fontID) {
-  // No need to manually call TTF_CloseFont as the unique_ptr will handle it
+    // No need to manually call TTF_CloseFont as the unique_ptr will handle it
     if (m_fontMap.erase(fontID) > 0) {
         FONT_INFO(std::format("Cleared font: {}", fontID));
     }
@@ -271,17 +271,17 @@ bool FontManager::reloadFontsForDisplay(const std::string& fontPath, int windowW
 
     FONT_INFO("Reloading fonts for display change...");
 
-  // Clear existing fonts and caches without shutting down the manager
+    // Clear existing fonts and caches without shutting down the manager
     m_fontMap.clear();
     destroyGPUTextObjects();
     m_fontsLoaded.store(false, std::memory_order_release);
 
-  // Reset display tracking
+    // Reset display tracking
     m_lastWindowWidth = 0;
     m_lastWindowHeight = 0;
     m_lastFontPath.clear();
 
-  // Reload fonts with new dimensions and DPI scale
+    // Reload fonts with new dimensions and DPI scale
     return loadFontsForDisplay(fontPath, windowWidth, windowHeight, dpiScale);
 }
 
@@ -296,7 +296,7 @@ bool FontManager::measureText(const std::string& text, const std::string& fontID
         return false;
     }
 
-  // Use TTF_GetStringSize for accurate text measurement
+    // Use TTF_GetStringSize for accurate text measurement
     return TTF_GetStringSize(fontIt->second.get(), text.c_str(), 0, width, height);
 }
 
@@ -331,7 +331,7 @@ bool FontManager::measureMultilineText(const std::string& text, const std::strin
         return false;
     }
 
-  // Split text by newlines
+    // Split text by newlines
     std::vector<std::string> lines;
     std::string currentLine;
     for (char c : text) {
@@ -356,7 +356,7 @@ bool FontManager::measureMultilineText(const std::string& text, const std::strin
     int const lineHeight = TTF_GetFontHeight(font);
     int maxLineWidth = 0;
 
-  // Measure each line
+    // Measure each line
     for (const auto& line : lines) {
         int lineWidth = 0;
         if (!line.empty()) {
@@ -368,7 +368,7 @@ bool FontManager::measureMultilineText(const std::string& text, const std::strin
         maxLineWidth = std::max(maxLineWidth, lineWidth);
     }
 
-  // Apply max width constraint if specified
+    // Apply max width constraint if specified
     if (maxWidth > 0 && maxLineWidth > maxWidth) {
         maxLineWidth = maxWidth;
     }
@@ -384,16 +384,16 @@ void FontManager::clean() {
         return;
     }
 
-  // Mark the manager as shutting down before freeing resources
+    // Mark the manager as shutting down before freeing resources
     m_isShutdown = true;
 
-  // No need to manually close fonts as the unique_ptr will handle it
+    // No need to manually close fonts as the unique_ptr will handle it
     FONT_INFO(std::format("{} fonts freed", m_fontMap.size()));
     m_fontMap.clear();
     m_fontsLoaded.store(false, std::memory_order_release);
     destroyGPUTextObjects();
 
-  // Clear display tracking
+    // Clear display tracking
     m_lastWindowWidth = 0;
     m_lastWindowHeight = 0;
     m_lastFontPath.clear();
@@ -495,7 +495,7 @@ bool FontManager::prepareGPUText(const std::string& key, const std::string& text
         return false;
     }
 
-  // Keep text objects at local origin; callers translate returned draw data.
+    // Keep text objects at local origin; callers translate returned draw data.
     if (!TTF_SetTextPosition(entry.text, 0, 0)) {
         FONT_ERROR(std::format("Failed to reset GPU text origin for '{}': {}",
             key, SDL_GetError()));

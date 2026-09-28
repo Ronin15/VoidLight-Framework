@@ -164,8 +164,8 @@ void JsonValue::writeToStream(std::ostream& stream, int depth) const {
             if (isIntegerNumber() && std::floor(num) == num && std::abs(num) < 1e15) {
                 stream << static_cast<long long>(num);
             } else {
-      // Real number: emit the shortest round-trip form, but guarantee a
-      // fractional/exponent marker so it re-parses as a real, not an integer.
+                // Real number: emit the shortest round-trip form, but guarantee a
+                // fractional/exponent marker so it re-parses as a real, not an integer.
                 std::string s = std::format("{}", num);
                 stream << s;
                 if (s.find_first_of(".eEnN") == std::string::npos) {
@@ -287,7 +287,7 @@ std::vector<JsonToken> JsonReader::tokenize() {
         size_t tokenLine = m_line;
         size_t tokenColumn = m_column;
 
-    // PERFORMANCE OPTIMIZATION: Use static strings to avoid allocations
+        // PERFORMANCE OPTIMIZATION: Use static strings to avoid allocations
         static const std::string LEFT_BRACE("{");
         static const std::string RIGHT_BRACE("}");
         static const std::string LEFT_BRACKET("[");
@@ -336,7 +336,7 @@ std::vector<JsonToken> JsonReader::tokenize() {
                 break;
             }
             case 't':
-      // PERFORMANCE: Check characters directly instead of substr
+                // PERFORMANCE: Check characters directly instead of substr
                 if (m_position + 4 <= m_input.length() &&
                     m_input[m_position + 1] == 'r' && m_input[m_position + 2] == 'u' &&
                     m_input[m_position + 3] == 'e') {
@@ -350,7 +350,7 @@ std::vector<JsonToken> JsonReader::tokenize() {
                 }
                 break;
             case 'f':
-      // PERFORMANCE: Check characters directly instead of substr
+                // PERFORMANCE: Check characters directly instead of substr
                 if (m_position + 5 <= m_input.length() &&
                     m_input[m_position + 1] == 'a' && m_input[m_position + 2] == 'l' &&
                     m_input[m_position + 3] == 's' && m_input[m_position + 4] == 'e') {
@@ -364,7 +364,7 @@ std::vector<JsonToken> JsonReader::tokenize() {
                 }
                 break;
             case 'n':
-      // PERFORMANCE: Check characters directly instead of substr
+                // PERFORMANCE: Check characters directly instead of substr
                 if (m_position + 4 <= m_input.length() &&
                     m_input[m_position + 1] == 'u' && m_input[m_position + 2] == 'l' &&
                     m_input[m_position + 3] == 'l') {
@@ -483,7 +483,7 @@ std::string JsonReader::parseString() {
                     if (!m_lastError.empty())
                         return "";
 
-        // Combine UTF-16 surrogate pairs into a single supplementary code point
+                    // Combine UTF-16 surrogate pairs into a single supplementary code point
                     if (codepoint >= 0xD800 && codepoint <= 0xDBFF) {
                         if (peek() != '\\' || peek(1) != 'u') {
                             setError("Invalid surrogate pair: expected low surrogate");
@@ -501,7 +501,7 @@ std::string JsonReader::parseString() {
                         codepoint = 0x10000 + ((codepoint - 0xD800) << 10) + (low - 0xDC00);
                     }
 
-        // Convert Unicode codepoint to UTF-8
+                    // Convert Unicode codepoint to UTF-8
                     if (codepoint <= 0x7F) {
                         result += static_cast<char>(codepoint);
                     } else if (codepoint <= 0x7FF) {
@@ -539,12 +539,12 @@ std::string JsonReader::parseString() {
 std::string JsonReader::parseNumber() {
     std::string result;
 
-  // Optional minus
+    // Optional minus
     if (peek() == '-') {
         result += advance();
     }
 
-  // Integer part
+    // Integer part
     if (peek() == '0') {
         result += advance();
     } else if (isDigit(peek())) {
@@ -556,7 +556,7 @@ std::string JsonReader::parseNumber() {
         return "";
     }
 
-  // Optional fractional part
+    // Optional fractional part
     if (peek() == '.') {
         result += advance();
         if (!isDigit(peek())) {
@@ -568,7 +568,7 @@ std::string JsonReader::parseNumber() {
         }
     }
 
-  // Optional exponent part
+    // Optional exponent part
     if (peek() == 'e' || peek() == 'E') {
         result += advance();
         if (peek() == '+' || peek() == '-') {
@@ -653,8 +653,8 @@ JsonValue JsonReader::Parser::parseValue() {
             std::string numStr = advance().value;
             try {
                 double num = std::stod(numStr);
-      // An integer literal has no fractional or exponent part; preserve that
-      // distinction so consumers can tell `1` from `1.0`.
+                // An integer literal has no fractional or exponent part; preserve that
+                // distinction so consumers can tell `1` from `1.0`.
                 const bool isInteger =
                     numStr.find_first_of(".eE") == std::string::npos;
                 return JsonValue::makeNumber(num, isInteger);

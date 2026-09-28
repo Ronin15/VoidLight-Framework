@@ -220,8 +220,8 @@ private:
      * Caches both interfaces to avoid repeated dynamic_cast
      */
     struct UpdatableEntry {
-        IUpdatable* updatable;    // For calling update()
-        ControllerBase* base;     // For checking isSuspended()
+        IUpdatable* updatable; // For calling update()
+        ControllerBase* base; // For checking isSuspended()
     };
 
     std::vector<std::unique_ptr<ControllerBase>> m_controllers;

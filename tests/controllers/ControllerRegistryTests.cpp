@@ -323,7 +323,7 @@ BOOST_FIXTURE_TEST_CASE(TestSuspendAll, RegistryFixture) {
 
     registry.suspendAll();
 
-    BOOST_CHECK(!ctrl1.isSubscribed());  // Default suspend unsubscribes
+    BOOST_CHECK(!ctrl1.isSubscribed()); // Default suspend unsubscribes
     BOOST_CHECK(!ctrl2.isSubscribed());
     BOOST_CHECK(ctrl1.isSuspended());
     BOOST_CHECK(ctrl2.isSuspended());
@@ -341,7 +341,7 @@ BOOST_FIXTURE_TEST_CASE(TestResumeAll, RegistryFixture) {
 
     registry.resumeAll();
 
-    BOOST_CHECK(ctrl1.isSubscribed());  // Default resume re-subscribes
+    BOOST_CHECK(ctrl1.isSubscribed()); // Default resume re-subscribes
     BOOST_CHECK(ctrl2.isSubscribed());
     BOOST_CHECK(!ctrl1.isSuspended());
     BOOST_CHECK(!ctrl2.isSuspended());
@@ -383,7 +383,7 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllCallsUpdatables, RegistryFixture) {
 }
 
 BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsNonUpdatables, RegistryFixture) {
-    registry.add<MockEventController>();  // Not IUpdatable
+    registry.add<MockEventController>(); // Not IUpdatable
     auto& updatable = registry.add<MockUpdatableController>();
 
     registry.subscribeAll();
@@ -425,14 +425,14 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsSuspended, RegistryFixture) {
     BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1);
 
     registry.suspendAll();
-    registry.updateAll(0.016f);  // Should be skipped
+    registry.updateAll(0.016f); // Should be skipped
 
-    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1);  // Still 1
+    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1); // Still 1
 
     registry.resumeAll();
     registry.updateAll(0.016f);
 
-    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 2);  // Now 2
+    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 2); // Now 2
 }
 
 BOOST_AUTO_TEST_SUITE_END()

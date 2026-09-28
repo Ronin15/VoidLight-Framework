@@ -75,24 +75,24 @@ private:
 // Global fixture to initialize ThreadSystem and EntityDataManager once for all tests
 struct GlobalEventTestFixture {
     GlobalEventTestFixture() {
-    // Initialize ThreadSystem once for all tests
+        // Initialize ThreadSystem once for all tests
         if (!VoidLight::ThreadSystem::Exists()) {
             if (!VoidLight::ThreadSystem::Instance().init()) {
                 throw std::runtime_error("ThreadSystem::init() failed");
             }
         }
-    // Initialize EntityDataManager (required for Player entity creation in DOD)
+        // Initialize EntityDataManager (required for Player entity creation in DOD)
         if (!EntityDataManager::Instance().init()) {
             throw std::runtime_error("EntityDataManager::init() failed");
         }
-    // Ensure benchmark mode is disabled for regular tests
+        // Ensure benchmark mode is disabled for regular tests
         VOIDLIGHT_DISABLE_BENCHMARK_MODE();
     }
 
     ~GlobalEventTestFixture() {
-    // Clean up EntityDataManager
+        // Clean up EntityDataManager
         EntityDataManager::Instance().clean();
-    // Clean up ThreadSystem at the very end
+        // Clean up ThreadSystem at the very end
         if (VoidLight::ThreadSystem::Exists()) {
             VoidLight::ThreadSystem::Instance().clean();
         }
@@ -103,16 +103,16 @@ BOOST_GLOBAL_FIXTURE(GlobalEventTestFixture);
 
 struct EventManagerFixture {
     EventManagerFixture() {
-    // Don't reinitialize ThreadSystem - use the global one
+        // Don't reinitialize ThreadSystem - use the global one
         EventManagerTestAccess::reset();
     }
 
     ~EventManagerFixture() {
-    // Disable threading before cleanup
+        // Disable threading before cleanup
         VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(false);)
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
-    // Clean up the EventManager
+        // Clean up the EventManager
         EventManager::Instance().clean();
     }
 };
@@ -136,7 +136,7 @@ BOOST_FIXTURE_TEST_CASE(DispatchEvent_WithHandler_CallsHandler, EventManagerFixt
             if (data.isActive()) handlerCalled.store(true);
         });
 
-  // Dispatch the event
+    // Dispatch the event
     BOOST_CHECK(EventManager::Instance().dispatchEvent(mockEvent));
     EventManager::Instance().update(); // Process deferred events
 
@@ -153,10 +153,10 @@ BOOST_FIXTURE_TEST_CASE(DispatchEvent_ImmediateMode_CallsHandlerSynchronously, E
             if (data.isActive()) handlerCalled.store(true);
         });
 
-  // Dispatch with Immediate mode - should call handler before returning
+    // Dispatch with Immediate mode - should call handler before returning
     EventManager::Instance().dispatchEvent(mockEvent, EventManager::DispatchMode::Immediate);
 
-  // Handler should already be called (no update() needed)
+    // Handler should already be called (no update() needed)
     BOOST_CHECK(handlerCalled.load());
     EventManager::Instance().removeHandler(token);
 }
@@ -170,16 +170,16 @@ BOOST_FIXTURE_TEST_CASE(DispatchEvent_DeferredMode_RequiresUpdate, EventManagerF
             if (data.isActive()) handlerCalled.store(true);
         });
 
-  // Dispatch with Deferred mode (default)
+    // Dispatch with Deferred mode (default)
     EventManager::Instance().dispatchEvent(mockEvent, EventManager::DispatchMode::Deferred);
 
-  // Handler should NOT be called yet
+    // Handler should NOT be called yet
     BOOST_CHECK(!handlerCalled.load());
 
-  // Now process deferred events
+    // Now process deferred events
     EventManager::Instance().update();
 
-  // Handler should now be called
+    // Handler should now be called
     BOOST_CHECK(handlerCalled.load());
     EventManager::Instance().removeHandler(token);
 }
@@ -195,15 +195,15 @@ BOOST_FIXTURE_TEST_CASE(RegisterHandlerWithToken_CanBeRemoved, EventManagerFixtu
             if (data.isActive()) ++callCount;
         });
 
-  // Dispatch once - handler should be called
+    // Dispatch once - handler should be called
     auto e1 = std::make_shared<MockEvent>("Test1");
     EventManager::Instance().dispatchEvent(e1, EventManager::DispatchMode::Immediate);
     BOOST_CHECK_EQUAL(callCount.load(), 1);
 
-  // Remove handler
+    // Remove handler
     EventManager::Instance().removeHandler(token);
 
-  // Dispatch again - handler should NOT be called
+    // Dispatch again - handler should NOT be called
     auto e2 = std::make_shared<MockEvent>("Test2");
     EventManager::Instance().dispatchEvent(e2, EventManager::DispatchMode::Immediate);
     BOOST_CHECK_EQUAL(callCount.load(), 1); // Still 1, not incremented
@@ -336,40 +336,40 @@ BOOST_FIXTURE_TEST_CASE(DeferredDispatch_MultipleTriggers_ProcessedInUpdate, Eve
         EventTypeId::NPCSpawn,
         [&handlerCallCount](const EventData&) { handlerCallCount.fetch_add(1); });
 
-  // Trigger multiple events with deferred dispatch (default)
+    // Trigger multiple events with deferred dispatch (default)
     BOOST_CHECK(EventManager::Instance().changeWeather("Storm", 3.0f));
     BOOST_CHECK(EventManager::Instance().spawnNPC("Boss", 500.0f, 300.0f));
 
-  // Events should be queued, handlers not called yet
+    // Events should be queued, handlers not called yet
     BOOST_CHECK_EQUAL(handlerCallCount.load(), 0);
 
-  // Process deferred events
+    // Process deferred events
     EventManager::Instance().update();
 
-  // Allow processing time
+    // Allow processing time
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  // Handlers should now be called
+    // Handlers should now be called
     BOOST_CHECK_GE(handlerCallCount.load(), 2);
 }
 
 
 BOOST_FIXTURE_TEST_CASE(GetPendingEventCount_TracksQueuedEvents, EventManagerFixture) {
-  // Initially should have no pending events
+    // Initially should have no pending events
     BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 0);
 
-  // Queue some deferred events
+    // Queue some deferred events
     EventManager::Instance().changeWeather("Rainy", 1.0f);
     EventManager::Instance().spawnNPC("Guard", 0, 0);
 
-  // Should have pending events
+    // Should have pending events
     BOOST_CHECK_GT(EventManager::Instance().getPendingEventCount(), 0);
 
-  // Process events
+    // Process events
     EventManager::Instance().update();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  // Should have no pending events after processing
+    // Should have no pending events after processing
     BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 0);
 }
 
@@ -438,7 +438,7 @@ BOOST_FIXTURE_TEST_CASE(ThreadSafety_ConcurrentTriggers, EventManagerFixture) {
 
     VoidLight::ResourceHandle testResource(1, 1);
 
-  // Trigger multiple resource change events concurrently with immediate dispatch
+    // Trigger multiple resource change events concurrently with immediate dispatch
     std::vector<std::thread> threads;
     for (int i = 0; i < 5; ++i) {
         threads.emplace_back([i, &testResource]() {
@@ -448,15 +448,15 @@ BOOST_FIXTURE_TEST_CASE(ThreadSafety_ConcurrentTriggers, EventManagerFixture) {
         });
     }
 
-  // Wait for all threads
+    // Wait for all threads
     for (auto& thread : threads) {
         thread.join();
     }
 
-  // Allow a bit of time for any async operations to complete
+    // Allow a bit of time for any async operations to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
-  // Verify all events were processed
+    // Verify all events were processed
     BOOST_CHECK_GE(handlerCallCount.load(), 5);
 }
 
@@ -466,19 +466,19 @@ BOOST_FIXTURE_TEST_CASE(StateTransitionPreparation_CleansUpProperly, EventManage
     EventManager::Instance().clean();
     BOOST_REQUIRE(EventManager::Instance().init());
 
-  // Register a handler
+    // Register a handler
     bool handlerCalled = false;
     EventManager::Instance().registerHandler(
         EventTypeId::Custom,
         [&handlerCalled](const EventData&) { handlerCalled = true; });
 
-  // Test state transition preparation
+    // Test state transition preparation
     EventManager::Instance().prepareForStateTransition();
 
-  // Verify manager is still functional after preparation
+    // Verify manager is still functional after preparation
     BOOST_CHECK(EventManager::Instance().isInitialized());
 
-  // Handlers should be cleared
+    // Handlers should be cleared
     auto mockEvent = std::make_shared<MockEvent>("Test");
     EventManager::Instance().dispatchEvent(mockEvent, EventManager::DispatchMode::Immediate);
     BOOST_CHECK(!handlerCalled); // Handler was removed during transition prep
@@ -497,21 +497,21 @@ VOIDLIGHT_DEBUG_ONLY(
             EventTypeId::Weather,
             [&handlerCallCount](const EventData&) { handlerCallCount.fetch_add(1); });
 
-  // Debug toggle should not affect correctness of serial deferred delivery.
+        // Debug toggle should not affect correctness of serial deferred delivery.
         EventManager::Instance().enableThreading(false);
 
-  // Trigger event with deferred dispatch
+        // Trigger event with deferred dispatch
         BOOST_CHECK(EventManager::Instance().changeWeather("Clear", 1.0f));
         EventManager::Instance().update();
 
         int callsWithoutThreading = handlerCallCount.load();
         BOOST_CHECK_GE(callsWithoutThreading, 1);
 
-  // Reset counter and enable threading
+        // Reset counter and enable threading
         handlerCallCount.store(0);
         EventManager::Instance().enableThreading(true);
 
-  // Trigger another event
+        // Trigger another event
         BOOST_CHECK(EventManager::Instance().changeWeather("Rainy", 1.0f));
         EventManager::Instance().update();
 
@@ -910,18 +910,18 @@ BOOST_FIXTURE_TEST_CASE(DrainAllDeferredEvents_ProcessesAllEvents, EventManagerF
         EventTypeId::Weather,
         [&handlerCallCount](const EventData&) { handlerCallCount.fetch_add(1); });
 
-  // Queue multiple deferred events
+    // Queue multiple deferred events
     for (int i = 0; i < 5; ++i) {
         EventManager::Instance().changeWeather("Test", 1.0f);
     }
 
-  // Should have pending events
+    // Should have pending events
     BOOST_CHECK_GT(EventManager::Instance().getPendingEventCount(), 0);
 
-  // Drain all events (used in testing for deterministic processing)
+    // Drain all events (used in testing for deterministic processing)
     EventManager::Instance().drainAllDeferredEvents();
 
-  // All events should be processed
+    // All events should be processed
     BOOST_CHECK_EQUAL(EventManager::Instance().getPendingEventCount(), 0);
     BOOST_CHECK_GE(handlerCallCount.load(), 5);
 }
@@ -933,7 +933,7 @@ BOOST_FIXTURE_TEST_CASE(EnqueueBatch_ProcessesAllEventsInBatch, EventManagerFixt
         EventTypeId::Custom,
         [&handlerCallCount](const EventData&) { handlerCallCount.fetch_add(1); });
 
-  // Create a batch of deferred events
+    // Create a batch of deferred events
     std::vector<EventManager::DeferredEvent> batch;
     for (int i = 0; i < 10; ++i) {
         EventData data;
@@ -943,13 +943,13 @@ BOOST_FIXTURE_TEST_CASE(EnqueueBatch_ProcessesAllEventsInBatch, EventManagerFixt
         batch.push_back(EventManager::DeferredEvent{EventTypeId::Custom, std::move(data)});
     }
 
-  // Enqueue the batch
+    // Enqueue the batch
     EventManager::Instance().enqueueBatch(std::move(batch));
 
-  // Process all events
+    // Process all events
     EventManager::Instance().drainAllDeferredEvents();
 
-  // All batch events should be processed
+    // All batch events should be processed
     BOOST_CHECK_GE(handlerCallCount.load(), 10);
 }
 
@@ -997,10 +997,10 @@ BOOST_FIXTURE_TEST_CASE(EnqueueBatchOverflow_TrimsOversizedIncomingBatchToQueueC
 }
 
 BOOST_FIXTURE_TEST_CASE(GetHandlerCount_ReturnsCorrectCount, EventManagerFixture) {
-  // Initially no handlers
+    // Initially no handlers
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 0);
 
-  // Add handlers
+    // Add handlers
     auto tok1 = EventManager::Instance().registerHandlerWithToken(
         EventTypeId::Weather, [](const EventData&) {});
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 1);
@@ -1009,31 +1009,31 @@ BOOST_FIXTURE_TEST_CASE(GetHandlerCount_ReturnsCorrectCount, EventManagerFixture
         EventTypeId::Weather, [](const EventData&) {});
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 2);
 
-  // Remove one handler
+    // Remove one handler
     EventManager::Instance().removeHandler(tok1);
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 1);
 
-  // Remove remaining handler
+    // Remove remaining handler
     EventManager::Instance().removeHandler(tok2);
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 0);
 }
 
 BOOST_FIXTURE_TEST_CASE(RemoveHandlers_ClearsAllForType, EventManagerFixture) {
-  // Add multiple handlers for Weather
+    // Add multiple handlers for Weather
     EventManager::Instance().registerHandler(EventTypeId::Weather, [](const EventData&) {});
     EventManager::Instance().registerHandler(EventTypeId::Weather, [](const EventData&) {});
     EventManager::Instance().registerHandler(EventTypeId::Weather, [](const EventData&) {});
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 3);
 
-  // Also add a handler for a different type (Camera - not internally registered)
+    // Also add a handler for a different type (Camera - not internally registered)
     EventManager::Instance().registerHandler(EventTypeId::Camera, [](const EventData&) {});
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Camera), 1);
 
-  // Remove all Weather handlers
+    // Remove all Weather handlers
     EventManager::Instance().removeHandlers(EventTypeId::Weather);
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Weather), 0);
 
-  // Camera handler should still exist
+    // Camera handler should still exist
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Camera), 1);
 }
 
@@ -1044,24 +1044,24 @@ BOOST_FIXTURE_TEST_CASE(GlobalPause_BlocksUpdateProcessing, EventManagerFixture)
         EventTypeId::Weather,
         [&handlerCallCount](const EventData&) { handlerCallCount.fetch_add(1); });
 
-  // Queue a deferred event
+    // Queue a deferred event
     EventManager::Instance().changeWeather("Test", 1.0f);
     BOOST_CHECK_GT(EventManager::Instance().getPendingEventCount(), 0);
 
-  // Enable global pause
+    // Enable global pause
     EventManager::Instance().setGlobalPause(true);
     BOOST_CHECK(EventManager::Instance().isGloballyPaused());
 
-  // Update should not process events while paused
+    // Update should not process events while paused
     EventManager::Instance().update();
     BOOST_CHECK_EQUAL(handlerCallCount.load(), 0);
     BOOST_CHECK_GT(EventManager::Instance().getPendingEventCount(), 0); // Still pending
 
-  // Disable global pause
+    // Disable global pause
     EventManager::Instance().setGlobalPause(false);
     BOOST_CHECK(!EventManager::Instance().isGloballyPaused());
 
-  // Now update should process events
+    // Now update should process events
     EventManager::Instance().update();
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     BOOST_CHECK_GE(handlerCallCount.load(), 1);
@@ -1084,12 +1084,12 @@ BOOST_FIXTURE_TEST_CASE(MultipleHandlers_AllExecutedInOrder, EventManagerFixture
         callOrder.push_back(3);
     });
 
-  // Trigger event with immediate dispatch for deterministic order
+    // Trigger event with immediate dispatch for deterministic order
     EventManager::Instance().changeWeather("Test", 1.0f, EventManager::DispatchMode::Immediate);
 
-  // All three handlers should be called
+    // All three handlers should be called
     BOOST_CHECK_EQUAL(callOrder.size(), 3);
-  // They should be called in registration order
+    // They should be called in registration order
     BOOST_CHECK_EQUAL(callOrder[0], 1);
     BOOST_CHECK_EQUAL(callOrder[1], 2);
     BOOST_CHECK_EQUAL(callOrder[2], 3);
@@ -1098,32 +1098,32 @@ BOOST_FIXTURE_TEST_CASE(MultipleHandlers_AllExecutedInOrder, EventManagerFixture
 BOOST_FIXTURE_TEST_CASE(HandlerException_DoesNotStopOtherHandlers, EventManagerFixture) {
     std::atomic<int> handlerCallCount{0};
 
-  // First handler - throws exception
+    // First handler - throws exception
     EventManager::Instance().registerHandler(EventTypeId::Weather, [](const EventData&) {
         throw std::runtime_error("Test exception");
     });
 
-  // Second handler - should still be called
+    // Second handler - should still be called
     EventManager::Instance().registerHandler(EventTypeId::Weather, [&](const EventData&) {
         handlerCallCount.fetch_add(1);
     });
 
-  // Third handler - should still be called
+    // Third handler - should still be called
     EventManager::Instance().registerHandler(EventTypeId::Weather, [&](const EventData&) {
         handlerCallCount.fetch_add(1);
     });
 
-  // Trigger event - exception in first handler should not stop others
+    // Trigger event - exception in first handler should not stop others
     EventManager::Instance().changeWeather("Test", 1.0f, EventManager::DispatchMode::Immediate);
 
-  // Second and third handlers should still have been called
+    // Second and third handlers should still have been called
     BOOST_CHECK_GE(handlerCallCount.load(), 2);
 }
 
 // ==================== Edge Case Tests ====================
 
 BOOST_FIXTURE_TEST_CASE(NullEventDispatch_ReturnsFalse, EventManagerFixture) {
-  // Dispatching a null event should return false
+    // Dispatching a null event should return false
     bool result = EventManager::Instance().dispatchEvent(nullptr, EventManager::DispatchMode::Immediate);
     BOOST_CHECK(!result);
 
@@ -1132,15 +1132,15 @@ BOOST_FIXTURE_TEST_CASE(NullEventDispatch_ReturnsFalse, EventManagerFixture) {
 }
 
 BOOST_FIXTURE_TEST_CASE(Reinitialize_WorksAfterClean, EventManagerFixture) {
-  // Clean the manager
+    // Clean the manager
     EventManager::Instance().clean();
     BOOST_CHECK(!EventManager::Instance().isInitialized());
 
-  // Re-initialize should work
+    // Re-initialize should work
     BOOST_REQUIRE(EventManager::Instance().init());
     BOOST_CHECK(EventManager::Instance().isInitialized());
 
-  // Should be fully functional
+    // Should be fully functional
     std::atomic<bool> handlerCalled{false};
     EventManager::Instance().registerHandler(EventTypeId::Weather, [&](const EventData&) {
         handlerCalled.store(true);
@@ -1151,28 +1151,28 @@ BOOST_FIXTURE_TEST_CASE(Reinitialize_WorksAfterClean, EventManagerFixture) {
 }
 
 BOOST_FIXTURE_TEST_CASE(DoubleInit_WarnsAndSucceeds, EventManagerFixture) {
-  // First init (from fixture) should succeed
+    // First init (from fixture) should succeed
     BOOST_CHECK(EventManager::Instance().isInitialized());
 
-  // Second init should also return true (with warning logged)
+    // Second init should also return true (with warning logged)
     BOOST_REQUIRE(EventManager::Instance().init());
     BOOST_CHECK(EventManager::Instance().isInitialized());
 }
 
 BOOST_FIXTURE_TEST_CASE(IdempotentClean_SafeMultipleCalls, EventManagerFixture) {
-  // Clean multiple times - should be safe
+    // Clean multiple times - should be safe
     EventManager::Instance().clean();
     BOOST_CHECK(!EventManager::Instance().isInitialized());
 
-  // Second clean should also be safe (no crash)
+    // Second clean should also be safe (no crash)
     EventManager::Instance().clean();
     BOOST_CHECK(!EventManager::Instance().isInitialized());
 
-  // Third clean should also be safe
+    // Third clean should also be safe
     EventManager::Instance().clean();
     BOOST_CHECK(!EventManager::Instance().isInitialized());
 
-  // Re-init should still work
+    // Re-init should still work
     BOOST_REQUIRE(EventManager::Instance().init());
     BOOST_CHECK(EventManager::Instance().isInitialized());
 }

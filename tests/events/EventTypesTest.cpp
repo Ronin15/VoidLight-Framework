@@ -23,15 +23,15 @@
 
 struct EventTypesFixture {
     EventTypesFixture() {
-    // Initialize EntityDataManager (required for Player entity creation in DOD)
+        // Initialize EntityDataManager (required for Player entity creation in DOD)
         BOOST_REQUIRE(EntityDataManager::Instance().init());
 
-    // Make sure we start fresh with each test
+        // Make sure we start fresh with each test
         EventFactory::Instance().clean();
         BOOST_CHECK(EventFactory::Instance().init());
 
-    // Always register standard event creators explicitly for each test
-    // Make sure to register Weather creator first as it's used in most tests
+        // Always register standard event creators explicitly for each test
+        // Make sure to register Weather creator first as it's used in most tests
         registerWeatherCreator();
         registerSceneChangeCreator();
         registerNPCSpawnCreator();
@@ -39,13 +39,13 @@ struct EventTypesFixture {
     }
 
     ~EventTypesFixture() {
-    // Clean up EventFactory after each test
+        // Clean up EventFactory after each test
         EventFactory::Instance().clean();
-    // Clean up EntityDataManager
+        // Clean up EntityDataManager
         EntityDataManager::Instance().clean();
     }
 
-  // Register each creator separately for better control
+    // Register each creator separately for better control
     void registerWeatherCreator() {
         EventFactory::Instance().registerCustomEventCreator(
             "Weather", [](const EventDefinition& def) {
@@ -140,17 +140,17 @@ BOOST_AUTO_TEST_CASE(EventFactoryCleanInitRestoresBuiltInCreators) {
 
 // Test WeatherEvent creation and functionality
 BOOST_FIXTURE_TEST_CASE(WeatherEventBasics, EventTypesFixture) {
-  // Create a weather event
+    // Create a weather event
     auto rainEvent = std::make_shared<WeatherEvent>("Rain", WeatherType::Rainy);
 
-  // Check basic properties
+    // Check basic properties
     BOOST_CHECK_EQUAL(rainEvent->getName(), "Rain");
     BOOST_CHECK_EQUAL(rainEvent->getType(), "Weather");
     BOOST_CHECK_EQUAL(rainEvent->getWeatherType(), WeatherType::Rainy);
     BOOST_CHECK_EQUAL(rainEvent->getWeatherTypeString(), "Rainy");
     BOOST_CHECK(rainEvent->isActive());
 
-  // Test weather parameters
+    // Test weather parameters
     WeatherParams params;
     params.intensity = 0.8f;
     params.visibility = 0.5f;
@@ -165,62 +165,62 @@ BOOST_FIXTURE_TEST_CASE(WeatherEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().particleEffect, "heavy_rain");
     BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().soundEffect, "rain_sound");
 
-  // Test custom weather type
+    // Test custom weather type
     auto customWeather = std::make_shared<WeatherEvent>("Custom", "AcidRain");
     BOOST_CHECK_EQUAL(customWeather->getWeatherType(), WeatherType::Custom);
     BOOST_CHECK_EQUAL(customWeather->getWeatherTypeString(), "AcidRain");
 
-  // Test conditions without any conditions set
+    // Test conditions without any conditions set
     auto baseEvent =
         std::make_shared<WeatherEvent>("BaseTest", WeatherType::Clear);
     BOOST_CHECK(
         !baseEvent->checkConditions()); // No conditions set, should return false
 
-  // Create a new event instance for each condition test to avoid interference
-  // Test with a simple false condition in its own scope
+    // Create a new event instance for each condition test to avoid interference
+    // Test with a simple false condition in its own scope
     {
         auto falseEvent =
             std::make_shared<WeatherEvent>("FalseTest", WeatherType::Clear);
-    // Make sure there are no existing conditions
+        // Make sure there are no existing conditions
         falseEvent->clean();
-    // Add a condition that always returns false
+        // Add a condition that always returns false
         falseEvent->addTimeCondition(
             []() { return false; }); // Use direct lambda to avoid capture issues
-    // This should fail since the condition returns false
+        // This should fail since the condition returns false
         BOOST_CHECK(!falseEvent->checkConditions());
     }
 
-  // Test with a simple true condition in its own scope
+    // Test with a simple true condition in its own scope
     {
         auto trueEvent =
             std::make_shared<WeatherEvent>("TrueTest", WeatherType::Clear);
-    // Make sure there are no existing conditions
+        // Make sure there are no existing conditions
         trueEvent->clean();
-    // Add a condition that always returns true - no capture to avoid lifetime
-    // issues
+        // Add a condition that always returns true - no capture to avoid lifetime
+        // issues
         trueEvent->addTimeCondition([]() { return true; });
-    // This should pass since the condition returns true
+        // This should pass since the condition returns true
         BOOST_CHECK(trueEvent->checkConditions());
     }
 }
 
 // Test SceneChangeEvent creation and functionality
 BOOST_FIXTURE_TEST_CASE(SceneChangeEventBasics, EventTypesFixture) {
-  // Create a scene change event
+    // Create a scene change event
     auto sceneEvent =
         std::make_shared<SceneChangeEvent>("ToMainMenu", "MainMenu");
 
-  // Check basic properties
+    // Check basic properties
     BOOST_CHECK_EQUAL(sceneEvent->getName(), "ToMainMenu");
     BOOST_CHECK_EQUAL(sceneEvent->getType(), "SceneChange");
     BOOST_CHECK_EQUAL(sceneEvent->getTargetSceneID(), "MainMenu");
     BOOST_CHECK(sceneEvent->isActive());
 
-  // Test transition type
+    // Test transition type
     sceneEvent->setTransitionType(TransitionType::Dissolve);
     BOOST_CHECK_EQUAL(sceneEvent->getTransitionType(), TransitionType::Dissolve);
 
-  // Test transition parameters
+    // Test transition parameters
     TransitionParams params;
     params.duration = 2.5f;
     params.transitionEffect = "dissolve";
@@ -237,19 +237,19 @@ BOOST_FIXTURE_TEST_CASE(SceneChangeEventBasics, EventTypesFixture) {
         "transition_sound");
     BOOST_CHECK_EQUAL(sceneEvent->getTransitionParams().soundVolume, 0.7f);
 
-  // Test trigger zones
+    // Test trigger zones
     sceneEvent->setTriggerZone(100.0f, 200.0f, 50.0f); // Circle zone
 
-  // Test player input trigger
+    // Test player input trigger
     sceneEvent->setRequirePlayerInput(true);
     sceneEvent->setInputKey("E");
 
-  // Test timer trigger
+    // Test timer trigger
     sceneEvent->setTimerTrigger(5.0f);
     sceneEvent->startTimer();
     BOOST_CHECK(!sceneEvent->isTimerComplete()); // Timer just started
 
-  // Test custom conditions
+    // Test custom conditions
     bool conditionFlag = false;
     sceneEvent->addCondition([&conditionFlag]() { return conditionFlag; });
 
@@ -257,22 +257,22 @@ BOOST_FIXTURE_TEST_CASE(SceneChangeEventBasics, EventTypesFixture) {
         !sceneEvent->checkConditions()); // Should be false until condition is met
 
     conditionFlag = true;
-  // In a real test, this would return true if all other conditions were also
-  // met Here we expect false because isPlayerInTriggerZone() and
-  // isPlayerInputTriggered() will return false
+    // In a real test, this would return true if all other conditions were also
+    // met Here we expect false because isPlayerInTriggerZone() and
+    // isPlayerInputTriggered() will return false
 }
 
 // Test NPCSpawnEvent creation and functionality
 BOOST_FIXTURE_TEST_CASE(NPCSpawnEventBasics, EventTypesFixture) {
-  // Create an NPC spawn event
+    // Create an NPC spawn event
     auto spawnEvent = std::make_shared<NPCSpawnEvent>("SpawnGuards", "Guard");
 
-  // Check basic properties
+    // Check basic properties
     BOOST_CHECK_EQUAL(spawnEvent->getName(), "SpawnGuards");
     BOOST_CHECK_EQUAL(spawnEvent->getType(), "NPCSpawn");
     BOOST_CHECK(spawnEvent->isActive());
 
-  // Test spawn parameters
+    // Test spawn parameters
     SpawnParameters params;
     params.npcType = "EliteGuard";
     params.count = 3;
@@ -296,31 +296,31 @@ BOOST_FIXTURE_TEST_CASE(NPCSpawnEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(spawnEvent->getSpawnParameters().spawnSoundID,
         "spawn_sound");
 
-  // Test spawn locations
+    // Test spawn locations
     spawnEvent->clearSpawnPoints();
     spawnEvent->addSpawnPoint(100.0f, 200.0f);
     spawnEvent->addSpawnPoint(150.0f, 250.0f);
 
-  // Test spawn area
+    // Test spawn area
     spawnEvent->setSpawnArea(0.0f, 0.0f, 50.0f); // Circular area
 
-  // Test proximity trigger
+    // Test proximity trigger
     spawnEvent->setProximityTrigger(100.0f);
 
-  // Test time of day trigger
+    // Test time of day trigger
     spawnEvent->setTimeOfDayTrigger(19.0f, 6.0f); // Night time only
 
-  // Test respawn
+    // Test respawn
     spawnEvent->setRespawnTime(30.0f);
     BOOST_CHECK(spawnEvent->areAllEntitiesDead()); // No entities spawned yet
     BOOST_CHECK(!spawnEvent->canRespawn()); // Respawn timer not elapsed yet
 
-  // Test max spawn count
+    // Test max spawn count
     spawnEvent->setMaxSpawnCount(5);
     BOOST_CHECK_EQUAL(spawnEvent->getMaxSpawnCount(), 5);
     BOOST_CHECK_EQUAL(spawnEvent->getCurrentSpawnCount(), 0);
 
-  // Test custom conditions
+    // Test custom conditions
     bool conditionFlag = false;
     spawnEvent->addCondition([&conditionFlag]() { return conditionFlag; });
 
@@ -328,8 +328,8 @@ BOOST_FIXTURE_TEST_CASE(NPCSpawnEventBasics, EventTypesFixture) {
         !spawnEvent->checkConditions()); // Should be false until condition is met
 
     conditionFlag = true;
-  // In a real test, this would still return false because the proximity and
-  // time conditions aren't met
+    // In a real test, this would still return false because the proximity and
+    // time conditions aren't met
 }
 
 BOOST_FIXTURE_TEST_CASE(MerchantSpawnEventBasics, EventTypesFixture) {
@@ -350,13 +350,13 @@ BOOST_FIXTURE_TEST_CASE(MerchantSpawnEventBasics, EventTypesFixture) {
 
 // Test EventFactory creation methods
 BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
-  // Make sure EventFactory is properly initialized and Weather creator is
-  // registered
+    // Make sure EventFactory is properly initialized and Weather creator is
+    // registered
     EventFactory::Instance().clean();
     BOOST_REQUIRE(EventFactory::Instance().init());
     registerWeatherCreator();
 
-  // Test weather event creation
+    // Test weather event creation
     auto rainEvent =
         EventFactory::Instance().createWeatherEvent("Rain", "Rainy", 0.7f);
     BOOST_REQUIRE(rainEvent != nullptr);
@@ -366,7 +366,7 @@ BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
         static_cast<WeatherEvent*>(rainEvent.get())->getWeatherTypeString(),
         "Rainy");
 
-  // Test scene change event creation
+    // Test scene change event creation
     auto sceneEvent = EventFactory::Instance().createSceneChangeEvent(
         "ToMainMenu", "MainMenu", "fade", 1.5f);
     BOOST_REQUIRE(sceneEvent != nullptr);
@@ -391,7 +391,7 @@ BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
         static_cast<NPCSpawnEvent*>(spawnEvent.get())->getSpawnParameters().spawnRadius,
         10.0f);
 
-  // Test event creation from definition
+    // Test event creation from definition
     EventDefinition def;
     def.type = "Weather";
     def.name = "Storm";
@@ -412,7 +412,7 @@ BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
 
 // Test event sequence creation
 BOOST_FIXTURE_TEST_CASE(EventSequenceCreation, EventTypesFixture) {
-  // Create a weather sequence: Rain -> Lightning -> Clear
+    // Create a weather sequence: Rain -> Lightning -> Clear
     std::vector<EventDefinition> weatherSequence = {{"Weather",
                                                         "StartRain",
                                                         {{"weatherType", "Rainy"}},
@@ -433,7 +433,7 @@ BOOST_FIXTURE_TEST_CASE(EventSequenceCreation, EventTypesFixture) {
         "WeatherSequence", weatherSequence, true);
     BOOST_CHECK_EQUAL(sequence.size(), 3);
 
-  // Verify the sequence preserves the requested creation order
+    // Verify the sequence preserves the requested creation order
     BOOST_CHECK_EQUAL(sequence[0]->getName(), "StartRain");
     BOOST_CHECK_EQUAL(sequence[1]->getName(), "Thunderstorm");
     BOOST_CHECK_EQUAL(sequence[2]->getName(), "ClearSkies");
@@ -443,29 +443,29 @@ BOOST_FIXTURE_TEST_CASE(EventSequenceCreation, EventTypesFixture) {
 BOOST_FIXTURE_TEST_CASE(EventCooldownFunctionality, EventTypesFixture) {
     auto event = std::make_shared<WeatherEvent>("TestEvent", WeatherType::Rainy);
 
-  // Set cooldown time
+    // Set cooldown time
     event->setCooldown(2.0f);
     BOOST_CHECK_EQUAL(event->getCooldown(), 2.0f);
     BOOST_CHECK(!event->isOnCooldown());
 
-  // Start cooldown
+    // Start cooldown
     event->startCooldown();
     BOOST_CHECK(event->isOnCooldown());
 
-  // Reset cooldown
+    // Reset cooldown
     event->resetCooldown();
     BOOST_CHECK(!event->isOnCooldown());
 }
 
 // Test ParticleEffectEvent creation and basic functionality
 BOOST_FIXTURE_TEST_CASE(ParticleEffectEventBasics, EventTypesFixture) {
-  // Test constructor with Vector2D
+    // Test constructor with Vector2D
     Vector2D position(100.0f, 200.0f);
     ParticleEffectEvent effectEvent1("TestEffect1", ParticleEffectType::Fire,
         position, 1.5f, 5.0f, "group1",
         "fire_sound");
 
-  // Check basic properties
+    // Check basic properties
     BOOST_CHECK_EQUAL(effectEvent1.getName(), "TestEffect1");
     BOOST_CHECK_EQUAL(effectEvent1.getType(), "ParticleEffect");
     BOOST_CHECK_EQUAL(effectEvent1.getEffectName(), "Fire");
@@ -475,7 +475,7 @@ BOOST_FIXTURE_TEST_CASE(ParticleEffectEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(effectEvent1.getDuration(), 5.0f);
     BOOST_CHECK_EQUAL(effectEvent1.getGroupTag(), "group1");
 
-  // Test constructor with x,y coordinates
+    // Test constructor with x,y coordinates
     ParticleEffectEvent effectEvent2("TestEffect2", ParticleEffectType::Smoke,
         300.0f, 400.0f, 0.8f, -1.0f, "group2");
     BOOST_CHECK_EQUAL(effectEvent2.getName(), "TestEffect2");
@@ -491,7 +491,7 @@ BOOST_FIXTURE_TEST_CASE(ParticleEffectEventBasics, EventTypesFixture) {
 BOOST_FIXTURE_TEST_CASE(ParticleEffectEventProperties, EventTypesFixture) {
     ParticleEffectEvent effectEvent("PropTest", ParticleEffectType::Sparks, 50.0f,
         60.0f);
-  // Test position setters
+    // Test position setters
     effectEvent.setPosition(150.0f, 250.0f);
     BOOST_CHECK_EQUAL(effectEvent.getPosition().getX(), 150.0f);
     BOOST_CHECK_EQUAL(effectEvent.getPosition().getY(), 250.0f);
@@ -501,19 +501,19 @@ BOOST_FIXTURE_TEST_CASE(ParticleEffectEventProperties, EventTypesFixture) {
     BOOST_CHECK_EQUAL(effectEvent.getPosition().getX(), newPos.getX());
     BOOST_CHECK_EQUAL(effectEvent.getPosition().getY(), newPos.getY());
 
-  // Test intensity adjustment
+    // Test intensity adjustment
     effectEvent.setIntensity(2.5f);
     BOOST_CHECK_EQUAL(effectEvent.getIntensity(), 2.5f);
 
-  // Test duration setting
+    // Test duration setting
     effectEvent.setDuration(15.0f);
     BOOST_CHECK_EQUAL(effectEvent.getDuration(), 15.0f);
 
-  // Test group tagging
+    // Test group tagging
     effectEvent.setGroupTag("newGroup");
     BOOST_CHECK_EQUAL(effectEvent.getGroupTag(), "newGroup");
 
-  // Test default values
+    // Test default values
     ParticleEffectEvent defaultEvent("Default", ParticleEffectType::Rain, 0.0f,
         0.0f);
     BOOST_CHECK_EQUAL(defaultEvent.getIntensity(), 1.0f);
@@ -525,22 +525,22 @@ BOOST_FIXTURE_TEST_CASE(ParticleEffectEventProperties, EventTypesFixture) {
 BOOST_FIXTURE_TEST_CASE(ParticleEffectEventConditions, EventTypesFixture) {
     ParticleEffectEvent effectEvent("ConditionTest", ParticleEffectType::Snow,
         0.0f, 0.0f);
-  // Should be active by default
+    // Should be active by default
     BOOST_CHECK(effectEvent.isActive());
 
-  // Check conditions - should pass basic checks (active state, non-empty effect
-  // name) Note: ParticleManager availability check will fail in test
-  // environment
+    // Check conditions - should pass basic checks (active state, non-empty effect
+    // name) Note: ParticleManager availability check will fail in test
+    // environment
     BOOST_CHECK(
         !effectEvent
             .checkConditions()); // Fails due to ParticleManager not initialized
 
-  // Test with empty effect name
+    // Test with empty effect name
     ParticleEffectEvent emptyEvent("Empty", ParticleEffectType::Rain, 0.0f, 0.0f);
     BOOST_CHECK(
         !emptyEvent.checkConditions()); // Should fail due to empty effect name
 
-  // Test inactive event
+    // Test inactive event
     effectEvent.setActive(false);
     BOOST_CHECK(
         !effectEvent.checkConditions()); // Should fail due to inactive state
@@ -551,28 +551,28 @@ BOOST_FIXTURE_TEST_CASE(ParticleEffectEventLifecycle, EventTypesFixture) {
     ParticleEffectEvent effectEvent("LifecycleTest", ParticleEffectType::Fire,
         100.0f, 100.0f, 1.0f, 3.0f);
 
-  // Initially should not be active
+    // Initially should not be active
     BOOST_CHECK(!effectEvent.isEffectActive());
 
-  // Test update method (should not crash)
+    // Test update method (should not crash)
     effectEvent.update();
 
-  // Test reset method
+    // Test reset method
     effectEvent.reset();
     BOOST_CHECK(!effectEvent.isEffectActive());
 
-  // Test clean method
+    // Test clean method
     effectEvent.clean();
     BOOST_CHECK(!effectEvent.isEffectActive());
 
-  // Test stopEffect method (should not crash even if no effect is running)
+    // Test stopEffect method (should not crash even if no effect is running)
     effectEvent.stopEffect();
     BOOST_CHECK(!effectEvent.isEffectActive());
 }
 
 // Test ParticleEffectEvent edge cases
 BOOST_FIXTURE_TEST_CASE(ParticleEffectEventEdgeCases, EventTypesFixture) {
-  // Test with extreme values
+    // Test with extreme values
     ParticleEffectEvent extremeEvent("Extreme", ParticleEffectType::Custom,
         -1000.0f, 1000.0f, 0.0f, 0.0f);
     BOOST_CHECK_EQUAL(extremeEvent.getPosition().getX(), -1000.0f);
@@ -580,18 +580,18 @@ BOOST_FIXTURE_TEST_CASE(ParticleEffectEventEdgeCases, EventTypesFixture) {
     BOOST_CHECK_EQUAL(extremeEvent.getIntensity(), 0.0f);
     BOOST_CHECK_EQUAL(extremeEvent.getDuration(), 0.0f);
 
-  // Test with very high intensity
+    // Test with very high intensity
     extremeEvent.setIntensity(10.0f);
     BOOST_CHECK_EQUAL(extremeEvent.getIntensity(), 10.0f);
 
-  // Test with very long duration
+    // Test with very long duration
     extremeEvent.setDuration(9999.0f);
     BOOST_CHECK_EQUAL(extremeEvent.getDuration(), 9999.0f);
 
-  // Test execution without ParticleManager (should handle gracefully)
-    extremeEvent.execute();                      // Should not crash
+    // Test execution without ParticleManager (should handle gracefully)
+    extremeEvent.execute(); // Should not crash
     BOOST_CHECK(!extremeEvent.isEffectActive()); // Effect won't be active due to
-                                               // no ParticleManager
+    // no ParticleManager
 }
 
 // ============================================================================
@@ -612,12 +612,12 @@ BOOST_FIXTURE_TEST_CASE(HourChangedEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getName(), "HourChangedEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Test night flag
+    // Test night flag
     HourChangedEvent nightEvent(2, true);
     BOOST_CHECK_EQUAL(nightEvent.getHour(), 2);
     BOOST_CHECK(nightEvent.isNight());
 
-  // Test reset
+    // Test reset
     HourChangedEvent resetEvent(10, true);
     resetEvent.reset();
     BOOST_CHECK_EQUAL(resetEvent.getHour(), 0);
@@ -636,7 +636,7 @@ BOOST_FIXTURE_TEST_CASE(DayChangedEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTypeName(), "DayChangedEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Test reset
+    // Test reset
     DayChangedEvent resetEvent(5, 5, 1, "Sunpeak");
     resetEvent.reset();
     BOOST_CHECK_EQUAL(resetEvent.getDay(), 0);
@@ -656,7 +656,7 @@ BOOST_FIXTURE_TEST_CASE(MonthChangedEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTypeName(), "MonthChangedEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Test reset
+    // Test reset
     MonthChangedEvent resetEvent(2, "Harvestmoon", Season::Fall);
     resetEvent.reset();
     BOOST_CHECK_EQUAL(resetEvent.getMonth(), 0);
@@ -675,7 +675,7 @@ BOOST_FIXTURE_TEST_CASE(SeasonChangedEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTypeName(), "SeasonChangedEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Test reset
+    // Test reset
     SeasonChangedEvent resetEvent(Season::Summer, Season::Spring, "Summer");
     resetEvent.reset();
     BOOST_CHECK(resetEvent.getSeason() == Season::Spring);
@@ -692,7 +692,7 @@ BOOST_FIXTURE_TEST_CASE(YearChangedEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTypeName(), "YearChangedEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Test reset
+    // Test reset
     YearChangedEvent resetEvent(10);
     resetEvent.reset();
     BOOST_CHECK_EQUAL(resetEvent.getYear(), 0);
@@ -708,7 +708,7 @@ BOOST_FIXTURE_TEST_CASE(WeatherCheckEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTypeName(), "WeatherCheckEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Test reset
+    // Test reset
     WeatherCheckEvent resetEvent(Season::Summer, WeatherType::Clear);
     resetEvent.reset();
     BOOST_CHECK(resetEvent.getSeason() == Season::Spring);
@@ -726,14 +726,14 @@ BOOST_FIXTURE_TEST_CASE(TimePeriodChangedEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTypeName(), "TimePeriodChangedEvent");
     BOOST_CHECK(event.getTypeId() == EventTypeId::Time);
 
-  // Check visuals
+    // Check visuals
     const auto& v = event.getVisuals();
     BOOST_CHECK_EQUAL(v.overlayR, 20);
     BOOST_CHECK_EQUAL(v.overlayG, 20);
     BOOST_CHECK_EQUAL(v.overlayB, 60);
     BOOST_CHECK_EQUAL(v.overlayA, 90);
 
-  // Test reset
+    // Test reset
     TimePeriodChangedEvent resetEvent(TimePeriod::Morning, TimePeriod::Night,
         TimePeriodVisuals::getMorning());
     resetEvent.reset();
@@ -743,35 +743,35 @@ BOOST_FIXTURE_TEST_CASE(TimePeriodChangedEventBasics, EventTypesFixture) {
 
 // Test TimePeriodVisuals factory methods
 BOOST_FIXTURE_TEST_CASE(TimePeriodVisualsFactoryMethods, EventTypesFixture) {
-  // Morning - red-orange dawn
+    // Morning - red-orange dawn
     auto morning = TimePeriodVisuals::getMorning();
     BOOST_CHECK_EQUAL(morning.overlayR, 255);
     BOOST_CHECK_EQUAL(morning.overlayG, 140);
     BOOST_CHECK_EQUAL(morning.overlayB, 80);
     BOOST_CHECK_EQUAL(morning.overlayA, 30);
 
-  // Day - slight yellow
+    // Day - slight yellow
     auto day = TimePeriodVisuals::getDay();
     BOOST_CHECK_EQUAL(day.overlayR, 255);
     BOOST_CHECK_EQUAL(day.overlayG, 255);
     BOOST_CHECK_EQUAL(day.overlayB, 200);
     BOOST_CHECK_EQUAL(day.overlayA, 8);
 
-  // Evening - orange-red sunset
+    // Evening - orange-red sunset
     auto evening = TimePeriodVisuals::getEvening();
     BOOST_CHECK_EQUAL(evening.overlayR, 255);
     BOOST_CHECK_EQUAL(evening.overlayG, 80);
     BOOST_CHECK_EQUAL(evening.overlayB, 40);
     BOOST_CHECK_EQUAL(evening.overlayA, 40);
 
-  // Night - darker blue/purple
+    // Night - darker blue/purple
     auto night = TimePeriodVisuals::getNight();
     BOOST_CHECK_EQUAL(night.overlayR, 20);
     BOOST_CHECK_EQUAL(night.overlayG, 20);
     BOOST_CHECK_EQUAL(night.overlayB, 60);
     BOOST_CHECK_EQUAL(night.overlayA, 90);
 
-  // Test getForPeriod
+    // Test getForPeriod
     auto forMorning = TimePeriodVisuals::getForPeriod(TimePeriod::Morning);
     BOOST_CHECK_EQUAL(forMorning.overlayA, morning.overlayA);
 
@@ -789,12 +789,12 @@ BOOST_FIXTURE_TEST_CASE(TimePeriodVisualsFactoryMethods, EventTypesFixture) {
 BOOST_FIXTURE_TEST_CASE(TimeEventBaseClass, EventTypesFixture) {
     HourChangedEvent event(12, false);
 
-  // Test Event interface methods
-    BOOST_CHECK(event.checkConditions());  // Always true for TimeEvent
+    // Test Event interface methods
+    BOOST_CHECK(event.checkConditions()); // Always true for TimeEvent
     BOOST_CHECK_EQUAL(event.getType(), "HourChangedEvent");
     BOOST_CHECK_EQUAL(event.getName(), "HourChangedEvent");
 
-  // Test update/execute/clean don't crash
+    // Test update/execute/clean don't crash
     event.update();
     event.execute();
     event.clean();
@@ -814,7 +814,7 @@ BOOST_FIXTURE_TEST_CASE(TimeEventBaseClass, EventTypesFixture) {
 
 // Test EventTypeId enum values
 BOOST_AUTO_TEST_CASE(TestEventTypeIdEnumValues) {
-  // Verify EventTypeId enum has expected values
+    // Verify EventTypeId enum has expected values
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::Weather), 0);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::SceneChange), 1);
     BOOST_CHECK_EQUAL(static_cast<uint8_t>(EventTypeId::NPCSpawn), 2);
@@ -874,7 +874,7 @@ BOOST_FIXTURE_TEST_CASE(ResourceChangeEventBasics, EventTypesFixture) {
 
 // Test WorldEvent types
 BOOST_FIXTURE_TEST_CASE(WorldEventBasics, EventTypesFixture) {
-  // Test WorldLoadedEvent
+    // Test WorldLoadedEvent
     WorldLoadedEvent loadedEvent("test_world", 100, 100);
     BOOST_CHECK_EQUAL(loadedEvent.getName(), "WorldLoadedEvent");
     BOOST_CHECK_EQUAL(loadedEvent.getType(), "WorldLoadedEvent");
@@ -883,7 +883,7 @@ BOOST_FIXTURE_TEST_CASE(WorldEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(loadedEvent.getWidth(), 100);
     BOOST_CHECK_EQUAL(loadedEvent.getHeight(), 100);
 
-  // Test TileChangedEvent
+    // Test TileChangedEvent
     TileChangedEvent tileEvent(10, 20, "biome_change");
     BOOST_CHECK_EQUAL(tileEvent.getName(), "TileChangedEvent");
     BOOST_CHECK(tileEvent.getTypeId() == EventTypeId::World);
@@ -891,7 +891,7 @@ BOOST_FIXTURE_TEST_CASE(WorldEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(tileEvent.getY(), 20);
     BOOST_CHECK_EQUAL(tileEvent.getChangeType(), "biome_change");
 
-  // Test WorldGeneratedEvent
+    // Test WorldGeneratedEvent
     WorldGeneratedEvent genEvent("world_001", 200, 200, 2.5f);
     BOOST_CHECK_EQUAL(genEvent.getName(), "WorldGeneratedEvent");
     BOOST_CHECK(genEvent.getTypeId() == EventTypeId::World);
@@ -941,7 +941,7 @@ BOOST_FIXTURE_TEST_CASE(HarvestResourceEventBasics, EventTypesFixture) {
     BOOST_CHECK_EQUAL(event.getTargetY(), 20);
     BOOST_CHECK_EQUAL(event.getResourceType(), "wood");
 
-  // Test checkConditions (should be valid with proper coords)
+    // Test checkConditions (should be valid with proper coords)
     BOOST_CHECK(event.checkConditions());
 }
 
@@ -976,52 +976,52 @@ BOOST_FIXTURE_TEST_CASE(CollisionObstacleChangedEventBasics, EventTypesFixture) 
 
 // Test all event types return correct TypeId
 BOOST_FIXTURE_TEST_CASE(AllEventTypesReturnCorrectTypeId, EventTypesFixture) {
-  // Weather
+    // Weather
     WeatherEvent weatherEvent("test", WeatherType::Clear);
     BOOST_CHECK(weatherEvent.getTypeId() == EventTypeId::Weather);
 
-  // SceneChange
+    // SceneChange
     SceneChangeEvent sceneEvent("test", "target");
     BOOST_CHECK(sceneEvent.getTypeId() == EventTypeId::SceneChange);
 
-  // NPCSpawn
+    // NPCSpawn
     NPCSpawnEvent npcEvent("test", "Guard");
     BOOST_CHECK(npcEvent.getTypeId() == EventTypeId::NPCSpawn);
 
     MerchantSpawnEvent merchantEvent("merchant_test", "GeneralMerchant");
     BOOST_CHECK(merchantEvent.getTypeId() == EventTypeId::MerchantSpawn);
 
-  // ParticleEffect
+    // ParticleEffect
     ParticleEffectEvent particleEvent("test", ParticleEffectType::Fire, 0.0f, 0.0f);
     BOOST_CHECK(particleEvent.getTypeId() == EventTypeId::ParticleEffect);
 
-  // ResourceChange
+    // ResourceChange
     auto player = std::make_shared<Player>();
     VoidLight::ResourceHandle goldHandle(2, 1);
     ResourceChangeEvent resourceEvent(player->getHandle(), goldHandle, 0, 10, "looted");
     BOOST_CHECK(resourceEvent.getTypeId() == EventTypeId::ResourceChange);
 
-  // World
+    // World
     WorldLoadedEvent worldEvent("world", 10, 10);
     BOOST_CHECK(worldEvent.getTypeId() == EventTypeId::World);
 
-  // Camera
+    // Camera
     CameraMovedEvent cameraEvent(Vector2D(0.0f, 0.0f), Vector2D(0.0f, 0.0f));
     BOOST_CHECK(cameraEvent.getTypeId() == EventTypeId::Camera);
 
-  // Harvest
+    // Harvest
     HarvestResourceEvent harvestEvent(1, 0, 0, "wood");
     BOOST_CHECK(harvestEvent.getTypeId() == EventTypeId::Harvest);
 
-  // WorldTrigger
+    // WorldTrigger
     WorldTriggerEvent triggerEvent(1, 2, VoidLight::TriggerTag::None, Vector2D(0, 0), TriggerPhase::Enter);
     BOOST_CHECK(triggerEvent.getTypeId() == EventTypeId::WorldTrigger);
 
-  // CollisionObstacleChanged
+    // CollisionObstacleChanged
     CollisionObstacleChangedEvent obstacleEvent(CollisionObstacleChangedEvent::ChangeType::REMOVED, Vector2D(0, 0), 64.0f, "removed");
     BOOST_CHECK(obstacleEvent.getTypeId() == EventTypeId::CollisionObstacleChanged);
 
-  // Time
+    // Time
     HourChangedEvent timeEvent(12, false);
     BOOST_CHECK(timeEvent.getTypeId() == EventTypeId::Time);
 }

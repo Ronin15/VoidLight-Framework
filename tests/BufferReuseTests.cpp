@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(TestVectorClearPreservesCapacity) {
 
     // Clear buffer - should preserve capacity
     buffer.clear();
-    BOOST_CHECK_EQUAL(buffer.size(), 0);               // Size reset to 0
+    BOOST_CHECK_EQUAL(buffer.size(), 0); // Size reset to 0
     BOOST_CHECK_GE(buffer.capacity(), initialCapacity); // Capacity preserved
 
     // Second populate - no reallocation should occur
@@ -170,8 +170,8 @@ BOOST_AUTO_TEST_CASE(TestReservePreventReallocations) {
     }
 
     // Verify reserve() prevented reallocations
-    BOOST_CHECK_GT(reallocationCountWithout, 0);  // Multiple reallocations without reserve
-    BOOST_CHECK_EQUAL(reallocationCountWith, 0);  // Zero reallocations with reserve
+    BOOST_CHECK_GT(reallocationCountWithout, 0); // Multiple reallocations without reserve
+    BOOST_CHECK_EQUAL(reallocationCountWith, 0); // Zero reallocations with reserve
 }
 
 // ----------------------------------------------------------------------------

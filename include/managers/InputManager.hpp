@@ -38,7 +38,7 @@ public:
         Interact,
         OpenInventory,
         Pause,
-        WorldInteract,   // LMB world click (mouse pos read from getMousePosition())
+        WorldInteract, // LMB world click (mouse pos read from getMousePosition())
         ZoomIn,
         ZoomOut,
         // Hotbar selection (v1: select-only; use action TBD)
@@ -62,11 +62,11 @@ public:
     };
 
     enum class InputSource : uint8_t {
-        Keyboard,             // code = SDL_Scancode
-        MouseButton,          // code = 0/1/2 (LEFT/MIDDLE/RIGHT)
-        GamepadButton,        // code = SDL_GamepadButton
-        GamepadAxisPositive,  // code = SDL_GamepadAxis, active when axis > +0.3
-        GamepadAxisNegative,  // code = SDL_GamepadAxis, stick axes only, active when axis < -0.3
+        Keyboard, // code = SDL_Scancode
+        MouseButton, // code = 0/1/2 (LEFT/MIDDLE/RIGHT)
+        GamepadButton, // code = SDL_GamepadButton
+        GamepadAxisPositive, // code = SDL_GamepadAxis, active when axis > +0.3
+        GamepadAxisNegative, // code = SDL_GamepadAxis, stick axes only, active when axis < -0.3
     };
 
     // Device grouping used by the Controls UI and by rebind capture filtering.
@@ -94,9 +94,9 @@ public:
     // these methods read them. Callers from worker threads must use the raw
     // isKeyDown/getButtonState APIs instead.
     // -------------------------------------------------------------------------
-    bool isCommandPressed(Command c) const;   // rising edge this frame
-    bool isCommandDown(Command c) const;      // currently active
-    bool isCommandReleased(Command c) const;  // falling edge this frame
+    bool isCommandPressed(Command c) const; // rising edge this frame
+    bool isCommandDown(Command c) const; // currently active
+    bool isCommandReleased(Command c) const; // falling edge this frame
 
     // -------------------------------------------------------------------------
     // Binding management
@@ -132,8 +132,8 @@ public:
     // -------------------------------------------------------------------------
     // UI helpers
     // -------------------------------------------------------------------------
-    std::string describeBinding(InputBinding b) const;   // "F", "Left Mouse", "A", "Cross"
-    std::string commandDisplayName(Command c) const;     // "Attack (Light)"
+    std::string describeBinding(InputBinding b) const; // "F", "Left Mouse", "A", "Cross"
+    std::string commandDisplayName(Command c) const; // "Attack (Light)"
 
     // Controller family for vendor-specific button labels. Detected from
     // SDL_GetGamepadType on the primary connected gamepad. Generic covers
@@ -222,11 +222,11 @@ private:
     std::array<bool, kCommandCount> m_currentDown{};
     std::array<bool, kCommandCount> m_previousDown{};
 
-    Command m_rebindCommand{Command::COUNT};   // COUNT = none
+    Command m_rebindCommand{Command::COUNT}; // COUNT = none
     DeviceCategory m_rebindCategory{DeviceCategory::KeyboardMouse};
 
     bool sampleBinding(const InputBinding& b) const;
-    void captureRebind();          // called from refreshCommandState() while rebinding
+    void captureRebind(); // called from refreshCommandState() while rebinding
     void loadDefaultBindings();
 
     // -------------------------------------------------------------------------
@@ -242,9 +242,9 @@ private:
     std::vector<bool> m_mouseButtonStates{};
     // Previous input states for rebind-capture edge detection (primed by startRebinding())
     std::array<bool, 3> m_prevMouseButtonStates{};
-    std::vector<std::vector<bool>> m_prevGamepadButtonStates;    // parallel to m_gamepads
-    std::vector<std::array<bool, 6>> m_prevGamepadAxisPos;       // sticks + triggers positive threshold
-    std::vector<std::array<bool, 4>> m_prevGamepadAxisNeg;       // stick axes negative threshold
+    std::vector<std::vector<bool>> m_prevGamepadButtonStates; // parallel to m_gamepads
+    std::vector<std::array<bool, 6>> m_prevGamepadAxisPos; // sticks + triggers positive threshold
+    std::vector<std::array<bool, 4>> m_prevGamepadAxisNeg; // stick axes negative threshold
     Vector2D m_mousePosition{0.0f, 0.0f};
 
     bool m_isInitialized{false};
@@ -264,4 +264,4 @@ private:
     InputManager();
 };
 
-#endif  // INPUT_MANAGER_HPP
+#endif // INPUT_MANAGER_HPP

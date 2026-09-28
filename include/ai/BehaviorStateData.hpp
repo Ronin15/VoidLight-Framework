@@ -35,8 +35,8 @@ namespace VoidLight {
 // ============================================================================
 
 struct IdleStateData {
-    Vector2D originalPosition;   // 8 bytes
-    Vector2D currentOffset;      // 8 bytes
+    Vector2D originalPosition; // 8 bytes
+    Vector2D currentOffset; // 8 bytes
     float movementTimer{0.0f};
     float turnTimer{0.0f};
     float movementInterval{0.0f};
@@ -51,16 +51,16 @@ struct IdleStateData {
 // ============================================================================
 
 struct WanderStateData {
-    Vector2D currentDirection;   // 8 bytes
-    Vector2D previousVelocity;   // 8 bytes
-    Vector2D lastStallPosition;  // 8 bytes
+    Vector2D currentDirection; // 8 bytes
+    Vector2D previousVelocity; // 8 bytes
+    Vector2D lastStallPosition; // 8 bytes
     float directionChangeTimer{0.0f};
     float lastDirectionFlip{0.0f};
     float startDelay{0.0f};
     float stallTimer{0.0f};
     float stallPositionVariance{0.0f};
     float unstickTimer{0.0f};
-    float movementUpdateTimer{0.0f};  // Throttle heavy logic to run every ~5s
+    float movementUpdateTimer{0.0f}; // Throttle heavy logic to run every ~5s
     bool movementStarted{false};
     uint8_t _pad[3]{};
 };
@@ -70,23 +70,23 @@ struct WanderStateData {
 // ============================================================================
 
 struct ChaseStateData {
-    Vector2D lastKnownTargetPos;      // Last known target position
-    Vector2D currentDirection;         // Current movement direction
-    Vector2D lastStallPosition;        // Position when stall was detected
-    float timeWithoutSight{0.0f};     // Time since last line of sight
-    float stallPositionVariance{0.0f};// Variance for stall detection
-    float unstickTimer{0.0f};         // Timer for unstick behavior
-    float crowdCheckTimer{0.0f};      // Throttle crowd detection
-    float pathRequestCooldown{0.0f};  // Cooldown between path requests
-    float stallRecoveryCooldown{0.0f};// Cooldown after stall recovery
-    float behaviorChangeCooldown{0.0f};// Cooldown for behavior state changes
-    int recalcCounter{0};             // Path recalculation counter
-    int cachedChaserCount{0};         // Cached number of chasers nearby
-    bool isChasing{false};            // Currently in chase mode
-    bool hasLineOfSight{false};       // Has line of sight to target
-    bool hasExplicitTarget{false};    // NPC-vs-NPC chase: explicit target set
+    Vector2D lastKnownTargetPos; // Last known target position
+    Vector2D currentDirection; // Current movement direction
+    Vector2D lastStallPosition; // Position when stall was detected
+    float timeWithoutSight{0.0f}; // Time since last line of sight
+    float stallPositionVariance{0.0f}; // Variance for stall detection
+    float unstickTimer{0.0f}; // Timer for unstick behavior
+    float crowdCheckTimer{0.0f}; // Throttle crowd detection
+    float pathRequestCooldown{0.0f}; // Cooldown between path requests
+    float stallRecoveryCooldown{0.0f}; // Cooldown after stall recovery
+    float behaviorChangeCooldown{0.0f}; // Cooldown for behavior state changes
+    int recalcCounter{0}; // Path recalculation counter
+    int cachedChaserCount{0}; // Cached number of chasers nearby
+    bool isChasing{false}; // Currently in chase mode
+    bool hasLineOfSight{false}; // Has line of sight to target
+    bool hasExplicitTarget{false}; // NPC-vs-NPC chase: explicit target set
     uint8_t _pad[1]{};
-    EntityHandle explicitTarget;      // NPC-vs-NPC chase: overrides player targeting
+    EntityHandle explicitTarget; // NPC-vs-NPC chase: overrides player targeting
 };
 
 // ============================================================================
@@ -94,13 +94,13 @@ struct ChaseStateData {
 // ============================================================================
 
 struct PatrolStateData {
-    Vector2D patrolTargets[4];        // The 4 assigned patrol waypoints (persistent; NOT the EDM
-                                      // waypoint slot, which the pathfinder overwrites with nav nodes)
-    Vector2D currentPatrolTarget;     // Current target waypoint position
-    Vector2D assignedPosition;        // Starting/home position
-    float patrolMoveTimer{0.0f};      // Timer for dwell at waypoint
-    float patrolThrottleTimer{0.0f};  // Throttle timer for patrol update interval
-    uint32_t currentPatrolIndex{0};   // Current waypoint index (wraps mod 4)
+    Vector2D patrolTargets[4]; // The 4 assigned patrol waypoints (persistent; NOT the EDM
+    // waypoint slot, which the pathfinder overwrites with nav nodes)
+    Vector2D currentPatrolTarget; // Current target waypoint position
+    Vector2D assignedPosition; // Starting/home position
+    float patrolMoveTimer{0.0f}; // Timer for dwell at waypoint
+    float patrolThrottleTimer{0.0f}; // Throttle timer for patrol update interval
+    uint32_t currentPatrolIndex{0}; // Current waypoint index (wraps mod 4)
     uint8_t _pad[4]{};
 };
 
@@ -119,7 +119,7 @@ struct FleeStateData {
     float zigzagTimer{0.0f};
     float navRadius{0.0f};
     float backoffTimer{0.0f};
-    float fearBoost{0.0f};        // Cached from emotions each frame for speed modifier
+    float fearBoost{0.0f}; // Cached from emotions each frame for speed modifier
     int zigzagDirection{1};
     bool isFleeing{false};
     bool isInPanic{false};
@@ -127,10 +127,10 @@ struct FleeStateData {
     uint8_t _pad{};
 
     // Safe zone system (4 safe zones inline)
-    Vector2D safeZoneCenters[4];  // 32 bytes: Center positions of safe zones
-    float safeZoneRadii[4]{};     // 16 bytes: Radii of safe zones
-    uint8_t safeZoneCount{0};     // Number of active safe zones (0-4)
-    uint8_t _fleePad[7]{};        // Padding for alignment
+    Vector2D safeZoneCenters[4]; // 32 bytes: Center positions of safe zones
+    float safeZoneRadii[4]{}; // 16 bytes: Radii of safe zones
+    uint8_t safeZoneCount{0}; // Number of active safe zones (0-4)
+    uint8_t _fleePad[7]{}; // Padding for alignment
 };
 
 // ============================================================================
@@ -171,14 +171,14 @@ struct GuardStateData {
     float alertDecayTimer{0.0f};
     float currentHeading{0.0f};
     float roamTimer{0.0f};
-    float escalationMultiplier{1.0f};  // Suspicion-based threshold multiplier
-    float cachedDetectionRange{0.0f};  // Mode-only detection range; env scale applied at the check
-    float hostileTimer{0.0f};          // Time spent at alert level HOSTILE (3) for ALARM escalation
-    float patrolThrottleTimer{0.0f};   // Throttle timer for PatrolBehavior update interval
+    float escalationMultiplier{1.0f}; // Suspicion-based threshold multiplier
+    float cachedDetectionRange{0.0f}; // Mode-only detection range; env scale applied at the check
+    float hostileTimer{0.0f}; // Time spent at alert level HOSTILE (3) for ALARM escalation
+    float patrolThrottleTimer{0.0f}; // Throttle timer for PatrolBehavior update interval
     uint32_t currentPatrolIndex{0};
-    uint8_t currentAlertLevel{0};  // 0=Calm, 1=Suspicious, 2=Alert, 3=Combat
+    uint8_t currentAlertLevel{0}; // 0=Calm, 1=Suspicious, 2=Alert, 3=Combat
     uint8_t currentMode{0};
-    uint8_t lastCachedMode{255};       // Track mode for cache invalidation
+    uint8_t lastCachedMode{255}; // Track mode for cache invalidation
     bool hasActiveThreat{false};
     bool isInvestigating{false};
     bool returningToPost{false};
@@ -191,8 +191,8 @@ struct GuardStateData {
     Vector2D patrolWaypoints[MAX_PATROL_WAYPOINTS];
     uint8_t patrolWaypointCount{0};
     uint8_t currentPatrolWaypointIndex{0};
-    bool reversePatrol{false};   // Ping-pong patrol
-    bool patrolForward{true};    // Current direction in ping-pong mode
+    bool reversePatrol{false}; // Ping-pong patrol
+    bool patrolForward{true}; // Current direction in ping-pong mode
     uint8_t _guardPad[4]{};
 };
 
@@ -226,8 +226,8 @@ struct AttackStateData {
     int attacksInCombo{0};
     int strafeDirectionInt{1};
     uint8_t lastTacticalRetreatEncounter{0};
-    uint8_t currentState{0};   // 0=Seeking, 1=Assessing, 2=Approaching, 3=Attacking, 4=Recovering, 5=TacticalReset, 6=Pressuring, 7=Disengaging
-    uint8_t attackMode{0};     // 0=Melee, 1=Ranged, 2=Charge, 3=Ambush, 4=Coordinated, 5=HitAndRun, 6=Berserker
+    uint8_t currentState{0}; // 0=Seeking, 1=Assessing, 2=Approaching, 3=Attacking, 4=Recovering, 5=TacticalReset, 6=Pressuring, 7=Disengaging
+    uint8_t attackMode{0}; // 0=Melee, 1=Ranged, 2=Charge, 3=Ambush, 4=Coordinated, 5=HitAndRun, 6=Berserker
     uint8_t lastCombatDecision{0};
     bool inCombat{false};
     bool hasTarget{false};
@@ -241,7 +241,7 @@ struct AttackStateData {
     bool hasExplicitTarget{false};
     bool comboEnabled{false};
     bool hasHandledTacticalRetreat{false};
-    EntityHandle explicitTarget;  // NPC-vs-NPC combat: overrides player targeting
+    EntityHandle explicitTarget; // NPC-vs-NPC combat: overrides player targeting
 };
 
 } // namespace VoidLight

@@ -46,7 +46,7 @@ private:
 struct PowerProfileConfig {
     int entityCount = 20000;
     int durationSeconds = 60;
-    std::string threadingMode = "multi";  // "single" or "multi"
+    std::string threadingMode = "multi"; // "single" or "multi"
     bool verbose = false;
 
     static PowerProfileConfig parseArgs(int argc, char* argv[]) {
@@ -222,7 +222,7 @@ int main(int argc, char* argv[]) {
             }
 
             // Pace to ~60 FPS (includes vsync wait - this is where idle power happens!)
-            auto targetFrameTimeUs = 16667;  // 1000/60 ms in microseconds
+            auto targetFrameTimeUs = 16667; // 1000/60 ms in microseconds
             auto frameEnd = std::chrono::high_resolution_clock::now();
             auto frameTime = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart).count();
             if (frameTime < targetFrameTimeUs) {

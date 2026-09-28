@@ -83,7 +83,7 @@ void initializeGamepadFromBackgroundThread() {
         if (gamepadIds) {
             SDL_free(gamepadIds);
         }
-        return;  // g_gamepadSubsystemInitialized stays false
+        return; // g_gamepadSubsystemInitialized stays false
     }
 
     std::cout << "[INFO]   [BG THREAD] Found " << numGamepads << " gamepad(s)" << std::endl;

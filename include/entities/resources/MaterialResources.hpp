@@ -18,13 +18,13 @@ public:
         const std::string& name, ResourceType type);
     ~Material() override = default;
 
-  // Material-specific properties
+    // Material-specific properties
     int getTier() const { return m_tier; }
     void setTier(int tier);
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
 protected:
     int m_tier{1}; // Material tier/quality (1-10)
@@ -55,9 +55,9 @@ public:
     float getPurity() const { return m_purity; }
     void setPurity(float purity) { m_purity = purity; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
     static std::string componentTypeToString(ComponentType type);
 
@@ -89,9 +89,9 @@ public:
     int getRarity() const { return m_rarity; }
     void setRarity(int rarity) { m_rarity = rarity; }
 
-  // TODO: Implement proper serialization later
-  // bool serialize(std::ostream &stream) const override;
-  // bool deserialize(std::istream &stream) override;
+    // TODO: Implement proper serialization later
+    // bool serialize(std::ostream &stream) const override;
+    // bool deserialize(std::istream &stream) override;
 
     static std::string resourceOriginToString(ResourceOrigin origin);
 

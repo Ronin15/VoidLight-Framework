@@ -22,12 +22,12 @@
 
 InputManager::InputManager()
     : m_keystates(nullptr) {
-  // Reserve capacity for performance optimization
-    m_pressedThisFrame.reserve(16);  // Typical max keys pressed per frame
-    m_gamepads.reserve(4);           // Max 4 gamepads typically
-    m_mouseButtonStates.reserve(3);  // 3 mouse buttons
+    // Reserve capacity for performance optimization
+    m_pressedThisFrame.reserve(16); // Typical max keys pressed per frame
+    m_gamepads.reserve(4); // Max 4 gamepads typically
+    m_mouseButtonStates.reserve(3); // 3 mouse buttons
 
-  // Create button states for the mouse
+    // Create button states for the mouse
     for (int i = 0; i < 3; i++) {
         m_mouseButtonStates.push_back(false);
     }
@@ -41,7 +41,7 @@ bool InputManager::init() {
 
     INPUT_INFO("Initializing InputManager");
 
-  // Get initial keyboard state from SDL (may be null on devices without keyboard)
+    // Get initial keyboard state from SDL (may be null on devices without keyboard)
     m_keystates = SDL_GetKeyboardState(nullptr);
     if (!m_keystates) {
         INPUT_WARN("No keyboard state available - device may not have keyboard input");
@@ -68,15 +68,15 @@ bool InputManager::init() {
 }
 
 void InputManager::initializeGamePad() {
-  // Check if gamepad subsystem is already initialized
+    // Check if gamepad subsystem is already initialized
     if (m_gamePadInitialized) {
         return;
     }
 
-  // Gamepad subsystem is initialized by GameEngine::init() with SDL_INIT_GAMEPAD
-  // Just detect and open available gamepads here
+    // Gamepad subsystem is initialized by GameEngine::init() with SDL_INIT_GAMEPAD
+    // Just detect and open available gamepads here
 
-  // Get all available gamepads with RAII management
+    // Get all available gamepads with RAII management
     int numGamepads = 0;
     auto gamepadIDs = std::unique_ptr<SDL_JoystickID[], decltype(&SDL_free)>(
         SDL_GetGamepads(&numGamepads), SDL_free);
@@ -98,7 +98,7 @@ void InputManager::initializeGamePad() {
         m_gamePadInitialized = openedAnyGamepad;
     } else {
         INPUT_INFO("No gamepads found");
-    // Subsystem stays initialized - SDL_Quit() will clean up all subsystems
+        // Subsystem stays initialized - SDL_Quit() will clean up all subsystems
         return;
     }
 }
@@ -192,15 +192,15 @@ const Vector2D& InputManager::getMousePosition() const {
 }
 
 bool InputManager::wasKeyPressed(SDL_Scancode key) const {
-  // Check if this key was pressed this frame using std::any_of
+    // Check if this key was pressed this frame using std::any_of
     return std::any_of(m_pressedThisFrame.begin(), m_pressedThisFrame.end(),
         [key](SDL_Scancode pressedKey) { return pressedKey == key; });
 }
 
 void InputManager::clearFrameInput() {
-  // Clears keys tracked for wasKeyPressed()/rebind capture this frame. Called
-  // once per frame by GameEngine::handleEvents() before the SDL poll loop —
-  // this is the sole per-frame reset of m_pressedThisFrame.
+    // Clears keys tracked for wasKeyPressed()/rebind capture this frame. Called
+    // once per frame by GameEngine::handleEvents() before the SDL poll loop —
+    // this is the sole per-frame reset of m_pressedThisFrame.
     m_pressedThisFrame.clear();
 }
 
@@ -509,7 +509,7 @@ void InputManager::loadDefaultBindings() {
     add(C::Interact, S::Keyboard, SDL_SCANCODE_E);
     add(C::Interact, S::GamepadButton, SDL_GAMEPAD_BUTTON_SOUTH);
     add(C::OpenInventory, S::Keyboard, SDL_SCANCODE_I);
-    add(C::OpenInventory, S::GamepadButton, SDL_GAMEPAD_BUTTON_NORTH);          // Y/Triangle
+    add(C::OpenInventory, S::GamepadButton, SDL_GAMEPAD_BUTTON_NORTH); // Y/Triangle
     // Pause keyboard default is ESC so the GamePlayState ESC-to-pause behaviour
     // survives the raw-scancode → Command::Pause swap.
     add(C::Pause, S::Keyboard, SDL_SCANCODE_ESCAPE);
@@ -543,9 +543,9 @@ void InputManager::loadDefaultBindings() {
     // nothing. Arrow keys drive keyboard menu navigation; D-Pad drives
     // gamepad menu navigation.
     add(C::MenuConfirm, S::Keyboard, SDL_SCANCODE_RETURN);
-    add(C::MenuConfirm, S::GamepadButton, SDL_GAMEPAD_BUTTON_SOUTH);           // A/Cross
+    add(C::MenuConfirm, S::GamepadButton, SDL_GAMEPAD_BUTTON_SOUTH); // A/Cross
     add(C::MenuCancel, S::Keyboard, SDL_SCANCODE_ESCAPE);
-    add(C::MenuCancel, S::GamepadButton, SDL_GAMEPAD_BUTTON_EAST);            // B/Circle
+    add(C::MenuCancel, S::GamepadButton, SDL_GAMEPAD_BUTTON_EAST); // B/Circle
     add(C::MenuUp, S::Keyboard, SDL_SCANCODE_UP);
     add(C::MenuUp, S::GamepadButton, SDL_GAMEPAD_BUTTON_DPAD_UP);
     add(C::MenuDown, S::Keyboard, SDL_SCANCODE_DOWN);
@@ -627,7 +627,7 @@ InputManager::DeviceCategory InputManager::getRebindingCategory() const {
 // =============================================================================
 
 namespace {
-    // Maps a command to its JSON key string
+// Maps a command to its JSON key string
 const char* commandJsonKey(InputManager::Command c) {
     using C = InputManager::Command;
     switch (c) {
@@ -662,7 +662,7 @@ const char* commandJsonKey(InputManager::Command c) {
     return nullptr;
 }
 
-    // Maps JSON key string to Command
+// Maps JSON key string to Command
 std::optional<InputManager::Command> jsonKeyToCommand(const std::string& key) {
     using C = InputManager::Command;
     static constexpr size_t kCount = static_cast<size_t>(C::COUNT);
@@ -697,7 +697,7 @@ std::optional<InputManager::InputSource> jsonKeyToSource(const std::string& key)
     return std::nullopt;
 }
 
-    // Encode a binding code to its string representation
+// Encode a binding code to its string representation
 std::string encodeBindingCode(InputManager::InputSource src, int code) {
     using S = InputManager::InputSource;
     switch (src) {
@@ -731,7 +731,7 @@ std::string encodeBindingCode(InputManager::InputSource src, int code) {
     return "unknown";
 }
 
-    // Decode a binding code string to int for a given source
+// Decode a binding code string to int for a given source
 std::optional<int> decodeBindingCode(InputManager::InputSource src, const std::string& codeStr) {
     using S = InputManager::InputSource;
     switch (src) {
@@ -964,7 +964,7 @@ static const char* nonFaceButtonLabel(SDL_GamepadButton btn,
     switch (btn) {
         case SDL_GAMEPAD_BUTTON_BACK: return isPS ? "Share" : "Back";
         case SDL_GAMEPAD_BUTTON_GUIDE: return isPS ? "PS" : "Guide";
-        case SDL_GAMEPAD_BUTTON_START: return "Start";  // universal (pause)
+        case SDL_GAMEPAD_BUTTON_START: return "Start"; // universal (pause)
         case SDL_GAMEPAD_BUTTON_LEFT_STICK: return isPS ? "L3" : "L-Stick";
         case SDL_GAMEPAD_BUTTON_RIGHT_STICK: return isPS ? "R3" : "R-Stick";
         case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: return isPS ? "L1" : "LB";
@@ -1105,8 +1105,8 @@ void InputManager::onKeyDown(const SDL_Event& event) {
         return;
     }
 
-  // Track this key as pressed this frame (for wasKeyPressed)
-  // Check for duplicates to avoid multiple entries for the same key in one frame
+    // Track this key as pressed this frame (for wasKeyPressed)
+    // Check for duplicates to avoid multiple entries for the same key in one frame
     bool alreadyTracked = std::any_of(m_pressedThisFrame.begin(), m_pressedThisFrame.end(),
         [scancode = event.key.scancode](SDL_Scancode pressedKey) {
             return pressedKey == scancode;
@@ -1118,10 +1118,10 @@ void InputManager::onKeyDown(const SDL_Event& event) {
 }
 
 void InputManager::onKeyUp(const SDL_Event& /*event*/) {
-  // Keyboard state is already updated by SDL event system
+    // Keyboard state is already updated by SDL event system
 
-  // Key-specific processing can be handled by game states
-  // using the isKeyDown() method
+    // Key-specific processing can be handled by game states
+    // using the isKeyDown() method
 }
 
 void InputManager::onMouseMove(const SDL_Event& event) {
@@ -1168,7 +1168,7 @@ void InputManager::onGamepadAxisMove(const SDL_Event& event) {
     const size_t whichOne = *index;
     GamepadState& gamepadState = m_gamepads[whichOne];
 
-  // Get axis name for debug messages
+    // Get axis name for debug messages
     const char* axisName;
     switch (event.gaxis.axis) {
         case SDL_GAMEPAD_AXIS_LEFTX: axisName = "Left Stick X"; break;
@@ -1193,7 +1193,7 @@ void InputManager::onGamepadAxisMove(const SDL_Event& event) {
         gamepadState.rightStick.setY(normalizeGamepadAxisValue(event.gaxis.value, m_joystickDeadZone));
     }
 
-  // Process left trigger (L2/LT)
+    // Process left trigger (L2/LT)
     if (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFT_TRIGGER) {
         gamepadState.leftTrigger = std::max(
             0.0f, normalizeGamepadAxisValue(event.gaxis.value, m_joystickDeadZone));
@@ -1201,7 +1201,7 @@ void InputManager::onGamepadAxisMove(const SDL_Event& event) {
             std::format("Gamepad {} - {} pressed: {}", whichOne, axisName, event.gaxis.value));
     }
 
-  // Process right trigger (R2/RT)
+    // Process right trigger (R2/RT)
     if (event.gaxis.axis == SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) {
         gamepadState.rightTrigger = std::max(
             0.0f, normalizeGamepadAxisValue(event.gaxis.value, m_joystickDeadZone));
@@ -1223,7 +1223,7 @@ void InputManager::onGamepadButtonDown(const SDL_Event& event) {
 
     gamepadState.buttonStates[event.gbutton.button] = true;
 
-  // Get button name for debug message
+    // Get button name for debug message
     const char* buttonName;
     switch (event.gbutton.button) {
         case 0: buttonName = "A or CROSS"; break;
@@ -1244,7 +1244,7 @@ void InputManager::onGamepadButtonDown(const SDL_Event& event) {
         default: buttonName = "Unknown";
     }
 
-  // Debug message for button press with button name
+    // Debug message for button press with button name
     INPUT_DEBUG(std::format("Gamepad {} Button '{}' ({}) pressed!",
         *index, buttonName, static_cast<int>(event.gbutton.button)));
 }
@@ -1287,8 +1287,8 @@ void InputManager::onGamepadRemapped(const SDL_Event& event) {
 }
 
 void InputManager::onFocusLost() {
-  // SDL tracks keyboard state internally. Clear it on the main thread so held keys
-  // don't remain logically pressed when focus returns.
+    // SDL tracks keyboard state internally. Clear it on the main thread so held keys
+    // don't remain logically pressed when focus returns.
     SDL_ResetKeyboard();
 
     m_pressedThisFrame.clear();
@@ -1301,7 +1301,7 @@ void InputManager::clean() {
         return;
     }
 
-  // Close gamepad handles
+    // Close gamepad handles
     if (m_gamePadInitialized) {
         size_t count = m_gamepads.size();
         for (auto& gamepad : m_gamepads) {
@@ -1320,10 +1320,10 @@ void InputManager::clean() {
         INPUT_INFO("No gamepads to free");
     }
 
-  // Clear mouse states
+    // Clear mouse states
     m_mouseButtonStates.clear();
 
-  // Set shutdown flag
+    // Set shutdown flag
     m_isShutdown = true;
     INPUT_INFO("InputManager resources cleaned");
 }
@@ -1387,8 +1387,8 @@ void InputManager::closeGamepad(SDL_JoystickID instanceId) {
 }
 
 void InputManager::updateMousePositionFromWindowCoords(float x, float y) {
-  // GPU renders at pixel resolution, but SDL mouse events are in window coordinates.
-  // Scale by pixel density to convert window coords to pixel coords.
+    // GPU renders at pixel resolution, but SDL mouse events are in window coordinates.
+    // Scale by pixel density to convert window coords to pixel coords.
     float scale = 1.0f;
     SDL_Window* window = GameEngine::Instance().getWindow();
     if (window) {

@@ -129,8 +129,8 @@ public:
     bool isTrigger(EntityID id) const;
 
     // World coupling
-    void rebuildStaticFromWorld();                // build colliders from WorldManager grid
-    void onTileChanged(int x, int y);             // update a specific cell
+    void rebuildStaticFromWorld(); // build colliders from WorldManager grid
+    void onTileChanged(int x, int y); // update a specific cell
     void setWorldBounds(float minX, float minY, float maxX, float maxY);
 
     // Projectile hit sink: registered by ProjectileManager::init(), cleared in clean().
@@ -268,8 +268,8 @@ private:
     void subscribeWorldEvents(); // hook to world events
 
     // Collision culling configuration
-    static constexpr float COLLISION_CULLING_BUFFER = 1000.0f;      // Buffer around culling area (1200x1200 total area)
-    static constexpr float SPATIAL_QUERY_EPSILON = 0.5f;            // AABB expansion for cell boundary overlap protection
+    static constexpr float COLLISION_CULLING_BUFFER = 1000.0f; // Buffer around culling area (1200x1200 total area)
+    static constexpr float SPATIAL_QUERY_EPSILON = 0.5f; // AABB expansion for cell boundary overlap protection
 
     // Spatial culling support (area-based, not camera-based)
     struct CullingArea {
@@ -314,21 +314,21 @@ private:
             // SIZE_MAX = not linked; 0 is a valid EDM index and must not be the empty default.
             size_t edmIndex{SIZE_MAX};
 
-            uint16_t layers{0};          // Layer mask (supports 16 layers, 7 currently defined)
-            uint16_t collidesWith{0};    // Collision mask
-            uint8_t bodyType{0};         // BodyType enum (STATIC, KINEMATIC, DYNAMIC)
-            uint8_t triggerTag{0};       // TriggerTag enum for triggers
-            uint8_t triggerType{0};      // TriggerType (EventOnly, Physical)
-            uint8_t active{0};           // Whether this body participates in collision detection
-            uint8_t isTrigger{0};        // Whether this is a trigger body
+            uint16_t layers{0}; // Layer mask (supports 16 layers, 7 currently defined)
+            uint16_t collidesWith{0}; // Collision mask
+            uint8_t bodyType{0}; // BodyType enum (STATIC, KINEMATIC, DYNAMIC)
+            uint8_t triggerTag{0}; // TriggerTag enum for triggers
+            uint8_t triggerType{0}; // TriggerType (EventOnly, Physical)
+            uint8_t active{0}; // Whether this body participates in collision detection
+            uint8_t isTrigger{0}; // Whether this is a trigger body
 
             // OPTIMIZATION: Cached coarse grid coords (eliminates m_bodyCoarseCell map lookup)
-            int16_t coarseCellX{0};      // Cached coarse grid X coordinate
-            int16_t coarseCellY{0};      // Cached coarse grid Y coordinate
+            int16_t coarseCellX{0}; // Cached coarse grid X coordinate
+            int16_t coarseCellY{0}; // Cached coarse grid Y coordinate
 
             // Padding to 64 bytes (one cache line)
             // Layout: 16 (floats) + 8 (size_t) + 4 (uint16_t) + 5 (uint8_t) + 1 (implicit) + 4 (int16_t) = 38
-            uint8_t _reserved[26]{};     // Future expansion (38 + 26 = 64)
+            uint8_t _reserved[26]{}; // Future expansion (38 + 26 = 64)
         };
         static_assert(sizeof(HotData) == 64, "HotData should be exactly 64 bytes for cache alignment");
 
@@ -336,10 +336,10 @@ private:
         // NOTE: Position/velocity/halfSize owned by EntityDataManager
         // All collision bodies must have valid EDM entries (statics via createStaticBody)
         struct ColdData {
-            EntityWeakPtr entityWeak{};  // Back-reference to entity
-            float restitution{0.0f};     // Bounce coefficient (0.0-1.0)
-            float friction{0.0f};        // Surface friction (0.0-1.0)
-            float mass{0.0f};            // Mass (kg) - for future physics
+            EntityWeakPtr entityWeak{}; // Back-reference to entity
+            float restitution{0.0f}; // Bounce coefficient (0.0-1.0)
+            float friction{0.0f}; // Surface friction (0.0-1.0)
+            float mass{0.0f}; // Mass (kg) - for future physics
             // NOTE: edmIndex moved to HotData for cache locality during AABB updates
         };
 
@@ -434,8 +434,8 @@ private:
      * 4. Narrowphase filters pairs and computes collision details
      * 5. EventOnly detection queries m_eventOnlySpatialHash separately
      * ===================================================== */
-    VoidLight::HierarchicalSpatialHash m_staticSpatialHash;     // Static world geometry
-    VoidLight::HierarchicalSpatialHash m_eventOnlySpatialHash;  // EventOnly triggers (water, etc.)
+    VoidLight::HierarchicalSpatialHash m_staticSpatialHash; // Static world geometry
+    VoidLight::HierarchicalSpatialHash m_eventOnlySpatialHash; // EventOnly triggers (water, etc.)
 
     // Current culling area for spatial queries
     mutable CullingArea m_currentCullingArea{0.0f, 0.0f, 0.0f, 0.0f};
@@ -456,14 +456,14 @@ private:
         std::vector<std::pair<EntityID, EntityID>> pairBuffer;
         std::vector<EntityID> candidateBuffer;
         std::vector<CollisionInfo> collisionBuffer;
-        std::vector<EntityID> dynamicCandidates;  // For broadphase dynamic queries
-        std::vector<EntityID> staticCandidates;   // For broadphase static queries
+        std::vector<EntityID> dynamicCandidates; // For broadphase dynamic queries
+        std::vector<EntityID> staticCandidates; // For broadphase static queries
 
         // EDM-CENTRIC: Active tier indices and cached collision data
-        std::vector<size_t> movableIndices;       // EDM indices of Active tier entities with collision
-        std::vector<size_t> staticIndices;        // m_storage indices of static bodies in culling area
+        std::vector<size_t> movableIndices; // EDM indices of Active tier entities with collision
+        std::vector<size_t> staticIndices; // m_storage indices of static bodies in culling area
         std::vector<size_t> sortedMovableIndices; // Pool indices sorted by X for Sweep-and-Prune
-        std::vector<size_t> sortedStaticIndices;  // Pool indices into staticAABBs sorted by X for SAP
+        std::vector<size_t> sortedStaticIndices; // Pool indices into staticAABBs sorted by X for SAP
 
         // EDM-CENTRIC: Cached AABBs for movables, computed from EDM each frame
         // Parallel to movableIndices: movableAABBs[i] corresponds to movableIndices[i]
@@ -472,9 +472,9 @@ private:
             float minX, minY, maxX, maxY;
             uint32_t layers;
             uint32_t collidesWith;
-            EntityID entityId;      // Cached to avoid edm.getEntityId() in narrowphase
-            bool isTrigger;         // Cached to avoid edm.getHotDataByIndex() in narrowphase
-            bool isProjectile;      // Cached so narrowphase can stamp CollisionInfo::projectileInvolved
+            EntityID entityId; // Cached to avoid edm.getEntityId() in narrowphase
+            bool isTrigger; // Cached to avoid edm.getHotDataByIndex() in narrowphase
+            bool isProjectile; // Cached so narrowphase can stamp CollisionInfo::projectileInvolved
         };
         std::vector<MovableAABB> movableAABBs;
 
@@ -494,7 +494,7 @@ private:
 
         // EventOnly trigger overlaps detected via per-entity spatial query
         struct EventOnlyTriggerOverlap {
-            size_t movablePoolIdx;   // Index into movableIndices/movableAABBs
+            size_t movablePoolIdx; // Index into movableIndices/movableAABBs
             size_t triggerStorageIdx; // Index into m_storage.hotData
         };
         std::vector<EventOnlyTriggerOverlap> eventOnlyOverlaps;
@@ -530,11 +530,11 @@ private:
                 staticCandidates.reserve(std::min(static_cast<size_t>(256), bodyCount / 5));
 
                 // EDM-centric capacity
-                movableIndices.reserve(bodyCount / 4);  // Estimate 25% Active tier with collision
-                movableAABBs.reserve(bodyCount / 4);    // Parallel to movableIndices
+                movableIndices.reserve(bodyCount / 4); // Estimate 25% Active tier with collision
+                movableAABBs.reserve(bodyCount / 4); // Parallel to movableIndices
                 staticIndices.reserve(bodyCount);
                 sortedMovableIndices.reserve(bodyCount / 4);
-                sortedStaticIndices.reserve(bodyCount);  // For SAP on statics
+                sortedStaticIndices.reserve(bodyCount); // For SAP on statics
                 movableMovablePairs.reserve(expectedPairs / 4);
                 movableStaticPairs.reserve(expectedPairs);
 
@@ -561,6 +561,14 @@ private:
             eventOnlyOverlaps.clear();
             // Vectors retain capacity
         }
+
+        // Drop the cached static broadphase set. It holds m_storage indices,
+        // so it must be cleared whenever m_storage is cleared.
+        void clearStaticCache() {
+            staticIndices.clear();
+            staticAABBs.clear();
+            sortedStaticIndices.clear();
+        }
     };
 
     mutable CollisionPool m_collisionPool;
@@ -574,14 +582,14 @@ private:
 
     // PERFORMANCE: Reusable containers to avoid per-frame allocations
     // These are cleared each frame but capacity is retained to eliminate heap churn
-    mutable std::unordered_set<uint64_t> m_currentTriggerPairsBuffer;   // For processTriggerEvents()
-    mutable std::vector<size_t> m_triggerCandidates;  // For detectEventOnlyTriggers() spatial queries
+    mutable std::unordered_set<uint64_t> m_currentTriggerPairsBuffer; // For processTriggerEvents()
+    mutable std::vector<size_t> m_triggerCandidates; // For detectEventOnlyTriggers() spatial queries
     // Note: buildActiveIndices() uses pools.staticIndices directly (already a reusable buffer)
 
     // Trigger sweep edge buffer (avoids per-frame allocation in detectEventOnlyTriggersSweep)
     struct TriggerSweepEdge {
         float x;
-        size_t idx;     // edmIdx for entities, storageIdx for triggers
+        size_t idx; // edmIdx for entities, storageIdx for triggers
         bool isStart;
         bool isTrigger;
     };
@@ -604,17 +612,17 @@ private:
         size_t bodyCount{0};
 
         // PERFORMANCE OPTIMIZATION METRICS: Track optimization effectiveness
-        size_t lastActiveBodies{0};           // Bodies after culling optimizations
-        size_t lastDynamicBodiesCulled{0};    // Dynamic bodies culled by distance
-        size_t lastStaticBodiesCulled{0};     // Static bodies culled by area
-        size_t totalStaticBodies{0};          // Total static bodies before culling
-        size_t totalMovableBodies{0};         // Total dynamic+kinematic bodies before culling
-        double lastCullingMs{0.0};            // Time spent on culling operations
-        double avgBroadphaseMs{0.0};          // Average broadphase time
+        size_t lastActiveBodies{0}; // Bodies after culling optimizations
+        size_t lastDynamicBodiesCulled{0}; // Dynamic bodies culled by distance
+        size_t lastStaticBodiesCulled{0}; // Static bodies culled by area
+        size_t totalStaticBodies{0}; // Total static bodies before culling
+        size_t totalMovableBodies{0}; // Total dynamic+kinematic bodies before culling
+        double lastCullingMs{0.0}; // Time spent on culling operations
+        double avgBroadphaseMs{0.0}; // Average broadphase time
 
         // TRIGGER DETECTION METRICS: Track EventOnly trigger detection
-        size_t lastTriggerDetectors{0};       // Entities with NEEDS_TRIGGER_DETECTION flag
-        size_t lastTriggerOverlaps{0};        // EventOnly trigger overlaps detected
+        size_t lastTriggerDetectors{0}; // Entities with NEEDS_TRIGGER_DETECTION flag
+        size_t lastTriggerOverlaps{0}; // EventOnly trigger overlaps detected
 
         // High-performance exponential moving average (no loops, O(1))
         static constexpr double ALPHA = 0.01; // ~100 frame average, much faster than windowing

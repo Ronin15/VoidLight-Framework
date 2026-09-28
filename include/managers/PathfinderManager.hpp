@@ -360,13 +360,13 @@ private:
     // Mutex-protected shared_ptr with snapshot semantics for thread-safe grid access
     // Note: std::atomic<std::shared_ptr<T>> requires C++20 library support not available on all platforms
     std::shared_ptr<VoidLight::PathfindingGrid> m_grid;
-    mutable std::shared_mutex m_gridMutex;  // Read-write lock for concurrent read access
+    mutable std::shared_mutex m_gridMutex; // Read-write lock for concurrent read access
     // Direct ThreadSystem processing - no queue needed
 
     // Thread-safe grid access helpers
     std::shared_ptr<VoidLight::PathfindingGrid> getGridSnapshot() const {
         std::shared_lock<std::shared_mutex> lock(m_gridMutex);
-        return m_grid;  // Copy increments refcount, safe to use after lock release
+        return m_grid; // Copy increments refcount, safe to use after lock release
     }
 
     void setGrid(std::shared_ptr<VoidLight::PathfindingGrid> newGrid) {
@@ -408,12 +408,12 @@ private:
     float m_cacheExpirationTime{5.0f}; // Cache expiration time in seconds
 
     // Auto-calculated cache parameters (computed per world for optimal scaling)
-    float m_endpointQuantization{128.0f};      // Dynamic: ~1% world size
-    float m_cacheKeyQuantization{256.0f};      // Dynamic: worldSize / sqrt(cache)
-    float m_hierarchicalThreshold{2048.0f};    // Dynamic: 5% of diagonal
-    float m_connectivityThreshold{16000.0f};   // Dynamic: 25% of width
-    int m_prewarmSectorCount{8};               // Dynamic: 4-16 based on size
-    int m_prewarmPathCount{168};               // Dynamic: sectors² × 2.5
+    float m_endpointQuantization{128.0f}; // Dynamic: ~1% world size
+    float m_cacheKeyQuantization{256.0f}; // Dynamic: worldSize / sqrt(cache)
+    float m_hierarchicalThreshold{2048.0f}; // Dynamic: 5% of diagonal
+    float m_connectivityThreshold{16000.0f}; // Dynamic: 25% of width
+    int m_prewarmSectorCount{8}; // Dynamic: 4-16 based on size
+    int m_prewarmPathCount{168}; // Dynamic: sectors² × 2.5
 
     // State management
     std::atomic<bool> m_initialized{false};
@@ -451,7 +451,7 @@ private:
     };
 
     mutable std::unordered_map<uint64_t, PathCacheEntry> m_pathCache;
-    mutable std::shared_mutex m_cacheMutex;  // shared_mutex for concurrent reads
+    mutable std::shared_mutex m_cacheMutex; // shared_mutex for concurrent reads
 
     // Optimized for high entity counts (2000-10K+ entities in demo states)
     // At 32K entries: ~3.5MB memory (acceptable overhead for large-scale scenarios)
@@ -470,7 +470,7 @@ private:
 
     // Async task synchronization (mirroring AIManager pattern)
     std::vector<std::future<void>> m_gridRebuildFutures;
-    std::vector<std::future<void>> m_reusableGridRebuildFutures;  // Swap target to preserve capacity
+    std::vector<std::future<void>> m_reusableGridRebuildFutures; // Swap target to preserve capacity
     std::mutex m_gridRebuildFuturesMutex;
 
 
@@ -512,7 +512,7 @@ private:
 
     // Event handlers
     void onCollisionObstacleChanged(const Vector2D& position, float radius, const std::string& description);
-    void onStaticCollidersReady();  // Called when CollisionManager finishes building static bodies
+    void onStaticCollidersReady(); // Called when CollisionManager finishes building static bodies
     void onWorldUnloaded();
     void onTileChanged(int x, int y);
 };

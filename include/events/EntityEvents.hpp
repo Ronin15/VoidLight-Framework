@@ -41,23 +41,23 @@ class Entity;
 
 enum class EntityEventType : uint8_t {
     // Damage events
-    DamageIntent,       // Request to deal damage (CombatController fires this)
-    DamageApplied,      // Damage was applied (after handler processes)
+    DamageIntent, // Request to deal damage (CombatController fires this)
+    DamageApplied, // Damage was applied (after handler processes)
 
     // Death events
-    DeathIntent,        // Entity about to die
-    DeathCompleted,     // Entity death processed
+    DeathIntent, // Entity about to die
+    DeathCompleted, // Entity death processed
 
     // Spawn events
-    SpawnRequest,       // Request to spawn entity
-    SpawnCompleted,     // Entity was spawned
+    SpawnRequest, // Request to spawn entity
+    SpawnCompleted, // Entity was spawned
 
     // State changes
-    StateChanged,       // Entity state transition
-    TierChanged,        // Simulation tier changed
+    StateChanged, // Entity state transition
+    TierChanged, // Simulation tier changed
 
     // Crime events
-    TheftDetected       // Entity stole from another entity
+    TheftDetected // Entity stole from another entity
 };
 
 // ============================================================================
@@ -153,8 +153,8 @@ private:
     EntityHandle m_target;
     float m_damage{0.0f};
     Vector2D m_knockback;
-    float m_remainingHealth{0.0f};  // Set after processing
-    bool m_wasLethal{false};        // Set after processing
+    float m_remainingHealth{0.0f}; // Set after processing
+    bool m_wasLethal{false}; // Set after processing
 };
 
 // ============================================================================
@@ -264,7 +264,7 @@ private:
     EntityEventType m_eventType;
     EntityKind m_kind;
     Vector2D m_position;
-    EntityHandle m_spawnedEntity;  // Set after spawning
+    EntityHandle m_spawnedEntity; // Set after spawning
 };
 
 // ============================================================================

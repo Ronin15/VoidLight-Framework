@@ -30,13 +30,13 @@ public:
     GameTimeManagerTestFixture() {
         // Get the singleton instance and initialize with default values
         gameTime = &GameTimeManager::Instance();
-        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));  // Start at noon, normal time scale
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f)); // Start at noon, normal time scale
     }
 
     ~GameTimeManagerTestFixture() {
         // Reset to known state for next test
-        gameTime->setGlobalPause(false);  // Ensure not paused
-        BOOST_CHECK(gameTime->init(12.0f, 1.0f));  // Reset to defaults
+        gameTime->setGlobalPause(false); // Ensure not paused
+        BOOST_CHECK(gameTime->init(12.0f, 1.0f)); // Reset to defaults
     }
 
 protected:
@@ -403,7 +403,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(FormatTimeTests, GameTimeManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTime24Hour) {
-    BOOST_REQUIRE(gameTime->init(14.5f, 1.0f));  // 2:30 PM
+    BOOST_REQUIRE(gameTime->init(14.5f, 1.0f)); // 2:30 PM
 
     std::string formatted(gameTime->formatCurrentTime(true));
     BOOST_CHECK_EQUAL(formatted, "14:30");
@@ -411,18 +411,18 @@ BOOST_AUTO_TEST_CASE(TestFormatCurrentTime24Hour) {
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTime12Hour) {
     // Test PM time
-    BOOST_REQUIRE(gameTime->init(14.5f, 1.0f));  // 2:30 PM
+    BOOST_REQUIRE(gameTime->init(14.5f, 1.0f)); // 2:30 PM
     std::string formatted1(gameTime->formatCurrentTime(false));
     BOOST_CHECK_EQUAL(formatted1, "2:30 PM");
 
     // Test AM time
-    BOOST_REQUIRE(gameTime->init(9.25f, 1.0f));  // 9:15 AM
+    BOOST_REQUIRE(gameTime->init(9.25f, 1.0f)); // 9:15 AM
     std::string formatted2(gameTime->formatCurrentTime(false));
     BOOST_CHECK_EQUAL(formatted2, "9:15 AM");
 }
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTimeMidnight) {
-    BOOST_REQUIRE(gameTime->init(0.0f, 1.0f));  // Midnight
+    BOOST_REQUIRE(gameTime->init(0.0f, 1.0f)); // Midnight
 
     std::string formatted24(gameTime->formatCurrentTime(true));
     BOOST_CHECK_EQUAL(formatted24, "00:00");
@@ -432,7 +432,7 @@ BOOST_AUTO_TEST_CASE(TestFormatCurrentTimeMidnight) {
 }
 
 BOOST_AUTO_TEST_CASE(TestFormatCurrentTimeNoon) {
-    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));  // Noon
+    BOOST_REQUIRE(gameTime->init(12.0f, 1.0f)); // Noon
 
     std::string formatted24(gameTime->formatCurrentTime(true));
     BOOST_CHECK_EQUAL(formatted24, "12:00");
@@ -459,7 +459,7 @@ public:
         BOOST_REQUIRE(eventManager->init());
 
         // Initialize GameTime to known state
-        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f));  // Start at noon, normal time scale
+        BOOST_REQUIRE(gameTime->init(12.0f, 1.0f)); // Start at noon, normal time scale
     }
 
     ~GameTimeEventTestFixture() {
@@ -480,7 +480,7 @@ BOOST_FIXTURE_TEST_SUITE(EventEmissionTests, GameTimeEventTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestHourChangedEventEmission) {
     // Initialize to just before hour change
-    BOOST_REQUIRE(gameTime->init(11.95f, 1.0f));  // 11:57 AM
+    BOOST_REQUIRE(gameTime->init(11.95f, 1.0f)); // 11:57 AM
 
     std::atomic<bool> eventReceived{false};
     int receivedHour = -1;
@@ -502,19 +502,19 @@ BOOST_AUTO_TEST_CASE(TestHourChangedEventEmission) {
     // With timeScale=1.0, 1 real second = 1 game minute
     // Need ~4 minutes of game time = 4 * 60 = 240 real seconds at scale 1
     // But update() takes deltaTime in real seconds
-    gameTime->update(300.0f);  // 5 minutes real time = 5 game minutes
+    gameTime->update(300.0f); // 5 minutes real time = 5 game minutes
 
     // Process deferred events
     eventManager->update();
 
     BOOST_CHECK(eventReceived.load());
-    BOOST_CHECK_EQUAL(receivedHour, 12);  // Noon
-    BOOST_CHECK(!receivedIsNight);  // Noon is daytime
+    BOOST_CHECK_EQUAL(receivedHour, 12); // Noon
+    BOOST_CHECK(!receivedIsNight); // Noon is daytime
 }
 
 BOOST_AUTO_TEST_CASE(TestDayChangedEventEmission) {
     // Initialize to near end of day
-    BOOST_REQUIRE(gameTime->init(23.95f, 1.0f));  // 11:57 PM
+    BOOST_REQUIRE(gameTime->init(23.95f, 1.0f)); // 11:57 PM
 
     std::atomic<bool> eventReceived{false};
     int receivedDay = -1;
@@ -532,13 +532,13 @@ BOOST_AUTO_TEST_CASE(TestDayChangedEventEmission) {
         });
 
     // Advance time enough to trigger day change (wrap past midnight)
-    gameTime->update(600.0f);  // 10 real minutes = 10 game minutes
+    gameTime->update(600.0f); // 10 real minutes = 10 game minutes
 
     // Process deferred events
     eventManager->update();
 
     BOOST_CHECK(eventReceived.load());
-    BOOST_CHECK_EQUAL(receivedDay, 2);  // Day 2
+    BOOST_CHECK_EQUAL(receivedDay, 2); // Day 2
     BOOST_CHECK_GE(receivedDayOfMonth, 1);
 }
 
@@ -572,7 +572,7 @@ BOOST_AUTO_TEST_CASE(TestSeasonChangedEventEmission) {
 
 BOOST_AUTO_TEST_CASE(TestMultipleTimeEventsInSequence) {
     // Test that multiple events fire correctly in sequence
-    BOOST_REQUIRE(gameTime->init(23.5f, 1.0f));  // 11:30 PM
+    BOOST_REQUIRE(gameTime->init(23.5f, 1.0f)); // 11:30 PM
 
     std::atomic<int> hourEventCount{0};
     std::atomic<int> dayEventCount{0};
@@ -590,7 +590,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleTimeEventsInSequence) {
         });
 
     // Advance through midnight (should trigger both hour and day change)
-    gameTime->update(3600.0f);  // 1 hour of real time = 60 game minutes
+    gameTime->update(3600.0f); // 1 hour of real time = 60 game minutes
     eventManager->update();
 
     // Should have received at least 1 hour change event

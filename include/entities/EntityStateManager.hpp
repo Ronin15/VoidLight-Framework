@@ -25,9 +25,9 @@ public:
 
 private:
     std::unordered_map<std::string, std::shared_ptr<EntityState>> m_states;
-   // Non-owning observer to the current active state
-   // This state is owned by the 'states' container above
+    // Non-owning observer to the current active state
+    // This state is owned by the 'states' container above
     std::weak_ptr<EntityState> m_currentState;
 };
 
-#endif  // ENTITY_STATE_MANAGER_HPP
+#endif // ENTITY_STATE_MANAGER_HPP

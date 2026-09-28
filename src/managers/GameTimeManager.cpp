@@ -248,7 +248,7 @@ void GameTimeManager::updateCalendarState() {
     }
 
     // Calculate year and day within year (0-based)
-    int const daysSinceStart = m_currentDay - 1;  // Convert to 0-based
+    int const daysSinceStart = m_currentDay - 1; // Convert to 0-based
     m_currentYear = (daysSinceStart / totalDaysInYear) + 1;
     int dayInYear = daysSinceStart % totalDaysInYear;
 
@@ -258,7 +258,7 @@ void GameTimeManager::updateCalendarState() {
         const auto& month = m_calendarConfig.months[i];
         if (dayInYear < accumulatedDays + month.dayCount) {
             m_currentMonth = static_cast<int>(i);
-            m_dayOfMonth = dayInYear - accumulatedDays + 1;  // Convert to 1-based
+            m_dayOfMonth = dayInYear - accumulatedDays + 1; // Convert to 1-based
             break;
         }
         accumulatedDays += month.dayCount;
@@ -334,7 +334,7 @@ void GameTimeManager::checkWeatherUpdate() {
     // Calculate hours since last weather check
     float hoursSinceCheck = m_currentHour - m_lastWeatherCheckHour;
     if (hoursSinceCheck < 0.0f) {
-        hoursSinceCheck += 24.0f;  // Handle midnight wraparound
+        hoursSinceCheck += 24.0f; // Handle midnight wraparound
     }
 
     // Also account for day changes
@@ -474,7 +474,7 @@ std::string_view GameTimeManager::getCurrentMonthName() const {
 
 int GameTimeManager::getDaysInCurrentMonth() const {
     if (m_calendarConfig.months.empty()) {
-        return 30;  // Default
+        return 30; // Default
     }
 
     if (m_currentMonth >= 0 &&

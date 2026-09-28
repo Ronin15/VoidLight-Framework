@@ -39,8 +39,8 @@ bool BackgroundSimulationManager::init() {
     m_globallyPaused.store(false, std::memory_order_release);
 
     // Reserve buffers
-    m_backgroundIndices.reserve(10000);  // Expect up to 10K background entities
-    m_batchFutures.reserve(16);          // Reasonable batch count
+    m_backgroundIndices.reserve(10000); // Expect up to 10K background entities
+    m_batchFutures.reserve(16); // Reasonable batch count
 
     m_initialized.store(true, std::memory_order_release);
     BGSIM_INFO("BackgroundSimulationManager initialized successfully");
@@ -74,8 +74,8 @@ void BackgroundSimulationManager::prepareForStateTransition() {
     m_backgroundIndices.clear();
     m_tiersDirty.store(true, std::memory_order_release);
     m_framesSinceTierUpdate = 0;
-    m_referencePointSet = false;  // Force reference point update on next state
-    m_accumulator = 0.0;          // Reset timing for clean start
+    m_referencePointSet = false; // Force reference point update on next state
+    m_accumulator = 0.0; // Reset timing for clean start
     BGSIM_INFO("State transition preparation complete");
 }
 
@@ -89,7 +89,7 @@ void BackgroundSimulationManager::update(const Vector2D& referencePoint, float d
     if (!m_initialized.load(std::memory_order_acquire) ||
         m_isShutdown.load(std::memory_order_acquire) ||
         m_globallyPaused.load(std::memory_order_acquire)) {
-        return;  // Complete skip - zero CPU cycles when paused
+        return; // Complete skip - zero CPU cycles when paused
     }
 
     // === PHASE 1: Periodic tier recalculation (every 60 frames) ===
@@ -111,7 +111,7 @@ void BackgroundSimulationManager::update(const Vector2D& referencePoint, float d
 
     // === PHASE 2: Background entity processing (10Hz, only if work exists) ===
     if (!m_hasNonActiveEntities.load(std::memory_order_acquire)) {
-        return;  // No background entities - skip processing entirely
+        return; // No background entities - skip processing entirely
     }
 
     // Accumulator pattern for 10Hz updates
@@ -299,7 +299,7 @@ void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
                     BGSIM_ERROR("Unknown exception in background sim batch");
                 }
             },
-            VoidLight::TaskPriority::Low,  // Background sim is low priority
+            VoidLight::TaskPriority::Low, // Background sim is low priority
             "BGSim_Batch");
 
         {
@@ -358,8 +358,8 @@ void BackgroundSimulationManager::simulateNPC(float deltaTime, size_t index) {
     transform.previousPosition = transform.position;
 
     // Apply velocity with decay
-    constexpr float VELOCITY_DECAY = 0.98f;  // 2% decay per frame
-    constexpr float MIN_VELOCITY_SQ = 0.1f;  // Stop if velocity is negligible
+    constexpr float VELOCITY_DECAY = 0.98f; // 2% decay per frame
+    constexpr float MIN_VELOCITY_SQ = 0.1f; // Stop if velocity is negligible
 
     float velMagSq = transform.velocity.getX() * transform.velocity.getX() +
         transform.velocity.getY() * transform.velocity.getY();

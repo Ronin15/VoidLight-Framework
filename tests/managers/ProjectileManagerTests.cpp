@@ -226,7 +226,7 @@ BOOST_AUTO_TEST_CASE(ProjectileMovement) {
     size_t idx = edm.getIndex(proj);
     BOOST_REQUIRE_NE(idx, SIZE_MAX);
     const auto& transform = edm.getHotDataByIndex(idx).transform;
-    float expectedX = 500.0f + 200.0f * 0.1f;  // 520
+    float expectedX = 500.0f + 200.0f * 0.1f; // 520
     BOOST_CHECK_CLOSE(transform.position.getX(), expectedX, 1.0f);
     BOOST_CHECK_CLOSE(transform.position.getY(), 500.0f, 1.0f);
 }

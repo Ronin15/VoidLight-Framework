@@ -172,13 +172,13 @@ BOOST_AUTO_TEST_CASE(TestDoubleSubscribe) {
     SocialController controller(nullptr);
 
     controller.subscribe();
-    controller.subscribe();  // Should be no-op
+    controller.subscribe(); // Should be no-op
     BOOST_CHECK(controller.isSubscribed());
 }
 
 BOOST_AUTO_TEST_CASE(TestConstants) {
     // Verify price multipliers are reasonable
-    BOOST_CHECK_GT(SocialController::BUY_PRICE_MULTIPLIER, 1.0f);  // Markup
+    BOOST_CHECK_GT(SocialController::BUY_PRICE_MULTIPLIER, 1.0f); // Markup
     BOOST_CHECK_LT(SocialController::SELL_PRICE_MULTIPLIER, 1.0f); // Markdown
 
     // Verify relationship thresholds are ordered
@@ -365,7 +365,7 @@ BOOST_AUTO_TEST_CASE(TestReportTheftWithInvalidVictim) {
     SocialController controller(nullptr);
 
     EntityHandle thief;
-    EntityHandle victim;  // Invalid
+    EntityHandle victim; // Invalid
     VoidLight::ResourceHandle stolenItem(1, 1);
     std::atomic<int> theftEvents{0};
 

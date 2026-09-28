@@ -192,7 +192,7 @@ BOOST_AUTO_TEST_CASE(TestYearProgression) {
     gameTime->setGameDay(121);
     gameTime->update(0.0f);
     BOOST_CHECK_EQUAL(gameTime->getGameYear(), 2);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentMonth(), 0);  // Back to Bloomtide
+    BOOST_CHECK_EQUAL(gameTime->getCurrentMonth(), 0); // Back to Bloomtide
     BOOST_CHECK_EQUAL(gameTime->getDayOfMonth(), 1);
 }
 
@@ -213,7 +213,7 @@ BOOST_AUTO_TEST_CASE(TestMultiYearProgression) {
     gameTime->setGameDay(555);
     gameTime->update(0.0f);
     BOOST_CHECK_EQUAL(gameTime->getGameYear(), 5);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentMonth(), 2);  // Harvestmoon
+    BOOST_CHECK_EQUAL(gameTime->getCurrentMonth(), 2); // Harvestmoon
     BOOST_CHECK_EQUAL(gameTime->getDayOfMonth(), 15);
 }
 

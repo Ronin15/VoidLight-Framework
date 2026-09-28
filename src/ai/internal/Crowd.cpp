@@ -45,7 +45,7 @@ struct SpatialQueryCache {
     std::array<CacheEntry, CACHE_SIZE> entries; // Fixed-size, no heap allocations
 
     SpatialQueryCache() {
-    // Pre-allocate capacity for all vectors to avoid per-frame reallocations
+        // Pre-allocate capacity for all vectors to avoid per-frame reallocations
         for (auto& entry : entries) {
             entry.results.reserve(32); // Typical query returns ~10-30 entities
             entry.frameNumber = 0;
@@ -53,13 +53,13 @@ struct SpatialQueryCache {
         }
     }
 
-  // Simple hash for position+radius (quantize to reduce unique keys)
+    // Simple hash for position+radius (quantize to reduce unique keys)
     static uint64_t hashQuery(const Vector2D& center, float radius) {
-    // Quantize position to 8-pixel grid to increase cache hits
+        // Quantize position to 8-pixel grid to increase cache hits
         int32_t const qx = static_cast<int32_t>(center.getX() / 8.0f);
         int32_t const qy = static_cast<int32_t>(center.getY() / 8.0f);
         int32_t const qr = static_cast<int32_t>(radius / 8.0f);
-    // Combine into hash
+        // Combine into hash
         uint64_t hash = static_cast<uint64_t>(qx);
         hash ^= (static_cast<uint64_t>(qy) << 16);
         hash ^= (static_cast<uint64_t>(qr) << 32);
@@ -72,8 +72,8 @@ struct SpatialQueryCache {
         size_t index = key % CACHE_SIZE;
 
         const CacheEntry& entry = entries[index];
-    // Frame-based validation: entry is valid only if it was stamped during the
-    // authoritative current frame. Stamps from prior frames auto-invalidate.
+        // Frame-based validation: entry is valid only if it was stamped during the
+        // authoritative current frame. Stamps from prior frames auto-invalidate.
         if (entry.frameNumber == currentFrame && entry.queryKey == key) {
             outResults = entry.results;
             return true;
@@ -129,28 +129,28 @@ int CountNearbyEntities(EntityID excludeId, const Vector2D& center,
 
     VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
-  // Use thread-local vector to avoid repeated allocations
+    // Use thread-local vector to avoid repeated allocations
     static thread_local std::vector<EntityID> queryResults;
     queryResults.clear();
 
-  // Read the authoritative frame once; the thread-local cache self-invalidates
-  // against it so stale cross-frame data is never returned on worker threads.
+    // Read the authoritative frame once; the thread-local cache self-invalidates
+    // against it so stale cross-frame data is never returned on worker threads.
     uint64_t currentFrame = g_authoritativeFrame.load(std::memory_order_relaxed);
 
-  // PERFORMANCE: Check spatial cache before expensive queryArea call
+    // PERFORMANCE: Check spatial cache before expensive queryArea call
     bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
     VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
     if (!cacheHit) {
-    // Cache miss - perform actual collision query
+        // Cache miss - perform actual collision query
         VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
             radius * 2.0f, radius * 2.0f);
         cm.queryArea(area, queryResults);
 
-    // Store result in cache for subsequent queries in same frame
+        // Store result in cache for subsequent queries in same frame
         g_spatialCache.store(center, radius, currentFrame, queryResults);
     }
 
-  // Count only actual entities (dynamic/kinematic, non-trigger, excluding self)
+    // Count only actual entities (dynamic/kinematic, non-trigger, excluding self)
     int count = static_cast<int>(std::count_if(
         queryResults.begin(), queryResults.end(), [excludeId, &cm](auto id) {
             return id != excludeId && (cm.isDynamic(id) || cm.isKinematic(id)) &&
@@ -169,29 +169,29 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center,
 
     VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
-  // Use thread-local vector to avoid repeated allocations
+    // Use thread-local vector to avoid repeated allocations
     static thread_local std::vector<EntityID> queryResults;
     queryResults.clear();
 
-  // Read the authoritative frame once; the thread-local cache self-invalidates
-  // against it so stale cross-frame data is never returned on worker threads.
+    // Read the authoritative frame once; the thread-local cache self-invalidates
+    // against it so stale cross-frame data is never returned on worker threads.
     uint64_t currentFrame = g_authoritativeFrame.load(std::memory_order_relaxed);
 
-  // PERFORMANCE: Check spatial cache before expensive queryArea call
+    // PERFORMANCE: Check spatial cache before expensive queryArea call
     bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
     VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
     if (!cacheHit) {
-    // Cache miss - perform actual collision query
+        // Cache miss - perform actual collision query
         VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
             radius * 2.0f, radius * 2.0f);
         cm.queryArea(area, queryResults);
 
-    // Store result in cache for subsequent queries in same frame
+        // Store result in cache for subsequent queries in same frame
         g_spatialCache.store(center, radius, currentFrame, queryResults);
     }
 
-  // Collect positions of actual entities (dynamic/kinematic, non-trigger,
-  // excluding self)
+    // Collect positions of actual entities (dynamic/kinematic, non-trigger,
+    // excluding self)
     for (auto id : queryResults) {
         if (id != excludeId && (cm.isDynamic(id) || cm.isKinematic(id)) &&
             !cm.isTrigger(id)) {
@@ -208,10 +208,10 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center,
 }
 
 void InvalidateSpatialCache(uint64_t frameNumber) {
-  // Publish the new authoritative frame for all worker threads. Each worker's
-  // thread_local cache validates entries against this value, so prior-frame
-  // stamps auto-invalidate without any per-thread call. Released before the AI
-  // batch dispatch, which establishes happens-before for the workers' reads.
+    // Publish the new authoritative frame for all worker threads. Each worker's
+    // thread_local cache validates entries against this value, so prior-frame
+    // stamps auto-invalidate without any per-thread call. Released before the AI
+    // batch dispatch, which establishes happens-before for the workers' reads.
     g_authoritativeFrame.store(frameNumber, std::memory_order_relaxed);
 }
 

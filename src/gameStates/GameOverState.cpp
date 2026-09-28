@@ -19,11 +19,11 @@ bool GameOverState::enter() {
 
     gameEngine.setGlobalPause(true);
 
-  // Want silence on this screen; gameplay may still have been playing music.
+    // Want silence on this screen; gameplay may still have been playing music.
     SoundManager::Instance().stopMusic();
 
-  // Full-screen owner: ensure a clean UI slate before building this screen.
-  // GameStateManager already clears UI on full-screen replace; this is defensive.
+    // Full-screen owner: ensure a clean UI slate before building this screen.
+    // GameStateManager already clears UI on full-screen replace; this is defensive.
     ui.prepareForStateTransition();
 
     const int windowWidth = gameEngine.getWidthInPixels();
@@ -88,7 +88,7 @@ void GameOverState::handleInput() {
 }
 
 bool GameOverState::exit() {
-  // Full-screen replace: GameStateManager clears all UI after this exit().
+    // Full-screen replace: GameStateManager clears all UI after this exit().
     UIManager::Instance().clearKeyboardSelection();
     return true;
 }

@@ -35,7 +35,7 @@ constexpr size_t UI_IMAGE_BATCH_CAPACITY = 32;
 // UI Component Types
 enum class UIComponentType {
     BUTTON,
-    BUTTON_DANGER,  // Red colored buttons (Back, Quit, Exit, Delete, etc.)
+    BUTTON_DANGER, // Red colored buttons (Back, Quit, Exit, Delete, etc.)
     BUTTON_SUCCESS, // Green colored buttons (Save, Confirm, Accept, etc.)
     BUTTON_WARNING, // Orange/Yellow colored buttons (Caution, Reset, etc.)
     LABEL,
@@ -63,28 +63,28 @@ enum class UILayoutType {
 
 // Position Modes for auto-repositioning on window resize
 enum class UIPositionMode {
-    ABSOLUTE,        // Fixed x,y (default, backward compatible)
-    CENTERED_H,      // Horizontal center + offsetX, fixed offsetY
-    CENTERED_V,      // Vertical center + offsetY, fixed offsetX
-    CENTERED_BOTH,   // Center both axes + offsets
-    TOP_ALIGNED,     // Top-left: x = offsetX, y = offsetY
-    TOP_RIGHT,       // Top-right: x = right - width - offsetX, y = offsetY
-    BOTTOM_ALIGNED,  // Bottom-left: x = offsetX, y = bottom - height - offsetY
+    ABSOLUTE, // Fixed x,y (default, backward compatible)
+    CENTERED_H, // Horizontal center + offsetX, fixed offsetY
+    CENTERED_V, // Vertical center + offsetY, fixed offsetX
+    CENTERED_BOTH, // Center both axes + offsets
+    TOP_ALIGNED, // Top-left: x = offsetX, y = offsetY
+    TOP_RIGHT, // Top-right: x = right - width - offsetX, y = offsetY
+    BOTTOM_ALIGNED, // Bottom-left: x = offsetX, y = bottom - height - offsetY
     BOTTOM_CENTERED, // Bottom center: horizontally centered, y = bottom - height - offsetY
-    BOTTOM_RIGHT,    // Bottom-right: x = right - width - offsetX, y = bottom - height - offsetY
-    LEFT_ALIGNED,    // Left edge + offsetX, vertically centered
-    RIGHT_ALIGNED    // Right edge - width - offsetX, vertically centered
+    BOTTOM_RIGHT, // Bottom-right: x = right - width - offsetX, y = bottom - height - offsetY
+    LEFT_ALIGNED, // Left edge + offsetX, vertically centered
+    RIGHT_ALIGNED // Right edge - width - offsetX, vertically centered
 };
 
 // UI Positioning structure for auto-repositioning
 struct UIPositioning {
     UIPositionMode mode{UIPositionMode::ABSOLUTE};
-    int offsetX{0};      // Offset from positioning anchor
-    int offsetY{0};      // Offset from positioning anchor
-    int fixedWidth{0};   // Fixed width (0 = use current width)
-    int fixedHeight{0};  // Fixed height (0 = use current height)
-    float widthPercent{0.0f};   // Width as fraction of window (e.g., 0.57 = 57%), takes precedence over fixedWidth
-    float heightPercent{0.0f};  // Height as fraction of window, takes precedence over fixedHeight
+    int offsetX{0}; // Offset from positioning anchor
+    int offsetY{0}; // Offset from positioning anchor
+    int fixedWidth{0}; // Fixed width (0 = use current width)
+    int fixedHeight{0}; // Fixed height (0 = use current height)
+    float widthPercent{0.0f}; // Width as fraction of window (e.g., 0.57 = 57%), takes precedence over fixedWidth
+    float heightPercent{0.0f}; // Height as fraction of window, takes precedence over fixedHeight
 };
 
 // UI States
@@ -139,13 +139,13 @@ struct UIStyle {
     SDL_Color pressedColor{30, 30, 30, 255};
     SDL_Color disabledColor{80, 80, 80, 128};
 
-  // Text background properties (for labels and titles)
+    // Text background properties (for labels and titles)
     SDL_Color textBackgroundColor{0, 0, 0,
         128}; // Semi-transparent black by default
-    bool useTextBackground{false};      // Enable text background for readability
-    int textBackgroundPadding{UIConstants::DEFAULT_TEXT_BG_PADDING};       // Extra padding around text background
-  // Passive mouse-hover effects are opt-in. Hit testing still runs for all
-  // visible/enabled components regardless of these flags.
+    bool useTextBackground{false}; // Enable text background for readability
+    int textBackgroundPadding{UIConstants::DEFAULT_TEXT_BG_PADDING}; // Extra padding around text background
+    // Passive mouse-hover effects are opt-in. Hit testing still runs for all
+    // visible/enabled components regardless of these flags.
     bool highlightOnMouseHover{false};
     bool showTooltipOnMouseHover{false};
 
@@ -153,7 +153,7 @@ struct UIStyle {
     int padding{UIConstants::DEFAULT_COMPONENT_PADDING};
     int margin{UIConstants::DEFAULT_MARGIN};
     int listItemHeight{UIConstants::DEFAULT_LIST_ITEM_HEIGHT}; // Configurable height for list items (increased from
-                          // 20 for better mouse accuracy)
+    // 20 for better mouse accuracy)
 
     std::string fontID{UIConstants::FONT_UI};
     int fontSize{UIConstants::DEFAULT_FONT_SIZE};
@@ -171,31 +171,31 @@ struct UIComponent {
     bool m_visible{true};
     bool m_enabled{true};
     int m_zOrder{0};
-  // When true, this component swallows mouse hover/press for any lower-z component
-  // that shares the cursor position. Used by modal overlays to block click-through
-  // to UI beneath them. Non-interactive types (PANEL etc.) otherwise let input
-  // fall through to whatever is underneath.
+    // When true, this component swallows mouse hover/press for any lower-z component
+    // that shares the cursor position. Used by modal overlays to block click-through
+    // to UI beneath them. Non-interactive types (PANEL etc.) otherwise let input
+    // fall through to whatever is underneath.
     bool m_blocksInputBelow{false};
-  // Render occlusion is separate from input blocking. Modal overlays set both:
-  // input uses this component as a hit barrier, while rendering skips lower
-  // normal UI before fixed render-family submission begins.
+    // Render occlusion is separate from input blocking. Modal overlays set both:
+    // input uses this component as a hit barrier, while rendering skips lower
+    // normal UI before fixed render-family submission begins.
     bool m_occludesRenderingBelow{false};
 
-  // Auto-repositioning properties
+    // Auto-repositioning properties
     UIPositioning m_positioning{};
 
-  // Auto-sizing properties
+    // Auto-sizing properties
     bool m_autoSize{true}; // Enable content-aware auto-sizing by default
     UIRect m_minBounds{0, 0, UIConstants::MIN_COMPONENT_WIDTH,
         UIConstants::MIN_COMPONENT_HEIGHT}; // Minimum size constraints (only width/height used)
     UIRect m_maxBounds{0, 0, UIConstants::MAX_COMPONENT_WIDTH,
-        UIConstants::MAX_COMPONENT_HEIGHT};    // Maximum size constraints (only width/height used)
-    int m_contentPadding{UIConstants::DEFAULT_CONTENT_PADDING};    // Padding around content for size calculations
-    bool m_autoWidth{true};     // Auto-size width based on content
-    bool m_autoHeight{true};    // Auto-size height based on content
+        UIConstants::MAX_COMPONENT_HEIGHT}; // Maximum size constraints (only width/height used)
+    int m_contentPadding{UIConstants::DEFAULT_CONTENT_PADDING}; // Padding around content for size calculations
+    bool m_autoWidth{true}; // Auto-size width based on content
+    bool m_autoHeight{true}; // Auto-size height based on content
     bool m_sizeToContent{true}; // Size exactly to fit content (vs. expand to fill)
 
-  // Component-specific data
+    // Component-specific data
     std::string m_text{};
     std::function<std::string()> m_textBinding{}; // For data-bound text
     bool m_bindingDirty{true}; // Skip binding callbacks when false (perf optimization)
@@ -215,7 +215,7 @@ struct UIComponent {
     std::string m_placeholder{};
     int m_maxLength{UIConstants::DEFAULT_INPUT_MAX_LENGTH};
 
-  // Callbacks
+    // Callbacks
     std::function<void()> m_onClick{};
     std::function<void(float)> m_onValueChanged{};
     std::function<void(const std::string&)> m_onTextChanged{};
@@ -224,10 +224,10 @@ struct UIComponent {
     std::function<void()>
         m_onContentChanged{}; // Called when content changes and resize is needed
 
-  // Parent/child relationship — parents are PANEL/DIALOG containers that
-  // provide a backdrop. Children inherit that backdrop so default glyph
-  // text-backgrounds (redundant over a parent backdrop) are suppressed.
-  // Empty parent id means top-level component.
+    // Parent/child relationship — parents are PANEL/DIALOG containers that
+    // provide a backdrop. Children inherit that backdrop so default glyph
+    // text-backgrounds (redundant over a parent backdrop) are suppressed.
+    // Empty parent id means top-level component.
     std::string m_parentId{};
     std::vector<std::string> m_childIds{};
     bool m_hasBackdropAncestor{false};
@@ -242,7 +242,7 @@ struct UILayout {
     UIRect m_bounds{};
     std::vector<std::string> m_childComponents{};
 
-  // Layout-specific properties
+    // Layout-specific properties
     int m_spacing{UIConstants::DEFAULT_LAYOUT_SPACING};
     int m_columns{1};
     int m_rows{1};
@@ -297,24 +297,24 @@ public:
         return instance;
     }
 
-  // Core system methods
+    // Core system methods
     [[nodiscard]] bool init();
     void update(float deltaTime);
     void clean();
     bool isShutdown() const { return m_isShutdown; }
 
-  // GPU rendering methods
+    // GPU rendering methods
     void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer);
     void renderGPU(VoidLight::GPURenderer& gpuRenderer, SDL_GPURenderPass* pass);
 
-  // Window resize notification (called by InputManager on SDL_EVENT_WINDOW_RESIZED)
+    // Window resize notification (called by InputManager on SDL_EVENT_WINDOW_RESIZED)
     void onWindowResize(int newWidthInPixels, int newHeightInPixels);
 
-  // UI Component creation methods. The optional `parentId` attaches the new
-  // component to a parent container (typically a PANEL or DIALOG) so that
-  // visibility cascades and the child inherits the parent's backdrop —
-  // suppressing redundant text-backgrounds that would otherwise bleed past
-  // the parent's edges at small scale.
+    // UI Component creation methods. The optional `parentId` attaches the new
+    // component to a parent container (typically a PANEL or DIALOG) so that
+    // visibility cascades and the child inherits the parent's backdrop —
+    // suppressing redundant text-backgrounds that would otherwise bleed past
+    // the parent's edges at small scale.
     void createButton(const std::string& id, const UIRect& bounds,
         const std::string& text = "",
         const std::string& parentId = "");
@@ -362,14 +362,14 @@ public:
     void createDialog(const std::string& id, const UIRect& bounds,
         const std::string& parentId = "");
 
-  // Modal creation helper - combines theme + overlay + dialog
+    // Modal creation helper - combines theme + overlay + dialog
     void createModal(const std::string& dialogId, const UIRect& bounds,
         const std::string& theme, int windowWidth, int windowHeight);
 
-  // Theme management
+    // Theme management
     void refreshAllComponentThemes() const;
 
-  // Component manipulation
+    // Component manipulation
     void removeComponent(const std::string& id);
     void clearAllComponents();
     bool hasComponent(const std::string& id) const;
@@ -379,7 +379,7 @@ public:
     void setComponentZOrder(const std::string& id, int zOrder);
     void setComponentPositioning(const std::string& id, const UIPositioning& positioning);
 
-  // Component property setters
+    // Component property setters
     void setText(const std::string& id, const std::string& text);
     void setImageSource(const std::string& id, const TextureSource& source);
     void setImageSourceRect(const std::string& id, const UIRect& sourceRect);
@@ -388,14 +388,14 @@ public:
     void setChecked(const std::string& id, bool checked);
     void setStyle(const std::string& id, const UIStyle& style);
 
-  // Data binding methods
+    // Data binding methods
     void bindText(const std::string& id, std::function<std::string()> binding);
     void bindList(const std::string& id,
         std::function<void(std::vector<std::string>&, std::vector<std::pair<std::string, int>>&)> binding);
     void markBindingDirty(const std::string& id);
     void markAllBindingsDirty();
 
-  // Component property getters
+    // Component property getters
     std::string getText(const std::string& id) const;
     std::string getTexture(const std::string& id) const;
     UIRect getImageSourceRect(const std::string& id) const;
@@ -404,25 +404,25 @@ public:
     UIRect getBounds(const std::string& id) const;
     UIState getComponentState(const std::string& id) const;
 
-  // Event handling
+    // Event handling
     bool isButtonClicked(const std::string& id) const;
     bool isButtonPressed(const std::string& id) const;
     bool isButtonHovered(const std::string& id) const;
     bool isComponentFocused(const std::string& id) const;
 
-  // Keyboard/gamepad selection — game states use this to highlight a button
-  // when driving menus with MenuUp/MenuDown instead of the mouse. When set,
-  // the selected component renders in HOVERED state provided the mouse is not
-  // over any other interactive component. Mouse hover always wins.
+    // Keyboard/gamepad selection — game states use this to highlight a button
+    // when driving menus with MenuUp/MenuDown instead of the mouse. When set,
+    // the selected component renders in HOVERED state provided the mouse is not
+    // over any other interactive component. Mouse hover always wins.
     void setKeyboardSelection(const std::string& id);
     void clearKeyboardSelection();
     const std::string& getKeyboardSelection() const { return m_keyboardSelection; }
 
-  // Synthesizes a click on the named component — queues its onClick callback
-  // just like a mouse click would. Used by MenuConfirm keyboard/gamepad input.
+    // Synthesizes a click on the named component — queues its onClick callback
+    // just like a mouse click would. Used by MenuConfirm keyboard/gamepad input.
     void simulateClick(const std::string& id);
 
-  // Callback setters
+    // Callback setters
     void setOnClick(const std::string& id, std::function<void()> callback);
     void setOnValueChanged(const std::string& id,
         std::function<void(float)> callback);
@@ -431,7 +431,7 @@ public:
     void setOnHover(const std::string& id, std::function<void()> callback);
     void setOnFocus(const std::string& id, std::function<void()> callback);
 
-  // Layout management
+    // Layout management
     void createLayout(const std::string& id, UILayoutType type,
         const UIRect& bounds);
     void addComponentToLayout(const std::string& layoutID,
@@ -443,24 +443,24 @@ public:
     void setLayoutColumns(const std::string& layoutID, int columns);
     void setLayoutAlignment(const std::string& layoutID, UIAlignment alignment);
 
-  // Progress bar specific methods
+    // Progress bar specific methods
     void updateProgressBar(const std::string& id, float value);
     void setProgressBarRange(const std::string& id, float minVal, float maxVal);
 
-  // List specific methods
+    // List specific methods
     void addListItem(const std::string& listID, const std::string& item);
     void removeListItem(const std::string& listID, int index);
     void clearList(const std::string& listID);
     int getSelectedListItem(const std::string& listID) const;
     void setSelectedListItem(const std::string& listID, int index);
 
-  // Enhanced list methods for auto-scrolling and management
+    // Enhanced list methods for auto-scrolling and management
     void setListMaxItems(const std::string& listID, int maxItems);
     void addListItemWithAutoScroll(const std::string& listID,
         const std::string& item);
 
-  // Event log specific methods
-  // Event log management
+    // Event log specific methods
+    // Event log management
     void addEventLogEntry(const std::string& logID, const std::string& entry);
     void clearEventLog(const std::string& logID);
     void setEventLogMaxEntries(const std::string& logID, int maxEntries);
@@ -468,22 +468,22 @@ public:
         float interval = UIConstants::DEFAULT_EVENT_LOG_UPDATE_INTERVAL);
     void disableEventLogAutoUpdate(const std::string& logID);
 
-  // Title specific methods
+    // Title specific methods
     void setTitleAlignment(const std::string& titleID, UIAlignment alignment);
     void
     centerTitleInContainer(const std::string& titleID, int containerX,
         int containerWidth); // Center title after auto-sizing
 
-  // Label specific methods
+    // Label specific methods
     void setLabelAlignment(const std::string& labelID, UIAlignment alignment);
 
-  // Input field specific methods
+    // Input field specific methods
     void setInputFieldPlaceholder(const std::string& id,
         const std::string& placeholder);
     void setInputFieldMaxLength(const std::string& id, int maxLength);
     bool isInputFieldFocused(const std::string& id) const;
 
-  // Animation system
+    // Animation system
     void animateMove(const std::string& id, const UIRect& targetBounds,
         float duration, std::function<void()> onComplete = nullptr);
     void animateColor(const std::string& id, const SDL_Color& targetColor,
@@ -491,7 +491,7 @@ public:
     void stopAnimation(const std::string& id);
     bool isAnimating(const std::string& id) const;
 
-  // Theme management
+    // Theme management
     void loadTheme(const UITheme& theme);
     void setDefaultTheme();
     void setLightTheme();
@@ -501,7 +501,7 @@ public:
     void applyThemeToComponent(const std::string& id, UIComponentType type);
     void setGlobalStyle(const UIStyle& style);
 
-  // Overlay management - creates/removes semi-transparent background overlays
+    // Overlay management - creates/removes semi-transparent background overlays
     void
     createOverlay(int windowWidth,
         int windowHeight); // Creates overlay using specified dimensions
@@ -509,17 +509,17 @@ public:
     createOverlay(); // Creates overlay using auto-detected logical dimensions
     void removeOverlay(); // Removes the overlay background
 
-  // Text background methods (for labels and titles readability)
+    // Text background methods (for labels and titles readability)
     void enableTextBackground(const std::string& id, bool enable = true);
     void setTextBackgroundColor(const std::string& id, SDL_Color color);
     void setTextBackgroundPadding(const std::string& id, int padding);
 
-  // Component cleanup utilities
+    // Component cleanup utilities
     void removeComponentsWithPrefix(const std::string& prefix);
     void resetToDefaultTheme();
     void prepareForStateTransition();
 
-  // Auto-sizing core methods
+    // Auto-sizing core methods
     void calculateOptimalSize(
         const std::string& id); // Calculate and apply optimal size for component
     void calculateOptimalSize(
@@ -538,9 +538,9 @@ public:
     setAutoSizingConstraints(const std::string& id, const UIRect& minBounds,
         const UIRect& maxBounds); // Set size constraints
 
-  // Auto-detection and convenience methods
-    int getWidthInPixels() const;   // Auto-detect width in pixels from GameEngine
-    int getHeightInPixels() const;  // Auto-detect height in pixels from GameEngine
+    // Auto-detection and convenience methods
+    int getWidthInPixels() const; // Auto-detect width in pixels from GameEngine
+    int getHeightInPixels() const; // Auto-detect height in pixels from GameEngine
     void createTitleAtTop(const std::string& id, const std::string& text,
         int height = UIConstants::DEFAULT_TITLE_HEIGHT);
     void createButtonAtBottom(const std::string& id, const std::string& text,
@@ -550,7 +550,7 @@ public:
     void createCenteredButton(const std::string& id, int offsetY,
         int width, int height, const std::string& text);
 
-  /**
+    /**
    * @brief Creates a panel positioned at bottom-right corner
    * @param id Panel component ID
    * @param width Panel width
@@ -562,7 +562,7 @@ public:
         int offsetX = UIConstants::BOTTOM_RIGHT_OFFSET_X,
         int offsetY = UIConstants::BOTTOM_RIGHT_OFFSET_Y);
 
-  /**
+    /**
    * @brief Creates a label positioned at bottom-right corner
    * @param id Label component ID
    * @param text Initial label text
@@ -576,12 +576,12 @@ public:
         int offsetX = UIConstants::BOTTOM_RIGHT_OFFSET_X,
         int offsetY = UIConstants::BOTTOM_RIGHT_OFFSET_Y);
 
-  // Utility methods
+    // Utility methods
     void setGlobalFont(const std::string& fontID);
     void setGlobalScale(float scale);
     float getGlobalScale() const { return m_globalScale; }
 
-  // Helper to scale UIRect by global scale factor (eliminates redundant per-component multiplication)
+    // Helper to scale UIRect by global scale factor (eliminates redundant per-component multiplication)
     inline UIRect scaleRect(const UIRect& bounds) const {
         return {
             static_cast<int>(bounds.x * m_globalScale),
@@ -590,22 +590,22 @@ public:
             static_cast<int>(bounds.height * m_globalScale)};
     }
 
-    float calculateOptimalScale(int width, int height) const;  // Calculate resolution-aware scale
+    float calculateOptimalScale(int width, int height) const; // Calculate resolution-aware scale
     void enableTooltips(bool enable) { m_tooltipsEnabled = enable; }
     void setTooltipDelay(float delay) { m_tooltipDelay = delay; }
 
-  // Debug methods
+    // Debug methods
     void setDebugMode(bool enable) { m_debugMode = enable; }
     void drawDebugBounds(bool enable) { m_drawDebugBounds = enable; }
     bool isClickOnUI(const Vector2D& screenPos) const;
 
 private:
-  // Core data
+    // Core data
     std::unordered_map<std::string, std::shared_ptr<UIComponent>> m_components{};
     std::unordered_map<std::string, std::shared_ptr<UILayout>> m_layouts{};
     std::vector<std::shared_ptr<UIAnimation>> m_animations{};
 
-  // State tracking
+    // State tracking
     std::vector<std::string> m_clickedButtons{};
     std::vector<std::string> m_hoveredComponents{};
     std::string m_focusedComponent{};
@@ -614,7 +614,7 @@ private:
     std::string m_hoveredTooltipCandidate{};
     float m_tooltipTimer{0.0f};
 
-  // Theme and styling
+    // Theme and styling
     UITheme m_currentTheme{};
     UIStyle m_globalStyle{};
     std::string m_globalFontID{UIConstants::FONT_DEFAULT};
@@ -623,38 +623,38 @@ private:
     float m_globalScale{1.0f};
     std::string m_currentThemeMode{"light"};
 
-  // Settings
+    // Settings
     bool m_tooltipsEnabled{true};
     float m_tooltipDelay{1.0f};
     bool m_debugMode{false};
     bool m_drawDebugBounds{false};
 
-  // Event log state tracking
+    // Event log state tracking
     std::unordered_map<std::string, EventLogState> m_eventLogStates{};
     bool m_isShutdown{false};
 
-  // Window resize tracking for auto-repositioning
+    // Window resize tracking for auto-repositioning
     int m_currentWidthInPixels{0};
     int m_currentHeightInPixels{0};
 
-  // Input state
+    // Input state
     Vector2D m_lastMousePosition{};
     bool m_mousePressed{false};
     bool m_mouseReleased{false};
 
-  // Performance optimization: Cached sorted components to avoid per-frame allocation + sorting
+    // Performance optimization: Cached sorted components to avoid per-frame allocation + sorting
     mutable std::vector<std::shared_ptr<UIComponent>> m_sortedComponentsCache{};
     mutable bool m_sortedComponentsDirty{true};
 
-  // Reusable scratch key for per-item text-cache lookups in recordGPUVertices,
-  // so per-frame list/log/checkbox keys don't heap-allocate a fresh std::string.
+    // Reusable scratch key for per-item text-cache lookups in recordGPUVertices,
+    // so per-frame list/log/checkbox keys don't heap-allocate a fresh std::string.
     std::string m_scratchTextKey{};
 
-  // Performance optimization: Value caches to avoid hash lookup when values unchanged
+    // Performance optimization: Value caches to avoid hash lookup when values unchanged
     std::unordered_map<std::string, float> m_valueCache{};
     std::unordered_map<std::string, std::string> m_textCache{};
 
-  // Private helper methods
+    // Private helper methods
     std::shared_ptr<UIComponent> getComponent(const std::string& id);
     std::shared_ptr<const UIComponent> getComponent(const std::string& id) const;
     std::shared_ptr<UILayout> getLayout(const std::string& id);
@@ -662,18 +662,18 @@ private:
         const std::string& parentId,
         bool autoSize = false);
 
-  // Parent/child linkage — called from every create* method after the
-  // component is fully initialized. Registers the child with the parent,
-  // computes backdrop inheritance, and suppresses the child's default
-  // text-background when the parent already provides one (PANEL/DIALOG or
-  // any descendant of one).
+    // Parent/child linkage — called from every create* method after the
+    // component is fully initialized. Registers the child with the parent,
+    // computes backdrop inheritance, and suppresses the child's default
+    // text-background when the parent already provides one (PANEL/DIALOG or
+    // any descendant of one).
     void linkToParent(const std::shared_ptr<UIComponent>& component,
         const std::string& parentId);
     void applyThemeStyle(const std::shared_ptr<UIComponent>& component,
         UIComponentType type) const;
     void applyCurrentThemeToComponents() const;
 
-  // Auto-repositioning system (private helpers)
+    // Auto-repositioning system (private helpers)
     void repositionAllComponents(int width, int height);
     void applyPositioning(std::shared_ptr<UIComponent> component, int width, int height);
     int calculateListItemHeight(const std::shared_ptr<UIComponent>& component) const;
@@ -682,40 +682,40 @@ private:
     void updateAnimations(float deltaTime);
     void updateTooltips(float deltaTime);
     void updateEventLogs(float deltaTime);
-  // PERFORMANCE: Return const reference to avoid vector copy every frame
+    // PERFORMANCE: Return const reference to avoid vector copy every frame
     const std::vector<std::shared_ptr<UIComponent>>& getSortedComponents() const;
 
-  // Performance optimization helper
+    // Performance optimization helper
     void invalidateComponentCache();
     void clearFrameRenderBatches();
 
-  // Layout helpers
+    // Layout helpers
     void applyAbsoluteLayout(const std::shared_ptr<UILayout>& layout);
     void applyFlowLayout(const std::shared_ptr<UILayout>& layout);
     void applyGridLayout(const std::shared_ptr<UILayout>& layout);
     void applyStackLayout(const std::shared_ptr<UILayout>& layout);
     void applyAnchorLayout(const std::shared_ptr<UILayout>& layout);
 
-  // Utility helpers
+    // Utility helpers
     SDL_Color interpolateColor(const SDL_Color& start, const SDL_Color& end,
         float t);
     UIRect interpolateRect(const UIRect& start, const UIRect& end, float t);
     void executeDeferredCallbacks();
 
-  // Deferred execution queue to prevent iterator invalidation
+    // Deferred execution queue to prevent iterator invalidation
     std::vector<std::function<void()>> m_deferredCallbacks{};
 
-  // PERFORMANCE: Track active bindings to skip iteration when none exist
+    // PERFORMANCE: Track active bindings to skip iteration when none exist
     size_t m_activeBindingCount{0};
 
-  // Frame-local render batch state. Render order is fixed by family: primitives, images,
-  // then text. Component z-order controls input priority and ordering inside
-  // each family, not cross-family visual interleaving.
-    uint32_t m_uiPrimitiveVertexCount{0};                  // Filled rects, borders, text backgrounds
+    // Frame-local render batch state. Render order is fixed by family: primitives, images,
+    // then text. Component z-order controls input priority and ordering inside
+    // each family, not cross-family visual interleaving.
+    uint32_t m_uiPrimitiveVertexCount{0}; // Filled rects, borders, text backgrounds
     std::vector<VoidLight::UITextureDrawBatch> m_imageRenderBatches{}; // Images/textures
-    std::vector<VoidLight::UITextDrawBatch> m_textRenderBatches{};     // SDL3_ttf atlas-backed text
+    std::vector<VoidLight::UITextDrawBatch> m_textRenderBatches{}; // SDL3_ttf atlas-backed text
 
-  // Delete copy constructor and assignment operator
+    // Delete copy constructor and assignment operator
     UIManager(const UIManager&) = delete;
     UIManager& operator=(const UIManager&) = delete;
 

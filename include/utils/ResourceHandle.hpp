@@ -22,32 +22,32 @@ namespace VoidLight {
  */
 class ResourceHandle {
 public:
-  // Handle components
+    // Handle components
     using HandleId = uint32_t;
     using Generation = uint16_t;
 
-  // Special values
+    // Special values
     static constexpr HandleId INVALID_ID = 0;
     static constexpr Generation INVALID_GENERATION = 0;
 
-  // Default constructor creates invalid handle
+    // Default constructor creates invalid handle
     constexpr ResourceHandle() noexcept
         : m_id(INVALID_ID), m_generation(INVALID_GENERATION) {}
 
-  // Construct handle with ID and generation
+    // Construct handle with ID and generation
     constexpr ResourceHandle(HandleId id, Generation generation) noexcept
         : m_id(id), m_generation(generation) {}
 
-  // Accessors
+    // Accessors
     constexpr HandleId getId() const noexcept { return m_id; }
     constexpr Generation getGeneration() const noexcept { return m_generation; }
 
-  // Validity check
+    // Validity check
     constexpr bool isValid() const noexcept {
         return m_id != INVALID_ID && m_generation != INVALID_GENERATION;
     }
 
-  // Comparison operators
+    // Comparison operators
     constexpr bool operator==(const ResourceHandle& other) const noexcept {
         return m_id == other.m_id && m_generation == other.m_generation;
     }
@@ -62,13 +62,13 @@ public:
         return m_generation < other.m_generation;
     }
 
-  // Hash support for containers
+    // Hash support for containers
     std::size_t hash() const noexcept {
         return static_cast<std::size_t>(m_id) |
             (static_cast<std::size_t>(m_generation) << 32);
     }
 
-  // String conversion for debugging
+    // String conversion for debugging
     std::string toString() const {
         if (!isValid())
             return "ResourceHandle::INVALID";

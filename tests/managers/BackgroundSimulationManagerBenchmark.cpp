@@ -320,7 +320,7 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning) {
     prepareForTest();
 
     const float WORLD_SIZE = 50000.0f;
-    const float DELTA_TIME = 0.1f;  // Trigger background processing
+    const float DELTA_TIME = 0.1f; // Trigger background processing
 
     // Create enough entities for threading to be considered
     createBackgroundEntities(5000, WORLD_SIZE);

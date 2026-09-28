@@ -186,7 +186,7 @@ void HierarchicalSpatialHash::reserve(size_t expectedBodyCount) {
     // Reserve space for expected number of coarse regions
     // Empirically: ~200 bodies → ~20 regions, ~5000 bodies → ~250 regions
     size_t expectedRegions = std::max(size_t(64), expectedBodyCount / 20);
-    reserveRegions(expectedRegions * 2);  // 2x safety margin
+    reserveRegions(expectedRegions * 2); // 2x safety margin
 }
 
 void HierarchicalSpatialHash::reserveRegions(size_t expectedRegionCount) {
@@ -269,7 +269,7 @@ void HierarchicalSpatialHash::queryRegionBounds(float minX, float minY, float ma
         (minX + maxX) * 0.5f, // centerX
         (minY + maxY) * 0.5f, // centerY
         (maxX - minX) * 0.5f, // halfWidth
-        (maxY - minY) * 0.5f  // halfHeight
+        (maxY - minY) * 0.5f // halfHeight
     );
 
     // PERFORMANCE: No mutex needed - single-threaded collision system

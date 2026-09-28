@@ -361,7 +361,7 @@ uint64_t PathfinderManager::requestPathToEDM(
     // Get grid snapshot ONCE at start - avoid repeated atomic accesses
     auto gridSnapshot = getGridSnapshot();
     if (!gridSnapshot) {
-        return 0;  // No grid available
+        return 0; // No grid available
     }
 
     // Compute cache key from RAW coordinates BEFORE normalization
@@ -508,7 +508,7 @@ uint64_t PathfinderManager::requestPathToEDM(
 
     threadSystem.enqueueTask(work, mapEnumToTaskPriority(priority), "PathToEDM");
 
-    return requestId;  // Returns immediately - path computed asynchronously
+    return requestId; // Returns immediately - path computed asynchronously
 }
 
 VoidLight::PathfindingResult PathfinderManager::findPathImmediate(
@@ -699,7 +699,7 @@ void PathfinderManager::rebuildGrid(bool allowIncremental) {
     // Calculate optimal worker count for grid rebuild (considers queue pressure internally)
     size_t optimalWorkerCount = budgetMgr.getOptimalWorkers(
         VoidLight::SystemType::Pathfinding,
-        static_cast<size_t>(gridHeight)  // Workload = number of rows
+        static_cast<size_t>(gridHeight) // Workload = number of rows
     );
 
     // Get batch strategy from WorkerBudget
@@ -1377,8 +1377,8 @@ void PathfinderManager::calculateOptimalCacheSettings() {
     m_endpointQuantization = std::clamp(worldW / 200.0f, 128.0f, 256.0f);
 
     // ADAPTIVE THRESHOLDS
-    m_hierarchicalThreshold = diagonal * 0.05f;      // 5% of world diagonal
-    m_connectivityThreshold = worldW * 0.25f;        // 25% of world width
+    m_hierarchicalThreshold = diagonal * 0.05f; // 5% of world diagonal
+    m_connectivityThreshold = worldW * 0.25f; // 25% of world width
 
     // ADAPTIVE PRE-WARMING (8-connected sector graph)
     // Small worlds (< 16K): 4×4 sectors = 56 paths

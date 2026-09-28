@@ -36,7 +36,7 @@ ResourcePtr ResourceFactory::createFromJson(const JsonValue& json) {
         return nullptr;
     }
 
-  // Extract required fields
+    // Extract required fields
     if (!json.hasKey("id") || !json.hasKey("name") || !json.hasKey("category") ||
         !json.hasKey("type")) {
         RESOURCE_ERROR("ResourceFactory::createFromJson - Missing required fields "
@@ -54,11 +54,11 @@ ResourcePtr ResourceFactory::createFromJson(const JsonValue& json) {
         return nullptr;
     }
 
-  // Convert strings to enums for potential fallback use
+    // Convert strings to enums for potential fallback use
     ResourceCategory category = Resource::stringToCategory(categoryStr);
     ResourceType type = Resource::stringToType(typeStr);
 
-  // Look for specialized creator based on type
+    // Look for specialized creator based on type
     auto& creators = getCreators();
     auto creatorIt = creators.find(typeStr);
     if (creatorIt != creators.end()) {
@@ -74,12 +74,12 @@ ResourcePtr ResourceFactory::createFromJson(const JsonValue& json) {
         }
     }
 
-  // Fallback to base Resource creation using handles
+    // Fallback to base Resource creation using handles
     RESOURCE_WARN(std::format(
         "ResourceFactory::createFromJson - No specialized creator for type '{}', creating base Resource with category {}",
         typeStr, categoryStr));
 
-  // Generate a handle for the new resource
+    // Generate a handle for the new resource
     auto handle = ResourceTemplateManager::Instance().generateHandle();
     auto resource = std::make_shared<Resource>(handle, id, name, category, type);
     setCommonProperties(resource, json);
@@ -119,7 +119,7 @@ std::vector<std::string> ResourceFactory::getRegisteredTypes() {
 }
 
 void ResourceFactory::initialize() {
-  // Check if already initialized to avoid duplicate registrations
+    // Check if already initialized to avoid duplicate registrations
     const auto& creators = getCreators();
     if (!creators.empty()) {
         RESOURCE_DEBUG(std::format("ResourceFactory::initialize - Already initialized with {} resource creators",
@@ -130,7 +130,7 @@ void ResourceFactory::initialize() {
     RESOURCE_INFO(
         "ResourceFactory::initialize - Registering default resource creators");
 
-  // Register creators for all resource types
+    // Register creators for all resource types
     registerCreator("Equipment", [](const JsonValue& json) -> ResourcePtr {
         return createEquipment(ResourceTemplateManager::Instance().generateHandle(),
             json);
@@ -203,7 +203,7 @@ ResourceFactory::createEquipment(VoidLight::ResourceHandle handle,
     auto equipment = std::make_shared<Equipment>(handle, id, name, slot);
     setCommonProperties(equipment, json);
 
-  // Set equipment-specific properties
+    // Set equipment-specific properties
     if (json.hasKey("properties") && json["properties"].isObject()) {
         const JsonValue& props = json["properties"];
         equipment->setAttackBonus(props["attackBonus"].tryAsInt().value_or(0));
@@ -241,11 +241,11 @@ ResourceFactory::createConsumable(VoidLight::ResourceHandle handle,
     auto consumable = std::make_shared<Consumable>(handle, id, name);
     setCommonProperties(consumable, json);
 
-  // Set consumable-specific properties
+    // Set consumable-specific properties
     if (json.hasKey("properties") && json["properties"].isObject()) {
         const JsonValue& props = json["properties"];
 
-    // Map effect string to enum
+        // Map effect string to enum
         if (props.hasKey("effect")) {
             std::string effectStr = props["effect"].tryAsString().value_or("HealHP");
             Consumable::ConsumableEffect effect =
@@ -321,7 +321,7 @@ ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
     ResourceType type = Resource::stringToType(typeStr);
 
     if (type == ResourceType::CraftingComponent) {
-    // Determine component type from JSON or default to Metal
+        // Determine component type from JSON or default to Metal
         CraftingComponent::ComponentType componentType =
             CraftingComponent::ComponentType::Metal;
         if (json.hasKey("properties") && json["properties"].isObject()) {
@@ -350,7 +350,7 @@ ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
             std::make_shared<CraftingComponent>(handle, id, name, componentType);
         setCommonProperties(craftingComponent, json);
 
-    // Set crafting component specific properties
+        // Set crafting component specific properties
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
             craftingComponent->setTier(props["tier"].tryAsInt().value_or(1));
@@ -360,7 +360,7 @@ ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
 
         return craftingComponent;
     } else if (type == ResourceType::RawResource) {
-    // Determine resource origin from JSON or default to Mining
+        // Determine resource origin from JSON or default to Mining
         RawResource::ResourceOrigin origin = RawResource::ResourceOrigin::Mining;
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
@@ -383,7 +383,7 @@ ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
         auto rawResource = std::make_shared<RawResource>(handle, id, name, origin);
         setCommonProperties(rawResource, json);
 
-    // Set raw resource specific properties
+        // Set raw resource specific properties
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
             rawResource->setTier(props["tier"].tryAsInt().value_or(1));
@@ -393,7 +393,7 @@ ResourcePtr ResourceFactory::createMaterial(VoidLight::ResourceHandle handle,
         return rawResource;
     }
 
-  // Fallback to base Material class
+    // Fallback to base Material class
     auto material = std::make_shared<Material>(handle, id, name, type);
     setCommonProperties(material, json);
 
@@ -416,7 +416,7 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
         auto gold = std::make_shared<Gold>(handle, id, name);
         setCommonProperties(gold, json);
 
-    // Set currency-specific properties
+        // Set currency-specific properties
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
             gold->setExchangeRate(static_cast<float>(
@@ -425,7 +425,7 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
 
         return gold;
     } else if (type == ResourceType::Gem) {
-    // Determine gem type from JSON or default to Ruby
+        // Determine gem type from JSON or default to Ruby
         Gem::GemType gemType = Gem::GemType::Ruby;
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
@@ -444,7 +444,7 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
         auto gem = std::make_shared<Gem>(handle, id, name, gemType);
         setCommonProperties(gem, json);
 
-    // Set gem-specific properties
+        // Set gem-specific properties
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
             gem->setExchangeRate(static_cast<float>(
@@ -464,7 +464,7 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
             std::make_shared<FactionToken>(handle, id, name, factionId);
         setCommonProperties(factionToken, json);
 
-    // Set faction token specific properties
+        // Set faction token specific properties
         if (json.hasKey("properties") && json["properties"].isObject()) {
             const JsonValue& props = json["properties"];
             factionToken->setExchangeRate(static_cast<float>(
@@ -486,7 +486,7 @@ ResourcePtr ResourceFactory::createCurrency(VoidLight::ResourceHandle handle,
         return craftingCurrency;
     }
 
-  // Fallback to base Currency class
+    // Fallback to base Currency class
     auto currency = std::make_shared<Currency>(handle, id, name, type);
     setCommonProperties(currency, json);
 
@@ -503,7 +503,7 @@ void ResourceFactory::setCommonProperties(const ResourcePtr& resource,
     if (!resource)
         return;
 
-  // Set basic properties
+    // Set basic properties
     if (json.hasKey("description")) {
         resource->setDescription(json["description"].tryAsString().value_or(""));
     }
@@ -521,14 +521,14 @@ void ResourceFactory::setCommonProperties(const ResourcePtr& resource,
         resource->setConsumable(json["consumable"].tryAsBool().value_or(false));
     }
 
-  // Support unified textureId field (sets both icon and world texture)
+    // Support unified textureId field (sets both icon and world texture)
     if (json.hasKey("textureId")) {
         std::string textureId = json["textureId"].tryAsString().value_or("");
         resource->setIconTextureId(textureId);
         resource->setWorldTextureId(textureId);
     }
 
-  // Legacy support: separate iconTextureId/worldTextureId override unified field
+    // Legacy support: separate iconTextureId/worldTextureId override unified field
     if (json.hasKey("iconTextureId")) {
         resource->setIconTextureId(
             json["iconTextureId"].tryAsString().value_or(""));
@@ -547,9 +547,9 @@ void ResourceFactory::setCommonProperties(const ResourcePtr& resource,
         resource->setAnimSpeed(json["animSpeed"].tryAsInt().value_or(0));
     }
 
-  // Note: Atlas coordinates (atlasX/Y/W/H) are now looked up from atlas.json
-  // in ResourceTemplateManager::createDefaultResources(), not read from
-  // resource JSON files. This allows a single source of truth for sprite coords.
+    // Note: Atlas coordinates (atlasX/Y/W/H) are now looked up from atlas.json
+    // in ResourceTemplateManager::createDefaultResources(), not read from
+    // resource JSON files. This allows a single source of truth for sprite coords.
 }
 
 } // namespace VoidLight

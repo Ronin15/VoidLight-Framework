@@ -21,8 +21,8 @@
 // Helper function to find resource handle by name
 VoidLight::ResourceHandle
 findResourceByName(ResourceTemplateManager* manager, const std::string& name) {
-  // Use a more efficient approach - iterate through resource handles we know
-  // exist rather than testing every possible handle ID
+    // Use a more efficient approach - iterate through resource handles we know
+    // exist rather than testing every possible handle ID
     for (int cat = 0; cat < static_cast<int>(ResourceCategory::COUNT); ++cat) {
         auto resources =
             manager->getResourcesByCategory(static_cast<ResourceCategory>(cat));
@@ -38,24 +38,24 @@ findResourceByName(ResourceTemplateManager* manager, const std::string& name) {
 class ResourceTemplateManagerJsonTestFixture {
 public:
     ResourceTemplateManagerJsonTestFixture() {
-    // Initialize ResourceTemplateManager singleton
+        // Initialize ResourceTemplateManager singleton
         resourceManager = &ResourceTemplateManager::Instance();
         BOOST_REQUIRE(resourceManager != nullptr);
 
-    // Clean and initialize the manager for each test
+        // Clean and initialize the manager for each test
         resourceManager->clean();
         bool initialized = resourceManager->init();
         BOOST_REQUIRE_MESSAGE(initialized,
             "Failed to initialize ResourceTemplateManager");
 
-    // Verify the manager is in a good state
+        // Verify the manager is in a good state
         BOOST_TEST_MESSAGE("ResourceTemplateManager initialized with "
             << resourceManager->getResourceTemplateCount()
             << " default resources");
     }
 
     ~ResourceTemplateManagerJsonTestFixture() {
-    // Clean up ResourceTemplateManager after each test
+        // Clean up ResourceTemplateManager after each test
         resourceManager->clean();
     }
 
@@ -260,18 +260,18 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonString) {
         ]
     })";
 
-  // Get initial count
+    // Get initial count
     size_t initialCount = resourceManager->getResourceTemplateCount();
 
-  // Load resources from JSON string
+    // Load resources from JSON string
     bool result = resourceManager->loadResourcesFromJsonString(jsonString);
     BOOST_CHECK_MESSAGE(result, "Failed to load resources from JSON string");
 
-  // Verify resources were loaded
+    // Verify resources were loaded
     size_t newCount = resourceManager->getResourceTemplateCount();
     BOOST_CHECK_EQUAL(newCount, initialCount + 3);
 
-  // Test Equipment (sword)
+    // Test Equipment (sword)
     auto swordHandle = findResourceByName(resourceManager, "JSON Test Sword");
     BOOST_REQUIRE(swordHandle.isValid());
     auto sword = resourceManager->getResourceTemplate(swordHandle);
@@ -279,7 +279,7 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonString) {
     BOOST_CHECK_EQUAL(sword->getName(), "JSON Test Sword");
     BOOST_CHECK_EQUAL(sword->getValue(), 150.0f);
 
-  // Test Consumable (potion)
+    // Test Consumable (potion)
     auto potionHandle = findResourceByName(resourceManager, "JSON Test Potion");
     BOOST_REQUIRE(potionHandle.isValid());
     auto potion = resourceManager->getResourceTemplate(potionHandle);
@@ -287,7 +287,7 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonString) {
     BOOST_CHECK_EQUAL(potion->getName(), "JSON Test Potion");
     BOOST_CHECK(potion->isConsumable());
 
-  // Test Gem type casting and properties
+    // Test Gem type casting and properties
     auto gemHandle = findResourceByName(resourceManager, "JSON Test Gem");
     BOOST_REQUIRE_MESSAGE(
         gemHandle.isValid(),
@@ -299,7 +299,7 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonString) {
     BOOST_TEST_MESSAGE("Retrieved gem: " << gem->getName() << " with value "
                                          << gem->getValue());
 
-  // Test that they're the correct specialized types
+    // Test that they're the correct specialized types
     auto equipment = std::dynamic_pointer_cast<Equipment>(sword);
     BOOST_CHECK_MESSAGE(equipment != nullptr,
         "Failed to cast sword to Equipment type");
@@ -326,20 +326,20 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonString) {
 }
 
 BOOST_AUTO_TEST_CASE(TestLoadValidJsonFile) {
-  // This test verifies that loadResourcesFromJson() works correctly.
-  // Since the manager already loads default resources during init(), we test
-  // that the method returns successfully and doesn't crash when loading
-  // the same file again (duplicate name detection should handle this
-  // gracefully).
+    // This test verifies that loadResourcesFromJson() works correctly.
+    // Since the manager already loads default resources during init(), we test
+    // that the method returns successfully and doesn't crash when loading
+    // the same file again (duplicate name detection should handle this
+    // gracefully).
 
-  // Test loading from the project's existing items.json file
+    // Test loading from the project's existing items.json file
     std::vector<std::filesystem::path> candidatePaths;
 
-  // Try multiple potential working directories and path combinations
+    // Try multiple potential working directories and path combinations
     std::filesystem::path itemsFile = "items.json";
     std::vector<std::filesystem::path> basePaths = {
         std::filesystem::current_path() / ".." / ".." / "res" /
-            "data",                                       // From bin/debug/
+            "data", // From bin/debug/
         std::filesystem::current_path() / "res" / "data", // From project root
         std::filesystem::current_path() / ".." / "res" / "data", // From build/
         std::filesystem::path("res") / "data", // Relative from project root
@@ -347,7 +347,7 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonFile) {
             "data" // Relative from bin/debug/
     };
 
-  // Build candidate paths with proper separators for the current platform
+    // Build candidate paths with proper separators for the current platform
     for (const auto& basePath : basePaths) {
         candidatePaths.push_back(basePath / itemsFile);
     }
@@ -357,15 +357,15 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonFile) {
     std::string successfulPath;
 
     for (const auto& path : candidatePaths) {
-    // Convert to string using native path separators
+        // Convert to string using native path separators
         std::string pathStr = path.string();
 
-    // Check if file exists before trying to load it
+        // Check if file exists before trying to load it
         if (std::filesystem::exists(path) &&
             std::filesystem::is_regular_file(path)) {
             foundFile = true;
-      // The method should handle duplicate resources gracefully
-      // and not crash, even if it can't load duplicates
+            // The method should handle duplicate resources gracefully
+            // and not crash, even if it can't load duplicates
             BOOST_CHECK_NO_THROW(result =
                                      resourceManager->loadResourcesFromJson(pathStr));
             successfulPath = pathStr;
@@ -373,12 +373,12 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonFile) {
         }
     }
 
-  // Verify that we either successfully found and processed the file,
-  // or that the file wasn't found (which is also acceptable)
+    // Verify that we either successfully found and processed the file,
+    // or that the file wasn't found (which is also acceptable)
     if (foundFile) {
         BOOST_TEST_MESSAGE("File loading attempted for: " << successfulPath);
-    // The method should complete without throwing exceptions
-    // Whether it returns true or false is less important than not crashing
+        // The method should complete without throwing exceptions
+        // Whether it returns true or false is less important than not crashing
         BOOST_TEST_MESSAGE(
             "loadResourcesFromJson result: " << (result ? "true" : "false"));
     } else {
@@ -396,11 +396,11 @@ BOOST_AUTO_TEST_CASE(TestLoadValidJsonFile) {
             }());
     }
 
-  // At minimum, verify that the manager is still functional after the operation
+    // At minimum, verify that the manager is still functional after the operation
     BOOST_CHECK(resourceManager->getResourceTemplateCount() > 0);
 }
 BOOST_AUTO_TEST_CASE(TestLoadInvalidJsonString) {
-  // Test malformed JSON
+    // Test malformed JSON
     std::string invalidJson = R"({
         "resources": [
             {
@@ -417,13 +417,13 @@ BOOST_AUTO_TEST_CASE(TestLoadInvalidJsonString) {
     bool result = resourceManager->loadResourcesFromJsonString(invalidJson);
     BOOST_CHECK_MESSAGE(!result, "Expected invalid JSON to fail parsing");
 
-  // Verify no resources were added
+    // Verify no resources were added
     size_t newCount = resourceManager->getResourceTemplateCount();
     BOOST_CHECK_EQUAL(newCount, initialCount);
 }
 
 BOOST_AUTO_TEST_CASE(TestLoadEmptyJsonString) {
-  // Test empty JSON
+    // Test empty JSON
     std::string emptyJson = "{}";
 
     size_t initialCount = resourceManager->getResourceTemplateCount();
@@ -431,13 +431,13 @@ BOOST_AUTO_TEST_CASE(TestLoadEmptyJsonString) {
     BOOST_CHECK_MESSAGE(!result,
         "Expected empty JSON to fail (missing resources array)");
 
-  // Verify no resources were added
+    // Verify no resources were added
     size_t newCount = resourceManager->getResourceTemplateCount();
     BOOST_CHECK_EQUAL(newCount, initialCount);
 }
 
 BOOST_AUTO_TEST_CASE(TestLoadInvalidResourceData) {
-  // Test JSON with missing required fields
+    // Test JSON with missing required fields
     std::string invalidResourceJson = R"({
         "resources": [
             {
@@ -453,7 +453,7 @@ BOOST_AUTO_TEST_CASE(TestLoadInvalidResourceData) {
         resourceManager->loadResourcesFromJsonString(invalidResourceJson);
     BOOST_CHECK_MESSAGE(!result, "Expected resource with missing fields to fail");
 
-  // Verify no resources were added
+    // Verify no resources were added
     size_t newCount = resourceManager->getResourceTemplateCount();
     BOOST_CHECK_EQUAL(newCount, initialCount);
 }
@@ -486,19 +486,19 @@ BOOST_AUTO_TEST_CASE(TestLoadGeneratesDeterministicIdsFromNames) {
 }
 
 BOOST_AUTO_TEST_CASE(TestLoadNonExistentFile) {
-  // Test loading from a file that doesn't exist
+    // Test loading from a file that doesn't exist
     std::string nonExistentFile = "../../non_existent_file.json";
 
     size_t initialCount = resourceManager->getResourceTemplateCount();
     bool result = resourceManager->loadResourcesFromJson(nonExistentFile);
     BOOST_CHECK_MESSAGE(!result, "Expected non-existent file to fail loading");
 
-  // Verify no resources were added
+    // Verify no resources were added
     size_t newCount = resourceManager->getResourceTemplateCount();
     BOOST_CHECK_EQUAL(newCount, initialCount);
 }
 BOOST_AUTO_TEST_CASE(TestLoadDuplicateResources) {
-  // First load
+    // First load
     std::string jsonString1 = R"({
         "resources": [
             {
@@ -523,7 +523,7 @@ BOOST_AUTO_TEST_CASE(TestLoadDuplicateResources) {
     BOOST_REQUIRE(resource1 != nullptr);
     BOOST_CHECK_EQUAL(resource1->getName(), "First Version");
 
-  // Second load with same ID should fail before mutating indexes.
+    // Second load with same ID should fail before mutating indexes.
     std::string jsonString2 = R"({
         "resources": [
             {
@@ -542,7 +542,7 @@ BOOST_AUTO_TEST_CASE(TestLoadDuplicateResources) {
     bool result2 = resourceManager->loadResourcesFromJsonString(jsonString2);
     BOOST_CHECK(!result2);
 
-  // The first resource remains, and the duplicate did not partially register.
+    // The first resource remains, and the duplicate did not partially register.
     auto firstHandle = findResourceByName(resourceManager, "First Version");
     BOOST_REQUIRE(firstHandle.isValid());
     auto firstResource = resourceManager->getResourceTemplate(firstHandle);
@@ -555,7 +555,7 @@ BOOST_AUTO_TEST_CASE(TestLoadDuplicateResources) {
 }
 
 BOOST_AUTO_TEST_CASE(TestLoadResourcesStatistics) {
-  // Reset stats
+    // Reset stats
     resourceManager->resetStats();
     ResourceStats initialStats = resourceManager->getStats();
 
@@ -587,7 +587,7 @@ BOOST_AUTO_TEST_CASE(TestLoadResourcesStatistics) {
 
     ResourceStats newStats = resourceManager->getStats();
 
-  // Check that templates loaded count increased
+    // Check that templates loaded count increased
     BOOST_CHECK(newStats.templatesLoaded.load() >
         initialStats.templatesLoaded.load());
 }

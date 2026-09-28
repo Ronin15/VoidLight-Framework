@@ -49,7 +49,7 @@ void ResourceRenderController::updateDroppedItemAnimations(float deltaTime, cons
     wrm.queryDroppedItemsInRadius(cameraCenter, animationRadius, m_visibleItemIndices);
 
     for (size_t idx : m_visibleItemIndices) {
-        const auto& hot = edm.getStaticHotDataByIndex(idx);  // Static pool accessor
+        const auto& hot = edm.getStaticHotDataByIndex(idx); // Static pool accessor
         if (!hot.isAlive()) continue;
 
         auto& r = edm.getItemRenderDataByTypeIndex(hot.typeLocalIndex);

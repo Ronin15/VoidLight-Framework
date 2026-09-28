@@ -30,7 +30,7 @@ SortIncludes: Never
 IncludeBlocks: Preserve
 FixNamespaceComments: false
 AlignTrailingComments:
-  Kind: Leave
+  Kind: Never
 AlignAfterOpenBracket: DontAlign
 AlignOperands: DontAlign
 AlignEscapedNewlines: Left

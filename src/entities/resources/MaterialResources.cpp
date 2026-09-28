@@ -10,7 +10,7 @@
 Material::Material(VoidLight::ResourceHandle handle, const std::string& id,
     const std::string& name, ResourceType type)
     : Resource(handle, id, name, ResourceCategory::Material, type) {
-  // Materials are generally stackable
+    // Materials are generally stackable
     setMaxStackSize(999);
     setConsumable(false);
 }
@@ -23,7 +23,7 @@ CraftingComponent::CraftingComponent(VoidLight::ResourceHandle handle,
     const std::string& name,
     ComponentType componentType)
     : Material(handle, id, name, ResourceType::CraftingComponent), m_componentType(componentType) {
-  // Set default properties based on component type
+    // Set default properties based on component type
     switch (componentType) {
         case ComponentType::Metal:
             setTier(2);
@@ -78,7 +78,7 @@ RawResource::RawResource(VoidLight::ResourceHandle handle,
     const std::string& id, const std::string& name,
     ResourceOrigin origin)
     : Material(handle, id, name, ResourceType::RawResource), m_origin(origin) {
-  // Set default properties based on origin
+    // Set default properties based on origin
     switch (origin) {
         case ResourceOrigin::Mining:
             setTier(2);

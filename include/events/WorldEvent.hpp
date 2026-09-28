@@ -14,14 +14,14 @@
  * @brief Event types for world-related changes
  */
 enum class WorldEventType {
-    WorldLoaded,           // New world has been loaded
-    WorldUnloaded,         // World has been unloaded
-    TileChanged,           // A specific tile has been modified
-    WorldGenerated,        // World generation completed
-    WorldSaved,            // World has been saved
-    ChunkLoaded,           // A chunk of the world has been loaded
-    ChunkUnloaded,         // A chunk of the world has been unloaded
-    StaticCollidersReady   // Static collision bodies have been built
+    WorldLoaded, // New world has been loaded
+    WorldUnloaded, // World has been unloaded
+    TileChanged, // A specific tile has been modified
+    WorldGenerated, // World generation completed
+    WorldSaved, // World has been saved
+    ChunkLoaded, // A chunk of the world has been loaded
+    ChunkUnloaded, // A chunk of the world has been unloaded
+    StaticCollidersReady // Static collision bodies have been built
 };
 
 /**

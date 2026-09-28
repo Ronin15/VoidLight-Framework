@@ -14,7 +14,7 @@
 enum class Sex : uint8_t {
     Male = 0,
     Female = 1,
-    Unknown = 2   // For creatures where sex is undefined/irrelevant
+    Unknown = 2 // For creatures where sex is undefined/irrelevant
 };
 
 #endif

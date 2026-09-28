@@ -14,12 +14,12 @@ namespace VoidLight {
  * Pipeline type identifiers for render sorting.
  */
 enum class PipelineType : uint8_t {
-    SpriteOpaque = 0,   // Depth write, no blend
-    SpriteAlpha,        // Depth test, alpha blend
-    Particle,           // No depth, additive/alpha blend
-    Composite,          // Fullscreen quad composite
-    Primitive,          // Colored primitives (UI backgrounds)
-    Text,               // Text rendering
+    SpriteOpaque = 0, // Depth write, no blend
+    SpriteAlpha, // Depth test, alpha blend
+    Particle, // No depth, additive/alpha blend
+    Composite, // Fullscreen quad composite
+    Primitive, // Colored primitives (UI backgrounds)
+    Text, // Text rendering
     COUNT
 };
 

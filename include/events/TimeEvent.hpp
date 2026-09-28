@@ -16,10 +16,10 @@
  * @brief Time of day periods for visual effects
  */
 enum class TimePeriod : uint8_t {
-    Morning = 0,   // 5:00 - 8:00
-    Day = 1,       // 8:00 - 17:00
-    Evening = 2,   // 17:00 - 21:00
-    Night = 3      // 21:00 - 5:00
+    Morning = 0, // 5:00 - 8:00
+    Day = 1, // 8:00 - 17:00
+    Evening = 2, // 17:00 - 21:00
+    Night = 3 // 21:00 - 5:00
 };
 
 /**
@@ -43,13 +43,13 @@ enum class TimePeriod : uint8_t {
  * @brief Event types for time-related changes
  */
 enum class TimeEventType {
-    HourChanged,        // Every in-game hour
-    DayChanged,         // When day advances
-    MonthChanged,       // When month changes
-    SeasonChanged,      // When season changes
-    YearChanged,        // When year increments
-    WeatherCheck,       // Periodic weather roll
-    TimePeriodChanged   // When time period changes (Morning/Day/Evening/Night)
+    HourChanged, // Every in-game hour
+    DayChanged, // When day advances
+    MonthChanged, // When month changes
+    SeasonChanged, // When season changes
+    YearChanged, // When year increments
+    WeatherCheck, // Periodic weather roll
+    TimePeriodChanged // When time period changes (Morning/Day/Evening/Night)
 };
 
 /**
@@ -257,13 +257,13 @@ struct TimePeriodVisuals {
     uint8_t overlayR{0};
     uint8_t overlayG{0};
     uint8_t overlayB{0};
-    uint8_t overlayA{0};  // Alpha 0 = no tint
+    uint8_t overlayA{0}; // Alpha 0 = no tint
 
     // Factory methods for default configurations
-    static TimePeriodVisuals getMorning() { return {255, 140, 80, 30}; }    // Red-orange dawn
-    static TimePeriodVisuals getDay() { return {255, 255, 200, 8}; }        // Slight yellow
-    static TimePeriodVisuals getEvening() { return {255, 80, 40, 40}; }     // Orange-red sunset
-    static TimePeriodVisuals getNight() { return {20, 20, 60, 90}; }        // Darker blue/purple
+    static TimePeriodVisuals getMorning() { return {255, 140, 80, 30}; } // Red-orange dawn
+    static TimePeriodVisuals getDay() { return {255, 255, 200, 8}; } // Slight yellow
+    static TimePeriodVisuals getEvening() { return {255, 80, 40, 40}; } // Orange-red sunset
+    static TimePeriodVisuals getNight() { return {20, 20, 60, 90}; } // Darker blue/purple
 
     static TimePeriodVisuals getForPeriod(TimePeriod period) {
         switch (period) {

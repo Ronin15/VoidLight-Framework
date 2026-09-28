@@ -26,11 +26,11 @@
 
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "managers/BackgroundSimulationManager.hpp"
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
-#include "core/Logger.hpp"  // For benchmark mode
+#include "core/Logger.hpp" // For benchmark mode
 #include "world/WorldData.hpp"
 
 namespace {
@@ -434,7 +434,7 @@ BOOST_AUTO_TEST_CASE(CombinedScaling) {
 
         // Approximate MM/MS split (pairs from movable-movable vs movable-static)
         // This is a rough estimate based on entity counts
-        size_t estimatedMM = pairs / 2;  // Rough split
+        size_t estimatedMM = pairs / 2; // Rough split
         size_t estimatedMS = pairs - estimatedMM;
 
         std::cout << std::setw(15) << scenario.name
@@ -464,7 +464,7 @@ BOOST_AUTO_TEST_CASE(EntityDensityTest) {
     // Test different distributions
     struct DensityTest {
         const char* name;
-        float clusterRadius;  // 0 = spread, >0 = clustered
+        float clusterRadius; // 0 = spread, >0 = clustered
     };
 
     std::vector<DensityTest> tests = {
@@ -506,23 +506,23 @@ BOOST_AUTO_TEST_CASE(TriggerDetectionScaling) {
     // Test cases: varying number of entities with NEEDS_TRIGGER_DETECTION flag
     // Threshold is 50: < 50 uses spatial queries, >= 50 uses sweep-and-prune
     struct TriggerTest {
-        size_t detectors;   // Entities with NEEDS_TRIGGER_DETECTION
-        size_t triggers;    // EventOnly triggers
+        size_t detectors; // Entities with NEEDS_TRIGGER_DETECTION
+        size_t triggers; // EventOnly triggers
         const char* method; // Expected method
     };
 
     std::vector<TriggerTest> tests = {
-        {1, 100, "spatial"},      // Player only - spatial query
-        {1, 400, "spatial"},      // Player only, many triggers
-        {10, 200, "spatial"},     // Few NPCs - spatial query
-        {25, 200, "spatial"},     // More NPCs - still spatial
-        {50, 200, "sweep"},       // At threshold - sweep-and-prune
-        {100, 200, "sweep"},      // Many NPCs - sweep-and-prune
-        {200, 400, "sweep"},      // Large scale - sweep-and-prune
+        {1, 100, "spatial"}, // Player only - spatial query
+        {1, 400, "spatial"}, // Player only, many triggers
+        {10, 200, "spatial"}, // Few NPCs - spatial query
+        {25, 200, "spatial"}, // More NPCs - still spatial
+        {50, 200, "sweep"}, // At threshold - sweep-and-prune
+        {100, 200, "sweep"}, // Many NPCs - sweep-and-prune
+        {200, 400, "sweep"}, // Large scale - sweep-and-prune
     };
 
     constexpr float WORLD_SIZE = 2000.0f;
-    constexpr size_t TOTAL_MOVABLES = 500;  // Background NPCs without trigger detection
+    constexpr size_t TOTAL_MOVABLES = 500; // Background NPCs without trigger detection
 
     for (const auto& test : tests) {
         prepareForTest();

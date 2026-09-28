@@ -39,13 +39,13 @@ enum class WeatherType {
 std::ostream& operator<<(std::ostream& os, const WeatherType& type);
 
 struct WeatherParams {
-    float intensity{1.0f};       // 0.0 to 1.0 intensity level
-    float windSpeed{0.0f};       // Wind speed in arbitrary units
-    float windDirection{0.0f};   // Direction in degrees (0-359)
-    float visibility{1.0f};      // 0.0 (no visibility) to 1.0 (full visibility)
-    float transitionTime{5.0f};  // Time in seconds to transition to this weather
+    float intensity{1.0f}; // 0.0 to 1.0 intensity level
+    float windSpeed{0.0f}; // Wind speed in arbitrary units
+    float windDirection{0.0f}; // Direction in degrees (0-359)
+    float visibility{1.0f}; // 0.0 (no visibility) to 1.0 (full visibility)
+    float transitionTime{5.0f}; // Time in seconds to transition to this weather
     std::string particleEffect{}; // Optional particle effect ID
-    std::string soundEffect{};    // Optional sound effect ID
+    std::string soundEffect{}; // Optional sound effect ID
 
     // Color modifiers for environment rendering
     float colorR{1.0f};
@@ -120,8 +120,8 @@ private:
 
     // Time-based parameters
     float m_startHour{-1.0f}; // -1 means no time restriction
-    float m_endHour{-1.0f};   // -1 means no time restriction
-    int m_season{-1};         // -1 means all seasons
+    float m_endHour{-1.0f}; // -1 means no time restriction
+    int m_season{-1}; // -1 means all seasons
 
     // Geographic parameters
     std::string m_regionName;

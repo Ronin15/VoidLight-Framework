@@ -24,14 +24,14 @@
  */
 
 #include "ai/AICommandBus.hpp"
-#include "ai/BehaviorCommonState.hpp"       // For BehaviorData, PathData
+#include "ai/BehaviorCommonState.hpp" // For BehaviorData, PathData
 #include "ai/BehaviorConfig.hpp"
 #include "ai/BehaviorStateData.hpp"
 #include "ai/EnvironmentModifiers.hpp"
 #include "ai/FactionStance.hpp"
-#include "managers/EntityDataTypes.hpp"     // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
-#include "managers/EventManager.hpp"        // For EventManager::DeferredEvent
-#include "managers/SparseSidecar.hpp"       // For SparseSidecar<KnockbackData>
+#include "managers/EntityDataTypes.hpp" // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
+#include "managers/EventManager.hpp" // For EventManager::DeferredEvent
+#include "managers/SparseSidecar.hpp" // For SparseSidecar<KnockbackData>
 #include <array>
 #include <vector>
 
@@ -42,30 +42,30 @@
  * Pre-populated by AIManager before each behavior update.
  */
 struct BehaviorContext {
-    TransformData& transform;      // Direct read/write access (lock-free)
-    EntityHotData& hotData;        // Entity metadata (halfWidth, halfHeight, etc.)
+    TransformData& transform; // Direct read/write access (lock-free)
+    EntityHotData& hotData; // Entity metadata (halfWidth, halfHeight, etc.)
     EntityHandle::IDType entityId; // For staggering calculations
-    size_t edmIndex;               // EDM index for vector-based state storage (contention-free)
+    size_t edmIndex; // EDM index for vector-based state storage (contention-free)
     float deltaTime;
 
     // Player info cached once per update batch - avoids lock contention in behaviors
-    EntityHandle playerHandle;     // Cached player handle (no lock needed)
-    Vector2D playerPosition;       // Cached player position (no lock needed)
-    Vector2D playerVelocity;       // Cached player velocity (for movement detection)
-    bool playerValid{false};       // Whether player is valid this frame
+    EntityHandle playerHandle; // Cached player handle (no lock needed)
+    Vector2D playerPosition; // Cached player position (no lock needed)
+    Vector2D playerVelocity; // Cached player velocity (for movement detection)
+    bool playerValid{false}; // Whether player is valid this frame
 
     // Pre-fetched EDM data - avoids repeated Instance() calls in behaviors
-    BehaviorData& sharedState;       // Slimmed shared header (flags, moveSpeed, crowd cache, message queue)
-    PathData* pathData{nullptr};     // Optional: some behaviors support direct movement fallback
-    NPCMemoryData& memoryData;       // Guaranteed valid for NPC behavior execution
-    const CharacterData& characterData;  // Guaranteed valid for behavior execution
+    BehaviorData& sharedState; // Slimmed shared header (flags, moveSpeed, crowd cache, message queue)
+    PathData* pathData{nullptr}; // Optional: some behaviors support direct movement fallback
+    NPCMemoryData& memoryData; // Guaranteed valid for NPC behavior execution
+    const CharacterData& characterData; // Guaranteed valid for behavior execution
 
     // World bounds cached once per frame - avoids WorldManager::Instance() calls in behaviors
     float worldMinX{0.0f};
     float worldMinY{0.0f};
     float worldMaxX{0.0f};
     float worldMaxY{0.0f};
-    bool worldBoundsValid{false};         // Whether world bounds are available
+    bool worldBoundsValid{false}; // Whether world bounds are available
 
     // Game time cached once per frame - absolute time for memory timestamps, encounter logging,
     // and future combat timing comparisons. Not currently consumed by behaviors but available
@@ -115,20 +115,20 @@ struct BehaviorContext {
  * (worker threads). AIManager commits them before behavior execute.
  */
 namespace BehaviorMessage {
-    // Attack messages
-constexpr uint8_t ATTACK_TARGET = 1;     // Force attack on explicit target
-constexpr uint8_t RETREAT = 2;           // Allies retreat when nearby attacker retreats
-constexpr uint8_t RANGED_ATTACK_FAILED = 3;  // Re-evaluate positioning/equipment after ranged failure
+// Attack messages
+constexpr uint8_t ATTACK_TARGET = 1; // Force attack on explicit target
+constexpr uint8_t RETREAT = 2; // Allies retreat when nearby attacker retreats
+constexpr uint8_t RANGED_ATTACK_FAILED = 3; // Re-evaluate positioning/equipment after ranged failure
 
-    // Flee messages
-constexpr uint8_t PANIC = 10;            // Witness lethal combat — force flee
-constexpr uint8_t CALM_DOWN = 11;        // Guard all-clear — reduce fear
+// Flee messages
+constexpr uint8_t PANIC = 10; // Witness lethal combat — force flee
+constexpr uint8_t CALM_DOWN = 11; // Guard all-clear — reduce fear
 
-    // Distress messages
-constexpr uint8_t DISTRESS = 20;         // Victim/fleeing entity calls nearby guards — force SUSPICIOUS
+// Distress messages
+constexpr uint8_t DISTRESS = 20; // Victim/fleeing entity calls nearby guards — force SUSPICIOUS
 
-    // Guard messages
-constexpr uint8_t RAISE_ALERT = 22;      // Guard/civilian under attack — force HOSTILE
+// Guard messages
+constexpr uint8_t RAISE_ALERT = 22; // Guard/civilian under attack — force HOSTILE
 }
 
 // ============================================================================
@@ -136,10 +136,10 @@ constexpr uint8_t RAISE_ALERT = 22;      // Guard/civilian under attack — forc
 // ============================================================================
 
 namespace Knockback {
-    // Number of fixed-timestep frames a knockback impulse is applied.
-    // This is a frame count, not seconds — see EntityHotData::knockbackFrames.
+// Number of fixed-timestep frames a knockback impulse is applied.
+// This is a frame count, not seconds — see EntityHotData::knockbackFrames.
 inline constexpr int FRAMES = 8;
-    // Per-frame decay factor applied to the knockback impulse components.
+// Per-frame decay factor applied to the knockback impulse components.
 inline constexpr float DECAY = 0.7f;
 }
 

@@ -63,7 +63,7 @@ public:
 
     ControllerBase& operator=(ControllerBase&& other) noexcept {
         if (this != &other) {
-            unsubscribe();  // Clean up current subscriptions
+            unsubscribe(); // Clean up current subscriptions
             m_subscribed = other.m_subscribed;
             m_suspended = other.m_suspended;
             m_handlerTokens = std::move(other.m_handlerTokens);

@@ -15,40 +15,40 @@
 #include "gpu/GPURenderer.hpp"
 
 bool PauseState::enter() {
-  // Cache manager references at function start
+    // Cache manager references at function start
     auto& gameEngine = GameEngine::Instance();
     auto& ui = UIManager::Instance();
 
     VoidLight::MenuNavigation::reset();
 
-  // Pause all game managers via GameEngine (collision, pathfinding, AI, particles, GameTime)
+    // Pause all game managers via GameEngine (collision, pathfinding, AI, particles, GameTime)
     gameEngine.setGlobalPause(true);
 
-  // Create pause state UI
+    // Create pause state UI
     int windowWidth = gameEngine.getWidthInPixels();
     int windowHeight = gameEngine.getHeightInPixels();
 
-  // Create overlay background to dim the game behind the pause menu
+    // Create overlay background to dim the game behind the pause menu
     ui.createOverlay(windowWidth, windowHeight);
-  // Overlay auto-repositions via createOverlay's positioning rules
+    // Overlay auto-repositions via createOverlay's positioning rules
 
     ui.createTitle("pause_title", {0, UIConstants::TITLE_TOP_OFFSET * 10, windowWidth, UIConstants::DEFAULT_TITLE_HEIGHT},
         "Game Paused");
     ui.setTitleAlignment("pause_title", UIAlignment::CENTER_CENTER);
-  // Set auto-repositioning: centered horizontally, fixed Y position
+    // Set auto-repositioning: centered horizontally, fixed Y position
     ui.setComponentPositioning("pause_title", {UIPositionMode::CENTERED_H, 0, UIConstants::TITLE_TOP_OFFSET * 10, -1, UIConstants::DEFAULT_TITLE_HEIGHT});
 
-  // Create centered buttons for pause menu
+    // Create centered buttons for pause menu
     int buttonWidth = 200;
     int buttonHeight = 40;
     int buttonSpacing = 60;
-    int firstButtonY = 50;  // Offset from center
+    int firstButtonY = 50; // Offset from center
 
     ui.createCenteredButton("pause_resume_btn", firstButtonY, buttonWidth, buttonHeight, "Resume Game");
     ui.createCenteredButton("pause_settings_btn", firstButtonY + buttonSpacing, buttonWidth, buttonHeight, "Settings");
     ui.createCenteredButton("pause_mainmenu_btn", firstButtonY + 2 * buttonSpacing, buttonWidth, buttonHeight, "Main Menu");
 
-  // Set button callbacks - capture mp_stateManager for proper architecture
+    // Set button callbacks - capture mp_stateManager for proper architecture
     ui.setOnClick("pause_resume_btn", [this]() {
         mp_stateManager->popState();
     });
@@ -65,10 +65,10 @@ bool PauseState::enter() {
         openMainMenuConfirm();
     });
 
-  // --- Return-to-main-menu confirm dialog (hidden by default) ---
-  // Going to the main menu abandons the current run (matches
-  // changeStateClearingStack's full teardown), so this warns before
-  // discarding progress -- mirrors MainMenuState's quit-confirm dialog.
+    // --- Return-to-main-menu confirm dialog (hidden by default) ---
+    // Going to the main menu abandons the current run (matches
+    // changeStateClearingStack's full teardown), so this warns before
+    // discarding progress -- mirrors MainMenuState's quit-confirm dialog.
     const int dialogWidth = UIConstants::DEFAULT_DIALOG_WIDTH;
     const int dialogHeight = UIConstants::DEFAULT_DIALOG_HEIGHT;
     const int dialogX = (UIConstants::BASELINE_WIDTH - dialogWidth) / 2;
@@ -112,8 +112,8 @@ bool PauseState::enter() {
         closeMainMenuConfirm();
     });
 
-  // Hidden until "Main Menu" is clicked — visibility cascades to all
-  // linked children (title/text/buttons) via their parentId.
+    // Hidden until "Main Menu" is clicked — visibility cascades to all
+    // linked children (title/text/buttons) via their parentId.
     ui.setComponentVisible("pause_confirm_panel", false);
 
     m_confirmDialogOpen = false;
@@ -137,22 +137,22 @@ void PauseState::update(float) {
 }
 
 bool PauseState::exit() {
-  // Resume all game managers via GameEngine (collision, pathfinding, AI, particles, GameTime)
+    // Resume all game managers via GameEngine (collision, pathfinding, AI, particles, GameTime)
     GameEngine::Instance().setGlobalPause(false);
 
-  // Overlay / stacked state: remove only our widgets. Never full-wipe UI —
-  // GamePlay HUD must remain when popping back or when replacing this top
-  // with Settings. Full-screen leave (changeStateClearingStack to MainMenu)
-  // clears UI in GameStateManager after the whole stack has exited.
+    // Overlay / stacked state: remove only our widgets. Never full-wipe UI —
+    // GamePlay HUD must remain when popping back or when replacing this top
+    // with Settings. Full-screen leave (changeStateClearingStack to MainMenu)
+    // clears UI in GameStateManager after the whole stack has exited.
     auto& ui = UIManager::Instance();
     ui.clearKeyboardSelection();
     ui.removeComponent("pause_title");
     ui.removeComponent("pause_resume_btn");
     ui.removeComponent("pause_settings_btn");
     ui.removeComponent("pause_mainmenu_btn");
-    ui.removeComponent("pause_confirm_panel");  // cascades to its linked children
-  // Overlay is shared; resume() removes it when returning to GamePlay. Full
-  // stack teardown clears it via GameStateManager's full-screen UI clear.
+    ui.removeComponent("pause_confirm_panel"); // cascades to its linked children
+    // Overlay is shared; resume() removes it when returning to GamePlay. Full
+    // stack teardown clears it via GameStateManager's full-screen UI clear.
 
     return true;
 }
@@ -161,8 +161,8 @@ bool PauseState::exit() {
 void PauseState::handleInput() {
     const auto& inputMgr = InputManager::Instance();
 
-  // Confirm dialog is modal — it consumes all input so Pause/R cannot
-  // resume or fall through to the pause menu behind it.
+    // Confirm dialog is modal — it consumes all input so Pause/R cannot
+    // resume or fall through to the pause menu behind it.
     if (m_confirmDialogOpen) {
         VoidLight::MenuNavigation::readInputs(kConfirmNavOrder, m_selectedIndex);
         if (VoidLight::MenuNavigation::cancelPressed()) {
@@ -172,15 +172,15 @@ void PauseState::handleInput() {
     }
 
     VoidLight::MenuNavigation::readInputs(kNavOrder, m_selectedIndex);
-  // MenuCancel or Pause both resume gameplay — symmetric with GamePlayState
-  // which uses Command::Pause to enter PauseState. Both use isCommandPressed
-  // (rising-edge) to avoid re-pausing on the same frame.
+    // MenuCancel or Pause both resume gameplay — symmetric with GamePlayState
+    // which uses Command::Pause to enter PauseState. Both use isCommandPressed
+    // (rising-edge) to avoid re-pausing on the same frame.
     if (VoidLight::MenuNavigation::cancelPressed() ||
         inputMgr.isCommandPressed(InputManager::Command::Pause)) {
         mp_stateManager->popState();
     }
 
-  // Developer debug shortcut — R also resumes. Intentionally not rebindable.
+    // Developer debug shortcut — R also resumes. Intentionally not rebindable.
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
         mp_stateManager->popState();
     }
@@ -195,7 +195,7 @@ void PauseState::openMainMenuConfirm() {
     ui.setComponentVisible("pause_mainmenu_btn", false);
     ui.setComponentVisible("pause_confirm_panel", true);
 
-  // Default focus: Cancel (index 0 in kConfirmNavOrder)
+    // Default focus: Cancel (index 0 in kConfirmNavOrder)
     m_selectedIndex = 0;
     VoidLight::MenuNavigation::reset();
 }
@@ -209,7 +209,7 @@ void PauseState::closeMainMenuConfirm() {
     ui.setComponentVisible("pause_settings_btn", true);
     ui.setComponentVisible("pause_mainmenu_btn", true);
 
-  // Return focus to the Main Menu button (last item in kNavOrder)
+    // Return focus to the Main Menu button (last item in kNavOrder)
     m_selectedIndex = kNavOrder.size() - 1;
     VoidLight::MenuNavigation::reset();
 }

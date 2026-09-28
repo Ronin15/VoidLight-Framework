@@ -64,4 +64,4 @@ private:
     TextureManager& operator=(const TextureManager&) = delete;
 };
 
-#endif  // TEXTURE_MANAGER_HPP
+#endif // TEXTURE_MANAGER_HPP

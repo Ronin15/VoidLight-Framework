@@ -18,8 +18,8 @@ using namespace VoidLight::SIMD;
 
 // Test tolerance for floating-point comparisons
 // SIMD can have slight precision differences from scalar due to FMA instructions
-constexpr float ABS_EPSILON = 0.0001f;  // For values near zero
-constexpr float REL_EPSILON = 0.0001f;  // For large values (0.01% relative error)
+constexpr float ABS_EPSILON = 0.0001f; // For values near zero
+constexpr float REL_EPSILON = 0.0001f; // For large values (0.01% relative error)
 
 // Helper to check if two floats are approximately equal
 // Uses relative tolerance for large values, absolute for small values
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(TestBatchDistanceCalculation) {
         Vector2D(103.0f, 104.0f), // Distance² = 9 + 16 = 25
         Vector2D(105.0f, 112.0f), // Distance² = 25 + 144 = 169
         Vector2D(100.0f, 100.0f), // Distance² = 0 (same position)
-        Vector2D(110.0f, 110.0f)  // Distance² = 100 + 100 = 200
+        Vector2D(110.0f, 110.0f) // Distance² = 100 + 100 = 200
     };
 
     // Scalar calculations
@@ -204,10 +204,10 @@ BOOST_AUTO_TEST_CASE(TestBatchDistanceCalculation) {
 BOOST_AUTO_TEST_CASE(TestDistanceNoNaNOrInfinity) {
     // Test various positions to ensure no NaN or Infinity
     std::vector<std::pair<Vector2D, Vector2D>> testCases = {
-        {Vector2D(0.0f, 0.0f), Vector2D(0.0f, 0.0f)},         // Same position
-        {Vector2D(0.0f, 0.0f), Vector2D(1000.0f, 1000.0f)},   // Far distance
+        {Vector2D(0.0f, 0.0f), Vector2D(0.0f, 0.0f)}, // Same position
+        {Vector2D(0.0f, 0.0f), Vector2D(1000.0f, 1000.0f)}, // Far distance
         {Vector2D(-500.0f, -500.0f), Vector2D(500.0f, 500.0f)}, // Negative coords
-        {Vector2D(0.01f, 0.01f), Vector2D(0.02f, 0.02f)}      // Tiny distance
+        {Vector2D(0.01f, 0.01f), Vector2D(0.02f, 0.02f)} // Tiny distance
     };
 
     for (const auto& testCase : testCases) {
@@ -350,10 +350,10 @@ BOOST_AUTO_TEST_CASE(TestBoundsExpansionNoNaN) {
 
     // Test various bounds including edge cases
     std::vector<std::tuple<float, float, float, float>> testBounds = {
-        {0.0f, 0.0f, 10.0f, 10.0f},           // Normal bounds
-        {-100.0f, -100.0f, -50.0f, -50.0f},   // Negative bounds
-        {0.0f, 0.0f, 0.0f, 0.0f},             // Zero-size bounds
-        {1000.0f, 1000.0f, 2000.0f, 2000.0f}  // Large bounds
+        {0.0f, 0.0f, 10.0f, 10.0f}, // Normal bounds
+        {-100.0f, -100.0f, -50.0f, -50.0f}, // Negative bounds
+        {0.0f, 0.0f, 0.0f, 0.0f}, // Zero-size bounds
+        {1000.0f, 1000.0f, 2000.0f, 2000.0f} // Large bounds
     };
 
     for (const auto& bounds : testBounds) {
@@ -447,7 +447,7 @@ BOOST_AUTO_TEST_CASE(TestLayerMaskNoCollision) {
 BOOST_AUTO_TEST_CASE(TestLayerMaskAllCollide) {
     // Test case where all layers overlap
     uint32_t maskA = 0xFFFFFFFF; // All layers
-    uint32_t maskB = 0b00001111;  // Layers 0-3
+    uint32_t maskB = 0b00001111; // Layers 0-3
 
     uint32_t scalarResult = maskA & maskB;
 
@@ -572,7 +572,7 @@ BOOST_AUTO_TEST_CASE(TestBitwiseOr) {
 BOOST_AUTO_TEST_CASE(TestMovemask) {
     // movemask extracts sign bits from float lanes
     // Used in CollisionManager for broadphase filtering
-    Float4 a = set(-1.0f, 1.0f, -1.0f, 1.0f);  // negative, positive, negative, positive
+    Float4 a = set(-1.0f, 1.0f, -1.0f, 1.0f); // negative, positive, negative, positive
     int mask = movemask(a);
 
     // Bits should be: lane0=negative(1), lane1=positive(0), lane2=negative(1), lane3=positive(0)
@@ -631,7 +631,7 @@ BOOST_AUTO_TEST_CASE(TestIntegerBitwiseAnd) {
     int mask = movemask_int(eq);
 
     // All 4 lanes should match (sign bits set for all lanes)
-    BOOST_CHECK(mask != 0);  // At least some lanes match
+    BOOST_CHECK(mask != 0); // At least some lanes match
 }
 
 BOOST_AUTO_TEST_CASE(TestIntegerCmpEq) {
@@ -646,7 +646,7 @@ BOOST_AUTO_TEST_CASE(TestIntegerCmpEq) {
 
     // Mask should be non-zero (some matches) but not all lanes
     // Exact value depends on platform, but pattern should show some matches
-    BOOST_CHECK(mask != 0);  // At least lanes 0,2 should match
+    BOOST_CHECK(mask != 0); // At least lanes 0,2 should match
 }
 
 BOOST_AUTO_TEST_CASE(TestIntegerBitwiseOr) {
@@ -661,12 +661,12 @@ BOOST_AUTO_TEST_CASE(TestIntegerBitwiseOr) {
     int mask = movemask_int(eq);
 
     // All lanes should match
-    BOOST_CHECK(mask != 0);  // At least some lanes match
+    BOOST_CHECK(mask != 0); // At least some lanes match
 }
 
 BOOST_AUTO_TEST_CASE(TestMovemaskInt) {
     // Integer movemask - used in CollisionManager layer filtering
-    Int4 a = set_int4(-1, 0, -1, 0);  // negative=sign bit set, 0=sign bit clear
+    Int4 a = set_int4(-1, 0, -1, 0); // negative=sign bit set, 0=sign bit clear
     int mask = movemask_int(a);
 
     // 4-bit mask: lanes 0,2 have sign bit set → bits 0,2 → 0b0101 = 0x5

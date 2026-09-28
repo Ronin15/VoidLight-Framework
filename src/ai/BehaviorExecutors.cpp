@@ -117,7 +117,7 @@ bool shouldFleeFromFear(const BehaviorContext& ctx) {
 
     // Crowd courage: nearby allies boost effective bravery
     int nearbyCount = ctx.sharedState.cachedNearbyCount;
-    float crowdBoost = std::min(0.3f, nearbyCount * 0.05f);  // Up to +0.3 from 6+ allies
+    float crowdBoost = std::min(0.3f, nearbyCount * 0.05f); // Up to +0.3 from 6+ allies
     bravery = std::min(1.0f, bravery + crowdBoost);
 
     return (fear > 0.7f && bravery < 0.3f);

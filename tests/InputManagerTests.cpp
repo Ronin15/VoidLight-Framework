@@ -159,12 +159,12 @@ SDL_JoystickID attachVirtualGamepad() {
 void clearEventQueue() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
-            // Discard all events
+        // Discard all events
     }
 }
 
-    // Process pending SDL events and route to InputManager handlers
-    // This simulates what GameEngine::handleEvents() does after the refactoring
+// Process pending SDL events and route to InputManager handlers
+// This simulates what GameEngine::handleEvents() does after the refactoring
 void processEvents() {
     InputManager& inputMgr = InputManager::Instance();
     inputMgr.clearFrameInput();

@@ -255,9 +255,9 @@ BOOST_AUTO_TEST_CASE(TestWholeValuedFloatRoundTrip) {
     auto& settings = SettingsManager::Instance();
 
     settings.clearAll();
-    settings.set("audio", "master_volume", 1.0f);   // whole-valued float
-    settings.set("audio", "balance", 0.0f);         // whole-valued float (zero)
-    settings.set("graphics", "vsync_level", 2);     // genuine int
+    settings.set("audio", "master_volume", 1.0f); // whole-valued float
+    settings.set("audio", "balance", 0.0f); // whole-valued float (zero)
+    settings.set("graphics", "vsync_level", 2); // genuine int
 
     BOOST_CHECK(settings.saveToFile(testFile));
 
@@ -292,7 +292,7 @@ BOOST_AUTO_TEST_CASE(TestChangeListener) {
     // Make changes
     settings.set("graphics", "width", 1920);
     settings.set("graphics", "height", 1080);
-    settings.set("audio", "volume", 0.5f);  // Different category, shouldn't trigger
+    settings.set("audio", "volume", 0.5f); // Different category, shouldn't trigger
 
     // Should have been called twice (only for graphics category)
     BOOST_CHECK_EQUAL(callbackCount, 2);
@@ -303,7 +303,7 @@ BOOST_AUTO_TEST_CASE(TestChangeListener) {
     settings.unregisterChangeListener(callbackId);
     settings.set("graphics", "vsync", true);
 
-    BOOST_CHECK_EQUAL(callbackCount, 2);  // Should still be 2
+    BOOST_CHECK_EQUAL(callbackCount, 2); // Should still be 2
 }
 
 BOOST_AUTO_TEST_CASE(TestGlobalChangeListener) {

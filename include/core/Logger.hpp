@@ -20,11 +20,11 @@
 
 namespace VoidLight {
 enum class LogLevel : uint8_t {
-    CRITICAL = 0,     // Always logs (even in release for crashes)
-    ERROR_LEVEL = 1,  // Debug only (renamed to avoid macro conflicts)
-    WARNING = 2,      // Debug only
-    INFO = 3,         // Debug only
-    DEBUG_LEVEL = 4   // Debug only (renamed to avoid macro conflicts)
+    CRITICAL = 0, // Always logs (even in release for crashes)
+    ERROR_LEVEL = 1, // Debug only (renamed to avoid macro conflicts)
+    WARNING = 2, // Debug only
+    INFO = 3, // Debug only
+    DEBUG_LEVEL = 4 // Debug only (renamed to avoid macro conflicts)
 };
 
 #ifdef DEBUG
@@ -49,7 +49,7 @@ public:
             return;
         }
 
-    // Thread-safe logging with mutex protection
+        // Thread-safe logging with mutex protection
         std::lock_guard<std::mutex> lock(s_logMutex);
         printf("VoidLight Engine - [%s] %s: %s\n", system, getLevelString(level),
             message.c_str());
@@ -62,7 +62,7 @@ public:
             return;
         }
 
-    // Thread-safe logging with mutex protection
+        // Thread-safe logging with mutex protection
         std::lock_guard<std::mutex> lock(s_logMutex);
         printf("VoidLight Engine - [%s] %s: %s\n", system, getLevelString(level),
             message);
@@ -128,7 +128,7 @@ public:
         return s_benchmarkMode.load(std::memory_order_relaxed);
     }
 
-  // Declarations only - implementations in Logger.cpp write to file
+    // Declarations only - implementations in Logger.cpp write to file
     static void Log(const char* level, const char* system,
         const std::string& message);
     static void Log(const char* level, const char* system, const char* message);

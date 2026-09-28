@@ -85,7 +85,7 @@ void TimestepManager::startFrame() {
 
     // Convert to seconds
     double deltaTime = deltaTimeMs / 1000.0;
-    m_lastDeltaSeconds = deltaTime;  // Store high precision for FPS calculation
+    m_lastDeltaSeconds = deltaTime; // Store high precision for FPS calculation
 
     // Unified accumulator for both VSync and software frame limiting:
     // Clamp delta to prevent spiral of death, then quantize to the active

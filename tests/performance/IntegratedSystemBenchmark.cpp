@@ -15,7 +15,7 @@
 #include <random>
 
 #include "core/ThreadSystem.hpp"
-#include "core/Logger.hpp"  // For benchmark mode
+#include "core/Logger.hpp" // For benchmark mode
 #include "managers/EventManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/PathfinderManager.hpp"
@@ -62,20 +62,20 @@ BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 BOOST_AUTO_TEST_SUITE(IntegratedSystemBenchmarkSuite)
 
 namespace {
-    // Test configuration constants.
-    // Note: this bench measures *managers only* (no GPU, audio, input, game logic).
-    // Production frames are typically 2–4x more expensive than what we measure here, so
-    // MANAGER_BUDGET_MS is a tighter target than the 16.67 ms full-frame budget — managers
-    // must finish in well under a frame to leave room for everything else.
-constexpr float TARGET_FRAME_TIME_MS = 16.67f;       // 60 FPS full-frame budget
-constexpr float MANAGER_BUDGET_MS = 10.0f;        // Realistic manager-only budget
+// Test configuration constants.
+// Note: this bench measures *managers only* (no GPU, audio, input, game logic).
+// Production frames are typically 2–4x more expensive than what we measure here, so
+// MANAGER_BUDGET_MS is a tighter target than the 16.67 ms full-frame budget — managers
+// must finish in well under a frame to leave room for everything else.
+constexpr float TARGET_FRAME_TIME_MS = 16.67f; // 60 FPS full-frame budget
+constexpr float MANAGER_BUDGET_MS = 10.0f; // Realistic manager-only budget
 constexpr float P95_TARGET_MS = 20.0f;
 constexpr float P99_TARGET_MS = 25.0f;
 constexpr float MAX_FRAME_DROP_PERCENT = 5.0f;
-    // Scaling-test setup distributes entities across tiers (60/30/10).
+// Scaling-test setup distributes entities across tiers (60/30/10).
 constexpr float TIER_ACTIVE_FRACTION = 0.60f;
 
-    // Benchmark helper class
+// Benchmark helper class
 class IntegratedSystemBenchmark {
 public:
     struct FrameStats {
@@ -99,7 +99,7 @@ public:
         cleanupAllManagers();
     }
 
-        // Test 1: Realistic game simulation at 60 FPS target
+    // Test 1: Realistic game simulation at 60 FPS target
     void testRealisticGameSimulation60FPS() {
         std::cout << "\n=== Integrated System Load Benchmark ===" << std::endl;
         std::cout << "Configuration:" << std::endl;
@@ -108,27 +108,27 @@ public:
         std::cout << "  Duration: 120 frames (2 seconds @ 60 FPS)" << std::endl;
         std::cout << std::endl;
 
-            // Setup realistic game scenario (reduced for faster ctest)
+        // Setup realistic game scenario (reduced for faster ctest)
         setupRealisticScenario(2000, 1000);
 
-            // Run benchmark
+        // Run benchmark
         constexpr size_t frameCount = 120;
         constexpr float deltaTime = 1.0f / 60.0f;
 
         auto stats = runFrameBenchmark(frameCount, deltaTime);
 
-            // Print results
+        // Print results
         printFrameStatistics(stats);
         printTestResult(stats);
     }
 
-        // Test 2: Scaling under increasing load
+    // Test 2: Scaling under increasing load
     void testScalingUnderLoad() {
         std::cout << "\n=== Scaling Under Load Benchmark ===" << std::endl;
         std::cout << "Testing frame time degradation with increasing entity counts" << std::endl;
         std::cout << std::endl;
 
-            // Entity counts aligned with engine's 10K+ AI target (see CLAUDE.md)
+        // Entity counts aligned with engine's 10K+ AI target (see CLAUDE.md)
         std::vector<size_t> entityCounts = {500, 1000, 2500, 5000, 10000};
         std::vector<FrameStats> scalingResults;
 
@@ -140,7 +140,7 @@ public:
             cleanupScenario();
             setupRealisticScenario(entityCount, entityCount / 2);
 
-                // 60 frames (1 second at 60 FPS) - sufficient for stable measurements
+            // 60 frames (1 second at 60 FPS) - sufficient for stable measurements
             constexpr size_t frameCount = 60;
             constexpr float deltaTime = 1.0f / 60.0f;
             auto stats = runFrameBenchmark(frameCount, deltaTime);
@@ -155,8 +155,8 @@ public:
         printScalingSummary(entityCounts, scalingResults);
     }
 
-        // Test 3: Manager coordination overhead — measured at multiple scales because
-        // overhead at 1K may not generalize to 10K (contention grows non-linearly).
+    // Test 3: Manager coordination overhead — measured at multiple scales because
+    // overhead at 1K may not generalize to 10K (contention grows non-linearly).
     void testManagerCoordinationOverhead() {
         std::cout << "\n=== Manager Coordination Overhead Benchmark ===" << std::endl;
         std::cout << "Measuring overhead from cross-manager communication" << std::endl;
@@ -204,7 +204,7 @@ public:
             std::cout << "  Coordination overhead: " << overhead << "ms ("
                       << overheadPct << "%)\n";
 
-                // Threshold scales with entity count — more work means more synchronization.
+            // Threshold scales with entity count — more work means more synchronization.
             const double thresholdMs = (entityCount <= 1000) ? 2.0 : 5.0;
             if (overhead < thresholdMs) {
                 std::cout << "  ✓ PASS: overhead < " << thresholdMs << "ms\n\n";
@@ -221,7 +221,7 @@ public:
         }
     }
 
-        // Test 4: Sustained performance over time
+    // Test 4: Sustained performance over time
     void testSustainedPerformance() {
         std::cout << "\n=== Sustained Performance Benchmark ===" << std::endl;
         std::cout << "Testing for performance degradation over 10 seconds" << std::endl;
@@ -229,16 +229,16 @@ public:
 
         setupRealisticScenario(2000, 1000);
 
-        constexpr size_t totalFrames = 600;   // 10 seconds at 60 FPS
+        constexpr size_t totalFrames = 600; // 10 seconds at 60 FPS
         constexpr size_t sampleInterval = 60; // Sample every second
         constexpr float deltaTime = 1.0f / 60.0f;
 
-            // Warmup frames (REQUIRED - longer than runFrameBenchmark's 16 frames)
-            // Without warmup, first segment appears artificially fast due to:
-            // - WorkerBudget learning throughput (~1s to converge)
-            // - Thread pool warming up
-            // - Particle system ramping up
-            // 120 frames = 2 seconds ensures full WorkerBudget convergence
+        // Warmup frames (REQUIRED - longer than runFrameBenchmark's 16 frames)
+        // Without warmup, first segment appears artificially fast due to:
+        // - WorkerBudget learning throughput (~1s to converge)
+        // - Thread pool warming up
+        // - Particle system ramping up
+        // 120 frames = 2 seconds ensures full WorkerBudget convergence
         for (size_t i = 0; i < 120; ++i) {
             updateAllManagers(deltaTime);
         }
@@ -268,7 +268,7 @@ public:
                       << segmentAverage << "ms average" << std::endl;
         }
 
-            // Analyze degradation
+        // Analyze degradation
         double firstSegment = segmentAverages.front();
         double lastSegment = segmentAverages.back();
         double degradation = lastSegment - firstSegment;
@@ -292,11 +292,11 @@ private:
     std::vector<std::shared_ptr<BenchmarkNPC>> m_testEntities;
 
     void initializeAllManagers() {
-            // Enable benchmark mode to suppress verbose logging during benchmarks
+        // Enable benchmark mode to suppress verbose logging during benchmarks
         VOIDLIGHT_ENABLE_BENCHMARK_MODE();
 
-            // Initialize in dependency order (matching GameEngine::init pattern)
-            // ThreadSystem handled by global fixture
+        // Initialize in dependency order (matching GameEngine::init pattern)
+        // ThreadSystem handled by global fixture
         BOOST_REQUIRE(EntityDataManager::Instance().init());
 
         BOOST_REQUIRE(EventManager::Instance().init());
@@ -305,19 +305,19 @@ private:
         BOOST_REQUIRE(CollisionManager::Instance().init());
         BOOST_REQUIRE(AIManager::Instance().init());
         VOIDLIGHT_DEBUG_ONLY(AIManager::Instance().enableThreading(true);)
-        BOOST_REQUIRE(ParticleManager::Instance().init());  // Initialize without texture manager
+        BOOST_REQUIRE(ParticleManager::Instance().init()); // Initialize without texture manager
         ParticleManager::Instance().registerBuiltInEffects();
 
-            // Initialize tier system for culling
+        // Initialize tier system for culling
         BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
-            // Headless test: simulate 1920x1080 radii (half-diagonal ~1100px)
-            // Active: 1.5x = 1650, Background: 2.0x = 2200
+        // Headless test: simulate 1920x1080 radii (half-diagonal ~1100px)
+        // Active: 1.5x = 1650, Background: 2.0x = 2200
         BackgroundSimulationManager::Instance().setActiveRadius(1650.0f);
         BackgroundSimulationManager::Instance().setBackgroundRadius(2200.0f);
     }
 
     void cleanupAllManagers() {
-            // Cleanup in reverse order
+        // Cleanup in reverse order
         cleanupScenario();
 
         BackgroundSimulationManager::Instance().clean();
@@ -330,7 +330,7 @@ private:
     }
 
     void cleanupScenario() {
-            // Remove all AI entities
+        // Remove all AI entities
         for (auto& entity : m_testEntities) {
             if (entity) {
                 AIManager::Instance().unregisterEntity(entity->getHandle());
@@ -339,7 +339,7 @@ private:
         }
         m_testEntities.clear();
 
-            // Particles will be cleaned automatically during manager cleanup
+        // Particles will be cleaned automatically during manager cleanup
     }
 
     void setupRealisticScenario(size_t aiEntityCount, size_t particleCount) {
@@ -348,13 +348,13 @@ private:
 
         m_testEntities.reserve(aiEntityCount);
 
-            // Use standard data-oriented behavior names (no registration needed)
+        // Use standard data-oriented behavior names (no registration needed)
         const std::vector<std::string> behaviorNames = {"Wander", "Guard", "Idle"};
 
-            // Create AI entities distributed across tier zones for realistic testing
-            // Active tier: within 1650px of center (first 60%)
-            // Background tier: 1650-2200px from center (next 30%)
-            // Hibernated tier: beyond 2200px (last 10%)
+        // Create AI entities distributed across tier zones for realistic testing
+        // Active tier: within 1650px of center (first 60%)
+        // Background tier: 1650-2200px from center (next 30%)
+        // Hibernated tier: beyond 2200px (last 10%)
         std::uniform_real_distribution<float> angleDist(0.0f, 2.0f * 3.14159f);
         std::uniform_real_distribution<float> distActive(0.0f, 1650.0f);
         std::uniform_real_distribution<float> distBackground(1650.0f, 2200.0f);
@@ -365,13 +365,13 @@ private:
             float distance;
 
             if (i < aiEntityCount * 6 / 10) {
-                    // 60% in Active tier
+                // 60% in Active tier
                 distance = distActive(m_rng);
             } else if (i < aiEntityCount * 9 / 10) {
-                    // 30% in Background tier
+                // 30% in Background tier
                 distance = distBackground(m_rng);
             } else {
-                    // 10% in Hibernated tier
+                // 10% in Hibernated tier
                 distance = distHibernated(m_rng);
             }
 
@@ -380,19 +380,19 @@ private:
             auto entity = BenchmarkNPC::create(static_cast<int>(i), pos);
             m_testEntities.push_back(entity);
 
-                // Assign behavior - distribute across types using data-oriented API
+            // Assign behavior - distribute across types using data-oriented API
             std::string behaviorName = behaviorNames[i % behaviorNames.size()];
             aiMgr.registerEntity(entity->getHandle(), behaviorName);
         }
 
-            // Set player for distance optimization
+        // Set player for distance optimization
         if (!m_testEntities.empty()) {
             aiMgr.setPlayerHandle(m_testEntities[0]->getHandle());
         }
 
-            // Create particle effects
+        // Create particle effects
         Vector2D spawnCenter(2500.0f, 2500.0f);
-        size_t effectsNeeded = particleCount / 100;  // Approximate particles per effect
+        size_t effectsNeeded = particleCount / 100; // Approximate particles per effect
 
         for (size_t i = 0; i < effectsNeeded; ++i) {
             particleMgr.playEffect(ParticleEffectType::Rain, spawnCenter, 1.0f);
@@ -403,7 +403,7 @@ private:
         auto& aiMgr = AIManager::Instance();
         m_testEntities.reserve(entityCount);
 
-            // Distribute entities across tier zones (same as setupRealisticScenario)
+        // Distribute entities across tier zones (same as setupRealisticScenario)
         std::uniform_real_distribution<float> angleDist(0.0f, 2.0f * 3.14159f);
         std::uniform_real_distribution<float> distActive(0.0f, 1650.0f);
         std::uniform_real_distribution<float> distBackground(1650.0f, 2200.0f);
@@ -426,7 +426,7 @@ private:
             auto entity = BenchmarkNPC::create(static_cast<int>(i), pos);
             m_testEntities.push_back(entity);
 
-                // Use data-oriented behavior API with standard behavior name
+            // Use data-oriented behavior API with standard behavior name
             aiMgr.registerEntity(entity->getHandle(), "Wander");
         }
 
@@ -446,28 +446,28 @@ private:
     }
 
     void updateAllManagers(float deltaTime) {
-            // Simulate realistic frame update order (matching GameEngine::update pattern)
+        // Simulate realistic frame update order (matching GameEngine::update pattern)
         EventManager::Instance().update();
         AIManager::Instance().update(deltaTime);
         CollisionManager::Instance().update(deltaTime);
         ParticleManager::Instance().update(deltaTime);
 
-            // Tier culling update (reference point = center of spawn area)
+        // Tier culling update (reference point = center of spawn area)
         Vector2D referencePoint(2500.0f, 2500.0f);
         BackgroundSimulationManager::Instance().update(referencePoint, deltaTime);
     }
 
     FrameStats runFrameBenchmark(size_t frameCount, float deltaTime) {
-            // Extended warmup: WorkerBudget hill-climb needs ~100 frames to converge.
-            // 16 frames was too short and made scaling-test numbers reflect pre-converged state.
+        // Extended warmup: WorkerBudget hill-climb needs ~100 frames to converge.
+        // 16 frames was too short and made scaling-test numbers reflect pre-converged state.
         constexpr size_t WARMUP_FRAMES = 100;
         for (size_t i = 0; i < WARMUP_FRAMES; ++i) {
             updateAllManagers(deltaTime);
         }
 
-            // Work-done sanity check via AIManager's exposed counter. Catches early-returns
-            // or any path that times-fast-but-does-nothing. Skipped if there's no AI work
-            // (baseline / particles-only tests) since the counter wouldn't advance anyway.
+        // Work-done sanity check via AIManager's exposed counter. Catches early-returns
+        // or any path that times-fast-but-does-nothing. Skipped if there's no AI work
+        // (baseline / particles-only tests) since the counter wouldn't advance anyway.
         auto& aim = AIManager::Instance();
         const size_t executionsBefore = aim.getBehaviorUpdateCount();
 
@@ -483,7 +483,7 @@ private:
             frameTimes.push_back(frameTime);
         }
 
-            // Sanity check: if the test had AI entities, behaviors should have executed.
+        // Sanity check: if the test had AI entities, behaviors should have executed.
         const size_t executionsAfter = aim.getBehaviorUpdateCount();
         const size_t actualExecutions = executionsAfter - executionsBefore;
         if (!m_testEntities.empty() && actualExecutions == 0) {
@@ -499,7 +499,7 @@ private:
         stats.frameTimes = frameTimes;
         stats.totalFrames = frameTimes.size();
 
-            // Sort for percentile calculations
+        // Sort for percentile calculations
         std::vector<double> sortedTimes = frameTimes;
         std::sort(sortedTimes.begin(), sortedTimes.end());
 
@@ -605,8 +605,8 @@ private:
             }
         }
 
-            // Find max sustainable Active entity count under manager-only budget.
-            // Reporting Active count rather than total — that's what's actually working per frame.
+        // Find max sustainable Active entity count under manager-only budget.
+        // Reporting Active count rather than total — that's what's actually working per frame.
         size_t maxSustainableActive = 0;
         for (size_t i = 0; i < results.size(); ++i) {
             if (results[i].averageMs < MANAGER_BUDGET_MS &&

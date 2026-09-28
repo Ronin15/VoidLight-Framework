@@ -275,7 +275,7 @@ BOOST_FIXTURE_TEST_CASE(AutoWeatherToggle, GameTimeWeatherFixture) {
 
     // Toggle multiple times
     gameTime->enableAutoWeather(true);
-    gameTime->enableAutoWeather(true);  // Enabling when already enabled
+    gameTime->enableAutoWeather(true); // Enabling when already enabled
     BOOST_CHECK(gameTime->isAutoWeatherEnabled());
 }
 
@@ -326,7 +326,7 @@ BOOST_FIXTURE_TEST_CASE(RollWeatherForCurrentSeason, GameTimeWeatherFixture) {
         // Verify it's a valid weather type (enum range check)
         int weatherVal = static_cast<int>(weather);
         BOOST_CHECK_GE(weatherVal, 0);
-        BOOST_CHECK_LE(weatherVal, 7);  // WeatherType enum has 8 values (0-7)
+        BOOST_CHECK_LE(weatherVal, 7); // WeatherType enum has 8 values (0-7)
     }
 }
 
@@ -374,8 +374,8 @@ BOOST_FIXTURE_TEST_CASE(WeatherProbabilityDistribution, GameTimeWeatherFixture) 
     BOOST_CHECK_GT(counts[WeatherType::Clear], counts[WeatherType::Rainy]);
 
     // Check that non-summer weather types have zero or near-zero
-    BOOST_CHECK_EQUAL(counts[WeatherType::Foggy], 0);  // Summer has 0% foggy
-    BOOST_CHECK_EQUAL(counts[WeatherType::Snowy], 0);  // Summer has 0% snowy
+    BOOST_CHECK_EQUAL(counts[WeatherType::Foggy], 0); // Summer has 0% foggy
+    BOOST_CHECK_EQUAL(counts[WeatherType::Snowy], 0); // Summer has 0% snowy
 
     // Cloudy should be more common than rainy (20% vs 15%)
     // Allow some variance due to randomness
@@ -408,6 +408,6 @@ BOOST_FIXTURE_TEST_CASE(SeasonWeatherProbabilitiesSumToOne, GameTimeWeatherFixtu
         float sum = probs.clear + probs.cloudy + probs.rainy +
             probs.stormy + probs.foggy + probs.snowy + probs.windy;
 
-        BOOST_CHECK_CLOSE(sum, 1.0f, 1.0f);  // Allow 1% tolerance
+        BOOST_CHECK_CLOSE(sum, 1.0f, 1.0f); // Allow 1% tolerance
     }
 }

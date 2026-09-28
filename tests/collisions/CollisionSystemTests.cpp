@@ -13,7 +13,7 @@
 #include "collisions/HierarchicalSpatialHash.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "managers/EventManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "events/CollisionObstacleChangedEvent.hpp"
@@ -40,12 +40,12 @@ BOOST_AUTO_TEST_CASE(TestAABBBasicProperties) {
 }
 
 BOOST_AUTO_TEST_CASE(TestAABBIntersection) {
-    AABB aabb1(10.0f, 10.0f, 5.0f, 5.0f);  // center at (10,10), size 10x10
-    AABB aabb2(15.0f, 10.0f, 3.0f, 3.0f);  // center at (15,10), size 6x6
-    AABB aabb3(20.0f, 10.0f, 2.0f, 2.0f);  // center at (20,10), size 4x4
+    AABB aabb1(10.0f, 10.0f, 5.0f, 5.0f); // center at (10,10), size 10x10
+    AABB aabb2(15.0f, 10.0f, 3.0f, 3.0f); // center at (15,10), size 6x6
+    AABB aabb3(20.0f, 10.0f, 2.0f, 2.0f); // center at (20,10), size 4x4
 
-    BOOST_CHECK(aabb1.intersects(aabb2));  // Should overlap
-    BOOST_CHECK(aabb2.intersects(aabb1));  // Symmetry
+    BOOST_CHECK(aabb1.intersects(aabb2)); // Should overlap
+    BOOST_CHECK(aabb2.intersects(aabb1)); // Symmetry
     BOOST_CHECK(!aabb1.intersects(aabb3)); // Should not overlap
     BOOST_CHECK(!aabb3.intersects(aabb1)); // Symmetry
 }
@@ -53,11 +53,11 @@ BOOST_AUTO_TEST_CASE(TestAABBIntersection) {
 BOOST_AUTO_TEST_CASE(TestAABBContainsPoint) {
     AABB aabb(10.0f, 10.0f, 5.0f, 5.0f);
 
-    BOOST_CHECK(aabb.contains(Vector2D(10.0f, 10.0f)));  // Center
-    BOOST_CHECK(aabb.contains(Vector2D(5.0f, 5.0f)));    // Corner
-    BOOST_CHECK(aabb.contains(Vector2D(15.0f, 15.0f)));  // Opposite corner
+    BOOST_CHECK(aabb.contains(Vector2D(10.0f, 10.0f))); // Center
+    BOOST_CHECK(aabb.contains(Vector2D(5.0f, 5.0f))); // Corner
+    BOOST_CHECK(aabb.contains(Vector2D(15.0f, 15.0f))); // Opposite corner
     BOOST_CHECK(!aabb.contains(Vector2D(20.0f, 20.0f))); // Outside
-    BOOST_CHECK(!aabb.contains(Vector2D(0.0f, 0.0f)));   // Outside
+    BOOST_CHECK(!aabb.contains(Vector2D(0.0f, 0.0f))); // Outside
 }
 
 BOOST_AUTO_TEST_CASE(TestAABBClosestPoint) {
@@ -84,8 +84,8 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashInsertAndQuery) {
     HierarchicalSpatialHash spatialHash;
 
     // Insert a few entities
-    AABB aabb1(16.0f, 16.0f, 8.0f, 8.0f);  // Single cell
-    AABB aabb2(48.0f, 16.0f, 8.0f, 8.0f);  // Different cell
+    AABB aabb1(16.0f, 16.0f, 8.0f, 8.0f); // Single cell
+    AABB aabb2(48.0f, 16.0f, 8.0f, 8.0f); // Different cell
     AABB aabb3(32.0f, 32.0f, 16.0f, 16.0f); // Spans multiple cells
 
     size_t id1 = 1, id2 = 2, id3 = 3;
@@ -126,8 +126,8 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashUpdate) {
     HierarchicalSpatialHash spatialHash;
 
     size_t id1 = 1;
-    AABB oldAABB(100.0f, 100.0f, 8.0f, 8.0f);  // Coarse cell (0,0)
-    AABB newAABB(300.0f, 300.0f, 8.0f, 8.0f);  // Coarse cell (1,1)
+    AABB oldAABB(100.0f, 100.0f, 8.0f, 8.0f); // Coarse cell (0,0)
+    AABB newAABB(300.0f, 300.0f, 8.0f, 8.0f); // Coarse cell (1,1)
 
     spatialHash.insert(id1, oldAABB);
 
@@ -328,7 +328,7 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashPerformance) {
 
     // Performance requirements (adjust based on target performance)
     BOOST_CHECK_LT(insertDuration.count() / NUM_ENTITIES, 50); // < 50μs per insertion
-    BOOST_CHECK_LT(queryDuration.count() / NUM_QUERIES, 100);  // < 100μs per query
+    BOOST_CHECK_LT(queryDuration.count() / NUM_QUERIES, 100); // < 100μs per query
 }
 
 BOOST_AUTO_TEST_CASE(TestSpatialHashUpdatePerformance) {
@@ -537,7 +537,7 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes) {
     bgm.setActiveRadius(2000.0f);
 
     const int NUM_STATIC_BODIES = 200; // Simulate world tiles
-    const int NUM_MOVABLE_BODIES = 20;  // Simulate NPCs
+    const int NUM_MOVABLE_BODIES = 20; // Simulate NPCs
 
     std::vector<EntityID> staticBodies;
     std::vector<EntityHandle> movableHandles;
@@ -593,7 +593,7 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes) {
 
     // Performance assertions - broadphase should be fast with dual storage
     BOOST_CHECK_LT(perfStats.lastBroadphaseMs, 0.5); // < 0.5ms broadphase
-    BOOST_CHECK_LT(perfStats.lastTotalMs, 2.0);     // < 2ms total collision time
+    BOOST_CHECK_LT(perfStats.lastTotalMs, 2.0); // < 2ms total collision time
 
     // Average cycle time should be reasonable
     double avgCycleTimeMs = duration.count() / 1000.0 / NUM_CYCLES;
@@ -999,7 +999,7 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity) {
 
     // Create two overlapping NPC entities in EDM (Active tier = participates in collision)
     Vector2D posA(100.0f, 100.0f);
-    Vector2D posB(120.0f, 120.0f);  // Overlapping
+    Vector2D posB(120.0f, 120.0f); // Overlapping
     // Create NPCs with data-driven API (default frame 32x32 -> halfSize 16)
     EntityHandle handleA = edm.createNPCWithRaceClass(posA, "Human", "Guard");
     EntityHandle handleB = edm.createNPCWithRaceClass(posB, "Human", "Guard");
@@ -1020,9 +1020,9 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity) {
     // This populates m_activeIndices for collision detection
     auto& bgm = BackgroundSimulationManager::Instance();
     BOOST_REQUIRE(bgm.init());
-    bgm.setActiveRadius(2000.0f);       // Large radius to include test entities
+    bgm.setActiveRadius(2000.0f); // Large radius to include test entities
     bgm.setBackgroundRadius(4000.0f);
-    bgm.update(posA, 0.016f);           // Update with reference point near entities
+    bgm.update(posA, 0.016f); // Update with reference point near entities
 
     // Verify active indices were populated
     auto activeIndices = edm.getActiveIndices();
@@ -1046,8 +1046,8 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity) {
         BOOST_CHECK(collision.b != 0);
 
         // CRITICAL: Verify indices are populated and valid (EDM indices for movable-movable)
-        BOOST_CHECK_NE(collision.indexA, SIZE_MAX);  // Should not be default value
-        BOOST_CHECK_NE(collision.indexB, SIZE_MAX);  // Should not be default value
+        BOOST_CHECK_NE(collision.indexA, SIZE_MAX); // Should not be default value
+        BOOST_CHECK_NE(collision.indexB, SIZE_MAX); // Should not be default value
 
         // For movable-movable collisions, indices are EDM indices
         BOOST_CHECK(collision.isMovableMovable);
@@ -1057,7 +1057,7 @@ BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity) {
 
         // Verify collision normal is reasonable
         float normalLength = collision.normal.length();
-        BOOST_CHECK_GT(normalLength, 0.1f);  // Should have meaningful normal
+        BOOST_CHECK_GT(normalLength, 0.1f); // Should have meaningful normal
 
         // Verify penetration is positive for actual collision
         if (!collision.trigger) {
@@ -1165,7 +1165,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrat
     hot.collisionMask = 0xFFFF;
     hot.setCollisionEnabled(true);
 
-    EventManager::Instance().drainAllDeferredEvents();  // Process any events (should be none for movable)
+    EventManager::Instance().drainAllDeferredEvents(); // Process any events (should be none for movable)
 
     // Event count should not have changed
     BOOST_CHECK_EQUAL(eventCount.load(), previousEventCount);
@@ -1430,13 +1430,13 @@ BOOST_AUTO_TEST_CASE(TestLayerCollisionFiltering) {
     size_t idx1 = edm.getIndex(handle1);
     auto& hot1 = edm.getHotDataByIndex(idx1);
     hot1.collisionLayers = CollisionLayer::Layer_Player;
-    hot1.collisionMask = CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment;  // No Layer_Player
+    hot1.collisionMask = CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment; // No Layer_Player
     hot1.setCollisionEnabled(true);
 
     size_t idx2 = edm.getIndex(handle2);
     auto& hot2 = edm.getHotDataByIndex(idx2);
     hot2.collisionLayers = CollisionLayer::Layer_Player;
-    hot2.collisionMask = CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment;  // No Layer_Player
+    hot2.collisionMask = CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment; // No Layer_Player
     hot2.setCollisionEnabled(true);
 
     // Verify both have collision enabled but won't collide with each other
@@ -1968,7 +1968,7 @@ BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection) {
     npcHot.collisionLayers = CollisionLayer::Layer_Enemy;
     npcHot.collisionMask = CollisionLayer::Layer_Environment | CollisionLayer::Layer_Player;
     npcHot.setCollisionEnabled(true);
-    npcHot.setTriggerDetection(true);  // Enable trigger detection for NPC
+    npcHot.setTriggerDetection(true); // Enable trigger detection for NPC
 
     // Verify NPC has trigger detection flag
     BOOST_CHECK(npcHot.needsTriggerDetection());
@@ -1979,7 +1979,7 @@ BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection) {
         VoidLight::TriggerTag::Checkpoint,
         VoidLight::TriggerType::EventOnly,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Enemy  // Mask includes Layer_Enemy so NPC can trigger it
+        CollisionLayer::Layer_Enemy // Mask includes Layer_Enemy so NPC can trigger it
     );
 
     // Track trigger events
@@ -2032,7 +2032,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection) {
     BOOST_REQUIRE(bgm.init());
     bgm.setActiveRadius(5000.0f);
 
-    const int NUM_NPCS = 100;  // Above the sweep threshold (50)
+    const int NUM_NPCS = 100; // Above the sweep threshold (50)
     std::vector<EntityID> npcIds;
     std::vector<EntityHandle> npcHandles;
 
@@ -2052,7 +2052,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection) {
         npcHot.collisionLayers = CollisionLayer::Layer_Enemy;
         npcHot.collisionMask = CollisionLayer::Layer_Environment;
         npcHot.setCollisionEnabled(true);
-        npcHot.setTriggerDetection(true);  // Enable trigger detection
+        npcHot.setTriggerDetection(true); // Enable trigger detection
         npcHandles.push_back(npcHandle);
     }
 
@@ -2076,7 +2076,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection) {
 
     // Verify we have enough entities to trigger sweep-and-prune path
     auto triggerDetectionIndices = edm.getTriggerDetectionIndices();
-    BOOST_CHECK_GE(triggerDetectionIndices.size(), 50u);  // Should be above threshold
+    BOOST_CHECK_GE(triggerDetectionIndices.size(), 50u); // Should be above threshold
 
     BOOST_TEST_MESSAGE("Trigger detection entities: " << triggerDetectionIndices.size()
                                                       << " (sweep threshold: 50)");
@@ -2096,7 +2096,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection) {
                                                         << " trigger-detecting NPCs: " << avgUpdateMs << "ms");
 
     // Performance check: should complete reasonably fast even with many entities
-    BOOST_CHECK_LT(avgUpdateMs, 5.0);  // < 5ms per update
+    BOOST_CHECK_LT(avgUpdateMs, 5.0); // < 5ms per update
 
     // Clean up
     for (EntityID triggerId : triggerIds) {

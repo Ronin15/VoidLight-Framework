@@ -377,7 +377,7 @@ SDL_GPURenderPass* GPURenderer::beginScenePass() {
     // Begin scene render pass
     SDL_GPUColorTargetInfo colorTarget = m_sceneTexture->asColorTarget(
         SDL_GPU_LOADOP_CLEAR,
-        {0.122f, 0.125f, 0.133f, 1.0f}  // HammerGray slate gray (31, 32, 34)
+        {0.122f, 0.125f, 0.133f, 1.0f} // HammerGray slate gray (31, 32, 34)
     );
 
     profiler.beginRender(RenderPhase::GPUScenePass);
@@ -715,7 +715,7 @@ void GPURenderer::createOrthoMatrix(float left, float right, float bottom, float
 
     out[0] = 2.0f / (right - left);
     out[5] = 2.0f / (top - bottom);
-    out[10] = -1.0f;  // Near = 0, Far = 1 for Vulkan
+    out[10] = -1.0f; // Near = 0, Far = 1 for Vulkan
     out[12] = -(right + left) / (right - left);
     out[13] = -(top + bottom) / (top - bottom);
     out[15] = 1.0f;
@@ -725,10 +725,10 @@ bool GPURenderer::loadShaders() {
     auto& shaderMgr = GPUShaderManager::Instance();
 
     ShaderInfo spriteVertInfo{};
-    spriteVertInfo.numUniformBuffers = 1;  // View-projection matrix
+    spriteVertInfo.numUniformBuffers = 1; // View-projection matrix
 
     ShaderInfo spriteFragInfo{};
-    spriteFragInfo.numSamplers = 1;  // Texture sampler
+    spriteFragInfo.numSamplers = 1; // Texture sampler
 
     ShaderInfo textFragInfo{};
     textFragInfo.numSamplers = 1;
@@ -745,7 +745,7 @@ bool GPURenderer::loadShaders() {
 
     ShaderInfo compositeFragInfo{};
     compositeFragInfo.numSamplers = 1;
-    compositeFragInfo.numUniformBuffers = 1;  // CompositeUBO
+    compositeFragInfo.numUniformBuffers = 1; // CompositeUBO
 
     // Shader manager owns resource resolution for platform-specific shader binaries.
     if (!shaderMgr.loadShader("res/shaders/sprite.vert", SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo)) {
@@ -817,7 +817,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(spriteFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, spriteFragInfo),
             sceneFormat,
-            false  // opaque
+            false // opaque
         );
         if (!m_spriteOpaquePipeline.create(m_device, config)) {
             return false;
@@ -830,7 +830,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(spriteFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, spriteFragInfo),
             sceneFormat,
-            true  // alpha
+            true // alpha
         );
         if (!m_spriteAlphaPipeline.create(m_device, config)) {
             return false;
@@ -843,7 +843,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
             sceneFormat,
-            false  // alpha
+            false // alpha
         );
         if (!m_particlePipeline.create(m_device, config)) {
             return false;
@@ -856,7 +856,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
             sceneFormat,
-            true  // additive
+            true // additive
         );
         if (!m_particlePipelineAdditive.create(m_device, config)) {
             return false;
@@ -892,7 +892,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(spriteFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, spriteFragInfo),
             swapchainFormat,
-            true  // alpha blending for text
+            true // alpha blending for text
         );
         if (!m_uiSpritePipeline.create(m_device, config)) {
             return false;

@@ -52,7 +52,7 @@ ResourceTemplateManager& ResourceTemplateManager::Instance() {
 }
 
 ResourceTemplateManager::~ResourceTemplateManager() {
-  // Only clean up if not already shut down
+    // Only clean up if not already shut down
     if (!m_isShutdown) {
         clean();
     }
@@ -70,7 +70,7 @@ bool ResourceTemplateManager::init() {
     }
 
     try {
-    // Clear any existing data
+        // Clear any existing data
         m_resourceTemplates.clear();
         m_categoryIndex.clear();
         m_typeIndex.clear();
@@ -81,27 +81,27 @@ bool ResourceTemplateManager::init() {
         m_nameIndex.clear();
         m_idIndex.clear();
 
-    // PERFORMANCE OPTIMIZATION: Reserve capacity to avoid hashtable rehashing
+        // PERFORMANCE OPTIMIZATION: Reserve capacity to avoid hashtable rehashing
         const size_t expectedResourceCount = 100; // Adjust based on typical usage
         m_resourceTemplates.reserve(expectedResourceCount);
         m_categoryIndex.reserve(static_cast<size_t>(ResourceCategory::COUNT));
         m_typeIndex.reserve(static_cast<size_t>(ResourceType::COUNT));
 
-    // Initialize category index with pre-reserved vectors
+        // Initialize category index with pre-reserved vectors
         for (int i = 0; i < static_cast<int>(ResourceCategory::COUNT); ++i) {
             auto& vec = m_categoryIndex[static_cast<ResourceCategory>(i)];
             vec.reserve(expectedResourceCount /
                 static_cast<int>(ResourceCategory::COUNT));
         }
 
-    // Initialize type index with pre-reserved vectors
+        // Initialize type index with pre-reserved vectors
         for (int i = 0; i < static_cast<int>(ResourceType::COUNT); ++i) {
             auto& vec = m_typeIndex[static_cast<ResourceType>(i)];
             vec.reserve(expectedResourceCount /
                 static_cast<int>(ResourceType::COUNT));
         }
 
-    // Initialize ResourceFactory
+        // Initialize ResourceFactory
         ResourceFactory::initialize();
 
         if (!createDefaultResources()) {
@@ -139,7 +139,7 @@ void ResourceTemplateManager::clean() {
 
     std::lock_guard<std::shared_mutex> lock(m_resourceMutex);
 
-  // Clear all data structures
+    // Clear all data structures
     m_resourceTemplates.clear();
     m_maxStackSizes.clear();
     m_values.clear();
@@ -150,7 +150,7 @@ void ResourceTemplateManager::clean() {
     m_nameIndex.clear();
     m_idIndex.clear();
 
-  // Clear handle generation data
+    // Clear handle generation data
     {
         std::lock_guard<std::mutex> handleLock(m_handleMutex);
         m_freedHandleIds.clear();
@@ -158,7 +158,7 @@ void ResourceTemplateManager::clean() {
         m_nextHandleId.store(1, std::memory_order_release);
     }
 
-  // Clear ResourceFactory for test isolation
+    // Clear ResourceFactory for test isolation
     ResourceFactory::clear();
 
     m_initialized.store(false, std::memory_order_release);
@@ -183,12 +183,12 @@ bool ResourceTemplateManager::registerResourceTemplate(
         return false;
     }
 
-  // Check if we're already holding the lock (to avoid deadlock during init)
-  // Try to acquire the lock with a timeout to detect deadlock
+    // Check if we're already holding the lock (to avoid deadlock during init)
+    // Try to acquire the lock with a timeout to detect deadlock
     std::unique_lock<std::shared_mutex> lock(m_resourceMutex, std::try_to_lock);
     if (!lock.owns_lock()) {
-    // This indicates we're likely in a recursive call during initialization
-    // Log the issue but use the internal method to avoid deadlock
+        // This indicates we're likely in a recursive call during initialization
+        // Log the issue but use the internal method to avoid deadlock
         RESOURCE_ERROR("ResourceTemplateManager::registerResourceTemplate - "
                        "Resource deadlock avoided for: " +
             handle.toString());
@@ -208,7 +208,7 @@ bool ResourceTemplateManager::removeResourceTemplate(
 
     std::unique_lock<std::shared_mutex> lock(m_resourceMutex);
 
-  // Check if resource exists
+    // Check if resource exists
     auto it = m_resourceTemplates.find(handle);
     if (it == m_resourceTemplates.end()) {
         RESOURCE_WARN("ResourceTemplateManager::removeResourceTemplate - Resource "
@@ -217,19 +217,19 @@ bool ResourceTemplateManager::removeResourceTemplate(
         return false;
     }
 
-  // Remove from indexes first: removeFromIndexes() relies on the cached
-  // m_categories/m_types entries to locate the category/type index buckets,
-  // so it must run before those caches are erased below.
+    // Remove from indexes first: removeFromIndexes() relies on the cached
+    // m_categories/m_types entries to locate the category/type index buckets,
+    // so it must run before those caches are erased below.
     removeFromIndexes(handle);
 
-  // Remove from all data structures
+    // Remove from all data structures
     m_resourceTemplates.erase(it);
     m_maxStackSizes.erase(handle);
     m_values.erase(handle);
     m_categories.erase(handle);
     m_types.erase(handle);
 
-  // Release the handle for reuse with incremented generation
+    // Release the handle for reuse with incremented generation
     releaseHandle(handle);
 
     m_stats.resourcesDestroyed.fetch_add(1, std::memory_order_relaxed);
@@ -242,10 +242,10 @@ bool ResourceTemplateManager::removeResourceTemplate(
 
 bool ResourceTemplateManager::registerResourceTemplateInternal(
     const ResourcePtr& resource) {
-  // This method assumes the lock is already held
+    // This method assumes the lock is already held
     VoidLight::ResourceHandle handle = resource->getHandle();
 
-  // Check if already registered
+    // Check if already registered
     if (m_resourceTemplates.find(handle) != m_resourceTemplates.end()) {
         RESOURCE_WARN("ResourceTemplateManager::registerResourceTemplateInternal "
                       "- Resource "
@@ -254,7 +254,7 @@ bool ResourceTemplateManager::registerResourceTemplateInternal(
         return false;
     }
 
-  // Check for duplicate names (validation phase)
+    // Check for duplicate names (validation phase)
     const std::string& resourceName = resource->getName();
     if (checkForDuplicateName(resourceName, handle)) {
         RESOURCE_ERROR(
@@ -266,16 +266,16 @@ bool ResourceTemplateManager::registerResourceTemplateInternal(
     }
 
     try {
-    // Cache frequently accessed properties for performance
+        // Cache frequently accessed properties for performance
         m_maxStackSizes[handle] = resource->getMaxStackSize();
         m_values[handle] = resource->getValue();
         m_categories[handle] = resource->getCategory();
         m_types[handle] = resource->getType();
 
-    // Register the resource template
+        // Register the resource template
         m_resourceTemplates[handle] = resource;
 
-    // Update indexes
+        // Update indexes
         updateIndexes(handle, resource->getCategory(), resource->getType());
         updateNameIndex(handle, resourceName);
 
@@ -299,33 +299,33 @@ VoidLight::ResourceHandle ResourceTemplateManager::generateHandle() {
     VoidLight::ResourceHandle::HandleId id;
     VoidLight::ResourceHandle::Generation generation;
 
-  // PERFORMANCE OPTIMIZATION: Prefer allocating new IDs over reusing freed ones
-  // to reduce unordered_map lookups in the hot path
+    // PERFORMANCE OPTIMIZATION: Prefer allocating new IDs over reusing freed ones
+    // to reduce unordered_map lookups in the hot path
     if (m_freedHandleIds.size() >
         50) { // Only reuse when we have many freed handles
-    // Reuse a freed handle ID with incremented generation
+        // Reuse a freed handle ID with incremented generation
         id = m_freedHandleIds.back();
         m_freedHandleIds.pop_back();
 
-    // Increment the generation for this reused ID to prevent stale handle bugs
+        // Increment the generation for this reused ID to prevent stale handle bugs
         auto genIt = m_handleGenerations.find(id);
         if (genIt != m_handleGenerations.end()) {
             generation = genIt->second + 1;
 
-      // Handle generation overflow (wrap around, but never use
-      // 0/INVALID_GENERATION)
+            // Handle generation overflow (wrap around, but never use
+            // 0/INVALID_GENERATION)
             if (generation == VoidLight::ResourceHandle::INVALID_GENERATION) {
                 generation = 1;
             }
 
             genIt->second = generation;
         } else {
-      // First time using this ID (shouldn't happen with proper bookkeeping)
+            // First time using this ID (shouldn't happen with proper bookkeeping)
             generation = 1;
             m_handleGenerations[id] = generation;
         }
     } else {
-    // Allocate a new ID - much faster than map lookups
+        // Allocate a new ID - much faster than map lookups
         id = m_nextHandleId.fetch_add(1, std::memory_order_relaxed);
         generation = 1;
         m_handleGenerations[id] = generation;
@@ -344,8 +344,8 @@ void ResourceTemplateManager::releaseHandle(
 
     auto id = handle.getId();
 
-  // Check if already in the freed list to avoid duplicates
-  // Use std::find since the vector should be relatively small
+    // Check if already in the freed list to avoid duplicates
+    // Use std::find since the vector should be relatively small
     auto it = std::find(m_freedHandleIds.begin(), m_freedHandleIds.end(), id);
     if (it == m_freedHandleIds.end()) {
         m_freedHandleIds.push_back(id);
@@ -360,7 +360,7 @@ bool ResourceTemplateManager::isValidHandle(
 
     std::lock_guard<std::mutex> lock(m_handleMutex);
 
-  // Check if the handle's generation matches our records
+    // Check if the handle's generation matches our records
     auto genIt = m_handleGenerations.find(handle.getId());
     if (genIt == m_handleGenerations.end()) {
         return false; // Unknown handle ID
@@ -391,9 +391,9 @@ std::vector<ResourcePtr> ResourceTemplateManager::getResourcesByCategory(
         const auto& handles = categoryIt->second;
         result.reserve(handles.size());
 
-    // PERFORMANCE OPTIMIZATION: Batch lookup to reduce hash map overhead
-    // Single pass through handles, direct insertion without intermediate
-    // lookups
+        // PERFORMANCE OPTIMIZATION: Batch lookup to reduce hash map overhead
+        // Single pass through handles, direct insertion without intermediate
+        // lookups
         for (const auto& handle : handles) {
             auto resourceIt = m_resourceTemplates.find(handle);
             if (resourceIt != m_resourceTemplates.end()) {
@@ -415,9 +415,9 @@ ResourceTemplateManager::getResourcesByType(ResourceType type) const {
         const auto& handles = typeIt->second;
         result.reserve(handles.size());
 
-    // PERFORMANCE OPTIMIZATION: Batch lookup to reduce hash map overhead
-    // Single pass through handles, direct insertion without intermediate
-    // lookups
+        // PERFORMANCE OPTIMIZATION: Batch lookup to reduce hash map overhead
+        // Single pass through handles, direct insertion without intermediate
+        // lookups
         for (const auto& handle : handles) {
             auto resourceIt = m_resourceTemplates.find(handle);
             if (resourceIt != m_resourceTemplates.end()) {
@@ -529,7 +529,7 @@ ResourcePtr ResourceTemplateManager::createResource(
     }
 
     try {
-    // Create a copy of the template
+        // Create a copy of the template
         ResourcePtr newResource = std::make_shared<Resource>(*templateResource);
 
         m_stats.resourcesCreated.fetch_add(1, std::memory_order_relaxed);
@@ -574,7 +574,7 @@ bool ResourceTemplateManager::loadResourcesFromJsonString(
         return false;
     }
 
-  // Check if we have a resources array
+    // Check if we have a resources array
     if (!root.hasKey("resources") || !root["resources"].isArray()) {
         RESOURCE_ERROR("ResourceTemplateManager::loadResourcesFromJsonString - "
                        "Missing or invalid 'resources' array");
@@ -646,7 +646,7 @@ bool ResourceTemplateManager::loadResourcesFromJsonString(
         "ResourceTemplateManager::loadResourcesFromJsonString - Loading {} resources from JSON",
         resourcesArray.size()));
 
-  // Process each resource in the array
+    // Process each resource in the array
     for (size_t i = 0; i < resourcesArray.size(); ++i) {
         const JsonValue& resourceJson = resourcesArray[i];
 
@@ -656,11 +656,11 @@ bool ResourceTemplateManager::loadResourcesFromJsonString(
                 if (registerResourceTemplateInternal(resource)) {
                     loadedCount++;
 
-          // Extract the resource ID from JSON for debug logging and ID index
+                    // Extract the resource ID from JSON for debug logging and ID index
                     if (resourceJson.hasKey("id") && resourceJson["id"].isString()) {
                         std::string resourceId = resourceJson["id"].asString();
 
-            // Update ID index for fast JSON ID lookups
+                        // Update ID index for fast JSON ID lookups
                         updateIdIndex(resource->getHandle(), resourceId);
 
                         RESOURCE_DEBUG(
@@ -721,15 +721,15 @@ size_t ResourceTemplateManager::getMemoryUsage() const {
 
     size_t totalSize = 0;
 
-  // Account for m_resourceTemplates map itself (key is a ResourceHandle)
+    // Account for m_resourceTemplates map itself (key is a ResourceHandle)
     totalSize += m_resourceTemplates.size() *
         (sizeof(VoidLight::ResourceHandle) + sizeof(ResourcePtr));
 
-  // Account for the actual Resource objects in m_resourceTemplates
+    // Account for the actual Resource objects in m_resourceTemplates
     for (const auto& entry : m_resourceTemplates) {
         const ResourcePtr& resource = entry.second;
         if (resource) {
-            totalSize += sizeof(Resource);           // Base Resource object size
+            totalSize += sizeof(Resource); // Base Resource object size
             totalSize += resource->getName().size(); // Resource name
             totalSize += resource->getDescription().size(); // Resource description
         }
@@ -751,10 +751,10 @@ void ResourceTemplateManager::updateIndexes(VoidLight::ResourceHandle handle,
     ResourceType type) {
     std::lock_guard<std::mutex> lock(m_indexMutex);
 
-  // Add to category index
+    // Add to category index
     m_categoryIndex[category].push_back(handle);
 
-  // Add to type index
+    // Add to type index
     m_typeIndex[type].push_back(handle);
 }
 
@@ -774,12 +774,12 @@ void ResourceTemplateManager::removeFromIndexes(
     VoidLight::ResourceHandle handle) {
     std::lock_guard<std::mutex> lock(m_indexMutex);
 
-  // PERFORMANCE OPTIMIZATION: Use cached properties to avoid O(n) searches
-  // Get resource properties from our cached maps instead of linear searches
+    // PERFORMANCE OPTIMIZATION: Use cached properties to avoid O(n) searches
+    // Get resource properties from our cached maps instead of linear searches
     auto categoryIt = m_categories.find(handle);
     auto typeIt = m_types.find(handle);
 
-  // Remove from category index using cached category (O(n) -> O(log n))
+    // Remove from category index using cached category (O(n) -> O(log n))
     if (categoryIt != m_categories.end()) {
         auto& handles = m_categoryIndex[categoryIt->second];
         auto it = std::find(handles.begin(), handles.end(), handle);
@@ -788,7 +788,7 @@ void ResourceTemplateManager::removeFromIndexes(
         }
     }
 
-  // Remove from type index using cached type (O(n) -> O(log n))
+    // Remove from type index using cached type (O(n) -> O(log n))
     if (typeIt != m_types.end()) {
         auto& handles = m_typeIndex[typeIt->second];
         auto it = std::find(handles.begin(), handles.end(), handle);
@@ -797,8 +797,8 @@ void ResourceTemplateManager::removeFromIndexes(
         }
     }
 
-  // Remove from name and ID indexes (reverse lookup still needed but only once
-  // each)
+    // Remove from name and ID indexes (reverse lookup still needed but only once
+    // each)
     auto nameIt = std::find_if(
         m_nameIndex.begin(), m_nameIndex.end(),
         [handle](const auto& pair) { return pair.second == handle; });
@@ -817,12 +817,12 @@ void ResourceTemplateManager::removeFromIndexes(
 
 bool ResourceTemplateManager::checkForDuplicateName(
     const std::string& name, VoidLight::ResourceHandle currentHandle) const {
-  // This method assumes the lock is already held by the caller
+    // This method assumes the lock is already held by the caller
     auto nameIt = m_nameIndex.find(name);
     if (nameIt != m_nameIndex.end()) {
-    // Name exists - check if it's for a different resource
+        // Name exists - check if it's for a different resource
         if (nameIt->second != currentHandle) {
-      // Different resource has the same name - this is a duplicate
+            // Different resource has the same name - this is a duplicate
             return true;
         }
     }
@@ -835,8 +835,8 @@ bool ResourceTemplateManager::createDefaultResources() {
         "resource templates");
 
     try {
-    // Load resource catalogs before atlas mapping so all entries share one
-    // texture-coordinate pass.
+        // Load resource catalogs before atlas mapping so all entries share one
+        // texture-coordinate pass.
         constexpr std::array<std::string_view, 5> resourceCatalogs{
             "items.json", "weapons.json", "equipment.json", "materials.json",
             "currency.json"};
@@ -857,7 +857,7 @@ bool ResourceTemplateManager::createDefaultResources() {
             return false;
         }
 
-    // Apply atlas coordinates from atlas.json (following WorldManager pattern)
+        // Apply atlas coordinates from atlas.json (following WorldManager pattern)
         JsonReader atlasReader;
         if (atlasReader.loadFromFile(VoidLight::ResourcePath::resolve("res/data/atlas.json"))) {
             const auto& atlasRoot = atlasReader.getRoot();
@@ -901,8 +901,8 @@ bool ResourceTemplateManager::createDefaultResources() {
 // Fast property access methods (cache-optimized)
 int ResourceTemplateManager::getMaxStackSize(
     VoidLight::ResourceHandle handle) const {
-  // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
-  // handles
+    // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
+    // handles
     if (!handle.isValid()) {
         return 1; // Default stack size for invalid handles
     }
@@ -914,8 +914,8 @@ int ResourceTemplateManager::getMaxStackSize(
 
 float ResourceTemplateManager::getValue(
     VoidLight::ResourceHandle handle) const {
-  // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
-  // handles
+    // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
+    // handles
     if (!handle.isValid()) {
         return 0.0f; // Default value for invalid handles
     }
@@ -927,8 +927,8 @@ float ResourceTemplateManager::getValue(
 
 ResourceCategory ResourceTemplateManager::getCategory(
     VoidLight::ResourceHandle handle) const {
-  // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
-  // handles
+    // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
+    // handles
     if (!handle.isValid()) {
         return ResourceCategory::Item; // Default category for invalid handles
     }
@@ -942,8 +942,8 @@ ResourceCategory ResourceTemplateManager::getCategory(
 
 ResourceType
 ResourceTemplateManager::getType(VoidLight::ResourceHandle handle) const {
-  // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
-  // handles
+    // PERFORMANCE OPTIMIZATION: Check validity first to avoid lock on invalid
+    // handles
     if (!handle.isValid()) {
         return ResourceType::Equipment; // Default type for invalid handles
     }
@@ -960,12 +960,12 @@ std::vector<int> ResourceTemplateManager::getMaxStackSizes(
     std::vector<int> results;
     results.reserve(handles.size());
 
-  // PERFORMANCE OPTIMIZATION: Early return for empty input
+    // PERFORMANCE OPTIMIZATION: Early return for empty input
     if (handles.empty()) {
         return results;
     }
 
-  // PERFORMANCE OPTIMIZATION: Single lock acquisition for all valid handles
+    // PERFORMANCE OPTIMIZATION: Single lock acquisition for all valid handles
     std::shared_lock<std::shared_mutex> lock(m_resourceMutex);
 
     for (const auto& handle : handles) {
@@ -985,12 +985,12 @@ std::vector<float> ResourceTemplateManager::getValues(
     std::vector<float> results;
     results.reserve(handles.size());
 
-  // PERFORMANCE OPTIMIZATION: Early return for empty input
+    // PERFORMANCE OPTIMIZATION: Early return for empty input
     if (handles.empty()) {
         return results;
     }
 
-  // PERFORMANCE OPTIMIZATION: Single lock acquisition for all valid handles
+    // PERFORMANCE OPTIMIZATION: Single lock acquisition for all valid handles
     std::shared_lock<std::shared_mutex> lock(m_resourceMutex);
 
     for (const auto& handle : handles) {
@@ -1023,9 +1023,9 @@ void ResourceTemplateManager::getPropertiesBatch(
     categories.reserve(count);
     types.reserve(count);
 
-  // Single pass through all handles for maximum cache efficiency
+    // Single pass through all handles for maximum cache efficiency
     for (const auto& handle : handles) {
-    // Look up all properties in one go
+        // Look up all properties in one go
         auto stackIt = m_maxStackSizes.find(handle);
         auto valueIt = m_values.find(handle);
         auto categoryIt = m_categories.find(handle);

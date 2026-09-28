@@ -5,13 +5,13 @@
 
 #include "managers/EntityDataManager.hpp"
 #include "core/Logger.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "entities/resources/EquipmentResources.hpp"
-#include "managers/AIManager.hpp"  // For auto-registering NPCs with AI
-#include "managers/ResourceTemplateManager.hpp"  // For getMaxStackSize in inventory
-#include "managers/WorldResourceManager.hpp"  // For unregister on harvestable destruction
-#include "utils/JsonReader.hpp"  // For loading NPC types from JSON
-#include "utils/ResourcePath.hpp"  // For path resolution in JSON loading
+#include "managers/AIManager.hpp" // For auto-registering NPCs with AI
+#include "managers/ResourceTemplateManager.hpp" // For getMaxStackSize in inventory
+#include "managers/WorldResourceManager.hpp" // For unregister on harvestable destruction
+#include "utils/JsonReader.hpp" // For loading NPC types from JSON
+#include "utils/ResourcePath.hpp" // For path resolution in JSON loading
 #include "utils/UniqueID.hpp"
 
 using VoidLight::JsonReader;
@@ -186,12 +186,12 @@ bool EntityDataManager::init() {
         m_staticIdToIndex.reserve(STATIC_CAPACITY);
 
         m_characterData.reserve(CHARACTER_CAPACITY);
-        m_npcRenderData.reserve(CHARACTER_CAPACITY);  // Same capacity as CharacterData
+        m_npcRenderData.reserve(CHARACTER_CAPACITY); // Same capacity as CharacterData
         m_itemData.reserve(ITEM_CAPACITY);
-        m_itemRenderData.reserve(ITEM_CAPACITY);  // Same capacity as ItemData
+        m_itemRenderData.reserve(ITEM_CAPACITY); // Same capacity as ItemData
         m_projectileData.reserve(PROJECTILE_CAPACITY);
         m_containerData.reserve(100);
-        m_containerRenderData.reserve(100);  // Same capacity as ContainerData
+        m_containerRenderData.reserve(100); // Same capacity as ContainerData
         m_harvestableData.reserve(500);
         m_areaEffectData.reserve(EFFECT_CAPACITY);
 
@@ -245,7 +245,7 @@ bool EntityDataManager::init() {
         }
 
         m_destructionQueue.reserve(100);
-        m_destroyBuffer.reserve(100);  // Match destruction queue capacity
+        m_destroyBuffer.reserve(100); // Match destruction queue capacity
         m_freeSlots.reserve(1000);
 
         // Inventory storage
@@ -460,11 +460,11 @@ size_t EntityDataManager::allocateSlot() {
         m_generations.emplace_back(0);
         // Pre-allocate PathData, WaypointSlot, BehaviorData, BehaviorConfigRef, MemoryData to match - avoids concurrent resize during AI processing
         m_pathData.emplace_back();
-        m_waypointSlots.emplace_back();  // Per-entity waypoint slot (256 bytes)
+        m_waypointSlots.emplace_back(); // Per-entity waypoint slot (256 bytes)
         m_behaviorData.emplace_back();
         // New entity starts with no active behavior config — ref is {None, UINT32_MAX}
         m_behaviorConfigRef.emplace_back(BehaviorConfigRef{BehaviorType::None, {0, 0, 0}, std::numeric_limits<uint32_t>::max()});
-        m_memoryData.emplace_back();     // NPC memory data
+        m_memoryData.emplace_back(); // NPC memory data
         for (auto& hook : m_sidecarGrowHooks) hook(m_hotData.size());
     }
 
@@ -569,7 +569,7 @@ void EntityDataManager::freeSlot(size_t index) {
     }
 
     m_tierIndicesDirty = true;
-    markKindDirty(kind);  // Only mark the freed entity's kind dirty
+    markKindDirty(kind); // Only mark the freed entity's kind dirty
 }
 
 uint32_t EntityDataManager::nextGeneration(size_t index) {
@@ -603,7 +603,7 @@ uint32_t EntityDataManager::allocateCharacterSlot() {
     } else {
         charIndex = static_cast<uint32_t>(m_characterData.size());
         m_characterData.emplace_back();
-        m_npcRenderData.emplace_back();  // Always stays in sync
+        m_npcRenderData.emplace_back(); // Always stays in sync
     }
     return charIndex;
 }
@@ -745,7 +745,7 @@ EntityHandle EntityDataManager::createNPCWithRaceClass(const Vector2D& position,
     charData.baseCombatStyle = charData.combatStyle;
     charData.projectileSpeed = classInfo.projectileSpeed;
     charData.baseProjectileSpeed = charData.projectileSpeed;
-    charData.mass = raceInfo.sizeMultiplier * raceInfo.sizeMultiplier;  // Mass scales with area
+    charData.mass = raceInfo.sizeMultiplier * raceInfo.sizeMultiplier; // Mass scales with area
     applyClassPersonalityBias(m_memoryData[index], classInfo);
 
     setNpcCollisionAsEnemy(index, false);
@@ -876,7 +876,7 @@ EntityHandle EntityDataManager::createMonster(const Vector2D& position,
     charData.baseMoveSpeed = charData.moveSpeed;
     charData.priority = variantInfo.basePriority;
     charData.faction = (factionOverride != 0xFF) ? factionOverride : typeInfo.defaultFaction;
-    charData.mass = typeInfo.sizeMultiplier * typeInfo.sizeMultiplier;  // Mass scales with area
+    charData.mass = typeInfo.sizeMultiplier * typeInfo.sizeMultiplier; // Mass scales with area
 
     setNpcCollisionAsEnemy(index, false);
 
@@ -975,13 +975,13 @@ EntityHandle EntityDataManager::createAnimal(const Vector2D& position,
     charData.stamina = charData.maxStamina;
     charData.attackDamage = speciesInfo.baseAttackDamage * roleInfo.attackDamageMult;
     charData.baseAttackDamage = charData.attackDamage;
-    charData.attackRange = speciesInfo.baseAttackRange;  // Animals don't have range multiplier
+    charData.attackRange = speciesInfo.baseAttackRange; // Animals don't have range multiplier
     charData.baseAttackRange = charData.attackRange;
     charData.moveSpeed = speciesInfo.baseMoveSpeed * roleInfo.moveSpeedMult;
     charData.baseMoveSpeed = charData.moveSpeed;
     charData.priority = roleInfo.basePriority;
     charData.faction = (factionOverride != 0xFF) ? factionOverride : roleInfo.defaultFaction;
-    charData.mass = speciesInfo.sizeMultiplier * speciesInfo.sizeMultiplier;  // Mass scales with area
+    charData.mass = speciesInfo.sizeMultiplier * speciesInfo.sizeMultiplier; // Mass scales with area
 
     setNpcCollisionAsEnemy(index, false);
 
@@ -1051,7 +1051,7 @@ void EntityDataManager::setFaction(EntityHandle handle, uint8_t newFaction) {
     if (index == SIZE_MAX) return;
 
     auto& charData = getCharacterDataByIndex(index);
-    if (charData.faction == newFaction) return;  // No change
+    if (charData.faction == newFaction) return; // No change
 
     uint8_t oldFaction = charData.faction;
     charData.faction = newFaction;
@@ -1219,9 +1219,9 @@ EntityHandle EntityDataManager::createDroppedItem(const Vector2D& position,
     hot.flags = EntityHotData::FLAG_ALIVE;
 
     // DroppedItems use WRM spatial index for pickup detection, not collision system
-    hot.collisionLayers = 0;  // No collision layers
-    hot.collisionMask = 0;    // No collision mask
-    hot.collisionFlags = 0;   // Collision disabled
+    hot.collisionLayers = 0; // No collision layers
+    hot.collisionMask = 0; // No collision mask
+    hot.collisionFlags = 0; // Collision disabled
     hot.triggerTag = 0;
 
     // Allocate item data and render data (keep indices in sync)
@@ -1232,12 +1232,12 @@ EntityHandle EntityDataManager::createDroppedItem(const Vector2D& position,
     } else {
         itemIndex = static_cast<uint32_t>(m_itemData.size());
         m_itemData.emplace_back();
-        m_itemRenderData.emplace_back();  // Keep in sync with ItemData
+        m_itemRenderData.emplace_back(); // Keep in sync with ItemData
     }
 
     // Initialize ItemData
     auto& item = m_itemData[itemIndex];
-    item = ItemData{};  // Reset to default
+    item = ItemData{}; // Reset to default
     item.resourceHandle = resourceHandle;
     item.quantity = quantity;
     item.pickupTimer = 0.5f;
@@ -1323,7 +1323,7 @@ EntityHandle EntityDataManager::createContainer(const Vector2D& position,
     std::lock_guard<std::mutex> lock(m_structuralMutex);
 
     // Auto-create inventory for this container
-    uint32_t inventoryIndex = createInventory(maxSlots, false);  // Containers not world-tracked by default
+    uint32_t inventoryIndex = createInventory(maxSlots, false); // Containers not world-tracked by default
     if (inventoryIndex == INVALID_INVENTORY_INDEX) {
         ENTITY_ERROR("createContainer: Failed to create inventory");
         return EntityHandle{};
@@ -1371,7 +1371,7 @@ EntityHandle EntityDataManager::createContainer(const Vector2D& position,
     } else {
         containerIndex = static_cast<uint32_t>(m_containerData.size());
         m_containerData.emplace_back();
-        m_containerRenderData.emplace_back();  // Keep in sync
+        m_containerRenderData.emplace_back(); // Keep in sync
     }
 
     // Initialize ContainerData
@@ -1585,7 +1585,7 @@ EntityHandle EntityDataManager::createProjectile(const Vector2D& position,
     hot.halfHeight = 4.0f;
     hot.kind = EntityKind::Projectile;
     markKindDirty(EntityKind::Projectile);
-    hot.tier = SimulationTier::Active;  // Projectiles always active
+    hot.tier = SimulationTier::Active; // Projectiles always active
     hot.flags = EntityHotData::FLAG_ALIVE;
 
     // Initialize collision data.
@@ -1611,7 +1611,7 @@ EntityHandle EntityDataManager::createProjectile(const Vector2D& position,
         m_projectileData.emplace_back();
     }
     auto& proj = m_projectileData[projIndex];
-    proj = ProjectileData{};  // Reset to default
+    proj = ProjectileData{}; // Reset to default
     proj.owner = owner;
     proj.damage = damage;
     proj.lifetime = lifetime;
@@ -1669,7 +1669,7 @@ EntityHandle EntityDataManager::createAreaEffect(const Vector2D& position,
         m_areaEffectData.emplace_back();
     }
     auto& effect = m_areaEffectData[effectIndex];
-    effect = AreaEffectData{};  // Reset to default
+    effect = AreaEffectData{}; // Reset to default
     effect.owner = owner;
     effect.radius = radius;
     effect.damage = damage;
@@ -1781,7 +1781,7 @@ EntityHandle EntityDataManager::createTrigger(const Vector2D& position,
 
     // Set collision data for trigger
     hot.collisionLayers = VoidLight::CollisionLayer::Layer_Environment;
-    hot.collisionMask = 0xFFFF;  // Collides with all layers
+    hot.collisionMask = 0xFFFF; // Collides with all layers
     hot.setCollisionEnabled(true);
     hot.setTrigger(true);
     hot.triggerTag = static_cast<uint8_t>(tag);
@@ -1832,7 +1832,7 @@ EntityHandle EntityDataManager::registerPlayer(EntityHandle::IDType entityId,
     hot.halfHeight = halfHeight;
     hot.kind = EntityKind::Player;
     markKindDirty(EntityKind::Player);
-    hot.tier = SimulationTier::Active;  // Player always active
+    hot.tier = SimulationTier::Active; // Player always active
     hot.flags = EntityHotData::FLAG_ALIVE;
 
     // Initialize collision data (Player collides with gameplay bodies, environment, triggers)
@@ -1910,7 +1910,7 @@ EntityHandle EntityDataManager::registerDroppedItem(EntityHandle::IDType entityI
     hot.halfWidth = 8.0f;
     hot.halfHeight = 8.0f;
     hot.kind = EntityKind::DroppedItem;
-    hot.tier = SimulationTier::Active;  // Not used for static, but set for consistency
+    hot.tier = SimulationTier::Active; // Not used for static, but set for consistency
     hot.flags = EntityHotData::FLAG_ALIVE;
 
     // Allocate item data and render data (reuse freed slot if available)
@@ -1982,7 +1982,7 @@ void EntityDataManager::unregisterEntity(EntityHandle::IDType entityId) {
     m_totalEntityCount.fetch_sub(1, std::memory_order_relaxed);
     m_countByKind[static_cast<size_t>(kind)].fetch_sub(1, std::memory_order_relaxed);
     m_countByTier[static_cast<size_t>(tier)].fetch_sub(1, std::memory_order_relaxed);
-    m_tierIndicesDirty = true;  // Remove destroyed entity from indices
+    m_tierIndicesDirty = true; // Remove destroyed entity from indices
 
     // Remove from ID mapping
     m_idToIndex.erase(it);
@@ -2067,7 +2067,7 @@ void EntityDataManager::destroyStaticResource(EntityHandle handle) {
     }
 
     // Mark slot free
-    m_staticHotData[index].flags = 0;  // Clear FLAG_ALIVE
+    m_staticHotData[index].flags = 0; // Clear FLAG_ALIVE
     m_freeStaticSlots.push_back(index);
     m_staticIdToIndex.erase(it);
     markKindDirty(handle.kind);
@@ -2233,7 +2233,7 @@ bool EntityDataManager::initNPCAsMerchant(EntityHandle handle, uint16_t maxSlots
     }
 
     // Create inventory
-    uint32_t invIdx = createInventory(maxSlots, false);  // Not world-tracked
+    uint32_t invIdx = createInventory(maxSlots, false); // Not world-tracked
     if (invIdx == INVALID_INVENTORY_INDEX) {
         ENTITY_ERROR("initNPCAsMerchant: Failed to create inventory");
         return false;
@@ -2700,7 +2700,7 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
     auto& rtm = ResourceTemplateManager::Instance();
     int maxStack = rtm.isInitialized() ? rtm.getMaxStackSize(handle) : 99;
     if (maxStack <= 0) {
-        maxStack = 99;  // Fallback for invalid stack size
+        maxStack = 99; // Fallback for invalid stack size
     }
 
     // Lock for thread-safe inventory modification
@@ -2798,7 +2798,7 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
 
     if (remaining > 0) {
         ENTITY_WARN(std::format("addToInventory: Could not add {} items (inventory full)", remaining));
-        return false;  // Couldn't fit everything
+        return false; // Couldn't fit everything
     }
 
     inv.flags |= InventoryData::FLAG_DIRTY;
@@ -3513,7 +3513,7 @@ size_t EntityDataManager::getStaticIndex(EntityHandle handle) const {
 
 EntityHandle EntityDataManager::getStaticHandle(size_t staticIndex) const {
     if (staticIndex >= m_staticHotData.size()) {
-        return EntityHandle{};  // Invalid
+        return EntityHandle{}; // Invalid
     }
 
     const auto& hot = m_staticHotData[staticIndex];
@@ -4122,7 +4122,7 @@ void EntityDataManager::recordCombatEvent(size_t index, EntityHandle attacker,
         memData.totalDamageDealt += damage;
     }
 
-    memData.lastCombatTime = 0.0f;  // Delta semantics: starts at 0, incremented by updateEmotionalDecay
+    memData.lastCombatTime = 0.0f; // Delta semantics: starts at 0, incremented by updateEmotionalDecay
     memData.combatEncounters++;
 
     // Create memory entry (MemoryEntry defaults keep unset fields determinate)
@@ -4136,7 +4136,7 @@ void EntityDataManager::recordCombatEvent(size_t index, EntityHandle attacker,
     mem.type = wasAttacked ? MemoryType::DamageReceived : MemoryType::DamageDealt;
     mem.importance = static_cast<uint8_t>(std::min(255.0f, damage * 2.0f));
     mem.flags = MemoryEntry::FLAG_VALID;
-    addMemory(index, mem, true);  // Use overflow for combat (important history)
+    addMemory(index, mem, true); // Use overflow for combat (important history)
 }
 
 void EntityDataManager::addLocationToHistory(size_t index, const Vector2D& location) {
@@ -4232,15 +4232,15 @@ void EntityDataManager::updateSimulationTiers(const Vector2D& referencePoint,
         rebuildTierIndicesFromHotData();
 
         VOIDLIGHT_STATS_ONLY(
-        // Rolling log every 60 seconds using time-based check
+            // Rolling log every 60 seconds using time-based check
             thread_local auto lastLogTime = std::chrono::steady_clock::now();
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::seconds>(now - lastLogTime).count() >= 60) {
                 lastLogTime = now;
                 size_t tierTotal = m_activeIndices.size() + m_backgroundIndices.size() + m_hibernatedIndices.size();
-                size_t dynamicCount = m_hotData.size();  // Only dynamic entities (statics in separate vector)
+                size_t dynamicCount = m_hotData.size(); // Only dynamic entities (statics in separate vector)
 
-            // Count static entities by kind
+                // Count static entities by kind
                 size_t resourceCount = 0, itemCount = 0, containerCount = 0, obstacleCount = 0;
                 for (const auto& hot : m_staticHotData) {
                     if (!hot.isAlive()) continue;
@@ -4297,8 +4297,8 @@ void EntityDataManager::rebuildTierIndicesFromHotData() {
     }
 
     m_tierIndicesDirty = false;
-    m_activeCollisionDirty = false;    // Built in same pass
-    m_triggerDetectionDirty = false;   // Built in same pass
+    m_activeCollisionDirty = false; // Built in same pass
+    m_triggerDetectionDirty = false; // Built in same pass
 }
 
 std::span<const size_t> EntityDataManager::getActiveIndices() const {

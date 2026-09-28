@@ -94,7 +94,7 @@ void FrameProfiler::endFrame() {
     // Decrement suppression counter (skip hitch logging during state transitions)
     if (m_suppressCount > 0) {
         --m_suppressCount;
-        return;  // Skip hitch detection while suppressed
+        return; // Skip hitch detection while suppressed
     }
 
     // Get swapchain wait time (expected pacing wait, not a render cost)
@@ -403,6 +403,6 @@ void FrameProfiler::updateOverlayText() {
     }
 }
 
-}  // namespace VoidLight
+} // namespace VoidLight
 
-#endif  // VOIDLIGHT_FRAME_PROFILER_ENABLED
+#endif // VOIDLIGHT_FRAME_PROFILER_ENABLED

@@ -159,4 +159,4 @@ private:
     void handleSliderAdjust();
 };
 
-#endif  // SETTINGS_MENU_STATE_HPP
+#endif // SETTINGS_MENU_STATE_HPP

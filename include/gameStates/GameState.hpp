@@ -39,42 +39,42 @@ public:
     virtual GameStateId getStateId() const = 0;
     virtual ~GameState() = default;
 
-  /**
+    /**
    * True when this state owns a scene pass (world, diorama, logo sprites).
    * GameStateManager records/renders scene from the highest stacked state
    * that returns true, and UI from the top state.
    */
     virtual bool hasGPUScene() const { return false; }
 
-  /**
+    /**
    * Record scene vertices (world/diorama/particles) before the scene pass.
    */
     virtual void recordGPUSceneVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
         [[maybe_unused]] float interpolationAlpha) {}
 
-  /**
+    /**
    * Record UI vertices before the swapchain UI pass.
    */
     virtual void recordGPUUIVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer) {}
 
-  /**
+    /**
    * Issue GPU draw calls during scene pass.
    */
     virtual void renderGPUScene([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
         [[maybe_unused]] SDL_GPURenderPass* scenePass,
         [[maybe_unused]] float interpolationAlpha) {}
 
-  /**
+    /**
    * Render UI/overlays during swapchain pass.
    * UI renders at exact screen positions - no interpolation needed.
    */
     virtual void renderGPUUI([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
         [[maybe_unused]] SDL_GPURenderPass* swapchainPass) {}
 
-  // State manager access - set by GameStateManager when state is registered
+    // State manager access - set by GameStateManager when state is registered
     void setStateManager(GameStateManager* manager) { mp_stateManager = manager; }
 
 protected:
     GameStateManager* mp_stateManager = nullptr;
 };
-#endif  // GAME_STATE_HPP
+#endif // GAME_STATE_HPP

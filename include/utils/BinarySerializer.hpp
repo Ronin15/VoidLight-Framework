@@ -66,7 +66,7 @@ public:
         }
     }
 
-  // Create writer for file
+    // Create writer for file
     static std::unique_ptr<Writer> createFileWriter(const std::string& filename) {
         auto stream = std::make_shared<std::ofstream>(filename, std::ios::binary);
         if (!stream->is_open()) {
@@ -77,7 +77,7 @@ public:
         return std::unique_ptr<Writer>(new Writer(std::move(stream)));
     }
 
-  // Write fundamental types
+    // Write fundamental types
     template <typename T>
     bool write(const T& value) {
         static_assert(std::is_trivially_copyable_v<T>,
@@ -86,7 +86,7 @@ public:
         return mp_stream->good();
     }
 
-  // Write strings
+    // Write strings
     bool writeString(const std::string& str) {
         uint32_t length = static_cast<uint32_t>(str.length());
         if (!write(length)) {
@@ -98,7 +98,7 @@ public:
         return mp_stream->good();
     }
 
-  // Write vectors of trivially copyable types
+    // Write vectors of trivially copyable types
     template <typename T>
     bool writeVector(const std::vector<T>& vec) {
         static_assert(std::is_trivially_copyable_v<T>,
@@ -114,7 +114,7 @@ public:
         return mp_stream->good();
     }
 
-  // Write custom serializable objects
+    // Write custom serializable objects
     template <typename T>
     bool writeSerializable(const T& obj) {
         return obj.serialize(*mp_stream);
@@ -151,7 +151,7 @@ public:
         }
     }
 
-  // Create reader for file
+    // Create reader for file
     static std::unique_ptr<Reader> createFileReader(const std::string& filename) {
         auto stream = std::make_shared<std::ifstream>(filename, std::ios::binary);
         if (!stream->is_open()) {
@@ -162,7 +162,7 @@ public:
         return std::unique_ptr<Reader>(new Reader(std::move(stream)));
     }
 
-  // Read fundamental types
+    // Read fundamental types
     template <typename T>
     bool read(T& value) {
         static_assert(std::is_trivially_copyable_v<T>,
@@ -171,7 +171,7 @@ public:
         return mp_stream->good() && mp_stream->gcount() == sizeof(T);
     }
 
-  // Read strings
+    // Read strings
     bool readString(std::string& str) {
         uint32_t length = 0;
         if (!read(length)) {
@@ -183,7 +183,7 @@ public:
             return true;
         }
 
-    // Safety check for reasonable string length
+        // Safety check for reasonable string length
         if (length > 1024 * 1024) { // 1MB limit
             SAVEGAME_ERROR(std::format("String length too large: {} bytes", length));
             return false;
@@ -195,7 +195,7 @@ public:
             mp_stream->gcount() == static_cast<std::streamsize>(length);
     }
 
-  // Read vectors of trivially copyable types
+    // Read vectors of trivially copyable types
     template <typename T>
     bool readVector(std::vector<T>& vec) {
         static_assert(std::is_trivially_copyable_v<T>,
@@ -210,7 +210,7 @@ public:
             return true;
         }
 
-    // Safety check for reasonable vector size
+        // Safety check for reasonable vector size
         if (size > 1024 * 1024) { // 1M elements limit
             SAVEGAME_ERROR(std::format("Vector size too large: {} elements", size));
             return false;
@@ -222,7 +222,7 @@ public:
             mp_stream->gcount() == static_cast<std::streamsize>(sizeof(T) * size);
     }
 
-  // Read custom serializable objects
+    // Read custom serializable objects
     template <typename T>
     bool readSerializable(T& obj) {
         return obj.deserialize(*mp_stream);

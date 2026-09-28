@@ -58,9 +58,9 @@ void clearEventQueue() {
     while (SDL_PollEvent(&event)) {}
 }
 
-    // Simulate one full input frame: clear pressed keys, drain SDL event queue,
-    // route events to InputManager handlers, then resolve command state.
-    // Mirrors GameEngine::handleEvents() behaviour.
+// Simulate one full input frame: clear pressed keys, drain SDL event queue,
+// route events to InputManager handlers, then resolve command state.
+// Mirrors GameEngine::handleEvents() behaviour.
 void processFrame() {
     InputManager& mgr = InputManager::Instance();
     mgr.clearFrameInput();
@@ -162,11 +162,11 @@ struct ScopedVirtualGamepad {
     ScopedVirtualGamepad& operator=(const ScopedVirtualGamepad&) = delete;
 };
 
-    // Resets bindings to defaults and clears any queued events for a clean test state
+// Resets bindings to defaults and clears any queued events for a clean test state
 void resetState() {
     clearEventQueue();
     InputManager::Instance().resetBindingsToDefaults();
-        // Two empty frames to flush any lingering edge state
+    // Two empty frames to flush any lingering edge state
     processFrame();
     processFrame();
 }
@@ -604,7 +604,7 @@ BOOST_AUTO_TEST_CASE(StartRebindingPrimesPrevStateWithoutSpuriousCapture) {
         SDL_Event e;
         SDL_zero(e);
         e.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
-        e.gbutton.which = 0;   // instance id 0 — may not match real hardware
+        e.gbutton.which = 0; // instance id 0 — may not match real hardware
         e.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
         // Push and drain so onGamepadButtonDown is called if a gamepad is open.
         // Without a real gamepad, m_gamepads will be empty, so the call is a no-op.

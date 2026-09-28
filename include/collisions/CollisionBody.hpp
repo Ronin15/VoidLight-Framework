@@ -12,9 +12,9 @@ namespace VoidLight {
 
 // Body type classifications for collision physics
 enum class BodyType : uint8_t {
-    STATIC,      // Immovable objects (world geometry, buildings)
-    KINEMATIC,   // Script-controlled movement (NPCs, moving platforms)
-    DYNAMIC      // Physics-simulated (player, projectiles)
+    STATIC, // Immovable objects (world geometry, buildings)
+    KINEMATIC, // Script-controlled movement (NPCs, moving platforms)
+    DYNAMIC // Physics-simulated (player, projectiles)
 };
 
 // Bitmask collision layers (combine via bitwise OR)

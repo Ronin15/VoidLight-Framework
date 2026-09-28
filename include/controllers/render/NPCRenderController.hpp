@@ -39,7 +39,7 @@ public:
     NPCRenderController& operator=(NPCRenderController&&) = delete;
 
     // ControllerBase interface
-    void subscribe() override {}  // No events needed
+    void subscribe() override {} // No events needed
     [[nodiscard]] std::string_view getName() const override { return "NPCRenderController"; }
 
     // IUpdatable - advances animation frames based on velocity
@@ -55,8 +55,8 @@ public:
     void recordGPU(const VoidLight::GPUSceneContext& ctx);
 
 private:
-    static constexpr float MOVEMENT_THRESHOLD = 15.0f;  // Velocity threshold for Moving/Idle
-    static constexpr float MOVEMENT_THRESHOLD_SQ = MOVEMENT_THRESHOLD * MOVEMENT_THRESHOLD;  // Squared for lengthSquared() comparison
+    static constexpr float MOVEMENT_THRESHOLD = 15.0f; // Velocity threshold for Moving/Idle
+    static constexpr float MOVEMENT_THRESHOLD_SQ = MOVEMENT_THRESHOLD * MOVEMENT_THRESHOLD; // Squared for lengthSquared() comparison
 };
 
 #endif // NPC_RENDER_CONTROLLER_HPP

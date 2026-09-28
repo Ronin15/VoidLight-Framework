@@ -52,23 +52,23 @@ inline std::ostream& operator<<(std::ostream& os, JsonType type) {
 class JsonValue {
 public:
     using ValueType = std::variant<std::nullptr_t, // null
-        bool,           // boolean
-        double,         // number
-        std::string,    // string
-        JsonArray,      // array
-        JsonObject      // object
+        bool, // boolean
+        double, // number
+        std::string, // string
+        JsonArray, // array
+        JsonObject // object
         >;
 
 private:
     ValueType m_value;
-  // Numbers are stored as double, but the authored token type (integer literal
-  // like `1` vs real literal like `1.0`) is preserved here so consumers that
-  // care about type identity (e.g. SettingsManager's typed variant) can
-  // round-trip it. Meaningful only when isNumber(); ignored otherwise.
+    // Numbers are stored as double, but the authored token type (integer literal
+    // like `1` vs real literal like `1.0`) is preserved here so consumers that
+    // care about type identity (e.g. SettingsManager's typed variant) can
+    // round-trip it. Meaningful only when isNumber(); ignored otherwise.
     bool m_numberIsInteger{false};
 
 public:
-  // Constructors
+    // Constructors
     JsonValue() : m_value(nullptr) {}
     explicit JsonValue(std::nullptr_t) : m_value(nullptr) {}
     explicit JsonValue(bool value) : m_value(value) {}
@@ -76,8 +76,8 @@ public:
         : m_value(static_cast<double>(value)), m_numberIsInteger(true) {}
     explicit JsonValue(double value) : m_value(value) {}
 
-  // Construct a number with an explicit integer/real classification. Used by
-  // the parser to carry the authored token type through the value tree.
+    // Construct a number with an explicit integer/real classification. Used by
+    // the parser to carry the authored token type through the value tree.
     static JsonValue makeNumber(double value, bool isInteger) {
         JsonValue v(value);
         v.m_numberIsInteger = isInteger;
@@ -91,15 +91,15 @@ public:
     explicit JsonValue(const JsonObject& value) : m_value(value) {}
     explicit JsonValue(JsonObject&& value) : m_value(std::move(value)) {}
 
-  // Type checking
+    // Type checking
     JsonType getType() const;
     bool isNull() const {
         return std::holds_alternative<std::nullptr_t>(m_value);
     }
     bool isBool() const { return std::holds_alternative<bool>(m_value); }
     bool isNumber() const { return std::holds_alternative<double>(m_value); }
-  // True only for numbers authored as an integer literal (no '.', 'e', or 'E').
-  // Lets consumers distinguish `1` from `1.0`, which asNumber()/asInt() cannot.
+    // True only for numbers authored as an integer literal (no '.', 'e', or 'E').
+    // Lets consumers distinguish `1` from `1.0`, which asNumber()/asInt() cannot.
     [[nodiscard]] bool isIntegerNumber() const {
         return isNumber() && m_numberIsInteger;
     }
@@ -107,7 +107,7 @@ public:
     bool isArray() const { return std::holds_alternative<JsonArray>(m_value); }
     bool isObject() const { return std::holds_alternative<JsonObject>(m_value); }
 
-  // Value accessors (throw std::bad_variant_access if wrong type)
+    // Value accessors (throw std::bad_variant_access if wrong type)
     bool asBool() const { return std::get<bool>(m_value); }
     double asNumber() const { return std::get<double>(m_value); }
     int asInt() const { return static_cast<int>(std::get<double>(m_value)); }
@@ -115,11 +115,11 @@ public:
     const JsonArray& asArray() const { return std::get<JsonArray>(m_value); }
     const JsonObject& asObject() const { return std::get<JsonObject>(m_value); }
 
-  // Mutable accessors
+    // Mutable accessors
     JsonArray& asArray() { return std::get<JsonArray>(m_value); }
     JsonObject& asObject() { return std::get<JsonObject>(m_value); }
 
-  // Safe accessors (return optional)
+    // Safe accessors (return optional)
     std::optional<bool> tryAsBool() const;
     std::optional<double> tryAsNumber() const;
     std::optional<int> tryAsInt() const;
@@ -127,39 +127,39 @@ public:
     const JsonArray* tryAsArray() const;
     const JsonObject* tryAsObject() const;
 
-  // Object member access
+    // Object member access
     bool hasKey(const std::string& key) const;
     const JsonValue& operator[](const std::string& key) const;
     JsonValue& operator[](const std::string& key);
 
-  // Array element access
+    // Array element access
     const JsonValue& operator[](size_t index) const;
     JsonValue& operator[](size_t index);
     size_t size() const;
 
-  // Utility. When pretty==true, objects/arrays are broken across lines with
-  // two-space indentation and a space after ':' — suitable for human-edited
-  // config files. Default (compact) output is unchanged.
+    // Utility. When pretty==true, objects/arrays are broken across lines with
+    // two-space indentation and a space after ':' — suitable for human-edited
+    // config files. Default (compact) output is unchanged.
     std::string toString(bool pretty = false) const;
 
 private:
-  // depth >= 0 enables pretty printing; depth < 0 emits compact JSON.
+    // depth >= 0 enables pretty printing; depth < 0 emits compact JSON.
     void writeToStream(std::ostream& stream, int depth = -1) const;
 };
 
 enum class JsonTokenType {
     EndOfFile,
-    LeftBrace,    // {
-    RightBrace,   // }
-    LeftBracket,  // [
+    LeftBrace, // {
+    RightBrace, // }
+    LeftBracket, // [
     RightBracket, // ]
-    Comma,        // ,
-    Colon,        // :
-    String,       // "..."
-    Number,       // 123, 12.34, -5, 1e10
-    True,         // true
-    False,        // false
-    Null          // null
+    Comma, // ,
+    Colon, // :
+    String, // "..."
+    Number, // 123, 12.34, -5, 1e10
+    True, // true
+    False, // false
+    Null // null
 };
 
 struct JsonToken {
@@ -182,7 +182,7 @@ private:
     std::string m_lastError;
     JsonValue m_root;
 
-  // Tokenizer
+    // Tokenizer
     std::vector<JsonToken> tokenize();
     char peek(size_t offset = 0) const;
     char advance();
@@ -193,7 +193,7 @@ private:
     bool isHexDigit(char c) const;
     uint32_t parseUnicodeEscape();
 
-  // Parser
+    // Parser
     class Parser {
     private:
         const std::vector<JsonToken>& m_tokens;

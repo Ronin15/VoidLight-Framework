@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(TestResumeAfterSuspendClearsSuspended) {
 BOOST_AUTO_TEST_CASE(TestSuspendOnAlreadySuspendedIsNoOp) {
     ProjectileRenderController ctrl;
     ctrl.suspend();
-    ctrl.suspend();  // idempotent
+    ctrl.suspend(); // idempotent
 
     BOOST_CHECK(ctrl.isSuspended());
 }
@@ -128,7 +128,7 @@ BOOST_AUTO_TEST_CASE(TestResumeOnNotSuspendedIsNoOp) {
     ProjectileRenderController ctrl;
     BOOST_REQUIRE(!ctrl.isSuspended());
 
-    ctrl.resume();  // no-op — must not crash or change state unexpectedly
+    ctrl.resume(); // no-op — must not crash or change state unexpectedly
 
     BOOST_CHECK(!ctrl.isSuspended());
 }
@@ -320,7 +320,7 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUDoesNotCrashWithInvalidContextValid) {
 
     VoidLight::GPUSceneContext ctx{};
     ctx.spriteBatch = &batch;
-    ctx.valid = false;  // explicitly false; controller still proceeds
+    ctx.valid = false; // explicitly false; controller still proceeds
 
     BOOST_CHECK_NO_THROW(m_controller.recordGPU(ctx));
 

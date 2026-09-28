@@ -31,8 +31,8 @@ private:
         "pause_mainmenu_btn",
     };
 
-  // Return-to-main-menu confirm dialog navigation — Cancel first so it is
-  // the default focus (mirrors MainMenuState's quit-confirm dialog).
+    // Return-to-main-menu confirm dialog navigation — Cancel first so it is
+    // the default focus (mirrors MainMenuState's quit-confirm dialog).
     static constexpr std::array<std::string_view, 2> kConfirmNavOrder{
         "pause_confirm_cancel_btn",
         "pause_confirm_yes_btn",
@@ -45,4 +45,4 @@ private:
     void closeMainMenuConfirm();
 };
 
-#endif  // PAUSE_STATE_HPP
+#endif // PAUSE_STATE_HPP

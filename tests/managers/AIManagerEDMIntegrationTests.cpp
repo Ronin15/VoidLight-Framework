@@ -769,13 +769,13 @@ BOOST_AUTO_TEST_CASE(RuntimeSwitchBehaviorUpdatesGuardQueries) {
 
     // Simulate runtime transition from behavior execution path (bypasses AIManager assignment APIs)
     Behaviors::switchBehavior(idx, BehaviorType::Attack);
-    aiMgr.update(0.016f);  // Commit queued transition
+    aiMgr.update(0.016f); // Commit queued transition
     results.clear();
     aiMgr.scanGuardsInRadius(Vector2D(300.0f, 300.0f), 1000.0f, results, false);
     BOOST_CHECK(std::find(results.begin(), results.end(), idx) == results.end());
 
     Behaviors::switchBehavior(idx, BehaviorType::Guard);
-    aiMgr.update(0.016f);  // Commit queued transition
+    aiMgr.update(0.016f); // Commit queued transition
     results.clear();
     aiMgr.scanGuardsInRadius(Vector2D(300.0f, 300.0f), 1000.0f, results, false);
     BOOST_CHECK(std::find(results.begin(), results.end(), idx) != results.end());

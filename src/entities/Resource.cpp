@@ -13,7 +13,7 @@ Resource::Resource(VoidLight::ResourceHandle handle, const std::string& id,
     ResourceType type)
     : m_handle(handle), m_id(id), m_name(name), m_category(category), m_type(type) {
 
-  // Set default properties based on category
+    // Set default properties based on category
     switch (category) {
         case ResourceCategory::Item:
             m_value = 10.0f;
@@ -60,17 +60,17 @@ std::string Resource::categoryToString(ResourceCategory category) {
 
 std::string Resource::typeToString(ResourceType type) {
     static const std::unordered_map<ResourceType, std::string> typeMap = {
-      // Items
+        // Items
         {ResourceType::Equipment, "Equipment"},
         {ResourceType::Consumable, "Consumable"},
         {ResourceType::QuestItem, "QuestItem"},
         {ResourceType::Ammunition, "Ammunition"},
 
-      // Materials
+        // Materials
         {ResourceType::CraftingComponent, "CraftingComponent"},
         {ResourceType::RawResource, "RawResource"},
 
-      // Currency
+        // Currency
         {ResourceType::Gold, "Gold"},
         {ResourceType::Gem, "Gem"},
         {ResourceType::FactionToken, "FactionToken"},
@@ -92,17 +92,17 @@ ResourceCategory Resource::stringToCategory(const std::string& categoryStr) {
 
 ResourceType Resource::stringToType(const std::string& typeStr) {
     static const std::unordered_map<std::string, ResourceType> typeMap = {
-      // Items
+        // Items
         {"Equipment", ResourceType::Equipment},
         {"Consumable", ResourceType::Consumable},
         {"QuestItem", ResourceType::QuestItem},
         {"Ammunition", ResourceType::Ammunition},
 
-      // Materials
+        // Materials
         {"CraftingComponent", ResourceType::CraftingComponent},
         {"RawResource", ResourceType::RawResource},
 
-      // Currency
+        // Currency
         {"Gold", ResourceType::Gold},
         {"Gem", ResourceType::Gem},
         {"FactionToken", ResourceType::FactionToken},

@@ -381,10 +381,10 @@ BOOST_FIXTURE_TEST_CASE(VertexUVsNormalized, SpriteBatchTestFixture) {
 
     // Verify UVs are normalized (0-1 range)
     // Source: x=64, y=64, w=32, h=32 in 256x256 texture
-    float u0 = 64.0f / texWidth;   // 0.25
-    float v0 = 64.0f / texHeight;  // 0.25
-    float u1 = 96.0f / texWidth;   // 0.375
-    float v1 = 96.0f / texHeight;  // 0.375
+    float u0 = 64.0f / texWidth; // 0.25
+    float v0 = 64.0f / texHeight; // 0.25
+    float u1 = 96.0f / texWidth; // 0.375
+    float v1 = 96.0f / texHeight; // 0.375
 
     BOOST_CHECK_CLOSE(vertices[0].u, u0, 0.001f);
     BOOST_CHECK_CLOSE(vertices[0].v, v0, 0.001f);

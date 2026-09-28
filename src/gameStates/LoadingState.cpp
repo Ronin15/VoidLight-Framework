@@ -23,7 +23,7 @@ void LoadingState::configure(
     m_targetStateId = targetStateId;
     m_worldConfig = worldConfig;
 
-  // Reset state for reuse
+    // Reset state for reuse
     m_progress.store(0.0f, std::memory_order_release);
     m_loadComplete.store(false, std::memory_order_release);
     m_loadFailed.store(false, std::memory_order_release);
@@ -31,7 +31,7 @@ void LoadingState::configure(
     m_handedOffToTarget = false;
     setStatusText("Initializing...");
 
-  // Clear any previous error
+    // Clear any previous error
     {
         std::lock_guard<std::mutex> lock(m_errorMutex);
         m_lastError.clear();
@@ -39,7 +39,7 @@ void LoadingState::configure(
 }
 
 bool LoadingState::enter() {
-  // Validate that LoadingState was properly configured
+    // Validate that LoadingState was properly configured
     if (m_targetStateId == GameStateId::COUNT) {
         GAMESTATE_ERROR(
             "LoadingState not configured - call configure() before pushing state");
@@ -49,50 +49,50 @@ bool LoadingState::enter() {
     GAMESTATE_INFO(
         std::format("Entering LoadingState - Target: {}", static_cast<int>(m_targetStateId)));
 
-  // Exclusive structural window: pause gameplay *producers* (AI, collision
-  // update, pathfinder update, projectiles, particles, game time) so the load
-  // worker is the only create/destroy owner. EventManager is still the single
-  // bus for both gameplay and engine/lifecycle events. Pause only skips its
-  // deferred drain; Immediate dispatch always runs. Gameplay managers are
-  // paused so they do not enqueue combat/weather/AI traffic. WorldManager is
-  // not paused — it posts Deferred WorldLoaded, which Collision handles
-  // (rebuild static colliders, Immediate StaticCollidersReady). LoadingState
-  // waits on PathfinderManager::isGridReady(). EventManager must stay
-  // unpaused so that deferred lifecycle event can drain.
-  // Destination enter() unpauses (GamePlayState, AIDemoState, EventDemoState)
-  // via GameEngine::setGlobalPause(false); EventManager is the gameplay bus
-  // again.
+    // Exclusive structural window: pause gameplay *producers* (AI, collision
+    // update, pathfinder update, projectiles, particles, game time) so the load
+    // worker is the only create/destroy owner. EventManager is still the single
+    // bus for both gameplay and engine/lifecycle events. Pause only skips its
+    // deferred drain; Immediate dispatch always runs. Gameplay managers are
+    // paused so they do not enqueue combat/weather/AI traffic. WorldManager is
+    // not paused — it posts Deferred WorldLoaded, which Collision handles
+    // (rebuild static colliders, Immediate StaticCollidersReady). LoadingState
+    // waits on PathfinderManager::isGridReady(). EventManager must stay
+    // unpaused so that deferred lifecycle event can drain.
+    // Destination enter() unpauses (GamePlayState, AIDemoState, EventDemoState)
+    // via GameEngine::setGlobalPause(false); EventManager is the gameplay bus
+    // again.
     GameEngine::Instance().setGlobalPause(true);
     EventManager::Instance().setGlobalPause(false);
 
-  // Full-screen owner: ensure a clean UI slate before building the loading
-  // screen. GameStateManager already clears UI on full-screen replace; this
-  // is defensive if enter() is reached without that path.
+    // Full-screen owner: ensure a clean UI slate before building the loading
+    // screen. GameStateManager already clears UI on full-screen replace; this
+    // is defensive if enter() is reached without that path.
     UIManager::Instance().prepareForStateTransition();
 
-  // Initialize loading screen UI
+    // Initialize loading screen UI
     initializeUI();
 
-  // Start async world loading
+    // Start async world loading
     startAsyncWorldLoad();
 
     return true;
 }
 
 void LoadingState::update(float) {
-  // Update UI state (progress bar and status text)
+    // Update UI state (progress bar and status text)
     auto& ui = UIManager::Instance();
     float currentProgress = m_progress.load(std::memory_order_acquire);
     ui.updateProgressBar("loading_progress", currentProgress);
     ui.setText("loading_status", getStatusText());
 
-  // Fast path: Check with relaxed ordering first (no memory barrier)
+    // Fast path: Check with relaxed ordering first (no memory barrier)
     if (m_loadComplete.load(std::memory_order_relaxed)) {
-    // Slow path: Verify with acquire barrier only when likely true
+        // Slow path: Verify with acquire barrier only when likely true
         if (m_loadComplete.load(std::memory_order_acquire)) {
-      // Check if we need to wait for pathfinding grid
+            // Check if we need to wait for pathfinding grid
             if (!m_waitingForPathfinding.load(std::memory_order_acquire)) {
-        // World loading just completed - now wait for pathfinding
+                // World loading just completed - now wait for pathfinding
                 m_waitingForPathfinding.store(true, std::memory_order_release);
                 setStatusText("Preparing pathfinding grid...");
                 GAMESTATE_INFO("World loading complete - waiting for pathfinding grid");
@@ -109,19 +109,19 @@ void LoadingState::update(float) {
                 std::string errorMsg = "World loading failed - transitioning anyway";
                 GAMESTATE_ERROR(errorMsg);
 
-        // Store error if not already set by the loadTask lambda
+                // Store error if not already set by the loadTask lambda
                 if (!hasError()) {
                     std::lock_guard<std::mutex> lock(m_errorMutex);
                     m_lastError = errorMsg;
                 }
-        // Continue to target state even on failure (matches current behavior)
+                // Continue to target state even on failure (matches current behavior)
             } else {
                 GAMESTATE_INFO(
                     std::format("World and pathfinding ready - transitioning to {}",
                         static_cast<int>(m_targetStateId)));
             }
 
-      // Transition to target state
+            // Transition to target state
             if (mp_stateManager->hasState(m_targetStateId)) {
                 m_handedOffToTarget = true;
                 mp_stateManager->changeState(m_targetStateId);
@@ -129,7 +129,7 @@ void LoadingState::update(float) {
                 GAMESTATE_ERROR(
                     std::format("Target state not found: {}", static_cast<int>(m_targetStateId)));
 
-        // Store error for diagnostic purposes
+                // Store error for diagnostic purposes
                 {
                     std::lock_guard<std::mutex> lock(m_errorMutex);
                     m_lastError = std::format("Target state not found: {}", static_cast<int>(m_targetStateId));
@@ -140,16 +140,16 @@ void LoadingState::update(float) {
 }
 
 void LoadingState::handleInput() {
-  // LoadingState doesn't accept input - loading must complete
+    // LoadingState doesn't accept input - loading must complete
 }
 
 bool LoadingState::exit() {
     GAMESTATE_INFO("Exiting LoadingState");
 
-  // Cleanup loading UI
+    // Cleanup loading UI
     cleanupUI();
 
-  // Wait for async task to complete if still running
+    // Wait for async task to complete if still running
     if (m_loadTask.valid()) {
         try {
             m_loadTask.wait();
@@ -158,7 +158,7 @@ bool LoadingState::exit() {
                 std::format("Exception while waiting for load task: {}", e.what());
             GAMESTATE_ERROR(errorMsg);
 
-      // Store error for diagnostic purposes
+            // Store error for diagnostic purposes
             {
                 std::lock_guard<std::mutex> lock(m_errorMutex);
                 m_lastError = errorMsg;
@@ -180,9 +180,9 @@ void LoadingState::unloadAbandonedWorld() {
         return;
     }
 
-  // Loading is not a gameplay owner. Abandoned exit only drops the world it
-  // created and did not hand off. Collision/pathfinder persistent
-  // WorldUnloaded handlers and GameEngine::clean() own the rest.
+    // Loading is not a gameplay owner. Abandoned exit only drops the world it
+    // created and did not hand off. Collision/pathfinder persistent
+    // WorldUnloaded handlers and GameEngine::clean() own the rest.
     GAMESTATE_INFO("LoadingState abandoned with a live world - unloading");
     worldMgr.unloadWorld();
 }
@@ -192,23 +192,23 @@ void LoadingState::startAsyncWorldLoad() {
     auto& threadSystem = VoidLight::ThreadSystem::Instance();
     auto& worldManager = WorldManager::Instance();
 
-  // Capture necessary data by value for thread safety
+    // Capture necessary data by value for thread safety
     auto worldConfig = m_worldConfig;
 
-  // Create lambda that will run on background thread
+    // Create lambda that will run on background thread
     auto loadTask = [this, worldConfig, &worldManager]() -> bool {
         GAMESTATE_INFO("Starting async world generation on background thread");
 
-    // Progress callback that updates our atomic progress
+        // Progress callback that updates our atomic progress
         auto progressCallback = [this](float percent, const std::string& status) {
-      // Update atomic progress (thread-safe)
+            // Update atomic progress (thread-safe)
             m_progress.store(percent, std::memory_order_release);
 
-      // Update status text (mutex-protected)
+            // Update status text (mutex-protected)
             setStatusText(status);
         };
 
-    // Load world with progress callback
+        // Load world with progress callback
         bool success = worldManager.loadNewWorld(worldConfig, progressCallback);
 
         if (success) {
@@ -217,21 +217,21 @@ void LoadingState::startAsyncWorldLoad() {
             std::string errorMsg = "Async world generation failed";
             GAMESTATE_ERROR(errorMsg);
 
-      // Store error for diagnostic purposes
+            // Store error for diagnostic purposes
             {
                 std::lock_guard<std::mutex> lock(m_errorMutex);
                 m_lastError = errorMsg;
             }
         }
 
-    // Mark loading as complete
+        // Mark loading as complete
         m_loadFailed.store(!success, std::memory_order_release);
         m_loadComplete.store(true, std::memory_order_release);
 
         return success;
     };
 
-  // Enqueue task with high priority and get future
+    // Enqueue task with high priority and get future
     m_loadTask = threadSystem.enqueueTaskWithResult(
         loadTask, VoidLight::TaskPriority::High,
         "LoadingState_WorldGeneration");
@@ -263,20 +263,20 @@ void LoadingState::initializeUI() {
     int windowWidth = gameEngine.getWidthInPixels();
     int windowHeight = gameEngine.getHeightInPixels();
 
-  // Create loading overlay
+    // Create loading overlay
     ui.createOverlay();
 
-  // Create title - centered both, 60px above center (accounts for 40px height)
-  // Using CENTERED_BOTH: y = (height - 40) / 2 + offsetY, we want y = height/2
-  // - 80 So offsetY = -80 + 20 = -60
+    // Create title - centered both, 60px above center (accounts for 40px height)
+    // Using CENTERED_BOTH: y = (height - 40) / 2 + offsetY, we want y = height/2
+    // - 80 So offsetY = -80 + 20 = -60
     ui.createTitle("loading_title", {0, windowHeight / 2 - 80, windowWidth, 40},
         "Loading World...");
     ui.setTitleAlignment("loading_title", UIAlignment::CENTER_CENTER);
     ui.setComponentPositioning("loading_title", {UIPositionMode::CENTERED_BOTH, 0, -60, windowWidth, 40});
 
-  // Create progress bar - centered both, at vertical center
-  // Using CENTERED_BOTH: y = (height - 30) / 2 + offsetY, we want y = height/2
-  // So offsetY = 15
+    // Create progress bar - centered both, at vertical center
+    // Using CENTERED_BOTH: y = (height - 30) / 2 + offsetY, we want y = height/2
+    // So offsetY = 15
     constexpr int progressBarWidth = 400;
     constexpr int progressBarHeight = 30;
     ui.createProgressBar(
@@ -286,9 +286,9 @@ void LoadingState::initializeUI() {
         {UIPositionMode::CENTERED_BOTH, 0, 15,
             progressBarWidth, progressBarHeight});
 
-  // Create status text - centered both, 50px below progress bar center
-  // Using CENTERED_BOTH: y = (height - 30) / 2 + offsetY, we want y = height/2
-  // + 50 So offsetY = 50 + 15 = 65
+    // Create status text - centered both, 50px below progress bar center
+    // Using CENTERED_BOTH: y = (height - 30) / 2 + offsetY, we want y = height/2
+    // + 50 So offsetY = 50 + 15 = 65
     ui.createTitle("loading_status", {0, windowHeight / 2 + 50, windowWidth, 30},
         "Initializing...");
     ui.setTitleAlignment("loading_status", UIAlignment::CENTER_CENTER);
@@ -304,8 +304,8 @@ void LoadingState::cleanupUI() {
         return;
     }
 
-  // Full-screen replace: GameStateManager clears all UI after this exit().
-  // Mark local flag only so we do not double-manage widgets here.
+    // Full-screen replace: GameStateManager clears all UI after this exit().
+    // Mark local flag only so we do not double-manage widgets here.
     m_uiInitialized = false;
 
     GAMESTATE_INFO("Loading screen UI cleaned up");
@@ -318,7 +318,7 @@ void LoadingState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
 
 void LoadingState::renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
     SDL_GPURenderPass* swapchainPass) {
-  // Render UI to swapchain
+    // Render UI to swapchain
     auto& ui = UIManager::Instance();
     ui.renderGPU(gpuRenderer, swapchainPass);
 }

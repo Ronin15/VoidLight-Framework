@@ -30,4 +30,4 @@ private:
     std::reference_wrapper<Player> m_player;
 };
 
-#endif  // PLAYER_RUNNING_STATE_HPP
+#endif // PLAYER_RUNNING_STATE_HPP

@@ -70,7 +70,7 @@ using Float4 = __m128;
 #elif defined(VOIDLIGHT_SIMD_NEON)
 using Float4 = float32x4_t;
 #else
-    // Scalar fallback
+// Scalar fallback
 struct Float4 {
     float data[4];
 };
@@ -85,7 +85,7 @@ using Int4 = __m128i;
 #elif defined(VOIDLIGHT_SIMD_NEON)
 using Int4 = uint32x4_t;
 #else
-    // Scalar fallback
+// Scalar fallback
 struct Int4 {
     int data[4];
 };
@@ -100,7 +100,7 @@ using Byte16 = __m128i;
 #elif defined(VOIDLIGHT_SIMD_NEON)
 using Byte16 = uint8x16_t;
 #else
-    // Scalar fallback
+// Scalar fallback
 struct Byte16 {
     uint8_t data[16];
 };

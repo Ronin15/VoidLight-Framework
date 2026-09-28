@@ -83,7 +83,7 @@ BOOST_AUTO_TEST_CASE(TestSpringDefaults) {
     // Weather probabilities
     BOOST_CHECK(approxEqual(config.weatherProbs.clear, 0.35f));
     BOOST_CHECK(approxEqual(config.weatherProbs.rainy, 0.25f));
-    BOOST_CHECK(approxEqual(config.weatherProbs.snowy, 0.00f));  // No snow in spring
+    BOOST_CHECK(approxEqual(config.weatherProbs.snowy, 0.00f)); // No snow in spring
 }
 
 BOOST_AUTO_TEST_CASE(TestSummerDefaults) {
@@ -96,7 +96,7 @@ BOOST_AUTO_TEST_CASE(TestSummerDefaults) {
 
     // Weather probabilities - summer has most clear days
     BOOST_CHECK(approxEqual(config.weatherProbs.clear, 0.50f));
-    BOOST_CHECK(approxEqual(config.weatherProbs.snowy, 0.00f));  // No snow in summer
+    BOOST_CHECK(approxEqual(config.weatherProbs.snowy, 0.00f)); // No snow in summer
 }
 
 BOOST_AUTO_TEST_CASE(TestFallDefaults) {
@@ -109,7 +109,7 @@ BOOST_AUTO_TEST_CASE(TestFallDefaults) {
 
     // Weather probabilities - fall has more fog
     BOOST_CHECK(approxEqual(config.weatherProbs.foggy, 0.10f));
-    BOOST_CHECK(approxEqual(config.weatherProbs.snowy, 0.00f));  // No snow in fall
+    BOOST_CHECK(approxEqual(config.weatherProbs.snowy, 0.00f)); // No snow in fall
 }
 
 BOOST_AUTO_TEST_CASE(TestWinterDefaults) {
@@ -203,7 +203,7 @@ BOOST_AUTO_TEST_CASE(TestSeasonConfigUpdateOnSeasonChange) {
 
     // Sunrise times should be different
     BOOST_CHECK_NE(springSunrise, summerSunrise);
-    BOOST_CHECK(approxEqual(summerSunrise, 5.0f));  // Summer sunrise is earlier
+    BOOST_CHECK(approxEqual(summerSunrise, 5.0f)); // Summer sunrise is earlier
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -231,10 +231,10 @@ BOOST_AUTO_TEST_CASE(TestTemperatureVariesWithTimeOfDay) {
     gameTime->setGameDay(1);
 
     // Check temperature at different hours
-    BOOST_REQUIRE(gameTime->init(4.0f, 1.0f));  // 4 AM - coldest
+    BOOST_REQUIRE(gameTime->init(4.0f, 1.0f)); // 4 AM - coldest
     float tempAt4AM = gameTime->getCurrentTemperature();
 
-    BOOST_REQUIRE(gameTime->init(14.0f, 1.0f));  // 2 PM - warmest
+    BOOST_REQUIRE(gameTime->init(14.0f, 1.0f)); // 2 PM - warmest
     float tempAt2PM = gameTime->getCurrentTemperature();
 
     // 2 PM should be warmer than 4 AM
@@ -243,12 +243,12 @@ BOOST_AUTO_TEST_CASE(TestTemperatureVariesWithTimeOfDay) {
 
 BOOST_AUTO_TEST_CASE(TestTemperatureChangesBySeason) {
     // Summer temperature
-    gameTime->setGameDay(31);  // Summer
+    gameTime->setGameDay(31); // Summer
     gameTime->setGameHour(12.0f);
     float summerTemp = gameTime->getCurrentTemperature();
 
     // Winter temperature
-    gameTime->setGameDay(91);  // Winter
+    gameTime->setGameDay(91); // Winter
     gameTime->setGameHour(12.0f);
     float winterTemp = gameTime->getCurrentTemperature();
 
@@ -292,31 +292,31 @@ BOOST_AUTO_TEST_CASE(TestGetCurrentSeasonLegacyMethod) {
 
     // Spring: days 1-30
     gameTime->setGameDay(1);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 0);  // Spring
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 0); // Spring
     gameTime->setGameDay(30);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 0);  // Still Spring
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 0); // Still Spring
 
     // Summer: days 31-60
     gameTime->setGameDay(31);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 1);  // Summer
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 1); // Summer
     gameTime->setGameDay(60);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 1);  // Still Summer
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 1); // Still Summer
 
     // Fall: days 61-90
     gameTime->setGameDay(61);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 2);  // Fall
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 2); // Fall
     gameTime->setGameDay(90);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 2);  // Still Fall
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 2); // Still Fall
 
     // Winter: days 91-120
     gameTime->setGameDay(91);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 3);  // Winter
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 3); // Winter
     gameTime->setGameDay(120);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 3);  // Still Winter
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 3); // Still Winter
 
     // Year wraps: day 121 = Spring again
     gameTime->setGameDay(121);
-    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 0);  // Spring (new year)
+    BOOST_CHECK_EQUAL(gameTime->getCurrentSeason(30), 0); // Spring (new year)
 }
 
 BOOST_AUTO_TEST_SUITE_END()

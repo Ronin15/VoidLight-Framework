@@ -60,7 +60,7 @@ struct EventFixture {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
     }
     ~EventFixture() {
-    // Clean after each test
+        // Clean after each test
         EventManager::Instance().clean();
         EntityDataManager::Instance().clean();
     }
@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(DispatchEvent_WithHandlers_CallsHandlers) {
             if (data.isActive()) ++handlerCallCount;
         });
 
-  // Dispatch directly (dispatch-only architecture)
+    // Dispatch directly (dispatch-only architecture)
     EventManager::Instance().dispatchEvent(e);
     EventManager::Instance().update(); // Process deferred events
 
@@ -92,11 +92,11 @@ BOOST_AUTO_TEST_CASE(DispatchEvent_WithHandlers_CallsHandlers) {
 BOOST_AUTO_TEST_CASE(DispatchEvent_NoHandlers_Succeeds) {
     auto e = std::make_shared<TestEvent>("TestB");
 
-  // No handlers registered for Custom type
+    // No handlers registered for Custom type
     bool ok = EventManager::Instance().dispatchEvent(e);
     BOOST_CHECK(ok);
 
-  // Update to process deferred events (should not crash)
+    // Update to process deferred events (should not crash)
     EventManager::Instance().update();
 }
 
@@ -207,16 +207,16 @@ BOOST_AUTO_TEST_CASE(RegisterHandlerWithToken_CanBeRemoved) {
             if (data.isActive()) ++callCount;
         });
 
-  // Dispatch once - handler should be called
+    // Dispatch once - handler should be called
     auto e1 = std::make_shared<TestEvent>("Test1");
     EventManager::Instance().dispatchEvent(e1);
     EventManager::Instance().update();
     BOOST_CHECK_EQUAL(callCount.load(), 1);
 
-  // Remove handler
+    // Remove handler
     EventManager::Instance().removeHandler(token);
 
-  // Dispatch again - handler should NOT be called
+    // Dispatch again - handler should NOT be called
     auto e2 = std::make_shared<TestEvent>("Test2");
     EventManager::Instance().dispatchEvent(e2);
     EventManager::Instance().update();
@@ -233,10 +233,10 @@ BOOST_AUTO_TEST_CASE(ImmediateDispatch_CallsHandlersSynchronously) {
 
     auto e = std::make_shared<TestEvent>("ImmediateTest");
 
-  // Dispatch with Immediate mode - should call handler before returning
+    // Dispatch with Immediate mode - should call handler before returning
     EventManager::Instance().dispatchEvent(e, EventManager::DispatchMode::Immediate);
 
-  // Handler should already be called (no update() needed)
+    // Handler should already be called (no update() needed)
     BOOST_CHECK(handlerCalled.load());
 
     EventManager::Instance().removeHandler(tok);
@@ -252,16 +252,16 @@ BOOST_AUTO_TEST_CASE(DeferredDispatch_RequiresUpdate) {
 
     auto e = std::make_shared<TestEvent>("DeferredTest");
 
-  // Dispatch with Deferred mode (default)
+    // Dispatch with Deferred mode (default)
     EventManager::Instance().dispatchEvent(e, EventManager::DispatchMode::Deferred);
 
-  // Handler should NOT be called yet
+    // Handler should NOT be called yet
     BOOST_CHECK(!handlerCalled.load());
 
-  // Now process deferred events
+    // Now process deferred events
     EventManager::Instance().update();
 
-  // Handler should now be called
+    // Handler should now be called
     BOOST_CHECK(handlerCalled.load());
 
     EventManager::Instance().removeHandler(tok);
@@ -308,7 +308,7 @@ BOOST_AUTO_TEST_CASE(PrepareForStateTransition_ClearsCustomHandlersButKeepsBuilt
     BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Custom), 0);
     BOOST_CHECK_GE(EventManager::Instance().getHandlerCount(EventTypeId::NPCSpawn), 1);
 
-  // Removing the stale token should be harmless after transition cleanup.
+    // Removing the stale token should be harmless after transition cleanup.
     BOOST_CHECK(!EventManager::Instance().removeHandler(customTok));
 }
 

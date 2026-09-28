@@ -145,9 +145,9 @@ bool AIManager::init() {
     }
 
     try {
-    // Validate dependency initialization order
-    // AIManager requires these managers to be initialized first to avoid
-    // null pointer dereferences and initialization races
+        // Validate dependency initialization order
+        // AIManager requires these managers to be initialized first to avoid
+        // null pointer dereferences and initialization races
         if (!PathfinderManager::Instance().isInitialized()) {
             AI_ERROR("PathfinderManager must be initialized before AIManager");
             return false;
@@ -157,16 +157,16 @@ bool AIManager::init() {
             return false;
         }
 
-    // Cache manager references for hot path usage (avoid singleton lookups)
+        // Cache manager references for hot path usage (avoid singleton lookups)
         mp_pathfinderManager = &PathfinderManager::Instance();
 
-    // Pre-allocate storage for better performance
+        // Pre-allocate storage for better performance
         constexpr size_t INITIAL_CAPACITY = 1000;
         m_storage.reserve(INITIAL_CAPACITY);
         m_handleToIndex.reserve(INITIAL_CAPACITY);
 
-    // Reserve EDM-to-storage reverse mapping (grows dynamically based on EDM
-    // indices)
+        // Reserve EDM-to-storage reverse mapping (grows dynamically based on EDM
+        // indices)
         m_edmToStorageIndex.reserve(INITIAL_CAPACITY);
 
         m_activeIndicesBuffer.reserve(INITIAL_CAPACITY);
@@ -252,7 +252,7 @@ bool AIManager::init() {
         m_globallyPaused.store(false, std::memory_order_release);
         m_isShutdown = false;
 
-    // Register default behaviors (Idle, Wander, Chase, Guard, Attack, Flee, Follow)
+        // Register default behaviors (Idle, Wander, Chase, Guard, Attack, Flee, Follow)
         registerDefaultBehaviors();
 
         AI_INFO("AIManager initialized successfully");
@@ -271,11 +271,11 @@ void AIManager::clean() {
 
     AI_INFO("AIManager shutting down...");
 
-  // Mark as shutting down
+    // Mark as shutting down
     m_isShutdown = true;
     m_initialized.store(false, std::memory_order_release);
 
-  // Stop accepting new tasks
+    // Stop accepting new tasks
     m_globallyPaused.store(true, std::memory_order_release);
     VoidLight::AICommandBus::Instance().clearAll();
     m_pendingFactionChanges.clear();
@@ -303,7 +303,7 @@ void AIManager::clean() {
     {
         std::unique_lock<std::shared_mutex> entitiesLock(m_entitiesMutex);
 
-    // Clear all storage (behaviors are data in EDM, no cleanup needed)
+        // Clear all storage (behaviors are data in EDM, no cleanup needed)
         m_storage.handles.clear();
         m_storage.lastUpdateTimes.clear();
         m_storage.edmIndices.clear();
@@ -314,10 +314,10 @@ void AIManager::clean() {
         for (auto& fv : m_factionEdmIndices) fv.clear();
     }
 
-  // Clear cached manager references
+    // Clear cached manager references
     mp_pathfinderManager = nullptr;
 
-  // Reset all counters
+    // Reset all counters
     m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
     m_totalAssignmentCount.store(0, std::memory_order_relaxed);
     m_frameCounter.store(0, std::memory_order_relaxed);
@@ -328,7 +328,7 @@ void AIManager::clean() {
 void AIManager::prepareForStateTransition() {
     AI_INFO("Preparing AIManager for state transition...");
 
-  // Pause AI processing to prevent new tasks
+    // Pause AI processing to prevent new tasks
     m_globallyPaused.store(true, std::memory_order_release);
     VoidLight::AICommandBus::Instance().clearAll();
     m_pendingFactionChanges.clear();
@@ -337,15 +337,15 @@ void AIManager::prepareForStateTransition() {
     m_pendingMeleeFallbackEquips.clear();
     m_pendingRangedAttacks.clear();
 
-  // Batches always complete within update() — no pending futures to wait for.
+    // Batches always complete within update() — no pending futures to wait for.
 
-  // Clean up all entities safely (behaviors are data in EDM, no cleanup needed)
+    // Clean up all entities safely (behaviors are data in EDM, no cleanup needed)
     {
         std::unique_lock<std::shared_mutex> lock(m_entitiesMutex);
 
         size_t entityCount = m_storage.size();
 
-    // Clear all storage completely
+        // Clear all storage completely
         m_storage.handles.clear();
         m_storage.lastUpdateTimes.clear();
         m_storage.edmIndices.clear();
@@ -366,18 +366,18 @@ void AIManager::prepareForStateTransition() {
     m_lastWeatherVisibility = 1.0f;
     m_environmentSnapshot = {};
 
-  // Reset all counters and stats
+    // Reset all counters and stats
     m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
     m_totalAssignmentCount.store(0, std::memory_order_relaxed);
     m_frameCounter.store(0, std::memory_order_relaxed);
 
-  // Clear player reference completely
+    // Clear player reference completely
     {
         std::lock_guard<std::shared_mutex> lock(m_entitiesMutex);
         m_playerHandle = EntityHandle{};
     }
 
-  // Reset pause state to false so next state starts unpaused
+    // Reset pause state to false so next state starts unpaused
     m_globallyPaused.store(false, std::memory_order_release);
 
     AI_INFO("AIManager state transition complete - all state cleared and reset");
@@ -389,19 +389,19 @@ void AIManager::update(float deltaTime) {
         return;
     }
 
-  // Early exit if no AI-managed entities (e.g., just player with no NPCs)
-  // This avoids all setup overhead when there's no behavior work to do
+    // Early exit if no AI-managed entities (e.g., just player with no NPCs)
+    // This avoids all setup overhead when there's no behavior work to do
     if (m_storage.edmIndices.empty()) {
         return;
     }
 
     try {
-    // Apply worker-computed path completions before behavior reads PathData.
+        // Apply worker-computed path completions before behavior reads PathData.
         PathfinderManager::Instance().commitCompletedPaths();
 
-    // Drain main-thread TLS (tests and any main-thread defer) into the bus
-    // before the pre-pass commit so messages queued before this update apply
-    // in the same frame's behavior execute.
+        // Drain main-thread TLS (tests and any main-thread defer) into the bus
+        // before the pre-pass commit so messages queued before this update apply
+        // in the same frame's behavior execute.
         m_singleBatchMessages.clear();
         Behaviors::collectDeferredBehaviorMessages(m_singleBatchMessages);
         for (const auto& msg : m_singleBatchMessages) {
@@ -409,17 +409,17 @@ void AIManager::update(float deltaTime) {
                 msg.targetHandle, msg.targetEdmIndex, msg.messageId, msg.param);
         }
 
-    // Commit queued cross-thread commands before reading per-entity behavior state.
-    // Order matters: faction changes keep indices coherent before scans;
-    // equipment swaps update current combat stats before attack configs are read;
-    // transitions first, then messages, so messages target current behavior.
+        // Commit queued cross-thread commands before reading per-entity behavior state.
+        // Order matters: faction changes keep indices coherent before scans;
+        // equipment swaps update current combat stats before attack configs are read;
+        // transitions first, then messages, so messages target current behavior.
         commitQueuedFactionChanges();
         commitQueuedMeleeFallbackEquips();
         commitQueuedBehaviorTransitions();
         commitQueuedBehaviorMessages();
 
-    // Use getActiveIndices() to iterate only Active tier entities
-    // This reduces iteration from 50K to ~468 (entities within active radius)
+        // Use getActiveIndices() to iterate only Active tier entities
+        // This reduces iteration from 50K to ~468 (entities within active radius)
         auto& edm = EntityDataManager::Instance();
         auto activeSpan = edm.getActiveIndices();
 
@@ -427,8 +427,8 @@ void AIManager::update(float deltaTime) {
             return;
         }
 
-    // Copy to local buffer (span may be invalidated during processing)
-    // Reuse buffer to avoid per-frame allocation
+        // Copy to local buffer (span may be invalidated during processing)
+        // Reuse buffer to avoid per-frame allocation
         m_activeIndicesBuffer.clear();
         m_activeIndicesBuffer.insert(m_activeIndicesBuffer.end(),
             activeSpan.begin(), activeSpan.end());
@@ -437,12 +437,12 @@ void AIManager::update(float deltaTime) {
 
         uint64_t currentFrame = m_frameCounter.load(std::memory_order_relaxed);
 
-    // Invalidate spatial query cache for new frame
-    // This ensures thread-local caches are fresh and don't use stale collision data
+        // Invalidate spatial query cache for new frame
+        // This ensures thread-local caches are fresh and don't use stale collision data
         AIInternal::InvalidateSpatialCache(currentFrame);
         VOIDLIGHT_DEBUG_ONLY(AIInternal::ResetCrowdStats();)
 
-    // Query world bounds ONCE per frame (not per batch)
+        // Query world bounds ONCE per frame (not per batch)
         float worldWidth = 32000.0f;
         float worldHeight = 32000.0f;
         if (mp_pathfinderManager) {
@@ -453,13 +453,13 @@ void AIManager::update(float deltaTime) {
             }
         }
 
-    // Cache world bounds for behaviors that need them during batch processing
-    // (e.g., PatrolBehavior waypoint generation). Avoids WorldManager::Instance()
-    // calls from worker threads.
+        // Cache world bounds for behaviors that need them during batch processing
+        // (e.g., PatrolBehavior waypoint generation). Avoids WorldManager::Instance()
+        // calls from worker threads.
         Behaviors::cacheWorldBounds();
 
-    // Cache player info ONCE per frame (not per behavior call)
-    // This eliminates shared_lock contention in getPlayerHandle()/getPlayerPosition()
+        // Cache player info ONCE per frame (not per behavior call)
+        // This eliminates shared_lock contention in getPlayerHandle()/getPlayerPosition()
         EntityHandle cachedPlayerHandle;
         Vector2D cachedPlayerPosition;
         Vector2D cachedPlayerVelocity;
@@ -469,8 +469,8 @@ void AIManager::update(float deltaTime) {
             cachedPlayerHandle = m_playerHandle;
             cachedPlayerValid = m_playerHandle.isValid();
             if (cachedPlayerValid) {
-        // Cache player edmIndex once per frame (avoids hash lookup per query),
-        // reusing this single lookup under the lock.
+                // Cache player edmIndex once per frame (avoids hash lookup per query),
+                // reusing this single lookup under the lock.
                 size_t playerIdx = edm.getIndex(m_playerHandle);
                 m_cachedPlayerEdmIdx = playerIdx;
                 if (playerIdx != SIZE_MAX) {
@@ -487,7 +487,7 @@ void AIManager::update(float deltaTime) {
             }
         }
 
-    // Cache game time ONCE per frame for combat timing comparisons
+        // Cache game time ONCE per frame for combat timing comparisons
         float cachedGameTime = GameTimeManager::Instance().getTotalGameTimeSeconds();
         m_environmentSnapshot = combineEnvironmentScales(
             hourToTimePeriod(GameTimeManager::Instance().getGameHour()),
@@ -495,15 +495,15 @@ void AIManager::update(float deltaTime) {
             m_lastWeatherVisibility);
         const EnvironmentSnapshot cachedEnvSnapshot = m_environmentSnapshot;
 
-    // WorkerBudget manager — used per-type bucket below.
+        // WorkerBudget manager — used per-type bucket below.
         auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
         auto& threadSystem = VoidLight::ThreadSystem::Instance();
 
-    // Collect all deferred events across batches.
+        // Collect all deferred events across batches.
         m_allDamageEvents.clear();
 
-    // Frame-level threading decision. WorkerBudget is the authoritative source:
-    // one decision per frame so EMA / threshold learning sees the full workload.
+        // Frame-level threading decision. WorkerBudget is the authoritative source:
+        // one decision per frame so EMA / threshold learning sees the full workload.
         const auto frameDecision = budgetMgr.shouldUseThreading(
             VoidLight::SystemType::AI, entityCount);
         bool frameShouldThread = frameDecision.shouldThread;
@@ -516,7 +516,7 @@ void AIManager::update(float deltaTime) {
             ? budgetMgr.getOptimalWorkers(VoidLight::SystemType::AI, entityCount)
             : 0;
 
-    // Frame-level batch execution timing.
+        // Frame-level batch execution timing.
         auto frameBatchStart = std::chrono::steady_clock::now();
 
         size_t totalBatchCount = 0;
@@ -524,8 +524,8 @@ void AIManager::update(float deltaTime) {
             bool logWasThreaded = false;)
 
         if (!frameShouldThread) {
-        // Unified single-pass: one call covering all entities. Emotional decay
-        // + behavior dispatch fused into the same loop inside processBatch.
+            // Unified single-pass: one call covering all entities. Emotional decay
+            // + behavior dispatch fused into the same loop inside processBatch.
             m_singleBatchEvents.clear();
             m_singleBatchKnockbackClears.clear();
             m_singleBatchMessages.clear();
@@ -549,7 +549,7 @@ void AIManager::update(float deltaTime) {
         } else {
             VOIDLIGHT_DEBUG_ONLY(logWasThreaded = true;)
 
-        // Single global batch strategy against the full workload.
+            // Single global batch strategy against the full workload.
             auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
                 VoidLight::SystemType::AI, entityCount, optimalWorkerCount);
             if (batchCount == 0) batchCount = 1;
@@ -614,9 +614,9 @@ void AIManager::update(float deltaTime) {
             }
         }
 
-    // Drain knockback-expiry queues on the main thread. SparseSidecar::remove()
-    // mutates shared m_dense/m_sparse via swap-pop and cannot be called from
-    // worker threads. Workers enqueued edmIdx values during processBatch.
+        // Drain knockback-expiry queues on the main thread. SparseSidecar::remove()
+        // mutates shared m_dense/m_sparse via swap-pop and cannot be called from
+        // worker threads. Workers enqueued edmIdx values during processBatch.
         {
             auto& edmDrain = EntityDataManager::Instance();
             for (uint32_t edmIdx : m_singleBatchKnockbackClears) {
@@ -627,14 +627,14 @@ void AIManager::update(float deltaTime) {
                 for (uint32_t edmIdx : m_batchKnockbackClears[i]) {
                     edmDrain.clearKnockback(edmIdx);
                 }
-            // Clear after draining so a later single-threaded frame (which fills
-            // only m_singleBatchKnockbackClears) does not re-drain stale indices
-            // left here by a prior threaded frame.
+                // Clear after draining so a later single-threaded frame (which fills
+                // only m_singleBatchKnockbackClears) does not re-drain stale indices
+                // left here by a prior threaded frame.
                 m_batchKnockbackClears[i].clear();
             }
         }
 
-    // Deliver all deferred events collected across all type passes.
+        // Deliver all deferred events collected across all type passes.
         if (!m_allDamageEvents.empty()) {
             EventManager::Instance().enqueueBatch(std::move(m_allDamageEvents));
         }
@@ -642,12 +642,12 @@ void AIManager::update(float deltaTime) {
         auto frameBatchEnd = std::chrono::steady_clock::now();
         double totalUpdateTime = std::chrono::duration<double, std::milli>(frameBatchEnd - frameBatchStart).count();
 
-    // Single frame-level reportExecution — matches the contract WorkerBudget's
-    // EMA / threshold-learning assume (one sample per frame per system).
+        // Single frame-level reportExecution — matches the contract WorkerBudget's
+        // EMA / threshold-learning assume (one sample per frame per system).
         budgetMgr.reportExecution(VoidLight::SystemType::AI,
             entityCount, frameShouldThread, totalBatchCount, totalUpdateTime);
 
-    // Commit commands emitted by worker threads during this frame's batches.
+        // Commit commands emitted by worker threads during this frame's batches.
         commitQueuedRangedAttacks();
         commitQueuedMeleeFallbackEquips();
         commitQueuedBehaviorTransitions();
@@ -656,9 +656,9 @@ void AIManager::update(float deltaTime) {
         m_frameCounter.fetch_add(1, std::memory_order_relaxed);
 
         VOIDLIGHT_DEBUG_ONLY(
-        // Interval stats logging
+            // Interval stats logging
             static thread_local uint64_t logFrameCounter = 0;
-            if (++logFrameCounter % 1800 == 0 && entityCount > 0) {  // ~30 seconds at 60fps
+            if (++logFrameCounter % 1800 == 0 && entityCount > 0) { // ~30 seconds at 60fps
                 double entitiesPerSecond =
                     totalUpdateTime > 0 ? (entityCount * 1000.0 / totalUpdateTime) : 0.0;
                 const auto crowdStats = AIInternal::GetCrowdStats();
@@ -699,7 +699,7 @@ void AIManager::update(float deltaTime) {
 
 
 void AIManager::registerDefaultBehaviors() {
-  // Initialize behavior name-to-type map for API compatibility
+    // Initialize behavior name-to-type map for API compatibility
     m_behaviorTypeMap = {
         {"Idle", BehaviorType::Idle},
         {"Wander", BehaviorType::Wander},
@@ -710,7 +710,7 @@ void AIManager::registerDefaultBehaviors() {
         {"Flee", BehaviorType::Flee},
         {"Follow", BehaviorType::Follow}};
 
-  // Register named preset configs (variants of base behaviors)
+    // Register named preset configs (variants of base behaviors)
     m_presetConfigs["SmallWander"] = VoidLight::BehaviorConfigData::makeWander(
         VoidLight::WanderBehaviorConfig::createSmallWander());
     m_presetConfigs["LargeWander"] = VoidLight::BehaviorConfigData::makeWander(
@@ -730,7 +730,7 @@ void AIManager::registerDefaultBehaviors() {
 }
 
 bool AIManager::hasBehavior(const std::string& name) const {
-  // Check preset configs first, then base behavior types
+    // Check preset configs first, then base behavior types
     if (m_presetConfigs.find(name) != m_presetConfigs.end()) {
         return true;
     }
@@ -745,15 +745,15 @@ void AIManager::assignBehavior(EntityHandle handle,
         return;
     }
 
-  // Check for preset config first (SmallWander, LargeWander, etc.)
+    // Check for preset config first (SmallWander, LargeWander, etc.)
     auto presetIt = m_presetConfigs.find(behaviorName);
     if (presetIt != m_presetConfigs.end()) {
-    // Use preset config directly via the config-based overload
+        // Use preset config directly via the config-based overload
         assignBehavior(handle, presetIt->second);
         return;
     }
 
-  // Fall back to default config for base behavior types
+    // Fall back to default config for base behavior types
     auto typeIt = m_behaviorTypeMap.find(behaviorName);
     if (typeIt == m_behaviorTypeMap.end()) {
         AI_ERROR(std::format("Unknown behavior name: {}", behaviorName));
@@ -761,7 +761,7 @@ void AIManager::assignBehavior(EntityHandle handle,
     }
     BehaviorType behaviorType = typeIt->second;
 
-  // Get default config for this behavior type
+    // Get default config for this behavior type
     auto& edm = EntityDataManager::Instance();
     size_t edmIndex = edm.getIndex(handle);
     if (edmIndex == SIZE_MAX) {
@@ -771,7 +771,7 @@ void AIManager::assignBehavior(EntityHandle handle,
 
     auto config = Behaviors::getDefaultConfig(behaviorType);
 
-  // For Attack behavior, customize config from CharacterData combat style
+    // For Attack behavior, customize config from CharacterData combat style
     const auto& hot = edm.getHotDataByIndex(edmIndex);
     if (behaviorType == BehaviorType::Attack &&
         (hot.kind == EntityKind::NPC || hot.kind == EntityKind::Player)) {
@@ -796,12 +796,12 @@ void AIManager::assignBehavior(EntityHandle handle,
     assert(edm.hasMemoryData(edmIndex) &&
         "Behavior-assigned AI entities must have valid memory data");
 
-  // Acquire write lock — index updates and EDM config must be atomic
+    // Acquire write lock — index updates and EDM config must be atomic
     std::unique_lock<std::shared_mutex> lock(m_entitiesMutex);
 
     auto indexIt = m_handleToIndex.find(handle);
     if (indexIt != m_handleToIndex.end()) {
-    // Update existing entity — remove old indices before overwriting config
+        // Update existing entity — remove old indices before overwriting config
         size_t index = indexIt->second;
         if (index < m_storage.size()) {
             BehaviorType oldType = edm.getBehaviorConfigRef(edmIndex).type;
@@ -820,7 +820,7 @@ void AIManager::assignBehavior(EntityHandle handle,
                 behaviorName));
         }
     } else {
-    // Add new entity
+        // Add new entity
         size_t newIndex = m_storage.size();
 
         m_storage.handles.push_back(handle);
@@ -837,7 +837,7 @@ void AIManager::assignBehavior(EntityHandle handle,
         AI_INFO(std::format("Added new entity with behavior: {}", behaviorName));
     }
 
-  // Set config in EDM and initialize state (after old indices removed)
+    // Set config in EDM and initialize state (after old indices removed)
     edm.reassignBehaviorConfig(edmIndex, config);
     Behaviors::init(edmIndex, config);
 
@@ -845,7 +845,7 @@ void AIManager::assignBehavior(EntityHandle handle,
     charData.homeRole = static_cast<uint8_t>(behaviorType);
     charData.behaviorType = static_cast<uint8_t>(behaviorType);
 
-  // Add to guard/faction indices for the new behavior
+    // Add to guard/faction indices for the new behavior
     addToIndices(edmIndex, behaviorType);
     syncNpcCollisionFromStance(edmIndex);
 
@@ -875,12 +875,12 @@ void AIManager::assignBehavior(EntityHandle handle,
     assert(edm.hasMemoryData(edmIndex) &&
         "Behavior-assigned AI entities must have valid memory data");
 
-  // Acquire write lock — index updates and EDM config must be atomic
+    // Acquire write lock — index updates and EDM config must be atomic
     std::unique_lock<std::shared_mutex> lock(m_entitiesMutex);
 
     auto indexIt = m_handleToIndex.find(handle);
     if (indexIt != m_handleToIndex.end()) {
-    // Update existing entity — remove old indices before overwriting config
+        // Update existing entity — remove old indices before overwriting config
         size_t index = indexIt->second;
         if (index < m_storage.size()) {
             BehaviorType oldType = edm.getBehaviorConfigRef(edmIndex).type;
@@ -898,7 +898,7 @@ void AIManager::assignBehavior(EntityHandle handle,
                 static_cast<int>(config.type)));
         }
     } else {
-    // Add new entity
+        // Add new entity
         size_t newIndex = m_storage.size();
 
         m_storage.handles.push_back(handle);
@@ -915,7 +915,7 @@ void AIManager::assignBehavior(EntityHandle handle,
             static_cast<int>(config.type)));
     }
 
-  // Set config in EDM and initialize state (after old indices removed)
+    // Set config in EDM and initialize state (after old indices removed)
     edm.reassignBehaviorConfig(edmIndex, config);
     Behaviors::init(edmIndex, config);
 
@@ -923,7 +923,7 @@ void AIManager::assignBehavior(EntityHandle handle,
     charData.homeRole = static_cast<uint8_t>(config.type);
     charData.behaviorType = static_cast<uint8_t>(config.type);
 
-  // Add to guard/faction indices for the new behavior
+    // Add to guard/faction indices for the new behavior
     addToIndices(edmIndex, config.type);
     syncNpcCollisionFromStance(edmIndex);
 
@@ -940,7 +940,7 @@ void AIManager::unassignBehavior(EntityHandle handle) {
     if (it != m_handleToIndex.end()) {
         size_t index = it->second;
         if (index < m_storage.size()) {
-      // Remove from indices then clear behavior config in EDM
+            // Remove from indices then clear behavior config in EDM
             size_t edmIndex = m_storage.edmIndices[index];
             if (edmIndex != SIZE_MAX) {
                 auto& edm = EntityDataManager::Instance();
@@ -964,7 +964,7 @@ bool AIManager::hasBehavior(EntityHandle handle) const {
 
     auto it = m_handleToIndex.find(handle);
     if (it != m_handleToIndex.end() && it->second < m_storage.size()) {
-    // Check if entity has a valid behavior config in EDM
+        // Check if entity has a valid behavior config in EDM
         size_t edmIndex = m_storage.edmIndices[it->second];
         if (edmIndex != SIZE_MAX) {
             const auto& edm = EntityDataManager::Instance();
@@ -1008,7 +1008,7 @@ void AIManager::unregisterEntity(EntityHandle handle) {
 
     std::unique_lock<std::shared_mutex> lock(m_entitiesMutex);
 
-  // Remove from indices and reverse mapping
+    // Remove from indices and reverse mapping
     auto it = m_handleToIndex.find(handle);
     if (it != m_handleToIndex.end() && it->second < m_storage.size()) {
         size_t edmIndex = m_storage.edmIndices[it->second];
@@ -1147,7 +1147,7 @@ void AIManager::scanActiveIndicesInRadius(const Vector2D& center, float radius,
         }
     }
 
-  // Filter player using cached edmIndex (no hash lookup)
+    // Filter player using cached edmIndex (no hash lookup)
     if (excludePlayer && m_cachedPlayerEdmIdx != SIZE_MAX) {
         std::erase(outEdmIndices, m_cachedPlayerEdmIdx);
     }
@@ -1469,13 +1469,13 @@ void AIManager::scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center,
 }
 
 void AIManager::addToIndices(size_t edmIndex, BehaviorType behaviorType) {
-  // Guard index
+    // Guard index
     if (behaviorType == BehaviorType::Guard) {
         if (std::find(m_guardEdmIndices.begin(), m_guardEdmIndices.end(), edmIndex) == m_guardEdmIndices.end()) {
             m_guardEdmIndices.push_back(edmIndex);
         }
     }
-  // Faction index
+    // Faction index
     auto& edm = EntityDataManager::Instance();
     uint8_t faction = edm.getCharacterDataByIndex(edmIndex).faction;
     if (faction < MAX_FACTIONS) {
@@ -1680,7 +1680,7 @@ void AIManager::commitQueuedBehaviorMessages() {
             candidates{};
         size_t candidateCount = 0;
 
-    // Existing inbox entries are always older than commands drained this frame.
+        // Existing inbox entries are always older than commands drained this frame.
         for (uint8_t msgIdx = 0; msgIdx < data.pendingMessageCount; ++msgIdx) {
             upsertPendingBehaviorCandidate(
                 candidates, candidateCount,
@@ -1746,9 +1746,9 @@ void AIManager::commitQueuedBehaviorTransitions() {
     auto& edm = EntityDataManager::Instance();
     std::unique_lock<std::shared_mutex> lock(m_entitiesMutex);
 
-  // Coalesce to one transition per target for this commit pass.
-  // Multiple worker threads can enqueue conflicting transitions for the same
-  // entity in one frame. Resolve by latest logical enqueue sequence.
+    // Coalesce to one transition per target for this commit pass.
+    // Multiple worker threads can enqueue conflicting transitions for the same
+    // entity in one frame. Resolve by latest logical enqueue sequence.
     m_selectedTransitions.clear();
     m_selectedTransitions.reserve(m_pendingBehaviorTransitions.size());
     m_selectedTransitionsByEdmIndex.clear();
@@ -1827,7 +1827,7 @@ void AIManager::resetBehaviors() {
 
     std::unique_lock<std::shared_mutex> entitiesLock(m_entitiesMutex);
 
-  // Clear all data (behaviors are data in EDM, no cleanup needed)
+    // Clear all data (behaviors are data in EDM, no cleanup needed)
     m_storage.handles.clear();
     m_storage.lastUpdateTimes.clear();
     m_storage.edmIndices.clear();
@@ -1837,7 +1837,7 @@ void AIManager::resetBehaviors() {
     for (auto& fv : m_factionEdmIndices) fv.clear();
     resetFactionStances();
 
-  // Reset counters
+    // Reset counters
     m_totalBehaviorExecutions.store(0, std::memory_order_relaxed);
 }
 
@@ -1848,7 +1848,7 @@ VOIDLIGHT_DEBUG_ONLY(
     })
 
 size_t AIManager::getBehaviorCount() const {
-  // m_behaviorTypeMap is immutable after init() — no lock needed
+    // m_behaviorTypeMap is immutable after init() — no lock needed
     return m_behaviorTypeMap.size();
 }
 
@@ -1872,16 +1872,16 @@ void AIManager::processBatch(
     std::vector<EventManager::DeferredEvent>& outEvents,
     std::vector<uint32_t>& outKnockbackClears,
     std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages) {
-  // Process batch of Active tier entities using EDM indices directly.
-  // Emotional decay and behavior dispatch are fused into a single pass so Debug
-  // builds touch each entity's hot data once per frame.
+    // Process batch of Active tier entities using EDM indices directly.
+    // Emotional decay and behavior dispatch are fused into a single pass so Debug
+    // builds touch each entity's hot data once per frame.
     size_t batchExecutions = 0;
     auto& edm = EntityDataManager::Instance();
 
-  // No lock needed: m_edmToStorageIndex is read-only during batch window
-  // - Behavior assignments happen synchronously via assignBehavior() before
-  // batch processing
-  // - Entity removals only mark inactive (don't modify vector structure)
+    // No lock needed: m_edmToStorageIndex is read-only during batch window
+    // - Behavior assignments happen synchronously via assignBehavior() before
+    // batch processing
+    // - Entity removals only mark inactive (don't modify vector structure)
 
     auto updateMovementScalar = [&](TransformData& transform,
                                     const EntityHotData& edmHotData) {
@@ -2005,15 +2005,15 @@ void AIManager::processBatch(
         batchCount = 0;
     };
 
-  // Unified single pass: emotional decay + behavior dispatch + SIMD movement
-  // accumulation fused into one traversal of activeIndices[start, end). Each
-  // entity's hot data is touched exactly once per frame.
+    // Unified single pass: emotional decay + behavior dispatch + SIMD movement
+    // accumulation fused into one traversal of activeIndices[start, end). Each
+    // entity's hot data is touched exactly once per frame.
     for (size_t i = start; i < end && i < activeIndices.size(); ++i) {
         size_t edmIdx = activeIndices[i];
 
         edm.updateEmotionalDecay(edmIdx, deltaTime);
 
-    // Get storage index from reverse mapping - O(1) lookup, no atomic overhead
+        // Get storage index from reverse mapping - O(1) lookup, no atomic overhead
         if (edmIdx >= m_edmToStorageIndex.size()) {
             continue; // No behavior registered for this entity (e.g., Player)
         }
@@ -2041,7 +2041,7 @@ void AIManager::processBatch(
 
         const CharacterData& characterData = edm.getCharacterDataByIndex(edmIdx);
 
-    // Store previous position for interpolation
+        // Store previous position for interpolation
         transform.previousPosition = transform.position;
 
         const bool factionInRange = characterData.faction < MAX_FACTIONS;
@@ -2096,23 +2096,23 @@ void AIManager::processBatch(
                 break;
         }
 
-    // Frame 1 (first tick after the hit): REPLACE behavior velocity with the
-    // impulse scaled by KICK_MULTIPLIER so chase/attack velocity can't swallow
-    // the shove — a pure `+=` at the base 30 px/s impulse reads as "no knockback"
-    // against ~100 px/s chase. Frames 2..N: ADD the decayed impulse on top of
-    // the behavior-produced velocity so the NPC resumes chasing immediately and
-    // the tail stays invisible — a pure `=` drained velocity to ~0 over 8 frames
-    // and read as a slow slide.
-    //
-    // Gated by a single sparse-array load — entities without knockback pay nothing.
-    // Expiry is deferred to the main thread via outKnockbackClears: SparseSidecar::remove()
-    // performs swap-pop on shared vectors and patches the displaced entity's m_sparse slot,
-    // so it is not race-safe across worker threads.
+        // Frame 1 (first tick after the hit): REPLACE behavior velocity with the
+        // impulse scaled by KICK_MULTIPLIER so chase/attack velocity can't swallow
+        // the shove — a pure `+=` at the base 30 px/s impulse reads as "no knockback"
+        // against ~100 px/s chase. Frames 2..N: ADD the decayed impulse on top of
+        // the behavior-produced velocity so the NPC resumes chasing immediately and
+        // the tail stays invisible — a pure `=` drained velocity to ~0 over 8 frames
+        // and read as a slow slide.
+        //
+        // Gated by a single sparse-array load — entities without knockback pay nothing.
+        // Expiry is deferred to the main thread via outKnockbackClears: SparseSidecar::remove()
+        // performs swap-pop on shared vectors and patches the displaced entity's m_sparse slot,
+        // so it is not race-safe across worker threads.
         if (auto* kb = ctx.knockback.get(static_cast<uint32_t>(edmIdx))) {
             constexpr float KICK_MULTIPLIER = 6.0f;
-      // Cap frame-1 velocity so a fast projectile, a low-mass NPC, or an
-      // accumulated restrike can't shove the target across the screen. The
-      // impulse direction is preserved; only the magnitude is clamped.
+            // Cap frame-1 velocity so a fast projectile, a low-mass NPC, or an
+            // accumulated restrike can't shove the target across the screen. The
+            // impulse direction is preserved; only the magnitude is clamped.
             constexpr float MAX_KICK_SPEED = 250.0f;
             constexpr float MAX_KICK_SPEED_SQ = MAX_KICK_SPEED * MAX_KICK_SPEED;
             if (kb->justApplied) {
@@ -2124,9 +2124,9 @@ void AIManager::processBatch(
                     const float scale = MAX_KICK_SPEED / std::sqrt(magSq);
                     kickX *= scale;
                     kickY *= scale;
-          // Float rounding on `x * (cap/x)` can leave |kick*| a few ULPs above
-          // the cap (e.g. 250.000015). Clamp components defensively so the
-          // post-clamp magnitude is bounded by MAX_KICK_SPEED on either axis.
+                    // Float rounding on `x * (cap/x)` can leave |kick*| a few ULPs above
+                    // the cap (e.g. 250.000015). Clamp components defensively so the
+                    // post-clamp magnitude is bounded by MAX_KICK_SPEED on either axis.
                     kickX = std::clamp(kickX, -MAX_KICK_SPEED, MAX_KICK_SPEED);
                     kickY = std::clamp(kickY, -MAX_KICK_SPEED, MAX_KICK_SPEED);
                 }
@@ -2160,7 +2160,7 @@ void AIManager::processBatch(
             std::memory_order_relaxed);
     }
 
-  // Collect deferred events from this batch's thread-local buffers into caller's vector
+    // Collect deferred events from this batch's thread-local buffers into caller's vector
     Behaviors::collectDeferredDamageEvents(outEvents);
     Behaviors::collectDeferredBehaviorMessages(outMessages);
 }
@@ -2169,7 +2169,7 @@ int AIManager::getEntityPriority(EntityHandle handle) const {
     if (!handle.isValid())
         return DEFAULT_PRIORITY;
 
-  // Read priority from EDM CharacterData (single source of truth)
+    // Read priority from EDM CharacterData (single source of truth)
     auto& edm = EntityDataManager::Instance();
     size_t edmIndex = edm.getIndex(handle);
     if (edmIndex != SIZE_MAX) {
@@ -2180,13 +2180,13 @@ int AIManager::getEntityPriority(EntityHandle handle) const {
 }
 
 float AIManager::getUpdateRangeMultiplier(int priority) const {
-  // Higher priority = larger update range multiplier
+    // Higher priority = larger update range multiplier
     return 1.0f + (std::max(0, std::min(9, priority)) * 0.1f);
 }
 
 void AIManager::registerEntity(EntityHandle handle,
     const std::string& behaviorName) {
-  // Assign behavior directly - no queue delay
+    // Assign behavior directly - no queue delay
     assignBehavior(handle, behaviorName);
 }
 

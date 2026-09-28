@@ -1334,8 +1334,8 @@ private:
     // ========================================================================
 
     // Shared data (indexed by global entity index)
-    std::vector<EntityHotData> m_hotData;           // Dynamic entities only
-    std::vector<EntityHotData> m_staticHotData;     // Static entities (separate, not tiered)
+    std::vector<EntityHotData> m_hotData; // Dynamic entities only
+    std::vector<EntityHotData> m_staticHotData; // Static entities (separate, not tiered)
     std::vector<EntityHandle::IDType> m_entityIds;
     std::vector<EntityHandle::IDType> m_staticEntityIds;
 
@@ -1344,22 +1344,22 @@ private:
     std::unordered_map<EntityHandle::IDType, size_t> m_staticIdToIndex;
 
     // Type-specific data (indexed by typeLocalIndex in EntityHotData)
-    std::vector<CharacterData> m_characterData;      // Player + NPC
-    std::vector<ItemData> m_itemData;                // DroppedItem
-    std::vector<ProjectileData> m_projectileData;    // Projectile
-    std::vector<ContainerData> m_containerData;      // Container
-    std::vector<HarvestableData> m_harvestableData;  // Harvestable
-    std::vector<AreaEffectData> m_areaEffectData;    // AreaEffect
-    std::vector<NPCRenderData> m_npcRenderData;      // NPC render data (same index as CharacterData for NPCs)
-    std::vector<ItemRenderData> m_itemRenderData;    // DroppedItem render data (same index as ItemData)
-    std::vector<ContainerRenderData> m_containerRenderData;  // Container render data
+    std::vector<CharacterData> m_characterData; // Player + NPC
+    std::vector<ItemData> m_itemData; // DroppedItem
+    std::vector<ProjectileData> m_projectileData; // Projectile
+    std::vector<ContainerData> m_containerData; // Container
+    std::vector<HarvestableData> m_harvestableData; // Harvestable
+    std::vector<AreaEffectData> m_areaEffectData; // AreaEffect
+    std::vector<NPCRenderData> m_npcRenderData; // NPC render data (same index as CharacterData for NPCs)
+    std::vector<ItemRenderData> m_itemRenderData; // DroppedItem render data (same index as ItemData)
+    std::vector<ContainerRenderData> m_containerRenderData; // Container render data
 
     // Inventory data (indexed by inventory index from createInventory())
     std::vector<InventoryData> m_inventoryData;
-    std::unordered_map<uint32_t, InventoryOverflow> m_inventoryOverflow;  // overflowId -> overflow data
-    std::vector<uint32_t> m_freeInventorySlots;                           // Free-list for inventory reuse
-    uint32_t m_nextOverflowId{1};                                         // Next overflow ID (0 = none)
-    mutable std::mutex m_inventoryMutex;                                  // Thread safety for inventory ops
+    std::unordered_map<uint32_t, InventoryOverflow> m_inventoryOverflow; // overflowId -> overflow data
+    std::vector<uint32_t> m_freeInventorySlots; // Free-list for inventory reuse
+    uint32_t m_nextOverflowId{1}; // Next overflow ID (0 = none)
+    mutable std::mutex m_inventoryMutex; // Thread safety for inventory ops
 
     // Transient knockback state — sparse/dense; only entities under knockback occupy space.
     // resizeSparse() called at every m_hotData growth site (allocateSlot new-slot path).
@@ -1488,7 +1488,7 @@ private:
 
     // Destruction queue and processing buffer (avoid per-frame allocation)
     std::vector<EntityHandle> m_destructionQueue;
-    std::vector<EntityHandle> m_destroyBuffer;  // Reused in processDestructionQueue
+    std::vector<EntityHandle> m_destroyBuffer; // Reused in processDestructionQueue
 
     // Free list for slot reuse
     std::vector<size_t> m_freeSlots;
@@ -1499,8 +1499,8 @@ private:
     std::vector<uint32_t> m_staticGenerations;
 
     // Thread safety for entity operations
-    std::mutex m_destructionMutex;  // Protects destruction queue enqueue/swap
-    std::mutex m_structuralMutex;   // One owner: create + processDestructionQueue freeSlot
+    std::mutex m_destructionMutex; // Protects destruction queue enqueue/swap
+    std::mutex m_structuralMutex; // One owner: create + processDestructionQueue freeSlot
 
     // ========================================================================
     // CREATURE COMPOSITION REGISTRIES
@@ -1547,7 +1547,7 @@ private:
     // Counters
     std::atomic<size_t> m_totalEntityCount{0};
     std::array<std::atomic<size_t>, static_cast<size_t>(EntityKind::COUNT)> m_countByKind{};
-    std::array<std::atomic<size_t>, 3> m_countByTier{};  // Active, Background, Hibernated
+    std::array<std::atomic<size_t>, 3> m_countByTier{}; // Active, Background, Hibernated
 };
 
 // ============================================================================

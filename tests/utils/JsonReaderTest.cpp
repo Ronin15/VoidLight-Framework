@@ -8,13 +8,13 @@ using namespace VoidLight;
 BOOST_AUTO_TEST_SUITE(JsonValueTests)
 
 BOOST_AUTO_TEST_CASE(TestBasicTypes) {
-  // Null
+    // Null
     JsonValue nullVal;
     BOOST_CHECK(nullVal.isNull());
     BOOST_CHECK_EQUAL(nullVal.getType(), JsonType::Null);
     BOOST_CHECK_EQUAL(nullVal.toString(), "null");
 
-  // Boolean
+    // Boolean
     JsonValue trueVal(true);
     JsonValue falseVal(false);
     BOOST_CHECK(trueVal.isBool());
@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_CASE(TestBasicTypes) {
     BOOST_CHECK_EQUAL(trueVal.toString(), "true");
     BOOST_CHECK_EQUAL(falseVal.toString(), "false");
 
-  // Number
+    // Number
     JsonValue intVal(42);
     JsonValue doubleVal(3.14);
     BOOST_CHECK(intVal.isNumber());
@@ -32,7 +32,7 @@ BOOST_AUTO_TEST_CASE(TestBasicTypes) {
     BOOST_CHECK_EQUAL(intVal.asInt(), 42);
     BOOST_CHECK_CLOSE(doubleVal.asNumber(), 3.14, 0.001);
 
-  // String
+    // String
     JsonValue stringVal("hello");
     BOOST_CHECK(stringVal.isString());
     BOOST_CHECK_EQUAL(stringVal.asString(), "hello");
@@ -74,13 +74,13 @@ BOOST_AUTO_TEST_CASE(TestSafeAccessors) {
     JsonValue stringVal("test");
     JsonValue numberVal(42);
 
-  // Valid conversions
+    // Valid conversions
     BOOST_CHECK(stringVal.tryAsString().has_value());
     BOOST_CHECK_EQUAL(stringVal.tryAsString().value(), "test");
     BOOST_CHECK(numberVal.tryAsInt().has_value());
     BOOST_CHECK_EQUAL(numberVal.tryAsInt().value(), 42);
 
-  // Invalid conversions
+    // Invalid conversions
     BOOST_CHECK(!stringVal.tryAsInt().has_value());
     BOOST_CHECK(!numberVal.tryAsString().has_value());
 }
@@ -92,18 +92,18 @@ BOOST_AUTO_TEST_SUITE(JsonReaderParsingTests)
 BOOST_AUTO_TEST_CASE(TestBasicParsing) {
     JsonReader reader;
 
-  // Null
+    // Null
     BOOST_CHECK(reader.parse("null"));
     BOOST_CHECK(reader.getRoot().isNull());
 
-  // Boolean
+    // Boolean
     BOOST_CHECK(reader.parse("true"));
     BOOST_CHECK_EQUAL(reader.getRoot().asBool(), true);
 
     BOOST_CHECK(reader.parse("false"));
     BOOST_CHECK_EQUAL(reader.getRoot().asBool(), false);
 
-  // Number
+    // Number
     BOOST_CHECK(reader.parse("42"));
     BOOST_CHECK_EQUAL(reader.getRoot().asInt(), 42);
 
@@ -116,7 +116,7 @@ BOOST_AUTO_TEST_CASE(TestBasicParsing) {
     BOOST_CHECK(reader.parse("1.5e2"));
     BOOST_CHECK_CLOSE(reader.getRoot().asNumber(), 150.0, 0.001);
 
-  // String
+    // String
     BOOST_CHECK(reader.parse("\"hello\""));
     BOOST_CHECK_EQUAL(reader.getRoot().asString(), "hello");
 }
@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(TestBasicParsing) {
 BOOST_AUTO_TEST_CASE(TestStringEscapes) {
     JsonReader reader;
 
-  // Basic escapes
+    // Basic escapes
     BOOST_CHECK(reader.parse("\"hello\\nworld\""));
     BOOST_CHECK_EQUAL(reader.getRoot().asString(), "hello\nworld");
 
@@ -137,7 +137,7 @@ BOOST_AUTO_TEST_CASE(TestStringEscapes) {
     BOOST_CHECK(reader.parse("\"backslash\\\\here\""));
     BOOST_CHECK_EQUAL(reader.getRoot().asString(), "backslash\\here");
 
-  // Unicode escape
+    // Unicode escape
     BOOST_CHECK(reader.parse("\"\\u0041\""));
     BOOST_CHECK_EQUAL(reader.getRoot().asString(), "A");
 }
@@ -145,12 +145,12 @@ BOOST_AUTO_TEST_CASE(TestStringEscapes) {
 BOOST_AUTO_TEST_CASE(TestArrayParsing) {
     JsonReader reader;
 
-  // Empty array
+    // Empty array
     BOOST_CHECK(reader.parse("[]"));
     BOOST_CHECK(reader.getRoot().isArray());
     BOOST_CHECK_EQUAL(reader.getRoot().size(), 0);
 
-  // Simple array
+    // Simple array
     BOOST_CHECK(reader.parse("[1, 2, 3]"));
     const auto& arr = reader.getRoot();
     BOOST_CHECK(arr.isArray());
@@ -159,7 +159,7 @@ BOOST_AUTO_TEST_CASE(TestArrayParsing) {
     BOOST_CHECK_EQUAL(arr[1].asInt(), 2);
     BOOST_CHECK_EQUAL(arr[2].asInt(), 3);
 
-  // Mixed types
+    // Mixed types
     BOOST_CHECK(reader.parse("[1, \"hello\", true, null]"));
     const auto& mixedArr = reader.getRoot();
     BOOST_CHECK_EQUAL(mixedArr.size(), 4);
@@ -172,12 +172,12 @@ BOOST_AUTO_TEST_CASE(TestArrayParsing) {
 BOOST_AUTO_TEST_CASE(TestObjectParsing) {
     JsonReader reader;
 
-  // Empty object
+    // Empty object
     BOOST_CHECK(reader.parse("{}"));
     BOOST_CHECK(reader.getRoot().isObject());
     BOOST_CHECK_EQUAL(reader.getRoot().size(), 0);
 
-  // Simple object
+    // Simple object
     BOOST_CHECK(reader.parse("{\"name\": \"John\", \"age\": 30}"));
     const auto& obj = reader.getRoot();
     BOOST_CHECK(obj.isObject());
@@ -235,7 +235,7 @@ BOOST_AUTO_TEST_CASE(TestNestedStructures) {
 BOOST_AUTO_TEST_CASE(TestWhitespace) {
     JsonReader reader;
 
-  // Various whitespace combinations
+    // Various whitespace combinations
     BOOST_CHECK(reader.parse("  \t\n  42  \r\n  "));
     BOOST_CHECK_EQUAL(reader.getRoot().asInt(), 42);
 
@@ -254,39 +254,39 @@ BOOST_AUTO_TEST_SUITE(JsonReaderErrorTests)
 BOOST_AUTO_TEST_CASE(TestInvalidJSON) {
     JsonReader reader;
 
-  // Missing quotes
+    // Missing quotes
     BOOST_CHECK(!reader.parse("hello"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Trailing comma in object
+    // Trailing comma in object
     BOOST_CHECK(!reader.parse("{\"key\": \"value\",}"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Trailing comma in array
+    // Trailing comma in array
     BOOST_CHECK(!reader.parse("[1, 2, 3,]"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Missing closing brace
+    // Missing closing brace
     BOOST_CHECK(!reader.parse("{\"key\": \"value\""));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Missing closing bracket
+    // Missing closing bracket
     BOOST_CHECK(!reader.parse("[1, 2, 3"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Invalid number
+    // Invalid number
     BOOST_CHECK(!reader.parse("123."));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Unterminated string
+    // Unterminated string
     BOOST_CHECK(!reader.parse("\"hello"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Invalid escape sequence
+    // Invalid escape sequence
     BOOST_CHECK(!reader.parse("\"hello\\x\""));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Multiple root values
+    // Multiple root values
     BOOST_CHECK(!reader.parse("42 43"));
     BOOST_CHECK(!reader.getLastError().empty());
 }
@@ -294,19 +294,19 @@ BOOST_AUTO_TEST_CASE(TestInvalidJSON) {
 BOOST_AUTO_TEST_CASE(TestMalformedStructures) {
     JsonReader reader;
 
-  // Missing colon in object
+    // Missing colon in object
     BOOST_CHECK(!reader.parse("{\"key\" \"value\"}"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Non-string key in object
+    // Non-string key in object
     BOOST_CHECK(!reader.parse("{42: \"value\"}"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Missing comma between object members
+    // Missing comma between object members
     BOOST_CHECK(!reader.parse("{\"key1\": \"value1\" \"key2\": \"value2\"}"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Missing comma between array elements
+    // Missing comma between array elements
     BOOST_CHECK(!reader.parse("[1 2 3]"));
     BOOST_CHECK(!reader.getLastError().empty());
 }
@@ -314,7 +314,7 @@ BOOST_AUTO_TEST_CASE(TestMalformedStructures) {
 BOOST_AUTO_TEST_CASE(TestInvalidTokens) {
     JsonReader reader;
 
-  // Invalid literal
+    // Invalid literal
     BOOST_CHECK(!reader.parse("truee"));
     BOOST_CHECK(!reader.getLastError().empty());
 
@@ -324,7 +324,7 @@ BOOST_AUTO_TEST_CASE(TestInvalidTokens) {
     BOOST_CHECK(!reader.parse("nulll"));
     BOOST_CHECK(!reader.getLastError().empty());
 
-  // Invalid characters
+    // Invalid characters
     BOOST_CHECK(!reader.parse("@"));
     BOOST_CHECK(!reader.getLastError().empty());
 
@@ -337,7 +337,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(JsonReaderFileTests)
 
 BOOST_AUTO_TEST_CASE(TestFileLoading) {
-  // Create a temporary JSON file
+    // Create a temporary JSON file
     std::string filename = "test_temp.json";
     std::string jsonContent = R"({
         "name": "Test Item",
@@ -368,7 +368,7 @@ BOOST_AUTO_TEST_CASE(TestFileLoading) {
     BOOST_CHECK_EQUAL(tags[0].asString(), "rare");
     BOOST_CHECK_EQUAL(tags[1].asString(), "magical");
 
-  // Clean up
+    // Clean up
     std::remove(filename.c_str());
 }
 
@@ -444,17 +444,17 @@ BOOST_AUTO_TEST_CASE(TestGameItemsJSON) {
     BOOST_CHECK(reader.parse(itemsJson));
     const auto& root = reader.getRoot();
 
-  // Check metadata
+    // Check metadata
     const auto& metadata = root["metadata"];
     BOOST_CHECK_EQUAL(metadata["version"].asString(), "1.0");
     BOOST_CHECK_EQUAL(metadata["total_items"].asInt(), 2);
 
-  // Check items array
+    // Check items array
     const auto& items = root["items"];
     BOOST_CHECK(items.isArray());
     BOOST_CHECK_EQUAL(items.size(), 2);
 
-  // Check first item (sword)
+    // Check first item (sword)
     const auto& sword = items[0];
     BOOST_CHECK_EQUAL(sword["id"].asString(), "sword_001");
     BOOST_CHECK_EQUAL(sword["name"].asString(), "Iron Sword");
@@ -477,7 +477,7 @@ BOOST_AUTO_TEST_CASE(TestGameItemsJSON) {
     BOOST_CHECK_EQUAL(swordEffects[0]["type"].asString(), "damage_bonus");
     BOOST_CHECK_EQUAL(swordEffects[0]["value"].asInt(), 5);
 
-  // Check second item (potion)
+    // Check second item (potion)
     const auto& potion = items[1];
     BOOST_CHECK_EQUAL(potion["id"].asString(), "potion_001");
     BOOST_CHECK_EQUAL(potion["name"].asString(), "Health Potion");

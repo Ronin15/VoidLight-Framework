@@ -25,8 +25,8 @@ struct EventDefinition {
     std::string type; // Event type (Weather, SceneChange, NPCSpawn, etc.)
     std::string name; // Unique name for the event
     std::unordered_map<std::string, std::string> params; // String parameters
-    std::unordered_map<std::string, float> numParams;    // Numeric parameters
-    std::unordered_map<std::string, bool> boolParams;    // Boolean parameters
+    std::unordered_map<std::string, float> numParams; // Numeric parameters
+    std::unordered_map<std::string, bool> boolParams; // Boolean parameters
 };
 
 // Forward declarations to reduce header dependencies
@@ -35,7 +35,7 @@ enum class TransitionType;
 
 class EventFactory {
 public:
-  /**
+    /**
    * @brief Get the singleton instance of EventFactory
    * @return Reference to the EventFactory instance
    */
@@ -44,20 +44,20 @@ public:
         return instance;
     }
 
-  /**
+    /**
    * @brief Initialize the factory
    * @return True if initialization succeeded, false otherwise
    */
     [[nodiscard]] bool init();
 
-  /**
+    /**
    * @brief Create an event from a definition
    * @param def Event definition with parameters
    * @return Shared pointer to the created event, or nullptr if creation failed
    */
     EventPtr createEvent(const EventDefinition& def);
 
-  /**
+    /**
    * @brief Create a weather event
    * @param name Unique name for the event
    * @param weatherType Type of weather (Clear, Rainy, Stormy, etc.)
@@ -70,7 +70,7 @@ public:
         float intensity = 0.5f,
         float transitionTime = 5.0f);
 
-  /**
+    /**
    * @brief Create a scene change event
    * @param name Unique name for the event
    * @param targetScene ID of the target scene
@@ -83,7 +83,7 @@ public:
         const std::string& transitionType = "fade",
         float duration = 1.0f);
 
-  /**
+    /**
    * @brief Create an NPC spawn event
    * @param name Unique name for the event
    * @param npcType Type of NPC to spawn
@@ -100,7 +100,7 @@ public:
         int count = 1,
         float spawnRadius = 0.0f);
 
-  // Particle effect event
+    // Particle effect event
     EventPtr createParticleEffectEvent(const std::string& name,
         const std::string& effectName, float x,
         float y, float intensity = 1.0f,
@@ -108,7 +108,7 @@ public:
         const std::string& groupTag = "",
         const std::string& soundEffect = "");
 
-  // World events
+    // World events
     EventPtr createWorldLoadedEvent(const std::string& name,
         const std::string& worldId, int width,
         int height);
@@ -120,7 +120,7 @@ public:
         const std::string& worldId, int width,
         int height, float generationTime);
 
-  // Camera events
+    // Camera events
     EventPtr createCameraMovedEvent(const std::string& name, float newX,
         float newY, float oldX, float oldY);
     EventPtr createCameraModeChangedEvent(const std::string& name, int newMode,
@@ -128,15 +128,15 @@ public:
     EventPtr createCameraShakeEvent(const std::string& name, float duration,
         float intensity);
 
-  // Resource change event
-  // Expects numeric params: resourceId (uint32), resourceGen (uint16),
-  // oldQuantity, newQuantity
+    // Resource change event
+    // Expects numeric params: resourceId (uint32), resourceGen (uint16),
+    // oldQuantity, newQuantity
     EventPtr createResourceChangeEvent(const std::string& name,
         uint32_t resourceId, uint16_t resourceGen,
         int oldQuantity, int newQuantity,
         const std::string& reason = "");
 
-  /**
+    /**
    * @brief Register a custom event creator function
    * @param eventType Type name for the custom event
    * @param creatorFunc Function that creates the event from a definition
@@ -145,7 +145,7 @@ public:
         const std::string& eventType,
         std::function<EventPtr(const EventDefinition&)> creatorFunc);
 
-  /**
+    /**
    * @brief Create a sequence of events that trigger in order
    * @param name Base name for the sequence
    * @param events Vector of event definitions to create
@@ -158,26 +158,26 @@ public:
         const std::vector<EventDefinition>& events,
         bool sequential = true);
 
-  /**
+    /**
    * @brief Clean up resources used by the factory
    */
     void clean();
 
 private:
-  // Singleton constructor/destructor
+    // Singleton constructor/destructor
     EventFactory();
     ~EventFactory() = default;
 
-  // Prevent copying
+    // Prevent copying
     EventFactory(const EventFactory&) = delete;
     EventFactory& operator=(const EventFactory&) = delete;
 
-  // Custom event creator functions
+    // Custom event creator functions
     std::unordered_map<std::string,
         std::function<EventPtr(const EventDefinition&)>>
         m_eventCreators;
 
-  // Helper methods for event creation
+    // Helper methods for event creation
     TransitionType getTransitionTypeFromString(const std::string& transitionType);
     void registerBuiltInEventCreators();
 };

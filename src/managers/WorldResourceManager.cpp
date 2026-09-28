@@ -253,7 +253,7 @@ void WorldResourceManager::registerInventory(uint32_t inventoryIndex, const Worl
     auto existingIt = m_inventoryToWorld.find(inventoryIndex);
     if (existingIt != m_inventoryToWorld.end()) {
         if (existingIt->second == worldId) {
-            return;  // Already registered to this world
+            return; // Already registered to this world
         }
         // Unregister from old world first
         auto& oldSet = m_inventoryRegistry[existingIt->second];
@@ -283,7 +283,7 @@ void WorldResourceManager::unregisterInventory(uint32_t inventoryIndex) {
 
     auto it = m_inventoryToWorld.find(inventoryIndex);
     if (it == m_inventoryToWorld.end()) {
-        return;  // Not registered
+        return; // Not registered
     }
 
     const WorldId& worldId = it->second;
@@ -416,14 +416,14 @@ WorldResourceManager::Quantity WorldResourceManager::queryHarvestableTotal(
         // Note: Registry should be kept clean via unregisterHarvestable on entity destruction
         const auto& hot = edm.getStaticHotDataByIndex(edmIdx);
         if (hot.kind != EntityKind::Harvestable) {
-            continue;  // Entity was destroyed or changed type
+            continue; // Entity was destroyed or changed type
         }
 
         const auto& harvData = edm.getHarvestableData(hot.typeLocalIndex);
 
         // Only count non-depleted harvestables with matching resource
         if (!harvData.isDepleted && harvData.yieldResource == handle) {
-            total += harvData.yieldMax;  // Potential yield
+            total += harvData.yieldMax; // Potential yield
         }
     }
 
@@ -473,7 +473,7 @@ WorldResourceManager::getWorldResources(const WorldId& worldId) const {
             // Registry is kept clean via unregisterHarvestable on entity destruction
             const auto& hot = edm.getStaticHotDataByIndex(edmIdx);
             if (hot.kind != EntityKind::Harvestable) {
-                continue;  // Entity was destroyed or changed type
+                continue; // Entity was destroyed or changed type
             }
 
             const auto& harvData = edm.getHarvestableData(hot.typeLocalIndex);
@@ -533,7 +533,7 @@ void WorldResourceManager::registerDroppedItem(size_t edmIndex, const Vector2D& 
     auto existingIt = m_itemToWorld.find(edmIndex);
     if (existingIt != m_itemToWorld.end()) {
         if (existingIt->second == worldId) {
-            return;  // Already registered to this world
+            return; // Already registered to this world
         }
         // Unregister from old world first
         auto& oldIndex = m_itemSpatialIndices[existingIt->second];
@@ -563,7 +563,7 @@ void WorldResourceManager::unregisterDroppedItem(size_t edmIndex) {
 
     auto it = m_itemToWorld.find(edmIndex);
     if (it == m_itemToWorld.end()) {
-        return;  // Not registered
+        return; // Not registered
     }
 
     // Update counter if unregistering from active world
@@ -589,7 +589,7 @@ void WorldResourceManager::registerContainerSpatial(size_t edmIndex, const Vecto
     auto existingIt = m_containerToWorld.find(edmIndex);
     if (existingIt != m_containerToWorld.end()) {
         if (existingIt->second == worldId) {
-            return;  // Already registered
+            return; // Already registered
         }
         // Unregister from old world
         auto& oldIndex = m_containerSpatialIndices[existingIt->second];
@@ -610,7 +610,7 @@ void WorldResourceManager::unregisterContainerSpatial(size_t edmIndex) {
 
     auto it = m_containerToWorld.find(edmIndex);
     if (it == m_containerToWorld.end()) {
-        return;  // Not registered
+        return; // Not registered
     }
 
     auto& spatialIndex = m_containerSpatialIndices[it->second];
@@ -686,7 +686,7 @@ size_t WorldResourceManager::queryDroppedItemsInRadius(const Vector2D& center, f
         [&](size_t idx) {
             const auto& hot = edm.getStaticHotDataByIndex(idx);
             if (!hot.isAlive()) {
-                return true;  // Remove stale entries
+                return true; // Remove stale entries
             }
             const auto& pos = hot.transform.position;
             float dx = pos.getX() - center.getX();
@@ -735,7 +735,7 @@ size_t WorldResourceManager::queryHarvestablesInRadius(const Vector2D& center, f
         [&](size_t idx) {
             const auto& hot = edm.getStaticHotDataByIndex(idx);
             if (!hot.isAlive()) {
-                return true;  // Remove stale entries
+                return true; // Remove stale entries
             }
             const auto& pos = hot.transform.position;
             float dx = pos.getX() - center.getX();

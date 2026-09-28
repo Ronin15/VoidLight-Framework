@@ -78,9 +78,9 @@ void CombatController::subscribe() {
         return;
     }
 
-  // CombatController doesn't need to subscribe to any events currently
-  // It drives combat, rather than reacting to events
-  // Future: could subscribe to damage events from other sources
+    // CombatController doesn't need to subscribe to any events currently
+    // It drives combat, rather than reacting to events
+    // Future: could subscribe to damage events from other sources
 
     setSubscribed(true);
     COMBAT_INFO("CombatController subscribed");
@@ -92,7 +92,7 @@ void CombatController::update(float deltaTime) {
         return;
     }
 
-  // Update attack cooldown
+    // Update attack cooldown
     if (m_attackCooldown > 0.0f) {
         m_attackCooldown -= deltaTime;
         if (m_attackCooldown < 0.0f) {
@@ -100,7 +100,7 @@ void CombatController::update(float deltaTime) {
         }
     }
 
-  // Regenerate stamina when not attacking
+    // Regenerate stamina when not attacking
     if (m_attackCooldown <= 0.0f) {
         regenerateStamina(player.get(), deltaTime);
     }
@@ -112,14 +112,14 @@ bool CombatController::tryAttack() {
         return false;
     }
 
-  // Check cooldown
+    // Check cooldown
     if (m_attackCooldown > 0.0f) {
         COMBAT_DEBUG(
             std::format("Attack on cooldown: {:.2f}s remaining", m_attackCooldown));
         return false;
     }
 
-  // Check stamina
+    // Check stamina
     if (!player->canAttack(ATTACK_STAMINA_COST)) {
         COMBAT_DEBUG(
             std::format("Not enough stamina to attack. Need {:.1f}, have {:.1f}",
@@ -131,7 +131,7 @@ bool CombatController::tryAttack() {
         return false;
     }
 
-  // Consume stamina and start cooldown
+    // Consume stamina and start cooldown
     float oldStamina = player->getStamina();
     player->consumeStamina(ATTACK_STAMINA_COST);
     m_attackCooldown = ATTACK_COOLDOWN;
@@ -139,7 +139,7 @@ bool CombatController::tryAttack() {
     COMBAT_INFO(std::format("Player attacking! Stamina: {:.1f} -> {:.1f}",
         oldStamina, player->getStamina()));
 
-  // Transition player to attacking state
+    // Transition player to attacking state
     player->changeState("attacking");
 
     return true;
@@ -150,14 +150,14 @@ bool CombatController::performAttack(Player* player) {
         return false;
     }
 
-  // Cache manager references at function scope
+    // Cache manager references at function scope
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
     const Vector2D playerPos = player->getPosition();
     EntityHandle playerHandle = player->getHandle();
     CharacterData activeCharData = edm.getCharacterData(playerHandle);
 
-  // Determine attack direction based on player facing
+    // Determine attack direction based on player facing
     float attackDirX = (player->getFlip() == SDL_FLIP_HORIZONTAL) ? -1.0f : 1.0f;
 
     if (activeCharData.combatStyle == CharacterData::CombatStyle::Ranged) {
@@ -189,9 +189,9 @@ bool CombatController::performAttack(Player* player) {
         }
     }
 
-  // Query nearby entity handles from AIManager (EntityHandle-based API)
-  // Reuse buffer to avoid per-frame allocation
-    m_nearbyHandlesBuffer.clear();  // Keeps capacity
+    // Query nearby entity handles from AIManager (EntityHandle-based API)
+    // Reuse buffer to avoid per-frame allocation
+    m_nearbyHandlesBuffer.clear(); // Keeps capacity
     aiMgr.scanActiveHandlesInRadius(playerPos, activeCharData.attackRange,
         m_nearbyHandlesBuffer, true);
 
@@ -199,7 +199,7 @@ bool CombatController::performAttack(Player* player) {
         if (!handle.isValid())
             continue;
 
-    // Phase 2 EDM Migration: Use handle.getKind() instead of EntityPtr
+        // Phase 2 EDM Migration: Use handle.getKind() instead of EntityPtr
         if (handle.getKind() != EntityKind::NPC) {
             continue;
         }
@@ -208,31 +208,31 @@ bool CombatController::performAttack(Player* player) {
         if (idx == SIZE_MAX)
             continue;
 
-    // Get entity data from EDM (single source of truth)
+        // Get entity data from EDM (single source of truth)
         auto& hotData = edm.getHotDataByIndex(idx);
 
-    // Use EDM's isAlive() instead of Entity method
+        // Use EDM's isAlive() instead of Entity method
         if (!hotData.isAlive()) {
             continue;
         }
 
         const Vector2D npcPos = hotData.transform.position;
         const Vector2D diff = npcPos - playerPos;
-    // Check if in attack direction (180 degree arc in front of player)
+        // Check if in attack direction (180 degree arc in front of player)
         float dotProduct = diff.getX() * attackDirX;
         if (dotProduct < 0.0f) {
-      // NPC is behind the player
+            // NPC is behind the player
             continue;
         }
 
-    // Hit detected - calculate knockback direction
+        // Hit detected - calculate knockback direction
         Vector2D knockback = diff.normalized() * 20.0f;
 
-    // Record pre-damage health for UI logging
+        // Record pre-damage health for UI logging
         float oldHealth = edm.getCharacterData(handle).health;
 
-    // Dispatch the mutable damage payload. EventManager applies combat results
-    // on the main thread immediately for player attacks.
+        // Dispatch the mutable damage payload. EventManager applies combat results
+        // on the main thread immediately for player attacks.
         auto& eventMgr = EventManager::Instance();
         auto damageEvent = eventMgr.acquireDamageEvent();
         damageEvent->configure(playerHandle, handle, activeCharData.attackDamage,
@@ -253,7 +253,7 @@ bool CombatController::performAttack(Player* player) {
             std::format("Hit Enemy #{} for {:.0f} damage!", handle.getId(),
                 activeCharData.attackDamage));
 
-    // Kill notification for UI
+        // Kill notification for UI
         if (wasLethal) {
             COMBAT_INFO(std::format("Entity {} killed!", handle.getId()));
 
