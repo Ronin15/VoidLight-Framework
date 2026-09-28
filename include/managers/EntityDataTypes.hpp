@@ -54,8 +54,7 @@ static constexpr size_t CHARACTER_EQUIPMENT_SLOT_COUNT = 9;
  * Points into one of the per-variant dense pools owned by EDM.
  * index == UINT32_MAX when type == BehaviorType::None (no active config).
  */
-struct BehaviorConfigRef
-{
+struct BehaviorConfigRef {
     BehaviorType type{BehaviorType::None}; // 1 byte
     uint8_t _pad[3]{};                     // 3 bytes alignment
     uint32_t index{std::numeric_limits<uint32_t>::max()}; // 4 bytes
@@ -80,12 +79,11 @@ static_assert(sizeof(TransformData) == 32, "TransformData should be 32 bytes");
  * Only entities that are currently being knocked back occupy space in the dense array.
  * framesRemaining is a fixed-timestep frame count (see Knockback::FRAMES / DECAY).
  */
-struct KnockbackData
-{
-    float   impulseX{0.0f};         // 4 bytes: knockback impulse X component
-    float   impulseY{0.0f};         // 4 bytes: knockback impulse Y component
+struct KnockbackData {
+    float impulseX{0.0f};         // 4 bytes: knockback impulse X component
+    float impulseY{0.0f};         // 4 bytes: knockback impulse Y component
     uint8_t framesRemaining{0};     // 1 byte:  remaining fixed-timestep frames
-    bool    justApplied{false};     // 1 byte:  true on the first tick after a hit is applied;
+    bool justApplied{false};     // 1 byte:  true on the first tick after a hit is applied;
                                     //           cleared by AIManager after consuming the REPLACE path
 };
 
@@ -253,7 +251,10 @@ struct CharacterData {
     uint8_t homeRole{static_cast<uint8_t>(BehaviorType::None)};
     uint8_t priority{5};       // AI priority (0-9)
     uint8_t stateFlags{0};     // alive, stunned, invulnerable, etc.
-    enum CombatStyle : uint8_t { Melee = 0, Ranged = 1 };
+    enum CombatStyle : uint8_t {
+        Melee = 0,
+        Ranged = 1
+    };
     uint8_t combatStyle{CombatStyle::Melee};
     uint8_t baseCombatStyle{CombatStyle::Melee};
 
@@ -403,7 +404,11 @@ struct InventorySlotData {
     int16_t _pad{0};                              // 2 bytes: Padding for alignment
 
     [[nodiscard]] bool isEmpty() const noexcept { return quantity <= 0 || !resourceHandle.isValid(); }
-    void clear() noexcept { resourceHandle = VoidLight::ResourceHandle{}; quantity = 0; _pad = 0; }
+    void clear() noexcept {
+        resourceHandle = VoidLight::ResourceHandle{};
+        quantity = 0;
+        _pad = 0;
+    }
 };
 
 // InventorySlotData is ~12 bytes (ResourceHandle 8 + quantity 2 + pad 2)
@@ -1050,29 +1055,29 @@ struct alignas(64) NPCMemoryData {
     static constexpr float NO_COMBAT_HISTORY = 999.0f;
 
     // First 64 B — read every frame by every behavior.
-    EmotionalState    emotions;                         // 16 B  (read+write per frame in decay loop)
+    EmotionalState emotions;                         // 16 B  (read+write per frame in decay loop)
     PersonalityTraits personality;                      // 16 B  (read every frame, written once at spawn)
-    EntityHandle      lastAttacker;                     // 16 B  (read by 5 behaviors)
-    float             lastCombatTime{NO_COMBAT_HISTORY};// 4 B   (updated per frame in decay)
-    float             lastDecayTime{0.0f};              // 4 B   (updated per frame)
-    uint8_t           flags{0};                         // 1 B   (FLAG_VALID, FLAG_HAS_OVERFLOW)
-    uint8_t           _pad1[7]{};                       // 7 B   → first 64 B exact
+    EntityHandle lastAttacker;                     // 16 B  (read by 5 behaviors)
+    float lastCombatTime{NO_COMBAT_HISTORY};// 4 B   (updated per frame in decay)
+    float lastDecayTime{0.0f};              // 4 B   (updated per frame)
+    uint8_t flags{0};                         // 1 B   (FLAG_VALID, FLAG_HAS_OVERFLOW)
+    uint8_t _pad1[7]{};                       // 7 B   → first 64 B exact
 
     // Next 64 B — read every frame by combat-tracking behaviors (Chase/Attack/Follow/Guard).
     // Kept adjacent so combat behaviors fault one extra cache line, not multiple.
     EntityHandle lastTarget;                            // 16 B  (read+write by 4 behaviors)
-    uint8_t      _pad2[48]{};                           // 48 B  → next 64 B exact (room for future combat fields)
+    uint8_t _pad2[48]{};                           // 48 B  → next 64 B exact (room for future combat fields)
 
     // Remaining bytes — read on event or only by Guard's memory iteration.
-    MemoryEntry  memories[INLINE_MEMORY_COUNT];         // 240 B (Guard iterates; findMemories on demand)
-    Vector2D     locationHistory[INLINE_LOCATION_COUNT];// 32 B  (only addLocationToHistory writes)
-    float        totalDamageReceived{0.0f};             // 4 B   (written on combat event)
-    float        totalDamageDealt{0.0f};                // 4 B   (written on combat event)
-    uint16_t     memoryCount{0};                        // 2 B   (total memories — inline + overflow)
-    uint16_t     locationCount{0};                      // 2 B   (locations stored — 0..4)
-    uint8_t      nextInlineSlot{0};                     // 1 B   (circular write position)
-    uint8_t      combatEncounters{0};                   // 1 B   (combat encounter counter)
-    uint8_t      _pad3[34]{};                           // 34 B  → struct totals 448 B (multiple of 64)
+    MemoryEntry memories[INLINE_MEMORY_COUNT];         // 240 B (Guard iterates; findMemories on demand)
+    Vector2D locationHistory[INLINE_LOCATION_COUNT];// 32 B  (only addLocationToHistory writes)
+    float totalDamageReceived{0.0f};             // 4 B   (written on combat event)
+    float totalDamageDealt{0.0f};                // 4 B   (written on combat event)
+    uint16_t memoryCount{0};                        // 2 B   (total memories — inline + overflow)
+    uint16_t locationCount{0};                      // 2 B   (locations stored — 0..4)
+    uint8_t nextInlineSlot{0};                     // 1 B   (circular write position)
+    uint8_t combatEncounters{0};                   // 1 B   (combat encounter counter)
+    uint8_t _pad3[34]{};                           // 34 B  → struct totals 448 B (multiple of 64)
 
     [[nodiscard]] bool isValid() const noexcept { return flags & FLAG_VALID; }
     [[nodiscard]] bool hasOverflow() const noexcept { return flags & FLAG_HAS_OVERFLOW; }
@@ -1102,13 +1107,13 @@ struct alignas(64) NPCMemoryData {
 };
 
 static_assert(offsetof(NPCMemoryData, emotions) == 0,
-              "First cache line must start at byte 0");
+    "First cache line must start at byte 0");
 static_assert(offsetof(NPCMemoryData, lastTarget) == 64,
-              "lastTarget must start at byte 64 — kept adjacent to first 64 B for combat behaviors");
+    "lastTarget must start at byte 64 — kept adjacent to first 64 B for combat behaviors");
 static_assert(offsetof(NPCMemoryData, memories) == 128,
-              "Event-only fields start at byte 128");
+    "Event-only fields start at byte 128");
 static_assert(sizeof(NPCMemoryData) == 448,
-              "Struct size locked at 448 B — change deliberately if you adjust the layout");
+    "Struct size locked at 448 B — change deliberately if you adjust the layout");
 
 /**
  * @brief Overflow storage for NPCs with extensive memory history

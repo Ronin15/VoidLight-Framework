@@ -73,7 +73,8 @@ protected:
         }
         BOOST_REQUIRE(
             budgetMgr.shouldUseThreading(
-                VoidLight::SystemType::BackgroundSim, workloadSize).shouldThread);
+                         VoidLight::SystemType::BackgroundSim, workloadSize)
+                .shouldThread);
     }
 
     EntityDataManager* edm;
@@ -584,7 +585,7 @@ BOOST_AUTO_TEST_CASE(TestBackgroundNPCVelocityDecay) {
     // Velocity should have decayed
     const auto& newTransform = edm->getTransform(handle);
     float velMag = std::sqrt(newTransform.velocity.getX() * newTransform.velocity.getX() +
-                             newTransform.velocity.getY() * newTransform.velocity.getY());
+        newTransform.velocity.getY() * newTransform.velocity.getY());
     // Velocity should be less than initial (was ~141.4)
     BOOST_CHECK(velMag < 141.0f);
 

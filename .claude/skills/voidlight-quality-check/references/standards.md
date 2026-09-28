@@ -14,11 +14,11 @@ WARNING.
 
 ### 3.2 Formatting
 
-4-space indent, no tabs, Allman braces. Check new/changed lines in the diff rather than the whole tree:
+`.clang-format` (K&R braces, 4-space indent, no tabs) is authoritative and the whole tree conforms:
 ```bash
-git diff -U0 main... -- '*.cpp' '*.hpp' | grep -nP "^\+.*\t"      # tabs in added lines
+git ls-files 'src/*' 'include/*' 'tests/*' | grep -E '\.(cpp|hpp|h)$' | xargs clang-format --dry-run -Werror
 ```
-INFO/WARNING — match the surrounding file when it predates the rule.
+WARNING for any file it reports; fix with `clang-format -i <file>`.
 
 ### 3.3 C++ API rules
 ```bash

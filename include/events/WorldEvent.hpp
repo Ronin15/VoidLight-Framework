@@ -29,16 +29,16 @@ enum class WorldEventType {
  */
 class WorldEvent : public Event {
 public:
-    explicit WorldEvent(WorldEventType eventType) 
+    explicit WorldEvent(WorldEventType eventType)
         : Event(), m_eventType(eventType) {}
-    
+
     ~WorldEvent() override = default;
-    
+
     WorldEventType getEventType() const { return m_eventType; }
-    
+
     std::string getTypeName() const override { return "WorldEvent"; }
     EventTypeId getTypeId() const override { return EventTypeId::World; }
-    
+
     // Required Event interface implementations
     void update() override {}
     void execute() override {}
@@ -46,7 +46,7 @@ public:
     std::string getName() const override { return getTypeName(); }
     std::string getType() const override { return getTypeName(); }
     bool checkConditions() override { return true; }
-    
+
     void reset() override {
         Event::resetCooldown();
         m_hasTriggered = false;
@@ -63,17 +63,16 @@ protected:
 class WorldLoadedEvent : public WorldEvent {
 public:
     WorldLoadedEvent(const std::string& worldId, int width, int height)
-        : WorldEvent(WorldEventType::WorldLoaded), m_worldId(worldId), 
-          m_width(width), m_height(height) {}
-    
+        : WorldEvent(WorldEventType::WorldLoaded), m_worldId(worldId), m_width(width), m_height(height) {}
+
     const std::string& getWorldId() const { return m_worldId; }
     int getWidth() const { return m_width; }
     int getHeight() const { return m_height; }
-    
+
     std::string getTypeName() const override { return "WorldLoadedEvent"; }
     std::string getName() const override { return "WorldLoadedEvent"; }
     std::string getType() const override { return "WorldLoadedEvent"; }
-    
+
     void reset() override {
         WorldEvent::reset();
         m_worldId.clear();
@@ -94,13 +93,13 @@ class WorldUnloadedEvent : public WorldEvent {
 public:
     explicit WorldUnloadedEvent(const std::string& worldId)
         : WorldEvent(WorldEventType::WorldUnloaded), m_worldId(worldId) {}
-    
+
     const std::string& getWorldId() const { return m_worldId; }
-    
+
     std::string getTypeName() const override { return "WorldUnloadedEvent"; }
     std::string getName() const override { return "WorldUnloadedEvent"; }
     std::string getType() const override { return "WorldUnloadedEvent"; }
-    
+
     void reset() override {
         WorldEvent::reset();
         m_worldId.clear();
@@ -116,18 +115,17 @@ private:
 class TileChangedEvent : public WorldEvent {
 public:
     TileChangedEvent(int x, int y, const std::string& changeType)
-        : WorldEvent(WorldEventType::TileChanged), m_position(x, y), 
-          m_changeType(changeType) {}
-    
+        : WorldEvent(WorldEventType::TileChanged), m_position(x, y), m_changeType(changeType) {}
+
     const Vector2D& getPosition() const { return m_position; }
     int getX() const { return m_position.getX(); }
     int getY() const { return m_position.getY(); }
     const std::string& getChangeType() const { return m_changeType; }
-    
+
     std::string getTypeName() const override { return "TileChangedEvent"; }
     std::string getName() const override { return "TileChangedEvent"; }
     std::string getType() const override { return "TileChangedEvent"; }
-    
+
     void reset() override {
         WorldEvent::reset();
         m_position = Vector2D{0, 0};
@@ -144,20 +142,19 @@ private:
  */
 class WorldGeneratedEvent : public WorldEvent {
 public:
-    WorldGeneratedEvent(const std::string& worldId, int width, int height, 
-                       float generationTime)
-        : WorldEvent(WorldEventType::WorldGenerated), m_worldId(worldId),
-          m_width(width), m_height(height), m_generationTime(generationTime) {}
-    
+    WorldGeneratedEvent(const std::string& worldId, int width, int height,
+        float generationTime)
+        : WorldEvent(WorldEventType::WorldGenerated), m_worldId(worldId), m_width(width), m_height(height), m_generationTime(generationTime) {}
+
     const std::string& getWorldId() const { return m_worldId; }
     int getWidth() const { return m_width; }
     int getHeight() const { return m_height; }
     float getGenerationTime() const { return m_generationTime; }
-    
+
     std::string getTypeName() const override { return "WorldGeneratedEvent"; }
     std::string getName() const override { return "WorldGeneratedEvent"; }
     std::string getType() const override { return "WorldGeneratedEvent"; }
-    
+
     void reset() override {
         WorldEvent::reset();
         m_worldId.clear();
@@ -179,8 +176,7 @@ private:
 class WorldSavedEvent : public WorldEvent {
 public:
     WorldSavedEvent(const std::string& worldId, const std::string& savePath)
-        : WorldEvent(WorldEventType::WorldSaved), m_worldId(worldId),
-          m_savePath(savePath) {}
+        : WorldEvent(WorldEventType::WorldSaved), m_worldId(worldId), m_savePath(savePath) {}
 
     const std::string& getWorldId() const { return m_worldId; }
     const std::string& getSavePath() const { return m_savePath; }
@@ -211,8 +207,7 @@ private:
 class StaticCollidersReadyEvent : public WorldEvent {
 public:
     StaticCollidersReadyEvent(size_t solidBodyCount, size_t triggerCount)
-        : WorldEvent(WorldEventType::StaticCollidersReady),
-          m_solidBodyCount(solidBodyCount), m_triggerCount(triggerCount) {}
+        : WorldEvent(WorldEventType::StaticCollidersReady), m_solidBodyCount(solidBodyCount), m_triggerCount(triggerCount) {}
 
     size_t getSolidBodyCount() const { return m_solidBodyCount; }
     size_t getTriggerCount() const { return m_triggerCount; }

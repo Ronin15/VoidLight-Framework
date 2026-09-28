@@ -329,8 +329,7 @@ void HierarchicalSpatialHash::queryRegionBoundsThreadSafe(
         (minX + maxX) * 0.5f,
         (minY + maxY) * 0.5f,
         (maxX - minX) * 0.5f,
-        (maxY - minY) * 0.5f
-    );
+        (maxY - minY) * 0.5f);
 
     // Thread-safe read-only access to m_regions (no modifications during query)
     for (const auto& regionCoord : buffers.queryRegions) {
@@ -413,8 +412,7 @@ void HierarchicalSpatialHash::logStatistics() const {
 HierarchicalSpatialHash::CoarseCoord HierarchicalSpatialHash::getCoarseCoord(const AABB& aabb) const {
     return {
         static_cast<int32_t>(std::floor(aabb.center.getX() / COARSE_CELL_SIZE)),
-        static_cast<int32_t>(std::floor(aabb.center.getY() / COARSE_CELL_SIZE))
-    };
+        static_cast<int32_t>(std::floor(aabb.center.getY() / COARSE_CELL_SIZE))};
 }
 
 void HierarchicalSpatialHash::getCoarseCoordsForAABB(const AABB& aabb, std::vector<CoarseCoord>& out) const {
@@ -436,7 +434,7 @@ void HierarchicalSpatialHash::getCoarseCoordsForBounds(float minX, float minY, f
 }
 
 HierarchicalSpatialHash::FineCoord HierarchicalSpatialHash::getFineCoord(const AABB& aabb,
-                                                                         const CoarseCoord& region) const {
+    const CoarseCoord& region) const {
     // Compute fine coordinates relative to the region's origin
     float const regionOriginX = region.x * COARSE_CELL_SIZE;
     float const regionOriginY = region.y * COARSE_CELL_SIZE;

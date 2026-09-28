@@ -16,13 +16,12 @@
 namespace AIInternal {
 
 VOIDLIGHT_STATS_ONLY(
-struct CrowdStats {
-  uint64_t queryCount{0};
-  uint64_t cacheHits{0};
-  uint64_t cacheMisses{0};
-  uint64_t resultsCount{0};
-};
-)
+    struct CrowdStats {
+        uint64_t queryCount{0};
+        uint64_t cacheHits{0};
+        uint64_t cacheMisses{0};
+        uint64_t resultsCount{0};
+    };)
 
 // Counts nearby entities within a given area, filtering for actual entities only
 // (excludes static objects, triggers, and self)
@@ -30,7 +29,7 @@ struct CrowdStats {
 // - center: center of query area
 // - radius: query radius
 // Returns: count of nearby dynamic/kinematic entities
-int CountNearbyEntities(EntityID excludeId, const Vector2D &center, float radius);
+int CountNearbyEntities(EntityID excludeId, const Vector2D& center, float radius);
 
 // Gets nearby entities with their positions for crowd analysis
 // - excludeId: entity ID to exclude from results (typically the querying entity)
@@ -38,8 +37,8 @@ int CountNearbyEntities(EntityID excludeId, const Vector2D &center, float radius
 // - radius: query radius
 // - outPositions: vector to fill with nearby entity positions
 // Returns: count of nearby entities (same as outPositions.size())
-int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D &center, float radius,
-                                   std::vector<Vector2D> &outPositions);
+int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center, float radius,
+    std::vector<Vector2D>& outPositions);
 
 // Invalidates spatial query cache for new frame
 // Call this at the start of each AI update cycle to ensure cache freshness
@@ -48,13 +47,12 @@ void InvalidateSpatialCache(uint64_t frameNumber);
 
 VOIDLIGHT_STATS_ONLY(
 // Crowd query stats (aggregated across worker threads)
-CrowdStats GetCrowdStats();
-void ResetCrowdStats();
-)
+    CrowdStats GetCrowdStats();
+    void ResetCrowdStats();)
 
 // Returns reference to thread-local position buffer for crowd queries
 // Caller must call clear() before use. Avoids per-call allocations.
-std::vector<Vector2D> &GetNearbyPositionBuffer();
+std::vector<Vector2D>& GetNearbyPositionBuffer();
 
 } // namespace AIInternal
 

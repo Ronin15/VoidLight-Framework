@@ -73,8 +73,7 @@ BOOST_FIXTURE_TEST_CASE(LoadSpriteVertexShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/sprite.vert",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        info
-    );
+        info);
 
     BOOST_CHECK(shader != nullptr);
     BOOST_TEST_MESSAGE("Sprite vertex shader loaded successfully");
@@ -90,8 +89,7 @@ BOOST_FIXTURE_TEST_CASE(LoadSpriteFragmentShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/sprite.frag",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        info
-    );
+        info);
 
     BOOST_CHECK(shader != nullptr);
     BOOST_TEST_MESSAGE("Sprite fragment shader loaded successfully");
@@ -107,8 +105,7 @@ BOOST_FIXTURE_TEST_CASE(LoadColorVertexShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/color.vert",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        info
-    );
+        info);
 
     BOOST_CHECK(shader != nullptr);
     BOOST_TEST_MESSAGE("Color vertex shader loaded successfully");
@@ -124,8 +121,7 @@ BOOST_FIXTURE_TEST_CASE(LoadColorFragmentShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/color.frag",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        info
-    );
+        info);
 
     BOOST_CHECK(shader != nullptr);
     BOOST_TEST_MESSAGE("Color fragment shader loaded successfully");
@@ -141,8 +137,7 @@ BOOST_FIXTURE_TEST_CASE(LoadCompositeVertexShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/composite.vert",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        info
-    );
+        info);
 
     BOOST_CHECK(shader != nullptr);
     BOOST_TEST_MESSAGE("Composite vertex shader loaded successfully");
@@ -159,8 +154,7 @@ BOOST_FIXTURE_TEST_CASE(LoadCompositeFragmentShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/composite.frag",
         SDL_GPU_SHADERSTAGE_FRAGMENT,
-        info
-    );
+        info);
 
     BOOST_CHECK(shader != nullptr);
     BOOST_TEST_MESSAGE("Composite fragment shader loaded successfully");
@@ -175,8 +169,7 @@ BOOST_FIXTURE_TEST_CASE(LoadNonExistentShader, ShaderTestFixture) {
     SDL_GPUShader* shader = shaderMgr->loadShader(
         "res/shaders/nonexistent.vert",
         SDL_GPU_SHADERSTAGE_VERTEX,
-        info
-    );
+        info);
 
     // Should return nullptr for missing shader
     BOOST_CHECK(shader == nullptr);
@@ -219,8 +212,7 @@ BOOST_FIXTURE_TEST_CASE(GetShaderReturnsSamePointer, ShaderTestFixture) {
 
     // Load shader
     SDL_GPUShader* shader1 = shaderMgr->loadShader(
-        shaderPath, SDL_GPU_SHADERSTAGE_FRAGMENT, info
-    );
+        shaderPath, SDL_GPU_SHADERSTAGE_FRAGMENT, info);
     BOOST_REQUIRE(shader1 != nullptr);
 
     // Get cached shader
@@ -236,8 +228,8 @@ BOOST_FIXTURE_TEST_CASE(GetShaderReturnsNullForUnloaded, ShaderTestFixture) {
 
     // Should return nullptr for shader not loaded
     SDL_GPUShader* shader = shaderMgr->getShader("res/shaders/not_loaded.vert",
-                                                 SDL_GPU_SHADERSTAGE_VERTEX,
-                                                 ShaderInfo{});
+        SDL_GPU_SHADERSTAGE_VERTEX,
+        ShaderInfo{});
     BOOST_CHECK(shader == nullptr);
 }
 
@@ -306,8 +298,7 @@ BOOST_AUTO_TEST_CASE(PlatformShaderFilesExist) {
         "res/shaders/color.vert" + ext,
         "res/shaders/color.frag" + ext,
         "res/shaders/composite.vert" + ext,
-        "res/shaders/composite.frag" + ext
-    };
+        "res/shaders/composite.frag" + ext};
 
     for (const auto& path : shaderFiles) {
         const std::string resolvedPath = VoidLight::ResourcePath::resolve(path);

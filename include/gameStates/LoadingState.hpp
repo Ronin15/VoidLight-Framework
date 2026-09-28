@@ -43,7 +43,7 @@ public:
      * @param worldConfig World generation configuration
      */
     void configure(GameStateId targetStateId,
-                   const VoidLight::WorldGenerationConfig& worldConfig);
+        const VoidLight::WorldGenerationConfig& worldConfig);
 
     bool enter() override;
     void update(float deltaTime) override;
@@ -53,7 +53,7 @@ public:
 
     void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
     void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                     SDL_GPURenderPass* swapchainPass) override;
+        SDL_GPURenderPass* swapchainPass) override;
 
     /**
      * @brief Get the last error message from failed loading

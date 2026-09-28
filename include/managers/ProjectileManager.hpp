@@ -35,14 +35,12 @@
 #include <vector>
 
 namespace VoidLight {
-    struct CollisionInfo;
+struct CollisionInfo;
 }
 
-class ProjectileManager
-{
+class ProjectileManager {
 public:
-    static ProjectileManager& Instance()
-    {
+    static ProjectileManager& Instance() {
         static ProjectileManager instance;
         return instance;
     }
@@ -60,29 +58,24 @@ public:
     void update(float deltaTime);
     void handleProjectileCollision(const VoidLight::CollisionInfo& info);
 
-    [[nodiscard]] bool isInitialized() const noexcept
-    {
+    [[nodiscard]] bool isInitialized() const noexcept {
         return m_initialized.load(std::memory_order_acquire);
     }
 
-    [[nodiscard]] bool isShutdown() const noexcept
-    {
+    [[nodiscard]] bool isShutdown() const noexcept {
         return m_isShutdown.load(std::memory_order_acquire);
     }
 
-    void setGlobalPause(bool paused)
-    {
+    void setGlobalPause(bool paused) {
         m_globallyPaused.store(paused, std::memory_order_release);
     }
 
-    [[nodiscard]] bool isGloballyPaused() const noexcept
-    {
+    [[nodiscard]] bool isGloballyPaused() const noexcept {
         return m_globallyPaused.load(std::memory_order_acquire);
     }
 
     // Performance metrics
-    struct PerfStats
-    {
+    struct PerfStats {
         double lastUpdateMs{0.0};
         double avgUpdateMs{0.0};
         size_t lastEntitiesProcessed{0};
@@ -102,13 +95,13 @@ private:
 
     // Batch processing
     void processBatch(const std::vector<size_t>& indices,
-                      size_t start, size_t end,
-                      float deltaTime,
-                      float worldWidth, float worldHeight,
-                      std::vector<EntityHandle>& outDestroyQueue);
+        size_t start, size_t end,
+        float deltaTime,
+        float worldWidth, float worldHeight,
+        std::vector<EntityHandle>& outDestroyQueue);
 
     void embedProjectile(size_t projectileIndex, const Vector2D& impactNormal,
-                         EntityHandle embeddedTarget = INVALID_ENTITY_HANDLE);
+        EntityHandle embeddedTarget = INVALID_ENTITY_HANDLE);
 
     // State
     std::atomic<bool> m_initialized{false};

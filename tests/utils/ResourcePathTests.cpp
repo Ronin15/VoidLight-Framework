@@ -18,13 +18,11 @@ namespace fs = std::filesystem;
 namespace {
 
 struct ResourcePathFixture {
-    ResourcePathFixture()
-    {
+    ResourcePathFixture() {
         ResourcePath::init();
     }
 
-    ~ResourcePathFixture()
-    {
+    ~ResourcePathFixture() {
         if (!m_highPath.empty()) {
             ResourcePath::removeSearchPath(m_highPath);
         }
@@ -38,8 +36,7 @@ struct ResourcePathFixture {
         }
     }
 
-    fs::path makeTempRoot()
-    {
+    fs::path makeTempRoot() {
         if (m_tempRoot.empty()) {
             m_tempRoot = fs::temp_directory_path() / "hammer_resource_path_tests";
             std::error_code ec;
@@ -65,8 +62,7 @@ struct ResourcePathFixture {
 
 BOOST_FIXTURE_TEST_SUITE(ResourcePathTests, ResourcePathFixture)
 
-BOOST_AUTO_TEST_CASE(TestSearchPathPriorityControlsResolution)
-{
+BOOST_AUTO_TEST_CASE(TestSearchPathPriorityControlsResolution) {
     const fs::path tempRoot = makeTempRoot();
 
     ResourcePath::addSearchPath(m_lowPath, 100);
@@ -77,8 +73,7 @@ BOOST_AUTO_TEST_CASE(TestSearchPathPriorityControlsResolution)
     BOOST_CHECK(ResourcePath::exists("res/img/icon.png"));
 }
 
-BOOST_AUTO_TEST_CASE(TestRemoveSearchPathFallsBackToNextCandidate)
-{
+BOOST_AUTO_TEST_CASE(TestRemoveSearchPathFallsBackToNextCandidate) {
     const fs::path tempRoot = makeTempRoot();
 
     ResourcePath::addSearchPath(m_lowPath, 100);

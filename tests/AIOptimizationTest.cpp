@@ -88,8 +88,7 @@ void updateAI(float deltaTime, const Vector2D& referencePoint = Vector2D(500.0f,
 }
 
 // Test case for entity component caching
-BOOST_AUTO_TEST_CASE(TestEntityComponentCaching)
-{
+BOOST_AUTO_TEST_CASE(TestEntityComponentCaching) {
     // Create test NPCs (already registered via createDataDrivenNPC)
     std::vector<EntityHandle> handles;
     std::vector<std::shared_ptr<OptimizationTestNPC>> entities;
@@ -120,8 +119,7 @@ BOOST_AUTO_TEST_CASE(TestEntityComponentCaching)
 }
 
 // Test case for batch processing
-BOOST_AUTO_TEST_CASE(TestBatchProcessing)
-{
+BOOST_AUTO_TEST_CASE(TestBatchProcessing) {
     // Create test NPCs (already registered via createDataDrivenNPC)
     std::vector<EntityHandle> handles;
     std::vector<std::shared_ptr<OptimizationTestNPC>> entityPtrs;
@@ -175,8 +173,7 @@ BOOST_AUTO_TEST_CASE(TestBatchProcessing)
 }
 
 // Test case for early exit conditions
-BOOST_AUTO_TEST_CASE(TestEarlyExitConditions)
-{
+BOOST_AUTO_TEST_CASE(TestEarlyExitConditions) {
     // Create test NPC (already registered via createDataDrivenNPC)
     Vector2D pos(100.0f, 100.0f);
     auto entity = OptimizationTestNPC::create(pos);
@@ -199,8 +196,7 @@ BOOST_AUTO_TEST_CASE(TestEarlyExitConditions)
 }
 
 // Test case for message queue system
-BOOST_AUTO_TEST_CASE(TestMessageQueueSystem)
-{
+BOOST_AUTO_TEST_CASE(TestMessageQueueSystem) {
     // Create test NPC (already registered via createDataDrivenNPC)
     Vector2D pos(100.0f, 100.0f);
     auto entity = OptimizationTestNPC::create(pos);
@@ -224,8 +220,7 @@ BOOST_AUTO_TEST_CASE(TestMessageQueueSystem)
     EntityDataManager::Instance().unregisterEntity(handle.getId());
 }
 
-BOOST_AUTO_TEST_CASE(TestWorldBoundsClampingWithBehaviors)
-{
+BOOST_AUTO_TEST_CASE(TestWorldBoundsClampingWithBehaviors) {
     // Test that entities with active behaviors stay within world bounds
     // This verifies world bounds clamping works with the behavior system
     std::vector<EntityHandle> handles;
@@ -280,8 +275,7 @@ BOOST_AUTO_TEST_CASE(TestWorldBoundsClampingWithBehaviors)
 // Test case for SIMD distance calculations including tail loop edge cases
 // This verifies that ALL entities receive proper distance calculations,
 // especially for entity counts that are NOT multiples of 4 (SIMD width)
-BOOST_AUTO_TEST_CASE(TestDistanceCalculationCorrectness)
-{
+BOOST_AUTO_TEST_CASE(TestDistanceCalculationCorrectness) {
     auto& edm = EntityDataManager::Instance();
 
     // Test with entity counts that stress the SIMD tail loop:
@@ -325,7 +319,7 @@ BOOST_AUTO_TEST_CASE(TestDistanceCalculationCorrectness)
                 float distanceFromOrigin = std::sqrt(pos.getX() * pos.getX() + pos.getY() * pos.getY());
                 BOOST_CHECK_MESSAGE(distanceFromOrigin > 10.0f,
                     "Entity " << i << " of " << count << " teleported to origin! Position: ("
-                    << pos.getX() << ", " << pos.getY() << ")");
+                              << pos.getX() << ", " << pos.getY() << ")");
             }
         }
 

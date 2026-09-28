@@ -26,7 +26,7 @@ public:
      * @param size Buffer size in bytes
      */
     GPUTransferBuffer(SDL_GPUDevice* device, SDL_GPUTransferBufferUsage usage,
-                      uint32_t size);
+        uint32_t size);
 
     ~GPUTransferBuffer();
 

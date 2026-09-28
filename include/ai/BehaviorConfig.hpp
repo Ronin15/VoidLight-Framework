@@ -22,8 +22,7 @@ enum class BehaviorType : uint8_t {
     None = 0xFF  // Invalid/uninitialized
 };
 
-namespace VoidLight
-{
+namespace VoidLight {
 
 /**
  * Configuration for IdleBehavior
@@ -31,8 +30,7 @@ namespace VoidLight
  * Controls idle animation modes: stationary, subtle swaying, occasional turns,
  * or light fidgeting movements.
  */
-struct IdleBehaviorConfig
-{
+struct IdleBehaviorConfig {
     enum class IdleMode : uint8_t {
         STATIONARY = 0,      // Completely still
         SUBTLE_SWAY = 1,     // Small swaying motion
@@ -50,8 +48,7 @@ struct IdleBehaviorConfig
     /**
      * Create stationary configuration (completely still)
      */
-    static IdleBehaviorConfig createStationary()
-    {
+    static IdleBehaviorConfig createStationary() {
         IdleBehaviorConfig config;
         config.mode = IdleMode::STATIONARY;
         config.idleRadius = 0.0f;
@@ -63,8 +60,7 @@ struct IdleBehaviorConfig
     /**
      * Create subtle sway configuration
      */
-    static IdleBehaviorConfig createSubtleSway()
-    {
+    static IdleBehaviorConfig createSubtleSway() {
         IdleBehaviorConfig config;
         config.mode = IdleMode::SUBTLE_SWAY;
         config.idleRadius = 30.0f;
@@ -76,8 +72,7 @@ struct IdleBehaviorConfig
     /**
      * Create occasional turn configuration (rotation only)
      */
-    static IdleBehaviorConfig createOccasionalTurn()
-    {
+    static IdleBehaviorConfig createOccasionalTurn() {
         IdleBehaviorConfig config;
         config.mode = IdleMode::OCCASIONAL_TURN;
         config.idleRadius = 0.0f;
@@ -89,8 +84,7 @@ struct IdleBehaviorConfig
     /**
      * Create light fidget configuration
      */
-    static IdleBehaviorConfig createLightFidget()
-    {
+    static IdleBehaviorConfig createLightFidget() {
         IdleBehaviorConfig config;
         config.mode = IdleMode::LIGHT_FIDGET;
         config.idleRadius = 50.0f;
@@ -106,8 +100,7 @@ struct IdleBehaviorConfig
  * Controls how entities wander around the world with boundary avoidance
  * and crowd awareness.
  */
-struct WanderBehaviorConfig
-{
+struct WanderBehaviorConfig {
     // Movement parameters
     float speed = 35.0f;                          // Base wandering speed in px/s
 
@@ -142,8 +135,7 @@ struct WanderBehaviorConfig
     float updateInterval{5.0f};                   // Seconds between full movement updates
 
     // Factory methods for common presets
-    static WanderBehaviorConfig createSmallWander()
-    {
+    static WanderBehaviorConfig createSmallWander() {
         WanderBehaviorConfig config;
         config.changeDirectionIntervalMin = 1000.0f;  // Faster changes
         config.changeDirectionIntervalMax = 3000.0f;
@@ -152,8 +144,7 @@ struct WanderBehaviorConfig
         return config;
     }
 
-    static WanderBehaviorConfig createLargeWander()
-    {
+    static WanderBehaviorConfig createLargeWander() {
         WanderBehaviorConfig config;
         config.changeDirectionIntervalMin = 8000.0f;  // Slower changes
         config.changeDirectionIntervalMax = 15000.0f;
@@ -162,8 +153,7 @@ struct WanderBehaviorConfig
         return config;
     }
 
-    static WanderBehaviorConfig createEventWander(float areaRadius = 300.0f)
-    {
+    static WanderBehaviorConfig createEventWander(float areaRadius = 300.0f) {
         WanderBehaviorConfig config;
         config.changeDirectionIntervalMin = 2000.0f;
         config.changeDirectionIntervalMax = 5000.0f;
@@ -180,8 +170,7 @@ struct WanderBehaviorConfig
  * Controls how entities pursue and catch targets with pathfinding and
  * line-of-sight tracking.
  */
-struct ChaseBehaviorConfig
-{
+struct ChaseBehaviorConfig {
     // Movement parameters
     float chaseSpeed = 60.0f;                     // Speed when actively chasing target
 
@@ -210,8 +199,7 @@ struct ChaseBehaviorConfig
     float speedMultiplier{1.1f};                  // Urgent movement multiplier applied to moveSpeed
 
     // Factory method for event targeting
-    static ChaseBehaviorConfig createEventTarget()
-    {
+    static ChaseBehaviorConfig createEventTarget() {
         ChaseBehaviorConfig config;
         config.pathRefreshInterval = 5.0f;        // Fast updates for event
         config.catchRadius = 50.0f;               // Larger arrival radius
@@ -225,8 +213,7 @@ struct ChaseBehaviorConfig
  * Controls how entities patrol between waypoints with obstacle avoidance
  * and stuck recovery.
  */
-struct PatrolBehaviorConfig
-{
+struct PatrolBehaviorConfig {
     // Movement parameters
     float moveSpeed = 40.0f;                      // Speed when patrolling between waypoints
 
@@ -251,16 +238,14 @@ struct PatrolBehaviorConfig
     float updateInterval{3.0f};                   // Seconds between full movement updates
 
     // Factory methods for common presets
-    static PatrolBehaviorConfig createRandomPatrol()
-    {
+    static PatrolBehaviorConfig createRandomPatrol() {
         PatrolBehaviorConfig config;
         config.randomWaypointGenerationAttempts = 100;  // More attempts for variety
         config.waypointCooldown = 1.5f;                 // Longer pause at points
         return config;
     }
 
-    static PatrolBehaviorConfig createCirclePatrol(float radius = 200.0f)
-    {
+    static PatrolBehaviorConfig createCirclePatrol(float radius = 200.0f) {
         PatrolBehaviorConfig config;
         config.waypointReachedRadius = radius * 0.15f;  // Scale with circle size
         config.waypointCooldown = 0.5f;                 // Quick transitions
@@ -274,8 +259,7 @@ struct PatrolBehaviorConfig
  *
  * Controls how entities flee from threats using pathfinding to escape.
  */
-struct FleeBehaviorConfig
-{
+struct FleeBehaviorConfig {
     // Movement parameters
     float fleeSpeed = 70.0f;                      // Speed when fleeing from threat
 
@@ -318,8 +302,7 @@ struct FleeBehaviorConfig
  *
  * Controls how entities follow a leader with distance management.
  */
-struct FollowBehaviorConfig
-{
+struct FollowBehaviorConfig {
     // Movement parameters
     float followSpeed = 50.0f;                    // Speed when following leader
     float followDistance = 100.0f;                // Desired distance to maintain from leader
@@ -354,8 +337,7 @@ struct FollowBehaviorConfig
  *
  * Controls how entities guard a position and return to it after threats.
  */
-struct GuardBehaviorConfig
-{
+struct GuardBehaviorConfig {
     // Movement parameters
     float guardSpeed = 45.0f;                     // Base speed when guarding
 
@@ -405,8 +387,7 @@ struct GuardBehaviorConfig
  * Defines all parameters for attack behavior modes. Each mode has preset
  * configurations that can be created via static factory methods.
  */
-struct AttackBehaviorConfig
-{
+struct AttackBehaviorConfig {
     // Range parameters (in pixels)
     float attackRange = 80.0f;                    // Maximum attack range
     float optimalRangeMultiplier = 0.8f;          // Optimal range as % of attack range
@@ -452,8 +433,7 @@ struct AttackBehaviorConfig
      * Create configuration for MELEE_ATTACK mode
      * Close-range combat with high mobility.
      */
-    static AttackBehaviorConfig createMeleeConfig(float baseRange = 100.0f)
-    {
+    static AttackBehaviorConfig createMeleeConfig(float baseRange = 100.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange;
         config.optimalRangeMultiplier = 0.8f;
@@ -468,8 +448,7 @@ struct AttackBehaviorConfig
      * Create configuration for RANGED_ATTACK mode
      * Long-range combat with kiting behavior.
      */
-    static AttackBehaviorConfig createRangedConfig(float baseRange = 200.0f)
-    {
+    static AttackBehaviorConfig createRangedConfig(float baseRange = 200.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange;
         config.optimalRangeMultiplier = 0.7f;
@@ -486,8 +465,7 @@ struct AttackBehaviorConfig
      * Create configuration for CHARGE_ATTACK mode
      * High-speed charge with increased damage.
      */
-    static AttackBehaviorConfig createChargeConfig(float baseRange = 150.0f)
-    {
+    static AttackBehaviorConfig createChargeConfig(float baseRange = 150.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange * 1.5f;
         config.optimalRangeMultiplier = 1.0f;    // Optimal range is max range for charge
@@ -503,8 +481,7 @@ struct AttackBehaviorConfig
      * Create configuration for AMBUSH_ATTACK mode
      * Stealth-based attacks with high critical hit chance.
      */
-    static AttackBehaviorConfig createAmbushConfig(float baseRange = 80.0f)
-    {
+    static AttackBehaviorConfig createAmbushConfig(float baseRange = 80.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange;
         config.optimalRangeMultiplier = 0.6f;
@@ -520,8 +497,7 @@ struct AttackBehaviorConfig
      * Create configuration for COORDINATED_ATTACK mode
      * Team-based combat with flanking.
      */
-    static AttackBehaviorConfig createCoordinatedConfig(float baseRange = 80.0f)
-    {
+    static AttackBehaviorConfig createCoordinatedConfig(float baseRange = 80.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange;
         config.optimalRangeMultiplier = 0.8f;
@@ -538,8 +514,7 @@ struct AttackBehaviorConfig
      * Create configuration for HIT_AND_RUN mode
      * High mobility with frequent retreats.
      */
-    static AttackBehaviorConfig createHitAndRunConfig(float baseRange = 80.0f)
-    {
+    static AttackBehaviorConfig createHitAndRunConfig(float baseRange = 80.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange;
         config.optimalRangeMultiplier = 0.8f;
@@ -555,8 +530,7 @@ struct AttackBehaviorConfig
      * Create configuration for BERSERKER_ATTACK mode
      * Aggressive close-combat with combo attacks.
      */
-    static AttackBehaviorConfig createBerserkerConfig(float baseRange = 100.0f)
-    {
+    static AttackBehaviorConfig createBerserkerConfig(float baseRange = 100.0f) {
         AttackBehaviorConfig config;
         config.attackRange = baseRange;
         config.optimalRangeMultiplier = 0.8f;

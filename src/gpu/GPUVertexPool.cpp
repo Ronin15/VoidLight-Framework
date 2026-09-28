@@ -16,7 +16,7 @@ bool GPUVertexPool::init(SDL_GPUDevice* device, uint32_t vertexSize, size_t maxV
 
     if (vertexSize == 0 || maxVertices == 0) {
         GAMEENGINE_ERROR(std::format("GPUVertexPool::init: invalid parameters (vertexSize={}, maxVertices={})",
-                         vertexSize, maxVertices));
+            vertexSize, maxVertices));
         return false;
     }
 
@@ -58,16 +58,16 @@ bool GPUVertexPool::init(SDL_GPUDevice* device, uint32_t vertexSize, size_t maxV
     }
 
     GAMEENGINE_INFO(std::format("GPUVertexPool initialized: {} vertices x {} bytes = {} KB",
-                    maxVertices, vertexSize, bufferSize / 1024));
+        maxVertices, vertexSize, bufferSize / 1024));
     return true;
 }
 
 void GPUVertexPool::shutdown() {
     std::generate(m_gpuBuffers.begin(), m_gpuBuffers.end(),
-                  []() { return GPUBuffer(); });
+        []() { return GPUBuffer(); });
 
     std::generate(m_transferBuffers.begin(), m_transferBuffers.end(),
-                  []() { return GPUTransferBuffer(); });
+        []() { return GPUTransferBuffer(); });
 
     m_device = nullptr;
     m_frameIndex = 0;
@@ -84,8 +84,7 @@ GPUVertexPool::GPUVertexPool(GPUVertexPool&& other) noexcept
     , m_maxVertices(other.m_maxVertices)
     , m_currentVertexCount(other.m_currentVertexCount)
     , m_pendingVertexCount(other.m_pendingVertexCount)
-    , m_mappedPtr(other.m_mappedPtr)
-{
+    , m_mappedPtr(other.m_mappedPtr) {
     // Clear source state to prevent double-cleanup
     other.m_device = nullptr;
     other.m_frameIndex = 0;
@@ -152,7 +151,7 @@ void GPUVertexPool::endFrame(size_t vertexCount) {
 
     if (vertexCount > m_maxVertices) {
         GAMEENGINE_WARN(std::format("GPUVertexPool::endFrame: vertex count {} exceeds max {}, clamping",
-                        vertexCount, m_maxVertices));
+            vertexCount, m_maxVertices));
         vertexCount = m_maxVertices;
     }
 

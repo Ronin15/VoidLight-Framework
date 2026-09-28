@@ -335,7 +335,7 @@ BOOST_AUTO_TEST_CASE(TestWeatherProbabilitiesSumToOne) {
         const auto& probs = config.weatherProbs;
 
         float sum = probs.clear + probs.cloudy + probs.rainy +
-                    probs.stormy + probs.foggy + probs.snowy + probs.windy;
+            probs.stormy + probs.foggy + probs.snowy + probs.windy;
 
         BOOST_CHECK(approxEqual(sum, 1.0f, 0.01f));
     }

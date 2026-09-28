@@ -35,8 +35,7 @@
 
 class Player;
 
-class HudController : public ControllerBase, public IUpdatable
-{
+class HudController : public ControllerBase, public IUpdatable {
 public:
     static constexpr float TARGET_DISPLAY_DURATION{3.0f};
 

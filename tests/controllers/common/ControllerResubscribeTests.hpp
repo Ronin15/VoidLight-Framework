@@ -29,8 +29,7 @@ inline void checkNoDuplicateAnnounceOnResume(
     ControllerBase& controller,
     EventTypeId announceEventType,
     const std::function<bool(const EventData&)>& matchesAnnounceEvent,
-    int resumeCycles = 3)
-{
+    int resumeCycles = 3) {
     int dispatchCount = 0;
     EventManager::Instance().registerHandler(
         announceEventType,

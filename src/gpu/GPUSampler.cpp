@@ -8,9 +8,8 @@
 namespace VoidLight {
 
 GPUSampler::GPUSampler(SDL_GPUDevice* device, SDL_GPUFilter minMagFilter,
-                       SDL_GPUSamplerAddressMode addressMode)
-    : m_device(device)
-{
+    SDL_GPUSamplerAddressMode addressMode)
+    : m_device(device) {
     if (!device) {
         GAMEENGINE_ERROR("GPUSampler: null device");
         return;
@@ -39,8 +38,7 @@ GPUSampler::GPUSampler(SDL_GPUDevice* device, SDL_GPUFilter minMagFilter,
 }
 
 GPUSampler::GPUSampler(SDL_GPUDevice* device, const SDL_GPUSamplerCreateInfo& createInfo)
-    : m_device(device)
-{
+    : m_device(device) {
     if (!device) {
         GAMEENGINE_ERROR("GPUSampler: null device");
         return;
@@ -59,8 +57,7 @@ GPUSampler::~GPUSampler() {
 
 GPUSampler::GPUSampler(GPUSampler&& other) noexcept
     : m_sampler(other.m_sampler)
-    , m_device(other.m_device)
-{
+    , m_device(other.m_device) {
     other.m_sampler = nullptr;
     other.m_device = nullptr;
 }
@@ -88,12 +85,12 @@ void GPUSampler::release() {
 
 GPUSampler GPUSampler::createNearest(SDL_GPUDevice* device) {
     return GPUSampler(device, SDL_GPU_FILTER_NEAREST,
-                      SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+        SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
 }
 
 GPUSampler GPUSampler::createLinear(SDL_GPUDevice* device) {
     return GPUSampler(device, SDL_GPU_FILTER_LINEAR,
-                      SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+        SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
 }
 
 GPUSampler GPUSampler::createLinearMipmapped(SDL_GPUDevice* device) {

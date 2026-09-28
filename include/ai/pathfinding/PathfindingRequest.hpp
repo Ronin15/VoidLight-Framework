@@ -15,13 +15,25 @@
 
 namespace VoidLight {
 
-enum class RequestPriority : uint8_t { LOW, NORMAL, HIGH, CRITICAL };
-enum class RequestStatus : uint8_t { PENDING, PROCESSING, COMPLETED, FAILED, CANCELLED };
+enum class RequestPriority : uint8_t {
+    LOW,
+    NORMAL,
+    HIGH,
+    CRITICAL
+};
+enum class RequestStatus : uint8_t {
+    PENDING,
+    PROCESSING,
+    COMPLETED,
+    FAILED,
+    CANCELLED
+};
 
 struct PathfindingRequest {
     uint32_t requestId{0};
     EntityID entityId{0};
-    Vector2D start; Vector2D goal;
+    Vector2D start;
+    Vector2D goal;
     RequestPriority priority{RequestPriority::NORMAL};
     RequestStatus status{RequestStatus::PENDING};
     std::vector<Vector2D> path;
@@ -32,4 +44,3 @@ struct PathfindingRequest {
 } // namespace VoidLight
 
 #endif // PATHFINDING_REQUEST_HPP
-

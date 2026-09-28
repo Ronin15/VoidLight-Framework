@@ -150,8 +150,7 @@ BOOST_AUTO_TEST_CASE(TestAllSystemTypes) {
         {VoidLight::SystemType::AI, "AI"},
         {VoidLight::SystemType::Particle, "Particle"},
         {VoidLight::SystemType::Pathfinding, "Pathfinding"},
-        {VoidLight::SystemType::Event, "Event"}
-    };
+        {VoidLight::SystemType::Event, "Event"}};
 
     for (const auto& [type, name] : systems) {
         size_t optimalWorkers = budgetMgr.getOptimalWorkers(type, workload);
@@ -258,7 +257,7 @@ BOOST_AUTO_TEST_CASE(TestBatchTuningStability) {
 
         // Parallel speedup (not perfect - diminishing returns)
         double parallelism = std::min(static_cast<double>(batches),
-                                      static_cast<double>(budget.totalWorkers));
+            static_cast<double>(budget.totalWorkers));
         double speedup = 1.0 + (parallelism - 1.0) * 0.85;  // 85% parallel efficiency
 
         // Work time

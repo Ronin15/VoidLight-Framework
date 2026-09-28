@@ -24,8 +24,7 @@ struct EnvironmentSnapshot {
 [[nodiscard]] EnvironmentSnapshot combineEnvironmentScales(
     TimePeriod period, WeatherType weather, float visibility);
 
-[[nodiscard]] inline float applyCautionScale(float value, float cautionScale)
-{
+[[nodiscard]] inline float applyCautionScale(float value, float cautionScale) {
     return value * cautionScale;
 }
 

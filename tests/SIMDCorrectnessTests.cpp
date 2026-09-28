@@ -184,9 +184,9 @@ BOOST_AUTO_TEST_CASE(TestBatchDistanceCalculation) {
     Float4 playerPosX = broadcast(playerPos.getX());
     Float4 playerPosY = broadcast(playerPos.getY());
     Float4 entityPosX = set(entityPositions[0].getX(), entityPositions[1].getX(),
-                           entityPositions[2].getX(), entityPositions[3].getX());
+        entityPositions[2].getX(), entityPositions[3].getX());
     Float4 entityPosY = set(entityPositions[0].getY(), entityPositions[1].getY(),
-                           entityPositions[2].getY(), entityPositions[3].getY());
+        entityPositions[2].getY(), entityPositions[3].getY());
 
     Float4 diffX = sub(entityPosX, playerPosX);
     Float4 diffY = sub(entityPosY, playerPosY);
@@ -701,9 +701,9 @@ BOOST_AUTO_TEST_CASE(TestByteAndOperation) {
     // Byte AND - used for particle flag filtering
     // Create data where AND result has known sign bits for movemask verification
     alignas(16) uint8_t dataA[16] = {0xFF, 0x80, 0x80, 0x00, 0xFF, 0x80, 0x80, 0x00,
-                                     0xFF, 0x80, 0x80, 0x00, 0xFF, 0x80, 0x80, 0x00};
+        0xFF, 0x80, 0x80, 0x00, 0xFF, 0x80, 0x80, 0x00};
     alignas(16) uint8_t dataB[16] = {0x80, 0x80, 0x00, 0x80, 0x80, 0x80, 0x00, 0x80,
-                                     0x80, 0x80, 0x00, 0x80, 0x80, 0x80, 0x00, 0x80};
+        0x80, 0x80, 0x00, 0x80, 0x80, 0x80, 0x00, 0x80};
 
     Byte16 a = load_byte16(dataA, 16);
     Byte16 b = load_byte16(dataB, 16);
@@ -722,7 +722,7 @@ BOOST_AUTO_TEST_CASE(TestByteAndOperation) {
 BOOST_AUTO_TEST_CASE(TestByteCompareGreater) {
     // cmpgt_byte - used for particle lifetime checks
     alignas(16) uint8_t dataA[16] = {10, 20, 30, 40, 50, 60, 70, 80,
-                                     90, 100, 110, 120, 130, 140, 150, 160};
+        90, 100, 110, 120, 130, 140, 150, 160};
     Byte16 a = load_byte16(dataA, 16);
     Byte16 threshold = broadcast_byte(50);
     Byte16 result = cmpgt_byte(a, threshold);
@@ -737,7 +737,7 @@ BOOST_AUTO_TEST_CASE(TestMovemaskByte) {
     // movemask_byte - extract sign bits from 16 bytes
     // Used in ParticleManager for batch culling
     alignas(16) uint8_t data[16] = {0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00,
-                                    0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
+        0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00};
     Byte16 a = load_byte16(data, 16);
     int mask = movemask_byte(a);
 

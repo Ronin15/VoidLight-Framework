@@ -29,8 +29,8 @@ public:
      * @param numLevels Number of mip levels (1 for no mipmaps)
      */
     GPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height,
-               SDL_GPUTextureFormat format, SDL_GPUTextureUsageFlags usage,
-               uint32_t numLevels = 1);
+        SDL_GPUTextureFormat format, SDL_GPUTextureUsageFlags usage,
+        uint32_t numLevels = 1);
 
     ~GPUTexture();
 

@@ -8,14 +8,13 @@
 namespace VoidLight {
 
 GPUTexture::GPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height,
-                       SDL_GPUTextureFormat format, SDL_GPUTextureUsageFlags usage,
-                       uint32_t numLevels)
+    SDL_GPUTextureFormat format, SDL_GPUTextureUsageFlags usage,
+    uint32_t numLevels)
     : m_device(device)
     , m_width(width)
     , m_height(height)
     , m_format(format)
-    , m_usage(usage)
-{
+    , m_usage(usage) {
     if (!device) {
         GAMEENGINE_ERROR("GPUTexture: null device");
         return;
@@ -40,7 +39,7 @@ GPUTexture::GPUTexture(SDL_GPUDevice* device, uint32_t width, uint32_t height,
 
     if (!m_texture) {
         GAMEENGINE_ERROR(std::format("Failed to create GPU texture {}x{}: {}",
-                         width, height, SDL_GetError()));
+            width, height, SDL_GetError()));
     }
 }
 
@@ -54,8 +53,7 @@ GPUTexture::GPUTexture(GPUTexture&& other) noexcept
     , m_width(other.m_width)
     , m_height(other.m_height)
     , m_format(other.m_format)
-    , m_usage(other.m_usage)
-{
+    , m_usage(other.m_usage) {
     other.m_texture = nullptr;
     other.m_device = nullptr;
     other.m_width = 0;
@@ -94,8 +92,7 @@ void GPUTexture::release() {
 SDL_GPUColorTargetInfo GPUTexture::asColorTarget(
     SDL_GPULoadOp loadOp,
     SDL_FColor clearColor,
-    SDL_GPUStoreOp storeOp) const
-{
+    SDL_GPUStoreOp storeOp) const {
     SDL_GPUColorTargetInfo info{};
     info.texture = m_texture;
     info.mip_level = 0;

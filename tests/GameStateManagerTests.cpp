@@ -14,9 +14,7 @@
 class MockGameState : public GameState {
 public:
     explicit MockGameState(GameStateId id, bool enterResult = true)
-        : m_id(id), m_enterCalled(false), m_exitCalled(false),
-          m_updateCalled(false), m_handleInputCalled(false),
-          m_pauseCalled(false), m_resumeCalled(false), m_enterResult(enterResult) {}
+        : m_id(id), m_enterCalled(false), m_exitCalled(false), m_updateCalled(false), m_handleInputCalled(false), m_pauseCalled(false), m_resumeCalled(false), m_enterResult(enterResult) {}
 
     bool enter() override {
         m_enterCalled = true;
@@ -33,7 +31,7 @@ public:
     }
 
     void recordGPUSceneVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                                float interpolationAlpha) override {
+        float interpolationAlpha) override {
         m_sceneRecordCalled = true;
         m_lastSceneAlpha = interpolationAlpha;
     }
@@ -43,14 +41,14 @@ public:
     }
 
     void renderGPUScene([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                        [[maybe_unused]] SDL_GPURenderPass* scenePass,
-                        float interpolationAlpha) override {
+        [[maybe_unused]] SDL_GPURenderPass* scenePass,
+        float interpolationAlpha) override {
         m_sceneRenderCalled = true;
         m_lastSceneRenderAlpha = interpolationAlpha;
     }
 
     void renderGPUUI([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                     [[maybe_unused]] SDL_GPURenderPass* swapchainPass) override {
+        [[maybe_unused]] SDL_GPURenderPass* swapchainPass) override {
         m_uiRenderCalled = true;
     }
 
@@ -94,9 +92,9 @@ public:
 
     void resetFlags() {
         m_enterCalled = m_exitCalled = m_updateCalled =
-        m_sceneRecordCalled = m_uiRecordCalled =
-        m_sceneRenderCalled = m_uiRenderCalled =
-        m_handleInputCalled = m_pauseCalled = m_resumeCalled = false;
+            m_sceneRecordCalled = m_uiRecordCalled =
+                m_sceneRenderCalled = m_uiRenderCalled =
+                    m_handleInputCalled = m_pauseCalled = m_resumeCalled = false;
         m_lastSceneAlpha = 0.0f;
         m_lastSceneRenderAlpha = 0.0f;
     }
@@ -104,7 +102,7 @@ public:
 private:
     GameStateId m_id;
     bool m_enterCalled, m_exitCalled, m_updateCalled,
-         m_handleInputCalled, m_pauseCalled, m_resumeCalled;
+        m_handleInputCalled, m_pauseCalled, m_resumeCalled;
     bool m_enterResult;
     bool m_hasGPUScene{false};
     bool m_sceneRecordCalled{false};

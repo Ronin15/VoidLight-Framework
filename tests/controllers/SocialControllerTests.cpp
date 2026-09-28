@@ -90,7 +90,7 @@ protected:
     }
 
     EntityHandle spawnNPC(const std::string& charClass,
-                          const Vector2D& position = Vector2D(100.0f, 100.0f)) {
+        const Vector2D& position = Vector2D(100.0f, 100.0f)) {
         EntityHandle npc = EntityDataManager::Instance().createNPCWithRaceClass(
             position, "Human", charClass);
         BOOST_REQUIRE(npc.isValid());
@@ -98,8 +98,8 @@ protected:
     }
 
     static int resourceDeltaFor(const std::vector<ResourceEventRecord>& events,
-                                EntityHandle owner,
-                                VoidLight::ResourceHandle handle) {
+        EntityHandle owner,
+        VoidLight::ResourceHandle handle) {
         int total = 0;
         for (const auto& event : events) {
             if (event.owner == owner && event.handle == handle) {
@@ -351,7 +351,7 @@ BOOST_AUTO_TEST_CASE(TestRecordInteractionAppliesMemoryAndEmotionState) {
     const auto initialEmotions = edm.getMemoryData(idx).emotions;
 
     controller.recordInteraction(npcHandle, InteractionType::Theft,
-                                 SocialController::THEFT_RELATIONSHIP_LOSS);
+        SocialController::THEFT_RELATIONSHIP_LOSS);
 
     const auto& memoryData = edm.getMemoryData(idx);
     BOOST_CHECK_EQUAL(memoryData.memoryCount, initialMemory + 1);
@@ -410,7 +410,7 @@ BOOST_AUTO_TEST_CASE(TestTheftWorsensFactionStance) {
     BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
     BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
-                      AIManager::PLAYER_STANDING_THEFT_DELTA);
+        AIManager::PLAYER_STANDING_THEFT_DELTA);
     BOOST_CHECK_GT(stanceEvents, 0);
 }
 
@@ -430,7 +430,7 @@ BOOST_AUTO_TEST_CASE(TestSameFactionTheftDropsStandingWithoutStanceChange) {
     BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
     BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0),
-                      AIManager::PLAYER_STANDING_THEFT_DELTA);
+        AIManager::PLAYER_STANDING_THEFT_DELTA);
 }
 
 BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
@@ -450,7 +450,7 @@ BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
     BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
     BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
-                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+        AIManager::PLAYER_STANDING_GIFT_DELTA);
 }
 
 BOOST_AUTO_TEST_CASE(TestSameFactionGiftRaisesStandingWithoutStanceChange) {
@@ -467,7 +467,7 @@ BOOST_AUTO_TEST_CASE(TestSameFactionGiftRaisesStandingWithoutStanceChange) {
     BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
     BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0),
-                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+        AIManager::PLAYER_STANDING_GIFT_DELTA);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -652,8 +652,8 @@ BOOST_AUTO_TEST_CASE(TestExecuteBuyUsesGoldCoinsCurrency) {
                 return;
             }
             resourceEvents.push_back({event->getOwnerHandle(),
-                                      event->getResourceHandle(),
-                                      event->getQuantityChange()});
+                event->getResourceHandle(),
+                event->getQuantityChange()});
         });
 
     BOOST_REQUIRE(controller.openTrade(merchant));
@@ -679,9 +679,9 @@ BOOST_AUTO_TEST_CASE(TestExecuteBuyUsesGoldCoinsCurrency) {
     BOOST_CHECK_EQUAL(player->getGold(), initialPlayerGold - expectedCost);
     BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread + 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, breadHandle),
-                      initialMerchantBread - 2);
+        initialMerchantBread - 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, goldHandle),
-                      initialMerchantGold + expectedCost);
+        initialMerchantGold + expectedCost);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), 2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), goldHandle), -expectedCost);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, breadHandle), -2);
@@ -711,8 +711,8 @@ BOOST_AUTO_TEST_CASE(TestExecuteSellUsesGoldCoinsCurrency) {
                 return;
             }
             resourceEvents.push_back({event->getOwnerHandle(),
-                                      event->getResourceHandle(),
-                                      event->getQuantityChange()});
+                event->getResourceHandle(),
+                event->getQuantityChange()});
         });
 
     BOOST_REQUIRE(controller.openTrade(merchant));
@@ -738,9 +738,9 @@ BOOST_AUTO_TEST_CASE(TestExecuteSellUsesGoldCoinsCurrency) {
     BOOST_CHECK_EQUAL(player->getGold(), initialPlayerGold + expectedPayout);
     BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread - 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, breadHandle),
-                      initialMerchantBread + 2);
+        initialMerchantBread + 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, goldHandle),
-                      initialMerchantGold - expectedPayout);
+        initialMerchantGold - expectedPayout);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), -2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), goldHandle), expectedPayout);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, breadHandle), 2);
@@ -768,8 +768,8 @@ BOOST_AUTO_TEST_CASE(TestGiftTransfersItemToNPCInventoryAndDispatchesResourceCha
                 return;
             }
             resourceEvents.push_back({event->getOwnerHandle(),
-                                      event->getResourceHandle(),
-                                      event->getQuantityChange()});
+                event->getResourceHandle(),
+                event->getQuantityChange()});
         });
 
     BOOST_CHECK(!edm.isNPCMerchant(villager));
@@ -778,7 +778,7 @@ BOOST_AUTO_TEST_CASE(TestGiftTransfersItemToNPCInventoryAndDispatchesResourceCha
 
     BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread - 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(villagerInvIdx, breadHandle),
-                      initialVillagerBread + 2);
+        initialVillagerBread + 2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), -2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, villager, breadHandle), 2);
 }

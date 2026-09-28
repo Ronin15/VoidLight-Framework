@@ -90,25 +90,17 @@ struct BehaviorContext {
     EnvironmentSnapshot envSnapshot{};
 
     BehaviorContext(TransformData& t, EntityHotData& h, EntityHandle::IDType id, size_t idx, float dt,
-                    EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
-                    BehaviorData& bData, PathData* pData, NPCMemoryData& mData,
-                    const CharacterData& cData,
-                    float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
-                    float gTime,
-                    const std::array<FactionStance, kFactionStanceRowSize>& stanceRow,
-                    uint8_t pFaction,
-                    bool hostileInRow,
-                    SparseSidecar<KnockbackData>& kbSidecar,
-                    EnvironmentSnapshot env = {})
-        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt),
-          playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid),
-          sharedState(bData), pathData(pData), memoryData(mData), characterData(cData),
-          worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY),
-          worldBoundsValid(wBoundsValid), gameTime(gTime),
-          factionStanceRow(stanceRow),
-          playerFaction(pFaction), hasHostileInRow(hostileInRow),
-          knockback(kbSidecar),
-          envSnapshot(env) {
+        EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
+        BehaviorData& bData, PathData* pData, NPCMemoryData& mData,
+        const CharacterData& cData,
+        float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
+        float gTime,
+        const std::array<FactionStance, kFactionStanceRowSize>& stanceRow,
+        uint8_t pFaction,
+        bool hostileInRow,
+        SparseSidecar<KnockbackData>& kbSidecar,
+        EnvironmentSnapshot env = {})
+        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), playerFaction(pFaction), hasHostileInRow(hostileInRow), knockback(kbSidecar), envSnapshot(env) {
     }
 };
 
@@ -124,19 +116,19 @@ struct BehaviorContext {
  */
 namespace BehaviorMessage {
     // Attack messages
-    constexpr uint8_t ATTACK_TARGET = 1;     // Force attack on explicit target
-    constexpr uint8_t RETREAT = 2;           // Allies retreat when nearby attacker retreats
-    constexpr uint8_t RANGED_ATTACK_FAILED = 3;  // Re-evaluate positioning/equipment after ranged failure
+constexpr uint8_t ATTACK_TARGET = 1;     // Force attack on explicit target
+constexpr uint8_t RETREAT = 2;           // Allies retreat when nearby attacker retreats
+constexpr uint8_t RANGED_ATTACK_FAILED = 3;  // Re-evaluate positioning/equipment after ranged failure
 
     // Flee messages
-    constexpr uint8_t PANIC = 10;            // Witness lethal combat — force flee
-    constexpr uint8_t CALM_DOWN = 11;        // Guard all-clear — reduce fear
+constexpr uint8_t PANIC = 10;            // Witness lethal combat — force flee
+constexpr uint8_t CALM_DOWN = 11;        // Guard all-clear — reduce fear
 
     // Distress messages
-    constexpr uint8_t DISTRESS = 20;         // Victim/fleeing entity calls nearby guards — force SUSPICIOUS
+constexpr uint8_t DISTRESS = 20;         // Victim/fleeing entity calls nearby guards — force SUSPICIOUS
 
     // Guard messages
-    constexpr uint8_t RAISE_ALERT = 22;      // Guard/civilian under attack — force HOSTILE
+constexpr uint8_t RAISE_ALERT = 22;      // Guard/civilian under attack — force HOSTILE
 }
 
 // ============================================================================
@@ -146,9 +138,9 @@ namespace BehaviorMessage {
 namespace Knockback {
     // Number of fixed-timestep frames a knockback impulse is applied.
     // This is a frame count, not seconds — see EntityHotData::knockbackFrames.
-    inline constexpr int FRAMES = 8;
+inline constexpr int FRAMES = 8;
     // Per-frame decay factor applied to the knockback impulse components.
-    inline constexpr float DECAY = 0.7f;
+inline constexpr float DECAY = 0.7f;
 }
 
 namespace Behaviors {

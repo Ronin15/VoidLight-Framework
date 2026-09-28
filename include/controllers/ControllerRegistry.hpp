@@ -48,8 +48,7 @@
 #include <unordered_map>
 #include <vector>
 
-class ControllerRegistry
-{
+class ControllerRegistry {
 public:
     ControllerRegistry() = default;
     ~ControllerRegistry() = default;
@@ -72,9 +71,8 @@ public:
      * If a controller of type T already exists, returns the existing one.
      * Automatically detects IUpdatable interface and adds to update list.
      */
-    template<typename T, typename... Args>
-    T& add(Args&&... args)
-    {
+    template <typename T, typename... Args>
+    T& add(Args&&... args) {
         static_assert(std::is_base_of_v<ControllerBase, T>,
             "T must derive from ControllerBase");
 
@@ -96,10 +94,8 @@ public:
 
         // Cache IUpdatable interface if present (compile-time detection)
         if constexpr (std::is_base_of_v<IUpdatable, T>) {
-            m_updatables.push_back({
-                static_cast<IUpdatable*>(&ref),
-                static_cast<ControllerBase*>(&ref)
-            });
+            m_updatables.push_back({static_cast<IUpdatable*>(&ref),
+                static_cast<ControllerBase*>(&ref)});
         }
 
         return ref;
@@ -110,9 +106,8 @@ public:
      * @tparam T Controller type to retrieve
      * @return Pointer to controller, or nullptr if not found
      */
-    template<typename T>
-    T* get()
-    {
+    template <typename T>
+    T* get() {
         static_assert(std::is_base_of_v<ControllerBase, T>,
             "T must derive from ControllerBase");
 
@@ -126,18 +121,16 @@ public:
     /**
      * @brief Get a controller of type T (const version)
      */
-    template<typename T>
-    const T* get() const
-    {
+    template <typename T>
+    const T* get() const {
         return const_cast<ControllerRegistry*>(this)->get<T>();
     }
 
     /**
      * @brief Check if a controller of type T is registered
      */
-    template<typename T>
-    [[nodiscard]] bool has() const
-    {
+    template <typename T>
+    [[nodiscard]] bool has() const {
         return m_typeToIndex.find(std::type_index(typeid(T))) != m_typeToIndex.end();
     }
 
@@ -147,8 +140,7 @@ public:
      * @brief Subscribe all registered controllers to their events
      * Called in GameState::enter()
      */
-    void subscribeAll()
-    {
+    void subscribeAll() {
         for (auto& controller : m_controllers) {
             controller->subscribe();
         }
@@ -158,8 +150,7 @@ public:
      * @brief Unsubscribe all controllers from their events
      * Called in GameState::exit()
      */
-    void unsubscribeAll()
-    {
+    void unsubscribeAll() {
         for (auto& controller : m_controllers) {
             controller->unsubscribe();
         }
@@ -169,8 +160,7 @@ public:
      * @brief Suspend all controllers (called when pause state pushed)
      * Called in GameState::pause()
      */
-    void suspendAll()
-    {
+    void suspendAll() {
         for (auto& controller : m_controllers) {
             controller->suspend();
         }
@@ -180,8 +170,7 @@ public:
      * @brief Resume all controllers (called when pause state popped)
      * Called in GameState::resume()
      */
-    void resumeAll()
-    {
+    void resumeAll() {
         for (auto& controller : m_controllers) {
             controller->resume();
         }
@@ -197,8 +186,7 @@ public:
      *
      * Called in GameState::update()
      */
-    void updateAll(float deltaTime)
-    {
+    void updateAll(float deltaTime) {
         for (auto& [updatable, base] : m_updatables) {
             if (!base->isSuspended()) {
                 updatable->update(deltaTime);
@@ -219,8 +207,7 @@ public:
     /**
      * @brief Clear all controllers (unsubscribes first)
      */
-    void clear()
-    {
+    void clear() {
         unsubscribeAll();
         m_controllers.clear();
         m_updatables.clear();

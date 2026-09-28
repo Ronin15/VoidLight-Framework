@@ -123,8 +123,7 @@ SDL_Window* createWindow() {
     SDL_Window* window = SDL_CreateWindow(
         "SDL3 Controller Crash Demo",
         640, 480,
-        0
-    );
+        0);
 
     if (!window) {
         printError("SDL_CreateWindow");

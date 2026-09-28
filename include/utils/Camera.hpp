@@ -74,7 +74,7 @@ public:
                 return false;
             }
             if (!std::all_of(zoomLevels.begin(), zoomLevels.end(),
-                             [](float zoom) { return zoom > 0.0f; })) {
+                    [](float zoom) { return zoom > 0.0f; })) {
                 return false;
             }
             if (defaultZoomLevel < 0 || defaultZoomLevel >= static_cast<int>(zoomLevels.size())) {
@@ -357,9 +357,9 @@ public:
      * @param worldX Output world X coordinate
      * @param worldY Output world Y coordinate
      */
-     void screenToWorld(float screenX, float screenY, float& worldX, float& worldY) const;
-     Vector2D screenToWorld(const Vector2D& screenCoords) const;
-     Vector2D worldToScreen(const Vector2D& worldCoords) const;
+    void screenToWorld(float screenX, float screenY, float& worldX, float& worldY) const;
+    Vector2D screenToWorld(const Vector2D& screenCoords) const;
+    Vector2D worldToScreen(const Vector2D& worldCoords) const;
 
     /**
      * @brief Immediately snaps camera to target position (no interpolation)

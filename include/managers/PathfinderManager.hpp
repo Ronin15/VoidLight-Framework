@@ -68,8 +68,8 @@
 
 // Forward declarations
 namespace VoidLight {
-    class PathfindingGrid;
-    enum class PathfindingResult : uint8_t;
+class PathfindingGrid;
+enum class PathfindingResult : uint8_t;
 }
 
 // Do not include internal AI headers here; keep public API stable and minimal.
@@ -87,9 +87,9 @@ public:
     // Public request priority (stable API)
     enum class Priority : int {
         Critical = 0,
-        High     = 1,
-        Normal   = 2,
-        Low      = 3
+        High = 1,
+        Normal = 2,
+        Low = 3
     };
 
     /**
@@ -183,8 +183,8 @@ public:
      * @return Request ID for tracking (0 if failed)
      */
     uint64_t requestPathToEDM(size_t edmIndex, const Vector2D& start,
-                              const Vector2D& goal,
-                              Priority priority = Priority::Normal);
+        const Vector2D& goal,
+        Priority priority = Priority::Normal);
 
     /**
      * @brief Commit worker-computed EDM path results on main thread.
@@ -267,15 +267,15 @@ public:
     Vector2D adjustSpawnToNavigable(const Vector2D& desired, float halfW = 16.0f, float halfH = 16.0f, float interiorMargin = 150.0f) const;
     // Area-constrained spawn adjustment
     Vector2D adjustSpawnToNavigableInRect(const Vector2D& desired,
-                                          float halfW, float halfH,
-                                          float interiorMargin,
-                                          float minX, float minY,
-                                          float maxX, float maxY) const;
+        float halfW, float halfH,
+        float interiorMargin,
+        float minX, float minY,
+        float maxX, float maxY) const;
     Vector2D adjustSpawnToNavigableInCircle(const Vector2D& desired,
-                                            float halfW, float halfH,
-                                            float interiorMargin,
-                                            const Vector2D& center,
-                                            float radius) const;
+        float halfW, float halfH,
+        float interiorMargin,
+        const Vector2D& center,
+        float radius) const;
 
     /**
      * @brief Follow a path step for entity movement
@@ -288,8 +288,8 @@ public:
      * @return true if successfully following path, false if path complete
      */
     bool followPathStep(const EntityPtr& entity, const Vector2D& currentPos,
-                       std::vector<Vector2D>& path, size_t& pathIndex,
-                       float speed, float nodeRadius = 64.0f) const;
+        std::vector<Vector2D>& path, size_t& pathIndex,
+        float speed, float nodeRadius = 64.0f) const;
 
     /**
      * @brief Get dynamic hierarchical threshold for current world
@@ -348,8 +348,7 @@ private:
         const Vector2D& start,
         const Vector2D& goal,
         Priority priority = Priority::Normal,
-        PathCallback callback = nullptr
-    );
+        PathCallback callback = nullptr);
 
     // Singleton implementation
     PathfinderManager() = default;
@@ -378,9 +377,9 @@ private:
     // Helpers - grid-passing overloads to avoid repeated getGridSnapshot() calls in hot path
     void normalizeEndpoints(Vector2D& start, Vector2D& goal) const;
     void normalizeEndpoints(Vector2D& start, Vector2D& goal,
-                           const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
+        const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
     Vector2D clampToWorldBounds(const Vector2D& position, float margin,
-                                const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
+        const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
 
     // INTERNAL ONLY: Synchronous pathfinding computation (used by async system)
     // DO NOT use directly - use requestPathToEDM() instead
@@ -388,8 +387,7 @@ private:
         const Vector2D& start,
         const Vector2D& goal,
         std::vector<Vector2D>& outPath,
-        bool skipNormalization = false
-    );
+        bool skipNormalization = false);
 
     // Grid-passing overload for hot path optimization
     VoidLight::PathfindingResult findPathImmediate(
@@ -397,8 +395,7 @@ private:
         const Vector2D& goal,
         std::vector<Vector2D>& outPath,
         const std::shared_ptr<VoidLight::PathfindingGrid>& grid,
-        bool skipNormalization = false
-    );
+        bool skipNormalization = false);
 
     // Request management - simplified
     std::atomic<uint64_t> m_nextRequestId{1};
@@ -460,7 +457,6 @@ private:
     // At 32K entries: ~3.5MB memory (acceptable overhead for large-scale scenarios)
     // Combined with coarser quantization (512px+), provides 70-85% cache hit rates
     static constexpr size_t MAX_CACHE_ENTRIES = 32768;
-
 
 
     // Collision version tracking for cache invalidation

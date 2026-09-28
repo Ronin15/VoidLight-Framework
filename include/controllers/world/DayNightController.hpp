@@ -28,8 +28,7 @@
 #include "events/TimeEvent.hpp"
 #include <string_view>
 
-class DayNightController : public ControllerBase
-{
+class DayNightController : public ControllerBase {
 public:
     DayNightController() = default;
     ~DayNightController() override = default;

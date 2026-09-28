@@ -26,16 +26,13 @@ constexpr float MIN_PROJECTILE_SPEED_SQ = 1.0f;
 // LIFECYCLE
 // ============================================================================
 
-bool ProjectileManager::init()
-{
-    if (m_initialized.load(std::memory_order_acquire))
-    {
+bool ProjectileManager::init() {
+    if (m_initialized.load(std::memory_order_acquire)) {
         PROJ_WARN("ProjectileManager already initialized");
         return true;
     }
 
-    if (!EntityDataManager::Instance().isInitialized())
-    {
+    if (!EntityDataManager::Instance().isInitialized()) {
         PROJ_ERROR("EntityDataManager must be initialized before ProjectileManager");
         return false;
     }
@@ -53,8 +50,7 @@ bool ProjectileManager::init()
 
     // Register collision sink: keeps CollisionManager free of ProjectileManager dependency
     CollisionManager::Instance().setProjectileHitSink(
-        [](const VoidLight::CollisionInfo& info)
-        {
+        [](const VoidLight::CollisionInfo& info) {
             ProjectileManager::Instance().handleProjectileCollision(info);
         });
 
@@ -63,10 +59,8 @@ bool ProjectileManager::init()
     return true;
 }
 
-void ProjectileManager::clean()
-{
-    if (!m_initialized.load(std::memory_order_acquire))
-    {
+void ProjectileManager::clean() {
+    if (!m_initialized.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -75,10 +69,8 @@ void ProjectileManager::clean()
     m_isShutdown.store(true, std::memory_order_release);
 
     // Wait for any pending async work
-    for (auto& future : m_batchFutures)
-    {
-        if (future.valid())
-        {
+    for (auto& future : m_batchFutures) {
+        if (future.valid()) {
             future.wait();
         }
     }
@@ -103,15 +95,12 @@ void ProjectileManager::clean()
     PROJ_INFO("ProjectileManager cleaned up");
 }
 
-void ProjectileManager::prepareForStateTransition()
-{
+void ProjectileManager::prepareForStateTransition() {
     PROJ_INFO("Preparing for state transition...");
 
     // Wait for any pending async work
-    for (auto& future : m_batchFutures)
-    {
-        if (future.valid())
-        {
+    for (auto& future : m_batchFutures) {
+        if (future.valid()) {
             future.wait();
         }
     }
@@ -120,11 +109,9 @@ void ProjectileManager::prepareForStateTransition()
     // Destroy all active projectiles
     auto& edm = EntityDataManager::Instance();
     auto projectileSpan = edm.getIndicesByKind(EntityKind::Projectile);
-    for (size_t idx : projectileSpan)
-    {
+    for (size_t idx : projectileSpan) {
         EntityHandle handle = edm.getHandle(idx);
-        if (handle.isValid())
-        {
+        if (handle.isValid()) {
             edm.destroyEntity(handle);
         }
     }
@@ -132,8 +119,7 @@ void ProjectileManager::prepareForStateTransition()
     // Clear buffers (keep capacity)
     m_activeProjectileIndices.clear();
     m_destroyQueue.clear();
-    for (auto& queue : m_batchDestroyQueues)
-    {
+    for (auto& queue : m_batchDestroyQueues) {
         queue.clear();
     }
 
@@ -142,22 +128,19 @@ void ProjectileManager::prepareForStateTransition()
 
 
 void ProjectileManager::embedProjectile(size_t projectileIndex, const Vector2D& impactNormal,
-                                        EntityHandle embeddedTarget)
-{
+    EntityHandle embeddedTarget) {
     auto& edm = EntityDataManager::Instance();
     auto& projectileHot = edm.getHotDataByIndex(projectileIndex);
     auto& projectile = edm.getProjectileData(projectileHot.typeLocalIndex);
 
-    if (projectile.isEmbedded())
-    {
+    if (projectile.isEmbedded()) {
         return;
     }
 
     projectile.flags |= ProjectileData::FLAG_EMBEDDED;
     projectile.embeddedTarget = embeddedTarget;
     projectile.lifetime = ProjectileData::EMBEDDED_LIFETIME_SECONDS;
-    if (embeddedTarget.isValid())
-    {
+    if (embeddedTarget.isValid()) {
         const auto& targetTransform = edm.getTransform(embeddedTarget);
         float offsetX = projectileHot.transform.position.getX() - targetTransform.position.getX();
         float offsetY = projectileHot.transform.position.getY() - targetTransform.position.getY();
@@ -165,13 +148,11 @@ void ProjectileManager::embedProjectile(size_t projectileIndex, const Vector2D& 
         // Clamp offset to prevent the projectile from rendering inside the target.
         // The maximum valid offset is the sum of half-extents of both bodies.
         const size_t targetEdmIdx = edm.getIndex(embeddedTarget);
-        if (targetEdmIdx != SIZE_MAX)
-        {
+        if (targetEdmIdx != SIZE_MAX) {
             const auto& targetHot = edm.getHotDataByIndex(targetEdmIdx);
             const float maxOffset = projectileHot.halfWidth + targetHot.halfWidth;
             const float offsetLen = std::hypot(offsetX, offsetY);
-            if (offsetLen > maxOffset && offsetLen > 0.0f)
-            {
+            if (offsetLen > maxOffset && offsetLen > 0.0f) {
                 const float scale = maxOffset / offsetLen;
                 offsetX *= scale;
                 offsetY *= scale;
@@ -180,9 +161,7 @@ void ProjectileManager::embedProjectile(size_t projectileIndex, const Vector2D& 
 
         projectile.embeddedOffsetX = offsetX;
         projectile.embeddedOffsetY = offsetY;
-    }
-    else
-    {
+    } else {
         projectile.embeddedOffsetX = impactNormal.getX() * projectileHot.halfWidth;
         projectile.embeddedOffsetY = impactNormal.getY() * projectileHot.halfHeight;
     }
@@ -198,11 +177,9 @@ void ProjectileManager::embedProjectile(size_t projectileIndex, const Vector2D& 
     projectileHot.collisionMask = 0;
 }
 
-void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo& info)
-{
+void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo& info) {
     if (!m_initialized.load(std::memory_order_acquire) ||
-        m_isShutdown.load(std::memory_order_acquire))
-    {
+        m_isShutdown.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -211,13 +188,11 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
     // Trigger collisions for projectiles reach here when a projectile overlaps a physical
     // trigger body. They are dispatched separately via processTriggerEvents(); this branch
     // is a defensive guard to prevent double-processing projectile-vs-trigger contacts.
-    if (info.trigger)
-    {
+    if (info.trigger) {
         return;
     }
 
-    if (info.indexA == SIZE_MAX)
-    {
+    if (info.indexA == SIZE_MAX) {
         return;
     }
 
@@ -226,15 +201,12 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
     Vector2D knockbackNormal = info.normal;
 
     const auto& hotA = edm.getHotDataByIndex(info.indexA);
-    if (!hotA.isAlive())
-    {
+    if (!hotA.isAlive()) {
         return;
     }
 
-    if (!info.isMovableMovable)
-    {
-        if (hotA.kind != EntityKind::Projectile)
-        {
+    if (!info.isMovableMovable) {
+        if (hotA.kind != EntityKind::Projectile) {
             return;
         }
 
@@ -242,59 +214,48 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
         return;
     }
 
-    if (info.indexB == SIZE_MAX)
-    {
+    if (info.indexB == SIZE_MAX) {
         return;
     }
 
     const auto& hotB = edm.getHotDataByIndex(info.indexB);
 
     // Skip if either entity is already dead (destroyed between collision detect and event dispatch)
-    if (!hotB.isAlive())
-    {
+    if (!hotB.isAlive()) {
         return;
     }
 
     // Identify which entity is the projectile (if any)
-    if (hotA.kind == EntityKind::Projectile && hotB.kind != EntityKind::Projectile)
-    {
+    if (hotA.kind == EntityKind::Projectile && hotB.kind != EntityKind::Projectile) {
         projIdx = info.indexA;
         targetIdx = info.indexB;
-    }
-    else if (hotB.kind == EntityKind::Projectile && hotA.kind != EntityKind::Projectile)
-    {
+    } else if (hotB.kind == EntityKind::Projectile && hotA.kind != EntityKind::Projectile) {
         projIdx = info.indexB;
         targetIdx = info.indexA;
         knockbackNormal = info.normal * -1.0f;
-    }
-    else
-    {
+    } else {
         // Neither is a projectile, or both are — skip
         return;
     }
 
     auto& projHot = edm.getHotDataByIndex(projIdx);
-    if (!projHot.isAlive())
-    {
+    if (!projHot.isAlive()) {
         return;
     }
 
     const auto& proj = edm.getProjectileData(projHot.typeLocalIndex);
-    if (proj.isEmbedded())
-    {
+    if (proj.isEmbedded()) {
         return;
     }
 
     EntityHandle targetHandle = edm.getHandle(targetIdx);
-    if (targetHandle == proj.owner)
-    {
+    if (targetHandle == proj.owner) {
         return;
     }
 
     // Only damage entities that have health (Player, NPC)
     const auto& targetHot = edm.getHotDataByIndex(targetIdx);
-    if (!EntityTraits::hasHealth(targetHot.kind))
-    {
+    if (!EntityTraits::hasHealth(targetHot.kind)) {
         // Hit non-damageable entity — embed and stop participating in collision/damage.
         embedProjectile(projIdx, knockbackNormal, targetHandle);
         return;
@@ -306,13 +267,11 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
     // speed when computing hit force.
     const float actualSpeedSq = projHot.transform.velocity.lengthSquared();
     float effectiveSpeedSq = actualSpeedSq;
-    if (effectiveSpeedSq < MIN_PROJECTILE_SPEED_SQ)
-    {
+    if (effectiveSpeedSq < MIN_PROJECTILE_SPEED_SQ) {
         effectiveSpeedSq = proj.speed * proj.speed;
     }
 
-    if (effectiveSpeedSq < MIN_PROJECTILE_SPEED_SQ)
-    {
+    if (effectiveSpeedSq < MIN_PROJECTILE_SPEED_SQ) {
         return;
     }
 
@@ -340,8 +299,7 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
     m_singleDeferredEventBatch.reserve(1); // Restore capacity lost by move
 
     // Destroy projectile (unless piercing)
-    if (!(proj.flags & ProjectileData::FLAG_PIERCING))
-    {
+    if (!(proj.flags & ProjectileData::FLAG_PIERCING)) {
         embedProjectile(projIdx, knockbackNormal, targetHandle);
     }
 }
@@ -351,20 +309,17 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
 // MAIN UPDATE — Position integration + lifetime management
 // ============================================================================
 
-void ProjectileManager::update(float deltaTime)
-{
+void ProjectileManager::update(float deltaTime) {
     if (!m_initialized.load(std::memory_order_acquire) ||
         m_isShutdown.load(std::memory_order_acquire) ||
-        m_globallyPaused.load(std::memory_order_acquire))
-    {
+        m_globallyPaused.load(std::memory_order_acquire)) {
         return;
     }
 
     auto& edm = EntityDataManager::Instance();
     auto projectileSpan = edm.getIndicesByKind(EntityKind::Projectile);
 
-    if (projectileSpan.empty())
-    {
+    if (projectileSpan.empty()) {
         m_perf.lastEntitiesProcessed = 0;
         m_perf.lastUpdateMs = 0.0;
         return;
@@ -375,7 +330,7 @@ void ProjectileManager::update(float deltaTime)
     // Copy to local buffer (span may be invalidated during processing)
     m_activeProjectileIndices.clear();
     m_activeProjectileIndices.insert(m_activeProjectileIndices.end(),
-                                     projectileSpan.begin(), projectileSpan.end());
+        projectileSpan.begin(), projectileSpan.end());
 
     const size_t entityCount = m_activeProjectileIndices.size();
 
@@ -383,11 +338,9 @@ void ProjectileManager::update(float deltaTime)
     float worldWidth = 32000.0f;
     float worldHeight = 32000.0f;
     auto& pathMgr = PathfinderManager::Instance();
-    if (pathMgr.isInitialized())
-    {
+    if (pathMgr.isInitialized()) {
         float w, h;
-        if (pathMgr.getCachedWorldBounds(w, h) && w > 0 && h > 0)
-        {
+        if (pathMgr.getCachedWorldBounds(w, h) && w > 0 && h > 0) {
             worldWidth = w;
             worldHeight = h;
         }
@@ -405,8 +358,7 @@ void ProjectileManager::update(float deltaTime)
     std::chrono::steady_clock::time_point startTime;
     std::chrono::steady_clock::time_point endTime;
 
-    if (useThreading)
-    {
+    if (useThreading) {
         size_t optimalWorkerCount = budgetMgr.getOptimalWorkers(
             VoidLight::SystemType::ProjectileSim, entityCount);
         auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
@@ -419,16 +371,13 @@ void ProjectileManager::update(float deltaTime)
         size_t remainingEntities = entityCount % batchCount;
 
         // Ensure per-batch destroy queues are sized and cleared
-        if (m_batchDestroyQueues.size() < batchCount)
-        {
+        if (m_batchDestroyQueues.size() < batchCount) {
             m_batchDestroyQueues.resize(batchCount);
-            for (size_t i = 0; i < batchCount; ++i)
-            {
+            for (size_t i = 0; i < batchCount; ++i) {
                 m_batchDestroyQueues[i].reserve(32);
             }
         }
-        for (size_t i = 0; i < batchCount; ++i)
-        {
+        for (size_t i = 0; i < batchCount; ++i) {
             m_batchDestroyQueues[i].clear();
         }
 
@@ -439,32 +388,27 @@ void ProjectileManager::update(float deltaTime)
 
         startTime = std::chrono::steady_clock::now();
 
-        for (size_t i = 0; i < batchCount; ++i)
-        {
+        for (size_t i = 0; i < batchCount; ++i) {
             size_t start = i * entitiesPerBatch;
             size_t end = start + entitiesPerBatch;
 
-            if (i == batchCount - 1)
-            {
+            if (i == batchCount - 1) {
                 end += remainingEntities;
             }
 
             m_batchFutures.push_back(
                 threadSystem.enqueueTaskWithResult(
-                    [this, start, end, deltaTime, worldWidth, worldHeight, i]()
-                    {
+                    [this, start, end, deltaTime, worldWidth, worldHeight, i]() {
                         processBatch(m_activeProjectileIndices, start, end,
-                                     deltaTime, worldWidth, worldHeight,
-                                     m_batchDestroyQueues[i]);
+                            deltaTime, worldWidth, worldHeight,
+                            m_batchDestroyQueues[i]);
                     },
                     VoidLight::TaskPriority::Normal, "Proj_Batch"));
         }
 
         // Wait for all batches
-        for (auto& future : m_batchFutures)
-        {
-            if (future.valid())
-            {
+        for (auto& future : m_batchFutures) {
+            if (future.valid()) {
                 future.get();
             }
         }
@@ -472,19 +416,14 @@ void ProjectileManager::update(float deltaTime)
         endTime = std::chrono::steady_clock::now();
 
         // Collect and process destroy queues from all batches
-        for (size_t i = 0; i < batchCount; ++i)
-        {
-            for (const auto& handle : m_batchDestroyQueues[i])
-            {
-                if (handle.isValid())
-                {
+        for (size_t i = 0; i < batchCount; ++i) {
+            for (const auto& handle : m_batchDestroyQueues[i]) {
+                if (handle.isValid()) {
                     edm.destroyEntity(handle);
                 }
             }
         }
-    }
-    else
-    {
+    } else {
         // Single-threaded processing
         actualWasThreaded = false;
         actualBatchCount = 1;
@@ -493,15 +432,13 @@ void ProjectileManager::update(float deltaTime)
         startTime = std::chrono::steady_clock::now();
 
         processBatch(m_activeProjectileIndices, 0, entityCount,
-                     deltaTime, worldWidth, worldHeight, m_destroyQueue);
+            deltaTime, worldWidth, worldHeight, m_destroyQueue);
 
         endTime = std::chrono::steady_clock::now();
 
         // Destroy expired projectiles
-        for (const auto& handle : m_destroyQueue)
-        {
-            if (handle.isValid())
-            {
+        for (const auto& handle : m_destroyQueue) {
+            if (handle.isValid()) {
                 edm.destroyEntity(handle);
             }
         }
@@ -518,31 +455,26 @@ void ProjectileManager::update(float deltaTime)
 
     // EMA update for rolling average
     constexpr double PERF_ALPHA = 0.05;
-    if (m_perf.totalUpdates == 0)
-    {
+    if (m_perf.totalUpdates == 0) {
         m_perf.avgUpdateMs = elapsedMs;
-    }
-    else
-    {
+    } else {
         m_perf.avgUpdateMs = PERF_ALPHA * elapsedMs + (1.0 - PERF_ALPHA) * m_perf.avgUpdateMs;
     }
     m_perf.totalUpdates++;
 
     // Report ONLY batch time for adaptive tuning
     budgetMgr.reportExecution(VoidLight::SystemType::ProjectileSim,
-                              entityCount, actualWasThreaded,
-                              actualBatchCount, batchMs);
+        entityCount, actualWasThreaded,
+        actualBatchCount, batchMs);
 
     VOIDLIGHT_DEBUG_ONLY(
         // Rolling log every 60 seconds (3600 updates at 60Hz)
-        if (m_perf.totalUpdates % 3600 == 0 && entityCount > 0)
-        {
+        if (m_perf.totalUpdates % 3600 == 0 && entityCount > 0) {
             PROJ_DEBUG(std::format(
                 "Entities: {}, Avg: {:.2f}ms [{}]",
                 entityCount, m_perf.avgUpdateMs,
                 actualWasThreaded ? std::format("{} batches", actualBatchCount) : "single"));
-        }
-    )
+        })
 }
 
 
@@ -551,11 +483,10 @@ void ProjectileManager::update(float deltaTime)
 // ============================================================================
 
 void ProjectileManager::processBatch(const std::vector<size_t>& indices,
-                                     size_t start, size_t end,
-                                     float deltaTime,
-                                     float worldWidth, float worldHeight,
-                                     std::vector<EntityHandle>& outDestroyQueue)
-{
+    size_t start, size_t end,
+    float deltaTime,
+    float worldWidth, float worldHeight,
+    std::vector<EntityHandle>& outDestroyQueue) {
     auto& edm = EntityDataManager::Instance();
 
     // SIMD 4-wide movement batch (follows AIManager pattern)
@@ -571,8 +502,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
 
     // Returns true if projectile hit world boundary and should embed there.
     auto updateMovementScalar = [&](TransformData& transform,
-                                    const EntityHotData& hotData) -> bool
-    {
+                                    const EntityHotData& hotData) -> bool {
         Vector2D pos = transform.position + (transform.velocity * deltaTime);
 
         float halfW = hotData.halfWidth;
@@ -581,62 +511,47 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
         float maxX = worldWidth - halfW;
         float minY = halfH;
         float maxY = worldHeight - halfH;
-        if (maxX < minX)
-        {
+        if (maxX < minX) {
             minX = worldWidth * 0.5f;
             maxX = minX;
         }
-        if (maxY < minY)
-        {
+        if (maxY < minY) {
             minY = worldHeight * 0.5f;
             maxY = minY;
         }
         Vector2D clamped(std::clamp(pos.getX(), minX, maxX),
-                         std::clamp(pos.getY(), minY, maxY));
+            std::clamp(pos.getY(), minY, maxY));
         transform.position = clamped;
 
         bool hitBoundary = false;
-        if (pos.getX() < minX || pos.getX() > maxX)
-        {
+        if (pos.getX() < minX || pos.getX() > maxX) {
             transform.velocity.setX(0.0f);
             hitBoundary = true;
         }
-        if (pos.getY() < minY || pos.getY() > maxY)
-        {
+        if (pos.getY() < minY || pos.getY() > maxY) {
             transform.velocity.setY(0.0f);
             hitBoundary = true;
         }
         return hitBoundary;
     };
 
-    auto flushMovementBatch = [&]()
-    {
-        if (batchCount == 0)
-        {
+    auto flushMovementBatch = [&]() {
+        if (batchCount == 0) {
             return;
         }
-        if (batchCount < 4)
-        {
-            for (size_t lane = 0; lane < batchCount; ++lane)
-            {
-                if (updateMovementScalar(*batchTransforms[lane], *batchHotData[lane]))
-                {
+        if (batchCount < 4) {
+            for (size_t lane = 0; lane < batchCount; ++lane) {
+                if (updateMovementScalar(*batchTransforms[lane], *batchHotData[lane])) {
                     TransformData* transform = batchTransforms[lane];
                     Vector2D impactNormal(0.0f, 0.0f);
-                    if (transform->position.getX() <= batchHotData[lane]->halfWidth)
-                    {
+                    if (transform->position.getX() <= batchHotData[lane]->halfWidth) {
                         impactNormal.setX(-1.0f);
-                    }
-                    else if (transform->position.getX() >= worldWidth - batchHotData[lane]->halfWidth)
-                    {
+                    } else if (transform->position.getX() >= worldWidth - batchHotData[lane]->halfWidth) {
                         impactNormal.setX(1.0f);
                     }
-                    if (transform->position.getY() <= batchHotData[lane]->halfHeight)
-                    {
+                    if (transform->position.getY() <= batchHotData[lane]->halfHeight) {
                         impactNormal.setY(-1.0f);
-                    }
-                    else if (transform->position.getY() >= worldHeight - batchHotData[lane]->halfHeight)
-                    {
+                    } else if (transform->position.getY() >= worldHeight - batchHotData[lane]->halfHeight) {
                         impactNormal.setY(1.0f);
                     }
                     pendingEmbeds.emplace_back(batchEdmIndices[lane], impactNormal);
@@ -655,8 +570,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
         alignas(16) float minY[4];
         alignas(16) float maxY[4];
 
-        for (size_t lane = 0; lane < 4; ++lane)
-        {
+        for (size_t lane = 0; lane < 4; ++lane) {
             TransformData* transform = batchTransforms[lane];
             const EntityHotData* hotData = batchHotData[lane];
             posX[lane] = transform->position.getX();
@@ -667,13 +581,11 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
             float laneMaxX = worldWidth - hotData->halfWidth;
             float laneMinY = hotData->halfHeight;
             float laneMaxY = worldHeight - hotData->halfHeight;
-            if (laneMaxX < laneMinX)
-            {
+            if (laneMaxX < laneMinX) {
                 laneMinX = worldWidth * 0.5f;
                 laneMaxX = laneMinX;
             }
-            if (laneMaxY < laneMinY)
-            {
+            if (laneMaxY < laneMinY) {
                 laneMinY = worldHeight * 0.5f;
                 laneMaxY = laneMinY;
             }
@@ -710,31 +622,25 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
         store4_aligned(posY, clampedYv);
 
         const int boundaryMask = clampXMask | clampYMask;
-        for (size_t lane = 0; lane < 4; ++lane)
-        {
+        for (size_t lane = 0; lane < 4; ++lane) {
             TransformData* transform = batchTransforms[lane];
             transform->position.setX(posX[lane]);
             transform->position.setY(posY[lane]);
 
-            if ((clampXMask >> lane) & 0x1)
-            {
+            if ((clampXMask >> lane) & 0x1) {
                 transform->velocity.setX(0.0f);
             }
-            if ((clampYMask >> lane) & 0x1)
-            {
+            if ((clampYMask >> lane) & 0x1) {
                 transform->velocity.setY(0.0f);
             }
 
             // Embed projectiles that hit the world boundary (deferred)
-            if ((boundaryMask >> lane) & 0x1)
-            {
+            if ((boundaryMask >> lane) & 0x1) {
                 Vector2D impactNormal(0.0f, 0.0f);
-                if ((clampXMask >> lane) & 0x1)
-                {
+                if ((clampXMask >> lane) & 0x1) {
                     impactNormal.setX((velX[lane] > 0.0f) ? 1.0f : -1.0f);
                 }
-                if ((clampYMask >> lane) & 0x1)
-                {
+                if ((clampYMask >> lane) & 0x1) {
                     impactNormal.setY((velY[lane] > 0.0f) ? 1.0f : -1.0f);
                 }
                 pendingEmbeds.emplace_back(batchEdmIndices[lane], impactNormal);
@@ -745,8 +651,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
     };
 
     // Main processing loop
-    for (size_t i = start; i < end && i < indices.size(); ++i)
-    {
+    for (size_t i = start; i < end && i < indices.size(); ++i) {
         size_t edmIdx = indices[i];
         auto& hot = edm.getHotDataByIndex(edmIdx);
 
@@ -755,8 +660,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
         auto& proj = edm.getProjectileData(hot.typeLocalIndex);
         proj.lifetime -= deltaTime;
 
-        if (proj.lifetime <= 0.0f)
-        {
+        if (proj.lifetime <= 0.0f) {
             outDestroyQueue.push_back(edm.getHandle(edmIdx));
             continue;
         }
@@ -764,8 +668,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
         // Embedded projectiles are stationary — position is invariant and
         // previousPosition was stamped once in embedProjectile(), so skip
         // the redundant per-frame write and SIMD batching entirely.
-        if (proj.isEmbedded())
-        {
+        if (proj.isEmbedded()) {
             continue;
         }
 
@@ -778,8 +681,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
         batchEdmIndices[batchCount] = edmIdx;
         ++batchCount;
 
-        if (batchCount == 4)
-        {
+        if (batchCount == 4) {
             flushMovementBatch();
         }
     }
@@ -788,8 +690,7 @@ void ProjectileManager::processBatch(const std::vector<size_t>& indices,
     flushMovementBatch();
 
     // Drain deferred boundary-embed events outside the hot SIMD loop.
-    for (const auto& [projectileIndex, impactNormal] : pendingEmbeds)
-    {
+    for (const auto& [projectileIndex, impactNormal] : pendingEmbeds) {
         embedProjectile(projectileIndex, impactNormal);
     }
     pendingEmbeds.clear();

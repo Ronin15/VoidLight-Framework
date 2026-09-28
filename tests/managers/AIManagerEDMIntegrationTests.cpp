@@ -79,7 +79,7 @@ public:
 
         auto& transform = edm.getTransformByIndex(index);
         return (transform.position - m_initialPosition).length() > 0.01f ||
-               transform.velocity.length() > 0.01f;
+            transform.velocity.length() > 0.01f;
     }
 
     void resetInitialPosition() {
@@ -312,7 +312,8 @@ BOOST_AUTO_TEST_CASE(TestMultipleEntitiesProcessedViaBatch) {
     for (size_t i = 0; i < ENTITY_COUNT; ++i) {
         auto entity = AITestNPC::create(Vector2D(100.0f + i * 50.0f, 100.0f));
         // Alternate between different behavior types to test variety
-        const char* behaviorName = (i % 3 == 0) ? "Wander" : (i % 3 == 1) ? "Idle" : "Patrol";
+        const char* behaviorName = (i % 3 == 0) ? "Wander" : (i % 3 == 1) ? "Idle"
+                                                                          : "Patrol";
         AIManager::Instance().assignBehavior(entity->getHandle(), behaviorName);
         entities.push_back(entity);
         handles.push_back(entity->getHandle());
@@ -992,19 +993,19 @@ BOOST_AUTO_TEST_CASE(TestSetStanceNoOpDoesNotEmitAndRealChangeDoes) {
     FactionStance newStance = FactionStance::Allied;
     uint32_t settlementId = 99;
     eventMgr.registerHandler(EventTypeId::StanceChanged,
-                             [&](const EventData& data) {
-                                 const auto* event =
-                                     dynamic_cast<const StanceChangedEvent*>(data.event.get());
-                                 if (!event) {
-                                     return;
-                                 }
-                                 ++stanceEvents;
-                                 fromFaction = event->getFromFaction();
-                                 towardFaction = event->getTowardFaction();
-                                 oldStance = event->getOldStance();
-                                 newStance = event->getNewStance();
-                                 settlementId = event->getSettlementId();
-                             });
+        [&](const EventData& data) {
+            const auto* event =
+                dynamic_cast<const StanceChangedEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            ++stanceEvents;
+            fromFaction = event->getFromFaction();
+            towardFaction = event->getTowardFaction();
+            oldStance = event->getOldStance();
+            newStance = event->getNewStance();
+            settlementId = event->getSettlementId();
+        });
 
     aiMgr.setStance(0, 1, FactionStance::Neutral);
     BOOST_CHECK_EQUAL(stanceEvents, 0);
@@ -1061,7 +1062,7 @@ BOOST_AUTO_TEST_CASE(TestPlayerFactionStandingSidecarLifetime) {
 
     aiMgr.adjustPlayerStanding(player, 1, AIManager::PLAYER_STANDING_THEFT_DELTA);
     BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(playerIdx, 1),
-                      AIManager::PLAYER_STANDING_THEFT_DELTA);
+        AIManager::PLAYER_STANDING_THEFT_DELTA);
 
     edm.destroyEntity(player);
     edm.processDestructionQueue();
@@ -1073,10 +1074,10 @@ BOOST_AUTO_TEST_CASE(TestPlayerFactionStandingSidecarLifetime) {
 
     aiMgr.adjustPlayerStanding(reused, 1, AIManager::PLAYER_STANDING_GIFT_DELTA);
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(reused, 1),
-                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+        AIManager::PLAYER_STANDING_GIFT_DELTA);
     aiMgr.resetFactionStances();
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(reused, 1),
-                      AIManager::PLAYER_STANDING_GIFT_DELTA);
+        AIManager::PLAYER_STANDING_GIFT_DELTA);
 
     edm.prepareForStateTransition();
     const size_t reusedIdx = edm.getIndex(reused);

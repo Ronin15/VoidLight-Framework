@@ -33,7 +33,7 @@ const WorkerBudget& WorkerBudgetManager::getBudget() {
 }
 
 size_t WorkerBudgetManager::getOptimalWorkers(SystemType,
-                                               size_t workloadSize) {
+    size_t workloadSize) {
     // No work = no workers needed
     if (workloadSize == 0) {
         return 0;
@@ -132,10 +132,7 @@ ThreadingDecision WorkerBudgetManager::shouldUseThreading(SystemType system, siz
             state.singleSampleCount.store(0, std::memory_order_relaxed);     // Reset warmup for re-learning
 
             VOIDLIGHT_DEBUG_ONLY(
-            VOIDLIGHT_DEBUG("WorkerBudget", std::format(
-                "{}: Re-learning (workload {} < hysteresis {})",
-                getSystemName(system), workloadSize, hysteresisLow));
-            )
+                VOIDLIGHT_DEBUG("WorkerBudget", std::format("{}: Re-learning (workload {} < hysteresis {})", getSystemName(system), workloadSize, hysteresisLow));)
             return {.shouldThread = false, .probePhase = 0};  // Back to learning mode
         }
 
@@ -154,8 +151,8 @@ ThreadingDecision WorkerBudgetManager::shouldUseThreading(SystemType system, siz
 }
 
 void WorkerBudgetManager::reportExecution(SystemType system, size_t workloadSize,
-                                           bool wasThreaded, size_t batchCount,
-                                           double totalTimeMs) {
+    bool wasThreaded, size_t batchCount,
+    double totalTimeMs) {
     if (workloadSize == 0 || totalTimeMs <= 0.0) {
         return;
     }
@@ -172,8 +169,7 @@ void WorkerBudgetManager::reportExecution(SystemType system, size_t workloadSize
             // Treats initial EMA state as 0.0ms with standard alpha weighting.
             newSmoothed = totalTimeMs * SystemTuningState::TIME_SMOOTHING;
         } else {
-            newSmoothed = prevSmoothed * (1.0 - SystemTuningState::TIME_SMOOTHING)
-                        + totalTimeMs * SystemTuningState::TIME_SMOOTHING;
+            newSmoothed = prevSmoothed * (1.0 - SystemTuningState::TIME_SMOOTHING) + totalTimeMs * SystemTuningState::TIME_SMOOTHING;
         }
         state.smoothedSingleTime.store(newSmoothed, std::memory_order_relaxed);
 
@@ -184,18 +180,12 @@ void WorkerBudgetManager::reportExecution(SystemType system, size_t workloadSize
         // MIN_LEARNING_SAMPLES prevents cold-start spikes (cache-cold burst spawns)
         // from triggering premature threshold learning on the first few frames
         size_t threshold = state.learnedThreshold.load(std::memory_order_relaxed);
-        if (threshold == 0
-            && samples >= SystemTuningState::MIN_LEARNING_SAMPLES
-            && newSmoothed >= SystemTuningState::LEARNING_TIME_THRESHOLD_MS) {
+        if (threshold == 0 && samples >= SystemTuningState::MIN_LEARNING_SAMPLES && newSmoothed >= SystemTuningState::LEARNING_TIME_THRESHOLD_MS) {
             state.learnedThreshold.store(workloadSize, std::memory_order_relaxed);
             state.thresholdActive.store(true, std::memory_order_relaxed);
 
             VOIDLIGHT_DEBUG_ONLY(
-            VOIDLIGHT_DEBUG("WorkerBudget", std::format(
-                "{}: Learned threshold={} (smoothed={:.2f}ms >= {:.1f}ms, instant={:.2f}ms)",
-                getSystemName(system), workloadSize, newSmoothed,
-                SystemTuningState::LEARNING_TIME_THRESHOLD_MS, totalTimeMs));
-            )
+                VOIDLIGHT_DEBUG("WorkerBudget", std::format("{}: Learned threshold={} (smoothed={:.2f}ms >= {:.1f}ms, instant={:.2f}ms)", getSystemName(system), workloadSize, newSmoothed, SystemTuningState::LEARNING_TIME_THRESHOLD_MS, totalTimeMs));)
         }
     }
     // ====== Multi-threaded: batch tuning only ======
@@ -208,8 +198,7 @@ void WorkerBudgetManager::reportExecution(SystemType system, size_t workloadSize
         if (prev <= 0.0) {
             smoothed = throughput;  // First sample
         } else {
-            smoothed = prev * (1.0 - SystemTuningState::THROUGHPUT_SMOOTHING)
-                     + throughput * SystemTuningState::THROUGHPUT_SMOOTHING;
+            smoothed = prev * (1.0 - SystemTuningState::THROUGHPUT_SMOOTHING) + throughput * SystemTuningState::THROUGHPUT_SMOOTHING;
         }
         state.multiSmoothedThroughput.store(smoothed, std::memory_order_relaxed);
 
@@ -250,8 +239,8 @@ void WorkerBudgetManager::updateBatchMultiplier(SystemTuningState& state, double
 
     // Clamp multiplier
     multiplier = std::clamp(multiplier,
-                            SystemTuningState::MIN_MULTIPLIER,
-                            SystemTuningState::MAX_MULTIPLIER);
+        SystemTuningState::MIN_MULTIPLIER,
+        SystemTuningState::MAX_MULTIPLIER);
 
     state.multiplier.store(multiplier, std::memory_order_relaxed);
 }

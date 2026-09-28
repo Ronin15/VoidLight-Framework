@@ -72,8 +72,7 @@ BOOST_AUTO_TEST_CASE(TestCustomCalendarConfig) {
         {"Month1", 28, Season::Spring},
         {"Month2", 31, Season::Summer},
         {"Month3", 30, Season::Fall},
-        {"Month4", 31, Season::Winter}
-    };
+        {"Month4", 31, Season::Winter}};
 
     // 28 + 31 + 30 + 31 = 120 days
     BOOST_CHECK_EQUAL(config.getTotalDaysInYear(), 120);
@@ -273,8 +272,7 @@ BOOST_AUTO_TEST_CASE(TestSetCustomCalendar) {
     customConfig.months = {
         {"FirstMonth", 10, Season::Spring},
         {"SecondMonth", 20, Season::Summer},
-        {"ThirdMonth", 15, Season::Fall}
-    };
+        {"ThirdMonth", 15, Season::Fall}};
 
     gameTime->setCalendarConfig(customConfig);
 

@@ -178,7 +178,8 @@ BOOST_FIXTURE_TEST_SUITE(BackgroundSimulationTests, BGSimBenchmarkFixture)
 // Test scaling performance with increasing entity counts
 BOOST_AUTO_TEST_CASE(BackgroundEntityScaling) {
     std::cout << "\n===== BACKGROUND SIMULATION SCALING TEST =====" << std::endl;
-    std::cout << "Testing background entity processing from 100 to 10,000 entities\n" << std::endl;
+    std::cout << "Testing background entity processing from 100 to 10,000 entities\n"
+              << std::endl;
 
     std::vector<size_t> entityCounts = {100, 500, 1000, 2500, 5000, 7500, 10000};
     const float WORLD_SIZE = 50000.0f;
@@ -222,13 +223,15 @@ BOOST_AUTO_TEST_CASE(BackgroundEntityScaling) {
         BOOST_CHECK_GT(result.entitiesProcessed, 0);
     }
 
-    std::cout << "=========================================\n" << std::endl;
+    std::cout << "=========================================\n"
+              << std::endl;
 }
 
 // Test threading threshold detection
 BOOST_AUTO_TEST_CASE(ThreadingThresholdDetection) {
     std::cout << "\n===== BACKGROUND SIM THREADING THRESHOLD DETECTION =====" << std::endl;
-    std::cout << "Comparing single-threaded vs multi-threaded at different entity counts\n" << std::endl;
+    std::cout << "Comparing single-threaded vs multi-threaded at different entity counts\n"
+              << std::endl;
 
     std::vector<size_t> testCounts = {100, 250, 500, 750, 1000, 2000, 5000};
     const float WORLD_SIZE = 50000.0f;
@@ -299,14 +302,16 @@ BOOST_AUTO_TEST_CASE(ThreadingThresholdDetection) {
         std::cout << "Single-threaded is efficient at all tested counts" << std::endl;
     }
 
-    std::cout << "================================\n" << std::endl;
+    std::cout << "================================\n"
+              << std::endl;
 }
 
 // WorkerBudget Adaptive Tuning test - verifies both batch sizing and threading
 // threshold adapt correctly over time
 BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning) {
     std::cout << "\n===== WORKERBUDGET ADAPTIVE TUNING TEST =====" << std::endl;
-    std::cout << "Testing both batch sizing hill-climb and threading threshold adaptation\n" << std::endl;
+    std::cout << "Testing both batch sizing hill-climb and threading threshold adaptation\n"
+              << std::endl;
 
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
     auto& bgsim = BackgroundSimulationManager::Instance();
@@ -390,12 +395,13 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning) {
     std::cout << "Batch sizing:       " << (batchConverged ? "PASS" : "IN_PROGRESS") << std::endl;
     std::cout << "Throughput tracking: " << (throughputCollected ? "PASS" : "NO_DATA") << std::endl;
     std::cout << "Final batch count:  " << finalBatch << std::endl;
-    std::cout << "================================\n" << std::endl;
+    std::cout << "================================\n"
+              << std::endl;
 
     // Test passes if batch sizing converged OR throughput was collected
     // (both systems are working, just may be at different stages)
     BOOST_CHECK_MESSAGE(batchConverged || throughputCollected,
-                        "At least one adaptive system should show activity");
+        "At least one adaptive system should show activity");
 }
 
 BOOST_AUTO_TEST_SUITE_END()

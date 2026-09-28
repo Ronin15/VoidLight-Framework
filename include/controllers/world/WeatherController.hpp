@@ -30,8 +30,7 @@
 // Forward declaration
 enum class WeatherType;
 
-class WeatherController : public ControllerBase
-{
+class WeatherController : public ControllerBase {
 public:
     WeatherController() = default;
     ~WeatherController() override = default;

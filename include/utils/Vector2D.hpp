@@ -24,8 +24,8 @@ public:
     // Vector operations (cache-friendly implementations)
     float length() const { return sqrt(lengthSquared()); }
     float lengthSquared() const { return m_x * m_x + m_y * m_y; }
-    
-    // Fast normalized vector (avoids sqrt when possible) 
+
+    // Fast normalized vector (avoids sqrt when possible)
     Vector2D normalized() const {
         float const lenSq = lengthSquared();
         if (lenSq < 0.0001f) return Vector2D(1.0f, 0.0f); // Default direction
@@ -85,18 +85,18 @@ public:
             (*this) *= 1 / l;
         }
     }
-    
+
     // Cache-friendly static utility functions
     static float distanceSquared(const Vector2D& a, const Vector2D& b) {
         float const dx = a.m_x - b.m_x;
-        float const dy = a.m_y - b.m_y; 
+        float const dy = a.m_y - b.m_y;
         return dx * dx + dy * dy;
     }
-    
+
     static float distance(const Vector2D& a, const Vector2D& b) {
         return sqrt(distanceSquared(a, b));
     }
-    
+
     // Return a normalized copy of the vector (keeping existing implementation for compatibility)
     Vector2D normalizedLegacy() const {
         Vector2D v = *this;

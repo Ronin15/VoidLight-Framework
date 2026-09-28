@@ -44,9 +44,13 @@ struct CollisionPathfindingFixture {
 
         // Load a test world - larger size with reduced blocking for navigable paths
         VoidLight::WorldGenerationConfig cfg{};
-        cfg.width = 50; cfg.height = 50; cfg.seed = 1234;
-        cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f;
-        cfg.waterLevel = 0.1f; cfg.mountainLevel = 0.9f;
+        cfg.width = 50;
+        cfg.height = 50;
+        cfg.seed = 1234;
+        cfg.elevationFrequency = 0.1f;
+        cfg.humidityFrequency = 0.1f;
+        cfg.waterLevel = 0.1f;
+        cfg.mountainLevel = 0.9f;
 
         if (!WorldManager::Instance().loadNewWorld(cfg)) {
             throw std::runtime_error("Failed to load test world");
@@ -151,8 +155,7 @@ struct CollisionPathfindingFixture {
         CollisionManager::Instance().addStaticBody(
             testId, testAABB.center, testAABB.halfSize,
             CollisionLayer::Layer_Player, CollisionLayer::Layer_Environment,
-            false, 0, 1, edmIndex
-        );
+            false, 0, 1, edmIndex);
 
         // Check for collisions using queryArea (use actual radius, not 2x)
         AABB queryAABB(position.getX(), position.getY(), radius, radius);
@@ -185,7 +188,7 @@ struct CollisionPathfindingFixture {
     }
 
     bool requestPathAndWait(size_t edmIndex, const Vector2D& start, const Vector2D& goal,
-                            std::vector<Vector2D>& outPath, int maxPolls = 50) {
+        std::vector<Vector2D>& outPath, int maxPolls = 50) {
         auto& pm = PathfinderManager::Instance();
         auto& edm = EntityDataManager::Instance();
         const uint64_t requestId = pm.requestPathToEDM(
@@ -216,8 +219,7 @@ struct CollisionPathfindingFixture {
 
 BOOST_AUTO_TEST_SUITE(CollisionPathfindingIntegrationSuite)
 
-BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFixture) {
     // Production path: requestPathToEDM + main-thread commitCompletedPaths.
 
     Vector2D start(100.0f, 100.0f);  // Clear area
@@ -231,9 +233,7 @@ BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFi
     // INTEGRATION TEST #1: Verify path avoids known obstacles
     bool pathClear = !pathIntersectsObstacles(path);
 
-    BOOST_TEST_MESSAGE("Path obstacle avoidance: " <<
-                      (pathClear ? "CLEAR" : "INTERSECTS") <<
-                      " (" << path.size() << " waypoints)");
+    BOOST_TEST_MESSAGE("Path obstacle avoidance: " << (pathClear ? "CLEAR" : "INTERSECTS") << " (" << path.size() << " waypoints)");
 
     // Path MUST avoid obstacles - this validates collision-pathfinding integration
     BOOST_CHECK_MESSAGE(pathClear, "Path should avoid collision obstacles");
@@ -248,11 +248,10 @@ BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFi
 
     BOOST_CHECK_MESSAGE(collisionCount == 0,
         "Path waypoints should not collide with obstacles (found " +
-        std::to_string(collisionCount) + " collisions)");
+            std::to_string(collisionCount) + " collisions)");
 }
 
-BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixture) {
     // Test dynamic obstacle integration between collision and pathfinding systems
 
     Vector2D start(200.0f, 200.0f);
@@ -284,14 +283,13 @@ BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixt
     BOOST_CHECK_GE(newPath.size(), 2);
 
     BOOST_TEST_MESSAGE("Dynamic obstacle integration: original " << originalPath.size()
-                      << " waypoints, new " << newPath.size() << " waypoints");
+                                                                 << " waypoints, new " << newPath.size() << " waypoints");
 
     // Clean up
     CollisionManager::Instance().removeCollisionBody(dynamicObstacle);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFixture) {
     // Test that collision events properly invalidate pathfinding cache
 
     Vector2D start(100.0f, 100.0f);  // Clear starting position
@@ -324,8 +322,7 @@ BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFix
     CollisionManager::Instance().removeCollisionBody(newObstacle);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionPathfindingFixture) {
     // Test concurrent collision and pathfinding operations using async API
 
     const int NUM_CONCURRENT_REQUESTS = 10;
@@ -339,7 +336,8 @@ BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionP
         Vector2D goal(500.0f + i * 20.0f, 500.0f);
         npcs.push_back(createPathNpc(start));
         BOOST_CHECK_GT(pm.requestPathToEDM(
-            npcs.back(), start, goal, PathfinderManager::Priority::High), 0U);
+                           npcs.back(), start, goal, PathfinderManager::Priority::High),
+            0U);
     }
 
     // Simultaneously add collision bodies while paths are being computed
@@ -378,7 +376,7 @@ BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionP
     BOOST_CHECK_GE(successfulPaths, NUM_CONCURRENT_REQUESTS / 2);
 
     BOOST_TEST_MESSAGE("Concurrent operations: " << successfulPaths
-                      << "/" << NUM_CONCURRENT_REQUESTS << " paths found successfully");
+                                                 << "/" << NUM_CONCURRENT_REQUESTS << " paths found successfully");
 
     // Clean up
     for (EntityID bodyId : tempBodies) {
@@ -386,8 +384,7 @@ BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionP
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture) {
     // Test system performance with both collision and pathfinding load
 
     const int NUM_COLLISION_BODIES = 50;
@@ -421,7 +418,8 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
         Vector2D goal(900.0f, 500.0f + i * 20.0f);
         npcs.push_back(createPathNpc(start));
         BOOST_CHECK_GT(pm.requestPathToEDM(
-            npcs.back(), start, goal, PathfinderManager::Priority::High), 0U);
+                           npcs.back(), start, goal, PathfinderManager::Priority::High),
+            0U);
     }
 
     int pathsCompleted = 0;
@@ -456,8 +454,8 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
     BOOST_CHECK_GE(pathsCompleted, NUM_PATH_REQUESTS / 3);
 
     BOOST_TEST_MESSAGE("Performance under load: " << NUM_COLLISION_BODIES
-                      << " bodies, " << pathsCompleted << "/" << NUM_PATH_REQUESTS
-                      << " paths completed in " << duration.count() << "ms");
+                                                  << " bodies, " << pathsCompleted << "/" << NUM_PATH_REQUESTS
+                                                  << " paths completed in " << duration.count() << "ms");
 
     // Clean up
     for (EntityID bodyId : bodies) {
@@ -465,8 +463,7 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathfindingFixture) {
     // Test that collision layers properly affect pathfinding
 
     // Add bodies with different collision layers
@@ -493,20 +490,17 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
     CollisionManager::Instance().setBodyLayer(
         playerObstacle,
         CollisionLayer::Layer_Player,
-        CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment
-    );
+        CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment);
 
     CollisionManager::Instance().setBodyLayer(
         enemyObstacle,
         CollisionLayer::Layer_Enemy,
-        CollisionLayer::Layer_Player | CollisionLayer::Layer_Environment
-    );
+        CollisionLayer::Layer_Player | CollisionLayer::Layer_Environment);
 
     CollisionManager::Instance().setBodyLayer(
         environmentObstacle,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy
-    );
+        CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy);
 
     // Event-driven: PathfinderManager automatically updates via CollisionObstacleChanged events
     EventManager::Instance().update();
@@ -524,7 +518,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
     BOOST_CHECK_GE(path.size(), 2);
 
     BOOST_TEST_MESSAGE("Collision layer pathfinding: " << path.size()
-                      << " waypoints with layered obstacles");
+                                                       << " waypoints with layered obstacles");
 
     // Clean up
     CollisionManager::Instance().removeCollisionBody(playerObstacle);
@@ -532,8 +526,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
     CollisionManager::Instance().removeCollisionBody(environmentObstacle);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture) {
     // INTEGRATION TEST #3: Actually move an entity along a path and verify no collisions occur
 
     Vector2D start(100.0f, 100.0f);  // Clear starting area
@@ -573,7 +566,7 @@ BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture
             for (EntityID colliderId : collisions) {
                 collisionsDetected++;
                 BOOST_TEST_MESSAGE("Collision detected at (" << currentPos.getX() << ", "
-                                 << currentPos.getY() << ") with entity " << colliderId);
+                                                             << currentPos.getY() << ") with entity " << colliderId);
                 break;
             }
 
@@ -588,7 +581,7 @@ BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture
     }
 
     BOOST_TEST_MESSAGE("Entity movement test: traversed " << waypointsTraversed
-                      << " waypoints with " << collisionsDetected << " collisions");
+                                                          << " waypoints with " << collisionsDetected << " collisions");
 
     // With 64px pathfinding grid, 32px obstacles, 16px entity radius, and 8px movement steps,
     // edge collisions are expected when brushing past obstacles. Each obstacle can trigger
@@ -597,16 +590,16 @@ BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture
     int maxAcceptableCollisions = std::max(20, static_cast<int>(path.size() * waypointsTraversed * 0.3f));
     BOOST_CHECK_MESSAGE(collisionsDetected <= maxAcceptableCollisions,
         "Entity movement should mostly avoid collisions (detected " +
-        std::to_string(collisionsDetected) + " collisions, max acceptable: " +
-        std::to_string(maxAcceptableCollisions) + ")");
+            std::to_string(collisionsDetected) + " collisions, max acceptable: " +
+            std::to_string(maxAcceptableCollisions) + ")");
 
     // Verify entity made progress towards goal (not stuck)
     float finalDistance = (currentPos - goal).length();
     float startDistance = (start - goal).length();
     BOOST_CHECK_MESSAGE(finalDistance < startDistance,
         "Entity should make progress towards goal (start: " +
-        std::to_string(startDistance) + "px, end: " +
-        std::to_string(finalDistance) + "px)");
+            std::to_string(startDistance) + "px, end: " +
+            std::to_string(finalDistance) + "px)");
 
     // No collision body to clean up (query-only test)
 }

@@ -15,10 +15,10 @@ public:
         static MockGameEngine instance;
         return instance;
     }
-    
+
     int getWindowWidth() const { return 1024; }
     int getWindowHeight() const { return 768; }
-    
+
 private:
     MockGameEngine() = default;
     ~MockGameEngine() = default;

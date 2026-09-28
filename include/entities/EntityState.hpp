@@ -7,11 +7,11 @@
 #define ENTITY_STATE_HPP
 
 class EntityState {
- public:
-  virtual void enter() = 0;
-  virtual void update(float deltaTime) = 0;
-  virtual void exit() = 0;
-  virtual ~EntityState() = default;
+public:
+    virtual void enter() = 0;
+    virtual void update(float deltaTime) = 0;
+    virtual void exit() = 0;
+    virtual ~EntityState() = default;
 };
 
 #endif  // ENTITY_STATE_HPP

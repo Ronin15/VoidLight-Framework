@@ -128,9 +128,13 @@ struct BehaviorTestFixture {
         // Load a simple test world for pathfinding
         // Note: World must be >= 26x26 to satisfy VILLAGE_RADIUS constraints in WorldGenerator
         VoidLight::WorldGenerationConfig cfg{};
-        cfg.width = 30; cfg.height = 30; cfg.seed = 12345;
-        cfg.elevationFrequency = 0.05f; cfg.humidityFrequency = 0.05f;
-        cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+        cfg.width = 30;
+        cfg.height = 30;
+        cfg.seed = 12345;
+        cfg.elevationFrequency = 0.05f;
+        cfg.humidityFrequency = 0.05f;
+        cfg.waterLevel = 0.3f;
+        cfg.mountainLevel = 0.7f;
 
         if (!WorldManager::Instance().loadNewWorld(cfg)) {
             throw std::runtime_error("Failed to load test world for behavior tests");
@@ -210,8 +214,7 @@ BOOST_FIXTURE_TEST_SUITE(BehaviorRegistrationTests, BehaviorTestFixture)
 BOOST_AUTO_TEST_CASE(TestAllBehaviorsRegistered) {
     // Test that all 8 behavior types are auto-registered
     std::vector<std::string> expectedBehaviors = {
-        "Idle", "Wander", "Patrol", "Chase", "Flee", "Follow", "Guard", "Attack"
-    };
+        "Idle", "Wander", "Patrol", "Chase", "Flee", "Follow", "Guard", "Attack"};
 
     for (const auto& behaviorName : expectedBehaviors) {
         BOOST_CHECK(AIManager::Instance().hasBehavior(behaviorName));
@@ -528,11 +531,11 @@ BOOST_AUTO_TEST_CASE(TestFleeBehavior) {
     EntityHandle handle = entity->getHandle();
 
     // FleeBehavior requires a lastAttacker in memory to know who to flee from
-    auto &edm = EntityDataManager::Instance();
+    auto& edm = EntityDataManager::Instance();
     size_t entityIdx = edm.getIndex(handle);
     if (entityIdx != SIZE_MAX) {
         edm.recordCombatEvent(entityIdx, playerHandle, handle, 10.0f,
-                              /*wasAttacked=*/true, 0.0f);
+            /*wasAttacked=*/true, 0.0f);
     }
 
     AIManager::Instance().assignBehavior(handle, "Flee");
@@ -789,11 +792,11 @@ BOOST_AUTO_TEST_CASE(TestPlayerCombatStandingDropsOnceOnHostileTransition) {
 
     int stanceEvents = 0;
     eventMgr.registerHandler(EventTypeId::StanceChanged,
-                             [&stanceEvents](const EventData& data) {
-                                 if (data.isActive() && data.event) {
-                                     ++stanceEvents;
-                                 }
-                             });
+        [&stanceEvents](const EventData& data) {
+            if (data.isActive() && data.event) {
+                ++stanceEvents;
+            }
+        });
 
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1), 0);
 
@@ -803,7 +806,7 @@ BOOST_AUTO_TEST_CASE(TestPlayerCombatStandingDropsOnceOnHostileTransition) {
 
     BOOST_CHECK(aiMgr.isHostileTo(1, playerFaction));
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
-                      AIManager::PLAYER_STANDING_COMBAT_DELTA);
+        AIManager::PLAYER_STANDING_COMBAT_DELTA);
     BOOST_CHECK_EQUAL(stanceEvents, 2);
 
     const float relationshipAfterFirst =
@@ -814,18 +817,18 @@ BOOST_AUTO_TEST_CASE(TestPlayerCombatStandingDropsOnceOnHostileTransition) {
     eventMgr.dispatchEvent(secondHit, EventManager::DispatchMode::Immediate);
 
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
-                      AIManager::PLAYER_STANDING_COMBAT_DELTA);
+        AIManager::PLAYER_STANDING_COMBAT_DELTA);
     BOOST_CHECK_EQUAL(stanceEvents, 2);
 
     aiMgr.adjustPlayerStanding(playerHandle, 1, AIManager::PLAYER_STANDING_THEFT_DELTA);
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
-                      AIManager::PLAYER_STANDING_COMBAT_DELTA +
-                          AIManager::PLAYER_STANDING_THEFT_DELTA);
+        AIManager::PLAYER_STANDING_COMBAT_DELTA +
+            AIManager::PLAYER_STANDING_THEFT_DELTA);
     BOOST_CHECK_EQUAL(Behaviors::getRelationshipLevel(victimHandle, playerHandle),
-                      relationshipAfterFirst);
+        relationshipAfterFirst);
     BOOST_CHECK_EQUAL(Behaviors::getPlayerFactionStanding(playerHandle, 1),
-                      AIManager::PLAYER_STANDING_COMBAT_DELTA +
-                          AIManager::PLAYER_STANDING_THEFT_DELTA);
+        AIManager::PLAYER_STANDING_COMBAT_DELTA +
+            AIManager::PLAYER_STANDING_THEFT_DELTA);
 }
 
 BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerAfterFactionMateHit) {
@@ -1079,13 +1082,13 @@ BOOST_AUTO_TEST_CASE(TestBehaviorContextStanceRowIsNonOwningRef) {
 
     std::array<FactionStance, kFactionStanceRowSize> stanceRow = kNeutralFactionStanceRow;
     BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
-                        idx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(idx),
-                        &edm.getPathData(idx), memoryData,
-                        edm.getCharacterDataByIndex(idx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        stanceRow, 0, false,
-                        edm.knockbackSidecar());
+        idx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(idx),
+        &edm.getPathData(idx), memoryData,
+        edm.getCharacterDataByIndex(idx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        stanceRow, 0, false,
+        edm.knockbackSidecar());
 
     BOOST_CHECK(!Behaviors::isHostileTowardFaction(ctx, 3));
     stanceRow[3] = FactionStance::Hostile;
@@ -1202,13 +1205,13 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackUsesFullWeaponReach) {
     memoryData.lastTarget = targetHandle;
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        kNeutralFactionStanceRow, 0, false,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, 0, false,
+        edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -1252,13 +1255,13 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackPressuresInsideReachBeforeWeaponReady) {
     memoryData.personality.composure = 0.8f;
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        kNeutralFactionStanceRow, 0, false,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, 0, false,
+        edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -1298,13 +1301,13 @@ BOOST_AUTO_TEST_CASE(TestAttackBehaviorSynchronizesCurrentAttackMode) {
     memoryData.setValid(true);
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        kNeutralFactionStanceRow, 0, false,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, 0, false,
+        edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -1358,13 +1361,13 @@ BOOST_AUTO_TEST_CASE(TestRangedAttackWithoutAmmoResetsForRepositioning) {
     memoryData.lastTarget = targetHandle;
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        kNeutralFactionStanceRow, 0, false,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, 0, false,
+        edm.knockbackSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -1459,8 +1462,8 @@ BOOST_AUTO_TEST_CASE(TestMessageQueueBasicOperations) {
     updateAI(0.016f);
     const auto afterRef = edm.getBehaviorConfigRef(idx);
     bool processedRetreat = (afterRef.type == BehaviorType::Flee) ||
-                            (afterRef.type == BehaviorType::Attack &&
-                             edm.getAttackState(afterRef.index).isRetreating);
+        (afterRef.type == BehaviorType::Attack &&
+            edm.getAttackState(afterRef.index).isRetreating);
     BOOST_CHECK(processedRetreat);
 
     // Clear messages
@@ -1753,8 +1756,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorSwitching) {
     EntityHandle handle = entity->getHandle();
 
     std::vector<std::string> behaviorSequence = {
-        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack"
-    };
+        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack"};
 
     for (const auto& behavior : behaviorSequence) {
         AIManager::Instance().assignBehavior(handle, behavior);
@@ -1852,8 +1854,7 @@ BOOST_AUTO_TEST_CASE(TestAllBehaviorTransitionsPreserveState) {
         {"Flee", "Guard"},
         {"Guard", "Attack"},  // Critical transition
         {"Attack", "Follow"},
-        {"Follow", "Idle"}
-    };
+        {"Follow", "Idle"}};
 
     for (const auto& [fromBehavior, toBehavior] : transitions) {
         // Start with first behavior
@@ -1896,8 +1897,7 @@ BOOST_AUTO_TEST_CASE(TestRapidBehaviorTransitionsStability) {
     auto& edm = EntityDataManager::Instance();
 
     std::vector<std::string> behaviors = {
-        "Idle", "Wander", "Chase", "Attack", "Flee", "Guard", "Follow"
-    };
+        "Idle", "Wander", "Chase", "Attack", "Flee", "Guard", "Follow"};
 
     // Register initially
     AIManager::Instance().assignBehavior(handle, "Idle");
@@ -1917,7 +1917,7 @@ BOOST_AUTO_TEST_CASE(TestRapidBehaviorTransitionsStability) {
             auto& behaviorData = edm.getBehaviorData(edmIdx);
             BOOST_CHECK_MESSAGE(behaviorData.isValid(),
                 "BehaviorData corrupt during rapid transitions at cycle " +
-                std::to_string(cycle) + ", behavior " + behavior);
+                    std::to_string(cycle) + ", behavior " + behavior);
         }
     }
 
@@ -1980,8 +1980,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorMemoryManagement) {
 
     // Rapidly switch between behaviors to test memory management
     std::vector<std::string> behaviors = {
-        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack"
-    };
+        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack"};
 
     for (int cycle = 0; cycle < 5; ++cycle) {
         for (const auto& behavior : behaviors) {
@@ -1996,7 +1995,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorMemoryManagement) {
 
     BOOST_CHECK(!AIManager::Instance().hasBehavior(handle));
     BOOST_CHECK_GE(AIManager::Instance().getTotalAssignmentCount(),
-                   initialAssignments + behaviors.size() * 5);
+        initialAssignments + behaviors.size() * 5);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -2165,7 +2164,7 @@ BOOST_AUTO_TEST_CASE(TestWanderSwitchesToFleeWhenAttacked) {
     BOOST_CHECK(responseType == BehaviorType::Chase || responseType == BehaviorType::Flee);
 
     BOOST_TEST_MESSAGE("Wander -> combat response on attack verified (type="
-                       << static_cast<int>(responseType) << ")");
+        << static_cast<int>(responseType) << ")");
 
     // Cleanup
     aiMgr.unassignBehavior(entityHandle);
@@ -2208,7 +2207,7 @@ BOOST_AUTO_TEST_CASE(TestIdleSwitchesToFleeWhenAttacked) {
     BOOST_CHECK(responseType == BehaviorType::Chase || responseType == BehaviorType::Flee);
 
     BOOST_TEST_MESSAGE("Idle -> combat response on attack verified (type="
-                       << static_cast<int>(responseType) << ")");
+        << static_cast<int>(responseType) << ")");
 
     // Cleanup
     aiMgr.unassignBehavior(entityHandle);
@@ -2233,7 +2232,7 @@ BOOST_AUTO_TEST_CASE(TestMassBasedKnockback) {
     float heavyScale = 1.0f / std::max(0.1f, heavyChar.mass);
 
     BOOST_TEST_MESSAGE("Knockback scales - light (mass=0.5): " << lightScale
-                       << ", heavy (mass=4.0): " << heavyScale);
+                                                               << ", heavy (mass=4.0): " << heavyScale);
 
     BOOST_CHECK_CLOSE(lightScale / heavyScale, 8.0f, 0.1f);
 
@@ -2312,15 +2311,15 @@ BOOST_AUTO_TEST_CASE(TestBerserkerModeNoRetreat) {
     memData.personality.aggression = 0.8f;
 
     bool isBerserker = (memData.emotions.aggression > 0.8f &&
-                        memData.personality.aggression > 0.7f);
+        memData.personality.aggression > 0.7f);
     BOOST_CHECK(isBerserker);
 
     auto& charData = edm.getCharacterData(handle);
     charData.health = charData.maxHealth * 0.1f;
 
     BOOST_TEST_MESSAGE("Berserker mode: aggression=" << memData.emotions.aggression
-                       << " personality=" << memData.personality.aggression
-                       << " health=" << (charData.health/charData.maxHealth*100) << "%");
+                                                     << " personality=" << memData.personality.aggression
+                                                     << " health=" << (charData.health / charData.maxHealth * 100) << "%");
 
     BOOST_CHECK(isBerserker);
 }
@@ -2716,7 +2715,7 @@ BOOST_AUTO_TEST_CASE(TestAttackPanicForcesRetreat) {
     const auto attackRef = edm.getBehaviorConfigRef(entityIdx);
     // May have switched to Flee or be in a disengaging Attack state.
     bool retreatingOrFled = (attackRef.type == BehaviorType::Flee) ||
-                            (attackRef.type == BehaviorType::Attack && edm.getAttackState(attackRef.index).isRetreating);
+        (attackRef.type == BehaviorType::Attack && edm.getAttackState(attackRef.index).isRetreating);
     BOOST_CHECK(retreatingOrFled);
     BOOST_TEST_MESSAGE("Attack PANIC forced retreat/flee verified");
     aiMgr.unassignBehavior(entityHandle);
@@ -2749,7 +2748,7 @@ BOOST_AUTO_TEST_CASE(TestLowHealthAttackRetreatsThenReengages) {
     BOOST_REQUIRE(attackRef.type == BehaviorType::Attack);
     auto& attackState = edm.getAttackState(attackRef.index);
     BOOST_REQUIRE_MESSAGE(attackState.isRetreating,
-                          "Low-health attacker should enter tactical retreat once");
+        "Low-health attacker should enter tactical retreat once");
     BOOST_CHECK(attackState.hasHandledTacticalRetreat);
     BOOST_CHECK_EQUAL(static_cast<int>(attackState.lastTacticalRetreatEncounter), 1);
 
@@ -2779,10 +2778,10 @@ BOOST_AUTO_TEST_CASE(TestLowHealthAttackRetreatsThenReengages) {
         finalPressure = finalAttackState.pressureScore;
     }
     BOOST_CHECK_MESSAGE(reengaged,
-                        std::format("Handled low-health retreat should not permanently block re-engagement "
-                                    "(type={}, state={}, attackTimer={:.2f}, pressure={:.2f})",
-                                    static_cast<int>(finalRef.type), finalState,
-                                    finalAttackTimer, finalPressure));
+        std::format("Handled low-health retreat should not permanently block re-engagement "
+                    "(type={}, state={}, attackTimer={:.2f}, pressure={:.2f})",
+            static_cast<int>(finalRef.type), finalState,
+            finalAttackTimer, finalPressure));
     aiMgr.unassignBehavior(attackerHandle);
 }
 
@@ -2830,11 +2829,11 @@ BOOST_AUTO_TEST_CASE(TestAttackNewDamageEncounterCanTriggerAnotherRetreat) {
     const auto& committedAttackState =
         edm.getAttackState(edm.getBehaviorConfigRef(attackerIdx).index);
     BOOST_REQUIRE_MESSAGE(committedAttackState.currentState == 3,
-                          std::format("Attacker should commit an attack after first tactical retreat "
-                                      "(state={}, pressure={:.2f}, resetConfidence={:.2f})",
-                                      static_cast<int>(committedAttackState.currentState),
-                                      committedAttackState.pressureScore,
-                                      committedAttackState.resetConfidence));
+        std::format("Attacker should commit an attack after first tactical retreat "
+                    "(state={}, pressure={:.2f}, resetConfidence={:.2f})",
+            static_cast<int>(committedAttackState.currentState),
+            committedAttackState.pressureScore,
+            committedAttackState.resetConfidence));
 
     memData.combatEncounters = 2;
     updateAI(0.1f, attacker->getPosition());
@@ -2843,16 +2842,16 @@ BOOST_AUTO_TEST_CASE(TestAttackNewDamageEncounterCanTriggerAnotherRetreat) {
     const auto& interruptedState =
         edm.getAttackState(edm.getBehaviorConfigRef(attackerIdx).index);
     BOOST_CHECK_MESSAGE(!interruptedState.isRetreating,
-                        "A fresh encounter must not preempt an already committed attack frame");
+        "A fresh encounter must not preempt an already committed attack frame");
     BOOST_REQUIRE_MESSAGE(damageAfterRetreat,
-                          "Committed attack should deal damage before tactical retreat replans");
+        "Committed attack should deal damage before tactical retreat replans");
 
     updateAI(0.1f, attacker->getPosition());
 
     const auto& secondRetreatState =
         edm.getAttackState(edm.getBehaviorConfigRef(attackerIdx).index);
     BOOST_CHECK_MESSAGE(secondRetreatState.isRetreating,
-                        "A new damage encounter can trigger another retreat after the committed attack resolves");
+        "A new damage encounter can trigger another retreat after the committed attack resolves");
     BOOST_CHECK_EQUAL(static_cast<int>(secondRetreatState.lastTacticalRetreatEncounter), 2);
     eventMgr.removeHandler(combatToken);
     aiMgr.unassignBehavior(attackerHandle);
@@ -2905,7 +2904,7 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
 
     updateAI(0.1f, player->getPosition());
     BOOST_REQUIRE_MESSAGE(attackState.isRetreating,
-                          "Low-health attacker should retreat during post-attack recovery");
+        "Low-health attacker should retreat during post-attack recovery");
     BOOST_REQUIRE(!attackState.canAttack);
 
     const float postRetreatStartHealth = player->getHealth();
@@ -2932,13 +2931,13 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
     }
 
     BOOST_CHECK_MESSAGE(secondHit,
-                        std::format("Retreat must not strand attack readiness after interrupting recovery "
-                                    "(type={}, state={}, canAttack={}, retreating={}, attackTimer={:.2f}, "
-                                    "pressure={:.2f}, healthBefore={:.2f}, healthAfter={:.2f})",
-                                    static_cast<int>(finalRef.type), finalState,
-                                    finalCanAttack, finalRetreating, finalAttackTimer,
-                                    finalPressure, postRetreatStartHealth,
-                                    player->getHealth()));
+        std::format("Retreat must not strand attack readiness after interrupting recovery "
+                    "(type={}, state={}, canAttack={}, retreating={}, attackTimer={:.2f}, "
+                    "pressure={:.2f}, healthBefore={:.2f}, healthAfter={:.2f})",
+            static_cast<int>(finalRef.type), finalState,
+            finalCanAttack, finalRetreating, finalAttackTimer,
+            finalPressure, postRetreatStartHealth,
+            player->getHealth()));
     aiMgr.unassignBehavior(attackerHandle);
 }
 
@@ -3055,13 +3054,13 @@ BOOST_AUTO_TEST_CASE(TestGuardDetectsAtIdentityNotAtNightScale) {
         EnvironmentSnapshot env{};
         env.detectionScale = detectionScale;
         BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
-                            idx, 0.016f, playerHandle, playerPos,
-                            Vector2D(0, 0), true, edm.getBehaviorData(idx),
-                            &edm.getPathData(idx), memoryData,
-                            edm.getCharacterDataByIndex(idx),
-                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                            stanceRow, playerFaction, true,
-                            edm.knockbackSidecar(), env);
+            idx, 0.016f, playerHandle, playerPos,
+            Vector2D(0, 0), true, edm.getBehaviorData(idx),
+            &edm.getPathData(idx), memoryData,
+            edm.getCharacterDataByIndex(idx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            stanceRow, playerFaction, true,
+            edm.knockbackSidecar(), env);
         Behaviors::executeGuard(ctx, config, state);
         return memoryData.lastTarget == playerHandle;
     };
@@ -3094,13 +3093,13 @@ BOOST_AUTO_TEST_CASE(TestWanderSlowerInStormThanClear) {
         state.directionChangeTimer = 0.0f;
         hotData.transform.velocity = Vector2D(0, 0);
         BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
-                            idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
-                            Vector2D(0, 0), false, edm.getBehaviorData(idx),
-                            &edm.getPathData(idx), memoryData,
-                            edm.getCharacterDataByIndex(idx),
-                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                            kNeutralFactionStanceRow, 0, false,
-                            edm.knockbackSidecar(), env);
+            idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
+            Vector2D(0, 0), false, edm.getBehaviorData(idx),
+            &edm.getPathData(idx), memoryData,
+            edm.getCharacterDataByIndex(idx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, 0, false,
+            edm.knockbackSidecar(), env);
         Behaviors::executeWander(ctx, config, state);
         return npc->getVelocity().length();
     };
@@ -3141,13 +3140,13 @@ BOOST_AUTO_TEST_CASE(TestPatrolDwellAndFleeSafeDistanceUseCaution) {
         EnvironmentSnapshot env{};
         env.cautionScale = cautionScale;
         BehaviorContext ctx(patrolHot.transform, patrolHot, patrolHandle.getId(),
-                            patrolIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                            Vector2D(0, 0), false, edm.getBehaviorData(patrolIdx),
-                            &edm.getPathData(patrolIdx), patrolMem,
-                            edm.getCharacterDataByIndex(patrolIdx),
-                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                            kNeutralFactionStanceRow, 0, false,
-                            edm.knockbackSidecar(), env);
+            patrolIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+            Vector2D(0, 0), false, edm.getBehaviorData(patrolIdx),
+            &edm.getPathData(patrolIdx), patrolMem,
+            edm.getCharacterDataByIndex(patrolIdx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, 0, false,
+            edm.knockbackSidecar(), env);
         Behaviors::executePatrol(ctx, patrolConfig, patrolState);
         return patrolState.currentPatrolIndex;
     };
@@ -3180,13 +3179,13 @@ BOOST_AUTO_TEST_CASE(TestPatrolDwellAndFleeSafeDistanceUseCaution) {
         EnvironmentSnapshot env{};
         env.cautionScale = cautionScale;
         BehaviorContext ctx(fleeHot.transform, fleeHot, fleeHandle.getId(),
-                            fleeIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                            Vector2D(0, 0), false, edm.getBehaviorData(fleeIdx),
-                            &edm.getPathData(fleeIdx), fleeMem,
-                            edm.getCharacterDataByIndex(fleeIdx),
-                            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                            kNeutralFactionStanceRow, 0, false,
-                            edm.knockbackSidecar(), env);
+            fleeIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+            Vector2D(0, 0), false, edm.getBehaviorData(fleeIdx),
+            &edm.getPathData(fleeIdx), fleeMem,
+            edm.getCharacterDataByIndex(fleeIdx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, 0, false,
+            edm.knockbackSidecar(), env);
         Behaviors::executeFlee(ctx, fleeConfig, fleeState);
         return fleeState.isFleeing;
     };
@@ -3208,7 +3207,7 @@ BOOST_AUTO_TEST_CASE(TestExecuteDoesNotCallWeatherOrTimeSingletons) {
         std::ifstream in(path);
         BOOST_REQUIRE(in);
         const std::string contents((std::istreambuf_iterator<char>(in)),
-                                   std::istreambuf_iterator<char>());
+            std::istreambuf_iterator<char>());
         BOOST_CHECK_MESSAGE(
             contents.find("GameTimeManager.hpp") == std::string::npos,
             path.filename().string() + " includes GameTimeManager.hpp");
@@ -3241,17 +3240,17 @@ BOOST_AUTO_TEST_CASE(TestExecuteDoesNotCallWeatherOrTimeSingletons) {
     EnvironmentSnapshot env{};
     env.moveSpeedScale = 0.5f;
     BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
-                        idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(idx),
-                        &edm.getPathData(idx), memoryData,
-                        edm.getCharacterDataByIndex(idx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        kNeutralFactionStanceRow, 0, false,
-                        edm.knockbackSidecar(), env);
+        idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(idx),
+        &edm.getPathData(idx), memoryData,
+        edm.getCharacterDataByIndex(idx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, 0, false,
+        edm.knockbackSidecar(), env);
     Behaviors::executeWander(ctx, edm.getWanderConfig(ref.index), state);
     BOOST_CHECK_GT(npc->getVelocity().length(), 0.0f);
     BOOST_CHECK_CLOSE(npc->getVelocity().length(),
-                      edm.getBehaviorData(idx).moveSpeed * 0.5f, 1.0);
+        edm.getBehaviorData(idx).moveSpeed * 0.5f, 1.0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

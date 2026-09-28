@@ -139,8 +139,7 @@ private:
                 Vector2D(16.0f, 16.0f),
                 CollisionLayer::Layer_Environment,
                 CollisionLayer::Layer_Environment,
-                false, 0, 1, edmIndex
-            );
+                false, 0, 1, edmIndex);
         }
 
         // The pathfinding grid should now be automatically available through WorldManager
@@ -161,7 +160,7 @@ size_t createBenchmarkNpc() {
 }
 
 bool waitForBenchmarkPath(size_t edmIndex, std::vector<Vector2D>& outPath,
-                          high_resolution_clock::time_point& doneAt) {
+    high_resolution_clock::time_point& doneAt) {
     auto& pm = PathfinderManager::Instance();
     auto& edm = EntityDataManager::Instance();
     while (true) {
@@ -194,8 +193,7 @@ BOOST_AUTO_TEST_CASE(BenchmarkImmediatePathfinding) {
         {50, "Small Grid (50x50)"},
         {100, "Medium Grid (100x100)"},
         {150, "Large Grid (150x150)"},
-        {200, "XLarge Grid (200x200)"}
-    };
+        {200, "XLarge Grid (200x200)"}};
 
     const int pathsPerSize = 100;
     std::mt19937 rng(42);
@@ -222,7 +220,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkImmediatePathfinding) {
 
             auto requestStart = high_resolution_clock::now();
             BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
-                npc, start, goal, PathfinderManager::Priority::High), 0U);
+                               npc, start, goal, PathfinderManager::Priority::High),
+                0U);
             auto requestQueued = high_resolution_clock::now();
 
             double queuingLatencyUs = duration_cast<nanoseconds>(requestQueued - requestStart).count() / 1000.0;
@@ -382,7 +381,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkPathLengthScaling) {
 
             auto requestStart = high_resolution_clock::now();
             BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
-                npc, start, goal, PathfinderManager::Priority::High), 0U);
+                               npc, start, goal, PathfinderManager::Priority::High),
+                0U);
             auto requestQueued = high_resolution_clock::now();
 
             double queuingLatencyUs = duration_cast<nanoseconds>(requestQueued - requestStart).count() / 1000.0;
@@ -447,7 +447,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkCachePerformance) {
 
         auto requestStart = high_resolution_clock::now();
         BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
-            cacheNpc, start, goal, PathfinderManager::Priority::High), 0U);
+                           cacheNpc, start, goal, PathfinderManager::Priority::High),
+            0U);
         waitForBenchmarkPath(cacheNpc, path, doneAt);
 
         double pathTimeMs = duration_cast<microseconds>(doneAt - requestStart).count() / 1000.0;
@@ -463,7 +464,8 @@ BOOST_AUTO_TEST_CASE(BenchmarkCachePerformance) {
 
             auto requestStart = high_resolution_clock::now();
             BOOST_CHECK_GT(PathfinderManager::Instance().requestPathToEDM(
-                cacheNpc, start, goal, PathfinderManager::Priority::High), 0U);
+                               cacheNpc, start, goal, PathfinderManager::Priority::High),
+                0U);
             waitForBenchmarkPath(cacheNpc, path, doneAt);
 
             double pathTimeMs = duration_cast<microseconds>(doneAt - requestStart).count() / 1000.0;

@@ -50,10 +50,7 @@ struct WorldResourceStats {
 
     WorldResourceStats() = default;
     WorldResourceStats(const WorldResourceStats& other)
-        : worldsTracked(other.worldsTracked.load()),
-          inventoriesRegistered(other.inventoriesRegistered.load()),
-          harvestablesRegistered(other.harvestablesRegistered.load()),
-          queryCount(other.queryCount.load()) {}
+        : worldsTracked(other.worldsTracked.load()), inventoriesRegistered(other.inventoriesRegistered.load()), harvestablesRegistered(other.harvestablesRegistered.load()), queryCount(other.queryCount.load()) {}
 
     WorldResourceStats& operator=(const WorldResourceStats& other) {
         if (this != &other) {
@@ -100,7 +97,7 @@ struct SpatialIndex {
     // Pack cell coordinates into 64-bit key
     [[nodiscard]] static uint64_t makeKey(int32_t cellX, int32_t cellY) noexcept {
         return (static_cast<uint64_t>(static_cast<uint32_t>(cellY)) << 32) |
-               static_cast<uint32_t>(cellX);
+            static_cast<uint32_t>(cellX);
     }
 
     // World position to cell coordinate
@@ -142,7 +139,7 @@ struct SpatialIndex {
 
     // Query all entities within radius of center
     void queryRadius(const Vector2D& center, float radius,
-                     std::vector<size_t>& outIndices) const {
+        std::vector<size_t>& outIndices) const {
         int32_t minCellX = toCell(center.getX() - radius);
         int32_t maxCellX = toCell(center.getX() + radius);
         int32_t minCellY = toCell(center.getY() - radius);
@@ -156,7 +153,7 @@ struct SpatialIndex {
                 auto it = cells.find(key);
                 if (it != cells.end()) {
                     std::copy(it->second.begin(), it->second.end(),
-                              std::back_inserter(outIndices));
+                        std::back_inserter(outIndices));
                 }
             }
         }
@@ -320,7 +317,7 @@ public:
      * @return Number of containers found
      */
     size_t queryContainersInRadius(const Vector2D& center, float radius,
-                                   std::vector<size_t>& outIndices) const;
+        std::vector<size_t>& outIndices) const;
 
     // ========================================================================
     // SPATIAL QUERIES (O(k) where k = cells in radius)
@@ -336,7 +333,7 @@ public:
      * Note: Returns EDM indices. Caller should validate with EDM::isAlive()
      */
     size_t queryDroppedItemsInRadius(const Vector2D& center, float radius,
-                                     std::vector<size_t>& outIndices) const;
+        std::vector<size_t>& outIndices) const;
 
     /**
      * @brief Query harvestables near a position in active world
@@ -346,7 +343,7 @@ public:
      * @return Number of harvestables found
      */
     size_t queryHarvestablesInRadius(const Vector2D& center, float radius,
-                                     std::vector<size_t>& outIndices) const;
+        std::vector<size_t>& outIndices) const;
 
     /**
      * @brief Find closest dropped item to position
@@ -395,7 +392,7 @@ public:
      * @return Sum of quantities across all registered inventories
      */
     [[nodiscard]] Quantity queryInventoryTotal(const WorldId& worldId,
-                                               VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Query total harvestable yield potential in a world
@@ -404,7 +401,7 @@ public:
      * @return Sum of (yieldMax) for non-depleted harvestables
      */
     [[nodiscard]] Quantity queryHarvestableTotal(const WorldId& worldId,
-                                                 VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Query total world resources (inventories + harvestables)
@@ -413,14 +410,14 @@ public:
      * @return Combined total from inventories and harvestables
      */
     [[nodiscard]] Quantity queryWorldTotal(const WorldId& worldId,
-                                           VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Check if a world has at least the specified quantity
      */
     [[nodiscard]] bool hasResource(const WorldId& worldId,
-                                   VoidLight::ResourceHandle handle,
-                                   Quantity minimumQuantity = 1) const;
+        VoidLight::ResourceHandle handle,
+        Quantity minimumQuantity = 1) const;
 
     /**
      * @brief Get all resource totals for a world

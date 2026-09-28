@@ -16,8 +16,7 @@
 // Helper types
 // ============================================================================
 
-struct SimpleData
-{
+struct SimpleData {
     int value{0};
     float weight{1.0f};
 };
@@ -28,8 +27,7 @@ struct SimpleData
 
 BOOST_AUTO_TEST_SUITE(BasicOperations)
 
-BOOST_AUTO_TEST_CASE(InsertAndHas)
-{
+BOOST_AUTO_TEST_CASE(InsertAndHas) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -43,8 +41,7 @@ BOOST_AUTO_TEST_CASE(InsertAndHas)
     BOOST_CHECK_EQUAL(sidecar.activeCount(), 1u);
 }
 
-BOOST_AUTO_TEST_CASE(GetReturnsNullptrOnAbsent)
-{
+BOOST_AUTO_TEST_CASE(GetReturnsNullptrOnAbsent) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -52,8 +49,7 @@ BOOST_AUTO_TEST_CASE(GetReturnsNullptrOnAbsent)
     BOOST_CHECK(static_cast<const SparseSidecar<SimpleData>&>(sidecar).get(3) == nullptr);
 }
 
-BOOST_AUTO_TEST_CASE(GetReturnsMutablePointerOnPresent)
-{
+BOOST_AUTO_TEST_CASE(GetReturnsMutablePointerOnPresent) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -68,8 +64,7 @@ BOOST_AUTO_TEST_CASE(GetReturnsMutablePointerOnPresent)
     BOOST_CHECK_EQUAL(sidecar.get(7)->value, 100);
 }
 
-BOOST_AUTO_TEST_CASE(ApplyOnExistingReturnsExisting)
-{
+BOOST_AUTO_TEST_CASE(ApplyOnExistingReturnsExisting) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -82,8 +77,7 @@ BOOST_AUTO_TEST_CASE(ApplyOnExistingReturnsExisting)
     BOOST_CHECK_CLOSE(sidecar.get(4)->weight, 3.14f, 0.001f);
 }
 
-BOOST_AUTO_TEST_CASE(RemoveSingle)
-{
+BOOST_AUTO_TEST_CASE(RemoveSingle) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -98,8 +92,7 @@ BOOST_AUTO_TEST_CASE(RemoveSingle)
     BOOST_CHECK(sidecar.get(2) == nullptr);
 }
 
-BOOST_AUTO_TEST_CASE(RemoveAbsentIsNoOp)
-{
+BOOST_AUTO_TEST_CASE(RemoveAbsentIsNoOp) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -111,8 +104,7 @@ BOOST_AUTO_TEST_CASE(RemoveAbsentIsNoOp)
     BOOST_CHECK(sidecar.has(3));
 }
 
-BOOST_AUTO_TEST_CASE(RemoveAllFor)
-{
+BOOST_AUTO_TEST_CASE(RemoveAllFor) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(10);
 
@@ -136,8 +128,7 @@ BOOST_AUTO_TEST_SUITE(SwapPopCorrectness)
  * C must be displaced to B's dense slot.
  * Verify C's sparse entry now points to the correct (displaced) dense slot.
  */
-BOOST_AUTO_TEST_CASE(RemoveMidElementPatchesDisplacedSparse)
-{
+BOOST_AUTO_TEST_CASE(RemoveMidElementPatchesDisplacedSparse) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(20);
 
@@ -163,20 +154,18 @@ BOOST_AUTO_TEST_CASE(RemoveMidElementPatchesDisplacedSparse)
 
     // Dense array integrity: owners() must be consistent
     auto owners = sidecar.owners();
-    auto dense  = sidecar.dense();
+    auto dense = sidecar.dense();
     BOOST_REQUIRE_EQUAL(owners.size(), 2u);
     BOOST_REQUIRE_EQUAL(dense.size(), 2u);
 
-    for (size_t i = 0; i < owners.size(); ++i)
-    {
+    for (size_t i = 0; i < owners.size(); ++i) {
         uint32_t edmIdx = owners[i];
         BOOST_CHECK(sidecar.has(edmIdx));
         BOOST_CHECK(sidecar.get(edmIdx) == &dense[i]);
     }
 }
 
-BOOST_AUTO_TEST_CASE(RemoveFirstElementOfThree)
-{
+BOOST_AUTO_TEST_CASE(RemoveFirstElementOfThree) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(20);
 
@@ -196,15 +185,13 @@ BOOST_AUTO_TEST_CASE(RemoveFirstElementOfThree)
 
     // Cross-check owners table
     auto owners = sidecar.owners();
-    auto dense  = sidecar.dense();
-    for (size_t i = 0; i < owners.size(); ++i)
-    {
+    auto dense = sidecar.dense();
+    for (size_t i = 0; i < owners.size(); ++i) {
         BOOST_CHECK(sidecar.get(owners[i]) == &dense[i]);
     }
 }
 
-BOOST_AUTO_TEST_CASE(RemoveLastElementOfThree)
-{
+BOOST_AUTO_TEST_CASE(RemoveLastElementOfThree) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(20);
 
@@ -221,8 +208,7 @@ BOOST_AUTO_TEST_CASE(RemoveLastElementOfThree)
     BOOST_CHECK_EQUAL(sidecar.activeCount(), 2u);
 }
 
-BOOST_AUTO_TEST_CASE(InsertAfterRemoveReusesSlot)
-{
+BOOST_AUTO_TEST_CASE(InsertAfterRemoveReusesSlot) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(20);
 
@@ -245,8 +231,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(ResizeStability)
 
-BOOST_AUTO_TEST_CASE(ExistingEntriesSurviveGrow)
-{
+BOOST_AUTO_TEST_CASE(ExistingEntriesSurviveGrow) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(5);
 
@@ -263,23 +248,20 @@ BOOST_AUTO_TEST_CASE(ExistingEntriesSurviveGrow)
     BOOST_CHECK_EQUAL(sidecar.activeCount(), 2u);
 }
 
-BOOST_AUTO_TEST_CASE(NewIndicesAfterGrowAreAbsent)
-{
+BOOST_AUTO_TEST_CASE(NewIndicesAfterGrowAreAbsent) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(5);
     sidecar.apply(1).value = 1;
 
     sidecar.resizeSparse(50);
 
-    for (uint32_t i = 2; i < 50; ++i)
-    {
+    for (uint32_t i = 2; i < 50; ++i) {
         BOOST_CHECK(!sidecar.has(i));
         BOOST_CHECK(sidecar.get(i) == nullptr);
     }
 }
 
-BOOST_AUTO_TEST_CASE(IdempotentResize)
-{
+BOOST_AUTO_TEST_CASE(IdempotentResize) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(20);
     sidecar.apply(10).value = 5;
@@ -300,14 +282,12 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(IterationSurface)
 
-BOOST_AUTO_TEST_CASE(DenseSpanCoversAllActiveEntries)
-{
+BOOST_AUTO_TEST_CASE(DenseSpanCoversAllActiveEntries) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(50);
 
     const std::vector<uint32_t> indices{3, 7, 12, 25, 48};
-    for (uint32_t i = 0; i < static_cast<uint32_t>(indices.size()); ++i)
-    {
+    for (uint32_t i = 0; i < static_cast<uint32_t>(indices.size()); ++i) {
         sidecar.apply(indices[i]).value = static_cast<int>(i * 10);
     }
 
@@ -320,22 +300,20 @@ BOOST_AUTO_TEST_CASE(DenseSpanCoversAllActiveEntries)
     BOOST_CHECK_EQUAL(sum, 0 + 10 + 20 + 30 + 40);
 }
 
-BOOST_AUTO_TEST_CASE(OwnersAndDenseAreConsistent)
-{
+BOOST_AUTO_TEST_CASE(OwnersAndDenseAreConsistent) {
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(30);
 
-    sidecar.apply(0).value  = 1;
+    sidecar.apply(0).value = 1;
     sidecar.apply(15).value = 2;
     sidecar.apply(29).value = 3;
 
     auto owners = sidecar.owners();
-    auto dense  = sidecar.dense();
+    auto dense = sidecar.dense();
 
     BOOST_REQUIRE_EQUAL(owners.size(), dense.size());
 
-    for (size_t i = 0; i < owners.size(); ++i)
-    {
+    for (size_t i = 0; i < owners.size(); ++i) {
         uint32_t edmIdx = owners[i];
         BOOST_CHECK(sidecar.has(edmIdx));
         BOOST_CHECK_EQUAL(sidecar.get(edmIdx), &dense[i]);
@@ -350,8 +328,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(StressTest)
 
-BOOST_AUTO_TEST_CASE(TenThousandRandomInsertsAndRemoves)
-{
+BOOST_AUTO_TEST_CASE(TenThousandRandomInsertsAndRemoves) {
     constexpr size_t ENTITY_COUNT = 10'000;
     SparseSidecar<SimpleData> sidecar;
     sidecar.resizeSparse(ENTITY_COUNT);
@@ -363,8 +340,7 @@ BOOST_AUTO_TEST_CASE(TenThousandRandomInsertsAndRemoves)
     std::unordered_set<uint32_t> groundTruth;
 
     // Phase 1: insert half the entities
-    for (size_t i = 0; i < ENTITY_COUNT / 2; ++i)
-    {
+    for (size_t i = 0; i < ENTITY_COUNT / 2; ++i) {
         uint32_t idx = idxDist(rng);
         sidecar.apply(idx).value = static_cast<int>(idx);
         groundTruth.insert(idx);
@@ -373,16 +349,12 @@ BOOST_AUTO_TEST_CASE(TenThousandRandomInsertsAndRemoves)
     BOOST_CHECK_EQUAL(sidecar.activeCount(), groundTruth.size());
 
     // Phase 2: random removes and inserts
-    for (size_t i = 0; i < ENTITY_COUNT; ++i)
-    {
+    for (size_t i = 0; i < ENTITY_COUNT; ++i) {
         uint32_t idx = idxDist(rng);
-        if (groundTruth.count(idx))
-        {
+        if (groundTruth.count(idx)) {
             sidecar.remove(idx);
             groundTruth.erase(idx);
-        }
-        else
-        {
+        } else {
             sidecar.apply(idx).value = static_cast<int>(idx);
             groundTruth.insert(idx);
         }
@@ -392,27 +364,22 @@ BOOST_AUTO_TEST_CASE(TenThousandRandomInsertsAndRemoves)
     BOOST_CHECK_EQUAL(sidecar.activeCount(), groundTruth.size());
 
     // Verify presence/absence for every entity
-    for (uint32_t i = 0; i < ENTITY_COUNT; ++i)
-    {
+    for (uint32_t i = 0; i < ENTITY_COUNT; ++i) {
         bool expected = (groundTruth.count(i) > 0);
         BOOST_CHECK_EQUAL(sidecar.has(i), expected);
-        if (expected)
-        {
+        if (expected) {
             BOOST_CHECK(sidecar.get(i) != nullptr);
             BOOST_CHECK_EQUAL(sidecar.get(i)->value, static_cast<int>(i));
-        }
-        else
-        {
+        } else {
             BOOST_CHECK(sidecar.get(i) == nullptr);
         }
     }
 
     // owners/dense consistency check
     auto owners = sidecar.owners();
-    auto dense  = sidecar.dense();
+    auto dense = sidecar.dense();
     BOOST_REQUIRE_EQUAL(owners.size(), dense.size());
-    for (size_t i = 0; i < owners.size(); ++i)
-    {
+    for (size_t i = 0; i < owners.size(); ++i) {
         BOOST_CHECK(sidecar.get(owners[i]) == &dense[i]);
     }
 }

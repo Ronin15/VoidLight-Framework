@@ -63,7 +63,7 @@ struct SpawnParameters {
 
     // Constructor with commonly used parameters
     explicit SpawnParameters(const std::string& type, int count = 1, float radius = 0.0f,
-                            const std::string& race = "")
+        const std::string& race = "")
         : npcType(type), npcRace(race), count(count), spawnRadius(radius) {}
 
     // Optional area constraints for spawns
@@ -138,7 +138,7 @@ public:
     // Spawn NPCs - handles "Random" type for random race/class selection
     static EntityHandle spawnNPC(const std::string& npcType, float x, float y);
     static std::vector<EntityHandle> spawnNPCs(const SpawnParameters& params, float x, float y);
-    
+
     // Area constraint configuration for the spawn event
     void setAreaConstraints(float minX, float minY, float maxX, float maxY) {
         m_constrainToArea = true;
@@ -147,7 +147,7 @@ public:
         m_constraintMaxX = maxX;
         m_constraintMaxY = maxY;
     }
-    
+
     void enableAreaConstraints(bool enable) { m_constrainToArea = enable; }
     bool hasAreaConstraints() const { return m_constrainToArea; }
 
@@ -192,7 +192,7 @@ private:
 
     // Tracking spawned entities (for counting/statistics only - not ownership)
     std::vector<EntityWeakPtr> m_spawnedEntities;
-    
+
     // Area constraint system for village/event confinement
     bool m_constrainToArea{false};
     float m_constraintMinX{0.0f}, m_constraintMinY{0.0f};

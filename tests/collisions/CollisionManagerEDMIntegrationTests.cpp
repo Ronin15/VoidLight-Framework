@@ -248,8 +248,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyAlwaysCheckedForCollision) {
         false,
         0,
         1,
-        edmIndex
-    );
+        edmIndex);
 
     // Create dynamic entity near the static obstacle
     [[maybe_unused]] EntityHandle entityHandle = createTestNPC(Vector2D(510.0f, 510.0f));
@@ -370,8 +369,7 @@ BOOST_AUTO_TEST_CASE(TestMovableStaticPairMixedIndices) {
         false,
         0,
         1,
-        edmIndex
-    );
+        edmIndex);
     BOOST_REQUIRE(staticStorageIdx != SIZE_MAX);
 
     // Create dynamic entity near static
@@ -436,8 +434,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodiesPreservedAfterDynamicClear) {
         false,
         0,
         1,
-        edmIndex
-    );
+        edmIndex);
 
     // Create dynamic entity
     [[maybe_unused]] EntityHandle entityHandle = createTestNPC(Vector2D(100.0f, 100.0f));

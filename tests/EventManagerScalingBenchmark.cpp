@@ -48,7 +48,8 @@ public:
 
         m_updateCount++;
         // Use variables to prevent optimization
-        if (conditionMet && m_lastUpdateTime < 0) { /* never happens */ }
+        if (conditionMet && m_lastUpdateTime < 0) { /* never happens */
+        }
     }
 
     void execute() override {
@@ -64,7 +65,8 @@ public:
 
         m_executeCount++;
         // Use variables to prevent optimization
-        if (m_effectActive && m_targetX < 0) { /* never happens */ }
+        if (m_effectActive && m_targetX < 0) { /* never happens */
+        }
     }
 
     void reset() override {
@@ -153,8 +155,8 @@ void enqueueSingleBenchmarkEvent(int sequence) {
 }
 
 EventManager::DeferredEvent createDeferredCombatBenchmarkEvent(int sequence,
-                                                               EntityHandle attacker,
-                                                               EntityHandle target) {
+    EntityHandle attacker,
+    EntityHandle target) {
     auto damageEvent = EventManager::Instance().acquireDamageEvent();
     if (!damageEvent) {
         damageEvent = std::make_shared<DamageEvent>();
@@ -205,7 +207,8 @@ public:
         }
 
         // Use the result to prevent compiler optimization
-        if (workResult < -1000) { /* never happens */ }
+        if (workResult < -1000) { /* never happens */
+        }
 
         // Store the parameter for verification
         m_lastParams = params;
@@ -319,8 +322,7 @@ struct EventManagerScalingFixture {
         std::cout << "  Config: " << numEventTypes << " types, "
                   << numHandlersPerType << " handlers per type, "
                   << numTriggers << " deferred events" << std::endl;
-        std::cout << "  Mode: " << (useBatching ? "batch enqueue + FIFO drain"
-                                                : "single enqueue + FIFO drain") << std::endl;
+        std::cout << "  Mode: " << (useBatching ? "batch enqueue + FIFO drain" : "single enqueue + FIFO drain") << std::endl;
         std::cout << "  System: " << totalWorkers << " workers (all available via WorkerBudget)" << std::endl;
 
         // Register simple handlers (just count calls)
@@ -397,11 +399,14 @@ struct EventManagerScalingFixture {
 
         // Calculate statistics
         double avgEnqueueMs = std::accumulate(
-            enqueueDurations.begin(), enqueueDurations.end(), 0.0) / enqueueDurations.size();
+                                  enqueueDurations.begin(), enqueueDurations.end(), 0.0) /
+            enqueueDurations.size();
         double avgDrainMs = std::accumulate(
-            drainDurations.begin(), drainDurations.end(), 0.0) / drainDurations.size();
+                                drainDurations.begin(), drainDurations.end(), 0.0) /
+            drainDurations.size();
         double avgTotalMs = std::accumulate(
-            totalDurations.begin(), totalDurations.end(), 0.0) / totalDurations.size();
+                                totalDurations.begin(), totalDurations.end(), 0.0) /
+            totalDurations.size();
         double minTotalMs = *std::min_element(totalDurations.begin(), totalDurations.end());
         double maxTotalMs = *std::max_element(totalDurations.begin(), totalDurations.end());
 
@@ -626,7 +631,8 @@ BOOST_AUTO_TEST_CASE(ThreadingVerificationTest) {
     }
 
     std::cout << "\n===== THREADING VERIFICATION TEST =====" << std::endl;
-    std::cout << "Testing with heavy handlers to trigger WorkerBudget threading threshold (0.9ms)\n" << std::endl;
+    std::cout << "Testing with heavy handlers to trigger WorkerBudget threading threshold (0.9ms)\n"
+              << std::endl;
 
     fixture.cleanup();
 
@@ -737,7 +743,6 @@ BOOST_AUTO_TEST_CASE(ExtremeScaleTest) {
         const int numEvents = 500;
 
 
-
         // Only test batched mode for extreme scale (immediate would be too slow)
         fixture.runHandlerBenchmark(numEventTypes, numHandlersPerType, numEvents, true);
 
@@ -754,7 +759,8 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
     }
 
     std::cout << "\n===== EVENT THREADING THRESHOLD DETECTION =====" << std::endl;
-    std::cout << "Comparing single-threaded vs multi-threaded at different event counts\n" << std::endl;
+    std::cout << "Comparing single-threaded vs multi-threaded at different event counts\n"
+              << std::endl;
 
     std::vector<int> testCounts = {25, 50, 75, 100, 150, 200, 300, 500};
     size_t optimalThreshold = 0;
@@ -866,7 +872,8 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
         std::cout << "STATUS: WorkerBudget will prefer single-threaded mode" << std::endl;
     }
 
-    std::cout << "========================================\n" << std::endl;
+    std::cout << "========================================\n"
+              << std::endl;
 
     // Restore threading
     VOIDLIGHT_DEBUG_ONLY(EventManager::Instance().enableThreading(true);)
@@ -875,8 +882,7 @@ BOOST_AUTO_TEST_CASE(TestThreadingThreshold) {
 // ---------------------------------------------------------------------------
 // WorkerBudget Adaptive Tuning Test (Batch Sizing + Throughput Tracking)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
-{
+BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning) {
     if (g_shutdownInProgress.load()) {
         BOOST_TEST_MESSAGE("Skipping test due to shutdown in progress");
         return;
@@ -960,15 +966,15 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
 // ---------------------------------------------------------------------------
 // Batch Enqueue vs Single Enqueue Performance Test
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
-{
+BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest) {
     if (g_shutdownInProgress.load()) {
         BOOST_TEST_MESSAGE("Skipping test due to shutdown in progress");
         return;
     }
 
     std::cout << "\n===== BATCH ENQUEUE vs SINGLE ENQUEUE BENCHMARK =====" << std::endl;
-    std::cout << "Simulates AI combat workers enqueueing damage events\n" << std::endl;
+    std::cout << "Simulates AI combat workers enqueueing damage events\n"
+              << std::endl;
 
     auto& eventMgr = EventManager::Instance();
     eventMgr.clean();
@@ -985,7 +991,8 @@ BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
     const int numRuns = 5;
 
     std::cout << "Config: " << numWorkers << " workers, " << eventsPerWorker
-              << " events/worker = " << totalEvents << " total events\n" << std::endl;
+              << " events/worker = " << totalEvents << " total events\n"
+              << std::endl;
 
     std::cout << std::setw(25) << "Method"
               << std::setw(12) << "Time (ms)"
@@ -1130,8 +1137,7 @@ BOOST_AUTO_TEST_CASE(BatchEnqueuePerformanceTest)
 // ---------------------------------------------------------------------------
 // Combat Burst Profile Benchmark
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
-{
+BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark) {
     if (g_shutdownInProgress.load()) {
         BOOST_TEST_MESSAGE("Skipping test due to shutdown in progress");
         return;
@@ -1156,7 +1162,8 @@ BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
     };
 
     std::cout << "\n===== COMBAT BURST PROFILE BENCHMARK =====" << std::endl;
-    std::cout << "Batched deferred combat events using pooled DamageEvent objects\n" << std::endl;
+    std::cout << "Batched deferred combat events using pooled DamageEvent objects\n"
+              << std::endl;
 
     auto resetCombatManagers = []() {
         EventManager::Instance().clean();
@@ -1200,21 +1207,19 @@ BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
     };
 
     auto runCombatBurst = [](const CombatProfile& profile,
-                             const CombatScene& scene) {
+                              const CombatScene& scene) {
         auto& eventMgr = EventManager::Instance();
         auto& threadSystem = VoidLight::ThreadSystem::Instance();
         auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
         const size_t producerWorkers =
-            std::max<size_t>(1, std::min<size_t>(budgetMgr.getBudget().totalWorkers,
-                                                 static_cast<size_t>(profile.totalEvents)));
+            std::max<size_t>(1, std::min<size_t>(budgetMgr.getBudget().totalWorkers, static_cast<size_t>(profile.totalEvents)));
         const int eventsPerProducer = std::max<int>(
-            1, static_cast<int>((profile.totalEvents + static_cast<int>(producerWorkers) - 1) /
-                                static_cast<int>(producerWorkers)));
+            1, static_cast<int>((profile.totalEvents + static_cast<int>(producerWorkers) - 1) / static_cast<int>(producerWorkers)));
         std::atomic<int> workersComplete{0};
 
         for (size_t worker = 0; worker < producerWorkers; ++worker) {
             threadSystem.enqueueTask([&eventMgr, &workersComplete, &profile,
-                                      &scene, worker, eventsPerProducer]() {
+                                         &scene, worker, eventsPerProducer]() {
                 std::vector<EventManager::DeferredEvent> localBatch;
                 localBatch.reserve(static_cast<size_t>(eventsPerProducer));
 
@@ -1242,11 +1247,9 @@ BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
         const int totalEvents = profile.totalEvents;
         auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
         const size_t producerWorkers =
-            std::max<size_t>(1, std::min<size_t>(budgetMgr.getBudget().totalWorkers,
-                                                 static_cast<size_t>(totalEvents)));
+            std::max<size_t>(1, std::min<size_t>(budgetMgr.getBudget().totalWorkers, static_cast<size_t>(totalEvents)));
         const int eventsPerProducer = std::max<int>(
-            1, static_cast<int>((totalEvents + static_cast<int>(producerWorkers) - 1) /
-                                static_cast<int>(producerWorkers)));
+            1, static_cast<int>((totalEvents + static_cast<int>(producerWorkers) - 1) / static_cast<int>(producerWorkers)));
         const double expectedTotalDamage = [&profile]() {
             double totalDamage = 0.0;
             for (int i = 0; i < profile.totalEvents; ++i) {
@@ -1270,7 +1273,7 @@ BOOST_AUTO_TEST_CASE(CombatBurstProfileBenchmark)
         auto enqueueStart = std::chrono::high_resolution_clock::now();
         for (size_t worker = 0; worker < producerWorkers; ++worker) {
             threadSystem.enqueueTask([&eventMgr, &workersComplete, &profile,
-                                      &scene, worker, eventsPerProducer]() {
+                                         &scene, worker, eventsPerProducer]() {
                 std::vector<EventManager::DeferredEvent> localBatch;
                 localBatch.reserve(static_cast<size_t>(eventsPerProducer));
 

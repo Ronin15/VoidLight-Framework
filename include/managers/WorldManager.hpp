@@ -87,8 +87,8 @@ public:
      * @param season Current season for seasonal textures
      */
     void recordGPUTiles(SpriteBatch& spriteBatch, float cameraX, float cameraY,
-                        float viewportWidth, float viewportHeight, float zoom,
-                        Season season);
+        float viewportWidth, float viewportHeight, float zoom,
+        Season season);
 
     /**
      * @brief Get the atlas GPU texture
@@ -217,7 +217,7 @@ public:
     void setupEventHandlers();
 
     [[nodiscard]] bool loadNewWorld(const VoidLight::WorldGenerationConfig& config,
-                     const VoidLight::WorldGenerationProgressCallback& progressCallback = nullptr);
+        const VoidLight::WorldGenerationProgressCallback& progressCallback = nullptr);
     [[nodiscard]] bool loadWorld(const std::string& worldId);
     // Main/test-thread unload: locked unload then processDestructionQueue.
     // Load worker uses unloadWorldLocked only (no drain).
@@ -254,7 +254,7 @@ public:
      * @param zoom Current zoom level
      */
     void recordGPU(VoidLight::SpriteBatch& spriteBatch, float cameraX, float cameraY,
-                   float viewWidth, float viewHeight, float zoom);
+        float viewWidth, float viewHeight, float zoom);
 
     bool handleHarvestResource(int entityId, int targetX, int targetY);
     bool modifyTile(int x, int y, const std::function<void(VoidLight::Tile&)>& mutator);
@@ -273,7 +273,10 @@ public:
     Season getCurrentSeason() const;
     void setCurrentSeason(Season season);
 
-    void setCamera(int x, int y) { m_cameraX = x; m_cameraY = y; }
+    void setCamera(int x, int y) {
+        m_cameraX = x;
+        m_cameraY = y;
+    }
     void setCameraViewport(int width, int height) {
         m_viewportWidth = width;
         m_viewportHeight = height;
@@ -283,9 +286,9 @@ public:
     decltype(auto) withWorldDataRead(Func&& func) const {
         using Result = std::invoke_result_t<Func, const VoidLight::WorldData*>;
         static_assert(!std::is_reference_v<Result>,
-                      "withWorldDataRead() callbacks must not return references");
+            "withWorldDataRead() callbacks must not return references");
         static_assert(!std::is_pointer_v<std::remove_cv_t<Result>>,
-                      "withWorldDataRead() callbacks must not return pointers");
+            "withWorldDataRead() callbacks must not return pointers");
 
         std::shared_lock<std::shared_mutex> lock(m_worldMutex);
         if constexpr (std::is_void_v<Result>) {

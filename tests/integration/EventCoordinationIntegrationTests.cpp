@@ -611,7 +611,7 @@ BOOST_AUTO_TEST_CASE(TestEventCoordinationPerformance) {
 
         // Check if all events processed
         int totalProcessed = weatherEventCount.load() + particleEventCount.load() +
-                            worldEventCount.load() + resourceEventCount.load();
+            worldEventCount.load() + resourceEventCount.load();
 
         if (totalProcessed >= numEventsPerType * 4) {
             break;
@@ -619,8 +619,7 @@ BOOST_AUTO_TEST_CASE(TestEventCoordinationPerformance) {
     }
 
     auto endTime = std::chrono::high_resolution_clock::now();
-    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-        endTime - startTime).count();
+    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
 
     // Verification: Check all events were processed
     BOOST_CHECK_GE(weatherEventCount.load(), numEventsPerType);
@@ -629,7 +628,7 @@ BOOST_AUTO_TEST_CASE(TestEventCoordinationPerformance) {
     BOOST_CHECK_GE(resourceEventCount.load(), numEventsPerType);
 
     int totalProcessed = weatherEventCount.load() + particleEventCount.load() +
-                        worldEventCount.load() + resourceEventCount.load();
+        worldEventCount.load() + resourceEventCount.load();
 
     TEST_LOG("Performance test completed:");
     std::cout << "[TEST]   Total events processed: " << totalProcessed << std::endl;

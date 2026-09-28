@@ -171,7 +171,13 @@ BOOST_FIXTURE_TEST_CASE(EventExecution, WeatherEventFixture) {
 BOOST_FIXTURE_TEST_CASE(RegionNameOnly_MismatchFails_MatchPasses, WeatherEventFixture) {
     // Generate world (must be >= 26x26 to satisfy VILLAGE_RADIUS in WorldGenerator)
     VoidLight::WorldGenerationConfig cfg{};
-    cfg.width = 30; cfg.height = 30; cfg.seed = 1234; cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f; cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+    cfg.width = 30;
+    cfg.height = 30;
+    cfg.seed = 1234;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
 
     // Force tile (0,0) biome to FOREST deterministically
@@ -195,7 +201,13 @@ BOOST_FIXTURE_TEST_CASE(RegionNameOnly_MismatchFails_MatchPasses, WeatherEventFi
 BOOST_FIXTURE_TEST_CASE(RegionAndBounds_BothMustPass, WeatherEventFixture) {
     // Generate world (must be >= 26x26 to satisfy VILLAGE_RADIUS in WorldGenerator)
     VoidLight::WorldGenerationConfig cfg{};
-    cfg.width = 30; cfg.height = 30; cfg.seed = 5678; cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f; cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+    cfg.width = 30;
+    cfg.height = 30;
+    cfg.seed = 5678;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
     auto tile = WorldManager::Instance().getTileCopyAt(0, 0);
     BOOST_REQUIRE(tile.has_value());
@@ -394,7 +406,7 @@ BOOST_FIXTURE_TEST_CASE(SeasonWeatherProbabilitiesSumToOne, GameTimeWeatherFixtu
         const auto& probs = config.weatherProbs;
 
         float sum = probs.clear + probs.cloudy + probs.rainy +
-                    probs.stormy + probs.foggy + probs.snowy + probs.windy;
+            probs.stormy + probs.foggy + probs.snowy + probs.windy;
 
         BOOST_CHECK_CLOSE(sum, 1.0f, 1.0f);  // Allow 1% tolerance
     }

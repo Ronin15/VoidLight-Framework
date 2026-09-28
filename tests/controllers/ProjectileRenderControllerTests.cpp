@@ -38,19 +38,15 @@
 // Global fixture — ThreadSystem initialised once for all test cases
 // ============================================================================
 
-struct GlobalThreadSystemFixture
-{
-    GlobalThreadSystemFixture()
-    {
-        if (!VoidLight::ThreadSystem::Instance().init())
-        {
+struct GlobalThreadSystemFixture {
+    GlobalThreadSystemFixture() {
+        if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error(
                 "ThreadSystem::init() failed in ProjectileRenderControllerTests");
         }
     }
 
-    ~GlobalThreadSystemFixture()
-    {
+    ~GlobalThreadSystemFixture() {
         VoidLight::ThreadSystem::Instance().clean();
     }
 };
@@ -63,11 +59,9 @@ BOOST_GLOBAL_FIXTURE(GlobalThreadSystemFixture);
 
 namespace {
 
-bool tryInitSpriteBatch(VoidLight::SpriteBatch& batch)
-{
+bool tryInitSpriteBatch(VoidLight::SpriteBatch& batch) {
     SDL_GPUDevice* device = VoidLight::GPUDevice::Instance().get();
-    if (!device)
-    {
+    if (!device) {
         return false;
     }
     return batch.init(device, "ProjectileRenderTestBatch");
@@ -81,22 +75,19 @@ bool tryInitSpriteBatch(VoidLight::SpriteBatch& batch)
 
 BOOST_AUTO_TEST_SUITE(ProjectileRenderControllerBaseContractTests)
 
-BOOST_AUTO_TEST_CASE(TestControllerName)
-{
+BOOST_AUTO_TEST_CASE(TestControllerName) {
     ProjectileRenderController ctrl;
     BOOST_CHECK_EQUAL(ctrl.getName(), "ProjectileRenderController");
 }
 
-BOOST_AUTO_TEST_CASE(TestDefaultConstructionDoesNotCrash)
-{
+BOOST_AUTO_TEST_CASE(TestDefaultConstructionDoesNotCrash) {
     BOOST_CHECK_NO_THROW({
         ProjectileRenderController ctrl;
         (void)ctrl.getName();
     });
 }
 
-BOOST_AUTO_TEST_CASE(TestSubscribeIsNoOpAndDoesNotMarkSubscribed)
-{
+BOOST_AUTO_TEST_CASE(TestSubscribeIsNoOpAndDoesNotMarkSubscribed) {
     // subscribe() is intentionally empty — the controller has no event
     // subscriptions and must NOT flip isSubscribed() to true.
     ProjectileRenderController ctrl;
@@ -106,8 +97,7 @@ BOOST_AUTO_TEST_CASE(TestSubscribeIsNoOpAndDoesNotMarkSubscribed)
     BOOST_CHECK(!ctrl.isSubscribed());
 }
 
-BOOST_AUTO_TEST_CASE(TestSuspendSetsIsSuspended)
-{
+BOOST_AUTO_TEST_CASE(TestSuspendSetsIsSuspended) {
     ProjectileRenderController ctrl;
     BOOST_CHECK(!ctrl.isSuspended());
 
@@ -116,8 +106,7 @@ BOOST_AUTO_TEST_CASE(TestSuspendSetsIsSuspended)
     BOOST_CHECK(ctrl.isSuspended());
 }
 
-BOOST_AUTO_TEST_CASE(TestResumeAfterSuspendClearsSuspended)
-{
+BOOST_AUTO_TEST_CASE(TestResumeAfterSuspendClearsSuspended) {
     ProjectileRenderController ctrl;
     ctrl.suspend();
     BOOST_REQUIRE(ctrl.isSuspended());
@@ -127,8 +116,7 @@ BOOST_AUTO_TEST_CASE(TestResumeAfterSuspendClearsSuspended)
     BOOST_CHECK(!ctrl.isSuspended());
 }
 
-BOOST_AUTO_TEST_CASE(TestSuspendOnAlreadySuspendedIsNoOp)
-{
+BOOST_AUTO_TEST_CASE(TestSuspendOnAlreadySuspendedIsNoOp) {
     ProjectileRenderController ctrl;
     ctrl.suspend();
     ctrl.suspend();  // idempotent
@@ -136,8 +124,7 @@ BOOST_AUTO_TEST_CASE(TestSuspendOnAlreadySuspendedIsNoOp)
     BOOST_CHECK(ctrl.isSuspended());
 }
 
-BOOST_AUTO_TEST_CASE(TestResumeOnNotSuspendedIsNoOp)
-{
+BOOST_AUTO_TEST_CASE(TestResumeOnNotSuspendedIsNoOp) {
     ProjectileRenderController ctrl;
     BOOST_REQUIRE(!ctrl.isSuspended());
 
@@ -146,8 +133,7 @@ BOOST_AUTO_TEST_CASE(TestResumeOnNotSuspendedIsNoOp)
     BOOST_CHECK(!ctrl.isSuspended());
 }
 
-BOOST_AUTO_TEST_CASE(TestRecordGPUWithNullSpriteBatchIsNoOp)
-{
+BOOST_AUTO_TEST_CASE(TestRecordGPUWithNullSpriteBatchIsNoOp) {
     // The controller guards against a null spriteBatch and must return early
     // without touching EntityDataManager or crashing.
     ProjectileRenderController ctrl;
@@ -165,16 +151,13 @@ BOOST_AUTO_TEST_SUITE_END()
 // EDM Integration Tests  (EntityDataManager required; GPU optional)
 // ============================================================================
 
-class ProjectileRenderControllerEDMFixture
-{
+class ProjectileRenderControllerEDMFixture {
 public:
-    ProjectileRenderControllerEDMFixture()
-    {
+    ProjectileRenderControllerEDMFixture() {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
     }
 
-    ~ProjectileRenderControllerEDMFixture()
-    {
+    ~ProjectileRenderControllerEDMFixture() {
         EntityDataManager::Instance().clean();
     }
 
@@ -183,8 +166,7 @@ public:
     // recordGPU() resolves the embedded-target branch only when isEmbedded()
     // is true, which requires explicit flag bits not set by createProjectile().
     EntityHandle createTestProjectile(const Vector2D& pos,
-                                      const Vector2D& vel = Vector2D(80.0f, 0.0f))
-    {
+        const Vector2D& vel = Vector2D(80.0f, 0.0f)) {
         return EntityDataManager::Instance().createProjectile(
             pos, vel, EntityHandle{}, 10.0f, 5.0f);
     }
@@ -194,16 +176,14 @@ protected:
 };
 
 BOOST_FIXTURE_TEST_SUITE(ProjectileRenderControllerEDMTests,
-                         ProjectileRenderControllerEDMFixture)
+    ProjectileRenderControllerEDMFixture)
 
-BOOST_AUTO_TEST_CASE(TestRecordGPUWithNoProjectilesWritesZeroVertices)
-{
+BOOST_AUTO_TEST_CASE(TestRecordGPUWithNoProjectilesWritesZeroVertices) {
     BOOST_CHECK_EQUAL(EntityDataManager::Instance().getEntityCount(EntityKind::Projectile), 0);
 
     std::vector<VoidLight::SpriteVertex> verts(64);
     VoidLight::SpriteBatch batch;
-    if (!tryInitSpriteBatch(batch))
-    {
+    if (!tryInitSpriteBatch(batch)) {
         BOOST_TEST_MESSAGE("Skipping GPU recording test: no GPU device available");
         return;
     }
@@ -223,8 +203,7 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUWithNoProjectilesWritesZeroVertices)
     batch.shutdown();
 }
 
-BOOST_AUTO_TEST_CASE(TestRecordGPUWithOneProjectileWritesVerticesPerSprite)
-{
+BOOST_AUTO_TEST_CASE(TestRecordGPUWithOneProjectileWritesVerticesPerSprite) {
     EntityHandle projectile = createTestProjectile(Vector2D(200.0f, 150.0f));
     BOOST_REQUIRE(projectile.isValid());
     BOOST_CHECK_EQUAL(EntityDataManager::Instance().getEntityCount(EntityKind::Projectile), 1);
@@ -235,8 +214,7 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUWithOneProjectileWritesVerticesPerSprite)
 
     std::vector<VoidLight::SpriteVertex> verts(64);
     VoidLight::SpriteBatch batch;
-    if (!tryInitSpriteBatch(batch))
-    {
+    if (!tryInitSpriteBatch(batch)) {
         BOOST_TEST_MESSAGE("Skipping GPU recording test: no GPU device available");
         return;
     }
@@ -255,11 +233,9 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUWithOneProjectileWritesVerticesPerSprite)
     batch.shutdown();
 }
 
-BOOST_AUTO_TEST_CASE(TestRecordGPUMultipleProjectilesWriteCorrectVertexCount)
-{
+BOOST_AUTO_TEST_CASE(TestRecordGPUMultipleProjectilesWriteCorrectVertexCount) {
     // Three projectiles → 3 × VERTICES_PER_SPRITE vertices
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         EntityHandle p = createTestProjectile(Vector2D(static_cast<float>(i) * 50.0f, 0.0f));
         BOOST_REQUIRE(p.isValid());
         auto& hot = EntityDataManager::Instance().getHotData(p);
@@ -269,8 +245,7 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUMultipleProjectilesWriteCorrectVertexCount)
 
     std::vector<VoidLight::SpriteVertex> verts(64);
     VoidLight::SpriteBatch batch;
-    if (!tryInitSpriteBatch(batch))
-    {
+    if (!tryInitSpriteBatch(batch)) {
         BOOST_TEST_MESSAGE("Skipping GPU recording test: no GPU device available");
         return;
     }
@@ -289,25 +264,23 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUMultipleProjectilesWriteCorrectVertexCount)
     batch.shutdown();
 }
 
-BOOST_AUTO_TEST_CASE(TestRecordGPUInterpolatesPositionAtHalfAlpha)
-{
+BOOST_AUTO_TEST_CASE(TestRecordGPUInterpolatesPositionAtHalfAlpha) {
     // Previous = (0, 0), current = (100, 100), alpha = 0.5
     // interpX = 50, interpY = 50
     // dstX = interpX - cameraX - PROJECTILE_WIDTH/2 = 50 - 0 - 8 = 42
     // With angle = 0 (horizontal velocity), vertex[0].x == dstX for the
     // un-rotated top-left corner in SpriteBatch drawUVRotated convention.
     EntityHandle projectile = createTestProjectile(Vector2D(100.0f, 100.0f),
-                                                   Vector2D(80.0f, 0.0f));
+        Vector2D(80.0f, 0.0f));
     BOOST_REQUIRE(projectile.isValid());
 
     auto& hot = EntityDataManager::Instance().getHotData(projectile);
     hot.transform.previousPosition = Vector2D(0.0f, 0.0f);
-    hot.transform.position         = Vector2D(100.0f, 100.0f);
+    hot.transform.position = Vector2D(100.0f, 100.0f);
 
     std::vector<VoidLight::SpriteVertex> verts(64);
     VoidLight::SpriteBatch batch;
-    if (!tryInitSpriteBatch(batch))
-    {
+    if (!tryInitSpriteBatch(batch)) {
         BOOST_TEST_MESSAGE("Skipping GPU recording test: no GPU device available");
         return;
     }
@@ -331,8 +304,7 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUInterpolatesPositionAtHalfAlpha)
     batch.shutdown();
 }
 
-BOOST_AUTO_TEST_CASE(TestRecordGPUDoesNotCrashWithInvalidContextValid)
-{
+BOOST_AUTO_TEST_CASE(TestRecordGPUDoesNotCrashWithInvalidContextValid) {
     // ctx.valid == false but ctx.spriteBatch != nullptr.
     // The controller does not check ctx.valid — it only guards ctx.spriteBatch.
     // This ensures the guard path is explicit and no silent skip occurs.
@@ -340,8 +312,7 @@ BOOST_AUTO_TEST_CASE(TestRecordGPUDoesNotCrashWithInvalidContextValid)
 
     std::vector<VoidLight::SpriteVertex> verts(64);
     VoidLight::SpriteBatch batch;
-    if (!tryInitSpriteBatch(batch))
-    {
+    if (!tryInitSpriteBatch(batch)) {
         BOOST_TEST_MESSAGE("Skipping GPU recording test: no GPU device available");
         return;
     }

@@ -19,7 +19,13 @@
 
 namespace VoidLight {
 
-enum class PathfindingResult : uint8_t { SUCCESS, NO_PATH_FOUND, INVALID_START, INVALID_GOAL, TIMEOUT };
+enum class PathfindingResult : uint8_t {
+    SUCCESS,
+    NO_PATH_FOUND,
+    INVALID_START,
+    INVALID_GOAL,
+    TIMEOUT
+};
 
 // Stream operator for PathfindingResult to support test output
 inline std::ostream& operator<<(std::ostream& os, const PathfindingResult& result) {
@@ -50,18 +56,21 @@ public:
     void clearDirtyRegions();                // clear dirty region tracking
 
     PathfindingResult findPath(const Vector2D& start, const Vector2D& goal,
-                               std::vector<Vector2D>& outPath);
-    
+        std::vector<Vector2D>& outPath);
+
     // Hierarchical pathfinding for long distances (10x speedup)
     PathfindingResult findPathHierarchical(const Vector2D& start, const Vector2D& goal,
-                                          std::vector<Vector2D>& outPath);
-                                          
+        std::vector<Vector2D>& outPath);
+
     // Decision function for choosing between direct and hierarchical pathfinding
     bool shouldUseHierarchicalPathfinding(const Vector2D& start, const Vector2D& goal) const;
 
     void setAllowDiagonal(bool allow) { m_allowDiagonal = allow; }
     void setMaxIterations(int maxIters) { m_maxIterations = maxIters; }
-    void setCosts(float straight, float diagonal) { m_costStraight = straight; m_costDiagonal = diagonal; }
+    void setCosts(float straight, float diagonal) {
+        m_costStraight = straight;
+        m_costDiagonal = diagonal;
+    }
 
     // Dynamic weighting for avoidance fields
     void resetWeights(float defaultWeight = 1.0f);
@@ -82,7 +91,7 @@ public:
     int getWidth() const { return m_w; }
     int getHeight() const { return m_h; }
     Vector2D getWorldOffset() const { return m_offset; }
-    
+
     // Grid data access for hierarchical pathfinding
     void setBlocked(int gx, int gy, bool blocked);
     void setWeight(int gx, int gy, float weight);
@@ -90,11 +99,11 @@ public:
     // World-space convenience helpers
     Vector2D snapToNearestOpenWorld(const Vector2D& pos, float maxWorldRadius) const;
     bool isWorldBlocked(const Vector2D& pos) const;
-    
+
     // Statistics
     struct PathfindingStats {
         uint64_t totalRequests{0};
-        uint64_t successfulPaths{0}; 
+        uint64_t successfulPaths{0};
         uint64_t timeouts{0};
         uint64_t invalidStarts{0};
         uint64_t invalidGoals{0};
@@ -103,12 +112,14 @@ public:
         uint32_t avgPathLength{0};
         uint32_t framesSinceReset{0};
     };
-    
+
     void resetStats() { m_stats = PathfindingStats{}; }
     const PathfindingStats& getStats() const { return m_stats; }
 
 private:
-    int m_w, m_h; float m_cell; Vector2D m_offset;
+    int m_w, m_h;
+    float m_cell;
+    Vector2D m_offset;
     std::vector<uint8_t> m_blocked; // 0 walkable, 1 blocked
     std::vector<float> m_weight;    // movement multipliers per cell
 
@@ -134,28 +145,34 @@ private:
 
     bool isBlocked(int gx, int gy) const;
     bool inBounds(int gx, int gy) const;
-    std::pair<int,int> worldToGrid(const Vector2D& w) const;
+    std::pair<int, int> worldToGrid(const Vector2D& w) const;
     Vector2D gridToWorld(int gx, int gy) const;
 
     // Helper: find nearest unblocked cell within maxRadius (grid units)
     bool findNearestOpen(int gx, int gy, int maxRadius, int& outGX, int& outGY) const;
-    
+
     // Path smoothing functions
     void smoothPath(std::vector<Vector2D>& path);
     bool hasLineOfSight(const Vector2D& start, const Vector2D& end) const;
-    
+
     // Hierarchical pathfinding helpers
     void initializeCoarseGrid();
     PathfindingResult refineCoarsePath(const std::vector<Vector2D>& coarsePath,
-                                     const Vector2D& start, const Vector2D& goal,
-                                     std::vector<Vector2D>& outPath);
+        const Vector2D& start, const Vector2D& goal,
+        std::vector<Vector2D>& outPath);
 
 private:
     // Object pools for memory optimization
     struct NodePool {
-        struct Node { int x; int y; float f; };
-        struct Cmp { bool operator()(const Node& a, const Node& b) const { return a.f > b.f; } };
-        
+        struct Node {
+            int x;
+            int y;
+            float f;
+        };
+        struct Cmp {
+            bool operator()(const Node& a, const Node& b) const { return a.f > b.f; }
+        };
+
         // Pre-allocated containers to avoid repeated allocation/deallocation
         std::priority_queue<Node, std::vector<Node>, Cmp> openQueue;
         std::vector<float> gScoreBuffer;
@@ -163,7 +180,7 @@ private:
         std::vector<int> parentBuffer;
         std::vector<uint8_t> closedBuffer; // moved from local to pooled to avoid per-call allocations
         std::vector<Vector2D> pathBuffer;
-        
+
         void ensureCapacity(int gridSize) {
             if (gScoreBuffer.size() < static_cast<size_t>(gridSize)) {
                 gScoreBuffer.resize(gridSize);
@@ -173,7 +190,7 @@ private:
                 pathBuffer.reserve(std::max(128, gridSize / 10)); // Reasonable path length estimate
             }
         }
-        
+
         void reset() {
             // Clear but don't deallocate
             while (!openQueue.empty()) openQueue.pop();
@@ -187,7 +204,7 @@ private:
             pathBuffer.clear();
         }
     };
-    
+
     // NodePool will be thread_local within findPath function
 };
 

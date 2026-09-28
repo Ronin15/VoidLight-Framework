@@ -164,7 +164,7 @@ void Camera::setWorldBounds(float minX, float minY, float maxX, float maxY) {
         m_worldBounds.maxY = maxY;
     } else {
         CAMERA_WARN(std::format("Invalid world bounds: ({}, {}) to ({}, {})",
-                                minX, minY, maxX, maxY));
+            minX, minY, maxX, maxY));
     }
 }
 
@@ -180,20 +180,20 @@ void Camera::setMode(Mode mode) {
     if (m_mode != mode) {
         Mode const oldMode = m_mode;
         m_mode = mode;
-        
+
         // When switching to follow mode, snap to target if available
         if (mode == Mode::Follow && hasTarget()) {
             Vector2D const targetPos = getTargetPosition();
             m_targetPosition = targetPos;
         }
-        
+
         // Fire mode changed event if enabled
         if (m_eventFiringEnabled) {
             fireModeChangedEvent(oldMode, mode);
         }
 
         CAMERA_INFO(std::format("Camera mode changed from {} to {}",
-                                static_cast<int>(oldMode), static_cast<int>(mode)));
+            static_cast<int>(oldMode), static_cast<int>(mode)));
     }
 }
 
@@ -201,12 +201,12 @@ void Camera::setTarget(const std::weak_ptr<Entity>& target) {
     std::weak_ptr<Entity> oldTarget = m_target;
     m_target = target;
     m_positionGetter = nullptr; // Clear function-based target
-    
+
     // Fire target changed event if enabled
     if (m_eventFiringEnabled) {
         fireTargetChangedEvent(oldTarget, target);
     }
-    
+
     if (auto targetPtr = target.lock()) {
         CAMERA_INFO("Camera target set to entity");
         // If in follow mode, update target position immediately
@@ -253,7 +253,7 @@ bool Camera::setConfig(const Config& config) {
         m_currentZoomIndex = std::clamp(m_currentZoomIndex, 0, maxZoomIndex);
         m_zoom = m_config.zoomLevels[m_currentZoomIndex];
         CAMERA_INFO(std::format("Camera configuration updated (followLag={}s, deadZone={}px, catchup={}px)",
-                                 m_config.followLag, m_config.deadZoneRadius, m_config.maxCatchupDistance));
+            m_config.followLag, m_config.deadZoneRadius, m_config.maxCatchupDistance));
         return true;
     } else {
         CAMERA_WARN("Invalid camera configuration provided");
@@ -270,18 +270,17 @@ Camera::ViewRect Camera::getViewRect() const {
     // Use full floating-point precision for smooth sub-pixel camera movement
     // Callers snap to pixels at render time if tile-aligned rendering is needed
     return ViewRect{
-        .x      = m_position.getX() - (worldViewWidth * 0.5f),
-        .y      = m_position.getY() - (worldViewHeight * 0.5f),
-        .width  = worldViewWidth,
-        .height = worldViewHeight
-    };
+        .x = m_position.getX() - (worldViewWidth * 0.5f),
+        .y = m_position.getY() - (worldViewHeight * 0.5f),
+        .width = worldViewWidth,
+        .height = worldViewHeight};
 }
 
 // Removed getInterpolatedViewRect(): Use getRenderOffset() + viewport/zoom instead
 // This ensures single atomic read pattern across all game states
 
 void Camera::computeOffsetFromCenter(float centerX, float centerY,
-                                     float& offsetX, float& offsetY) const {
+    float& offsetX, float& offsetY) const {
     // Compute camera offset (top-left corner) from a given center position
     float const worldViewWidth = m_viewport.width / m_zoom;
     float const worldViewHeight = m_viewport.height / m_zoom;
@@ -330,8 +329,8 @@ Vector2D Camera::getRenderOffset(float& offsetX, float& offsetY, float interpola
 
 bool Camera::isPointVisible(float x, float y) const {
     ViewRect const view = getViewRect();
-    return x >= view.left() && x <= view.right() && 
-           y >= view.top() && y <= view.bottom();
+    return x >= view.left() && x <= view.right() &&
+        y >= view.top() && y <= view.bottom();
 }
 
 bool Camera::isPointVisible(const Vector2D& point) const {
@@ -340,10 +339,10 @@ bool Camera::isPointVisible(const Vector2D& point) const {
 
 bool Camera::isRectVisible(float x, float y, float width, float height) const {
     ViewRect const view = getViewRect();
-    
+
     // Check if rectangles intersect
-    return !(x + width < view.left() || x > view.right() || 
-             y + height < view.top() || y > view.bottom());
+    return !(x + width < view.left() || x > view.right() ||
+        y + height < view.top() || y > view.bottom());
 }
 
 void Camera::worldToScreen(float worldX, float worldY, float& screenX, float& screenY) const {
@@ -419,7 +418,7 @@ void Camera::syncWorldBounds() {
     // This is needed for computeOffsetFromCenter() to work correctly in ALL modes
     if (m_autoSyncWorldBounds) {
         try {
-            const auto &wm = WorldManager::Instance();
+            const auto& wm = WorldManager::Instance();
             if (wm.hasActiveWorld()) {
                 uint64_t const currentVersion = wm.getWorldVersion();
                 if (currentVersion != m_lastWorldVersion) {
@@ -487,8 +486,7 @@ Vector2D Camera::generateShakeOffset() const {
     // Use member RNG and distribution for thread safety and performance
     return Vector2D{
         m_shakeDist(m_shakeRng) * currentIntensity,
-        m_shakeDist(m_shakeRng) * currentIntensity
-    };
+        m_shakeDist(m_shakeRng) * currentIntensity};
 }
 
 // Event firing helper methods
@@ -496,7 +494,7 @@ void Camera::firePositionChangedEvent(const Vector2D& oldPosition, const Vector2
     try {
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerCameraMoved(newPosition, oldPosition,
-                                          EventManager::DispatchMode::Deferred);
+            EventManager::DispatchMode::Deferred);
     } catch (const std::exception& ex) {
         CAMERA_ERROR(std::format("Failed to fire CameraMovedEvent: {}", ex.what()));
     }
@@ -506,7 +504,7 @@ void Camera::fireModeChangedEvent(Mode oldMode, Mode newMode) {
     try {
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerCameraModeChanged(static_cast<int>(newMode), static_cast<int>(oldMode),
-                                                EventManager::DispatchMode::Deferred);
+            EventManager::DispatchMode::Deferred);
     } catch (const std::exception& ex) {
         CAMERA_ERROR(std::format("Failed to fire CameraModeChangedEvent: {}", ex.what()));
     }
@@ -516,7 +514,7 @@ void Camera::fireTargetChangedEvent(const std::weak_ptr<Entity>& oldTarget, cons
     try {
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerCameraTargetChanged(newTarget, oldTarget,
-                                                  EventManager::DispatchMode::Deferred);
+            EventManager::DispatchMode::Deferred);
     } catch (const std::exception& ex) {
         CAMERA_ERROR(std::format("Failed to fire CameraTargetChangedEvent: {}", ex.what()));
     }
@@ -526,7 +524,7 @@ void Camera::fireShakeStartedEvent(float duration, float intensity) {
     try {
         const EventManager& eventMgr = EventManager::Instance();
         eventMgr.triggerCameraShakeStarted(duration, intensity,
-                                                 EventManager::DispatchMode::Deferred);
+            EventManager::DispatchMode::Deferred);
     } catch (const std::exception& ex) {
         CAMERA_ERROR(std::format("Failed to fire CameraShakeStartedEvent: {}", ex.what()));
     }
@@ -590,7 +588,7 @@ bool Camera::setZoomLevel(int levelIndex) {
     const int maxZoomIndex = static_cast<int>(m_config.zoomLevels.size()) - 1;
     if (levelIndex < 0 || levelIndex > maxZoomIndex) {
         CAMERA_WARN(std::format("Invalid zoom level index: {} (valid range: 0-{})",
-                                levelIndex, maxZoomIndex));
+            levelIndex, maxZoomIndex));
         return false;
     }
 

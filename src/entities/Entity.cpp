@@ -70,7 +70,7 @@ void Entity::setAcceleration(const Vector2D& acceleration) {
 // ============================================================================
 
 void Entity::registerWithDataManager(const Vector2D& position, float halfWidth,
-                                      float halfHeight, EntityKind kind) {
+    float halfHeight, EntityKind kind) {
     auto& edm = EntityDataManager::Instance();
     if (!edm.isInitialized()) {
         return;  // EDM not ready, skip registration

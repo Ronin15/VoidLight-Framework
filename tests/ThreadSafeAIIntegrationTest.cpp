@@ -176,7 +176,7 @@ BOOST_AUTO_TEST_CASE(TestConcurrentUpdates) {
 
     BOOST_CHECK_MESSAGE(behaviorsExecuted,
         "Expected behavior executions to increase. Initial: " << initialCount
-        << ", Final: " << finalCount);
+                                                              << ", Final: " << finalCount);
 
     // Note: In data-oriented architecture, AIManager processes behavior data directly
     // via executeLogic(ctx), which operates on EntityDataManager SoA data.

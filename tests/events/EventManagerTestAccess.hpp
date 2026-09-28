@@ -9,4 +9,3 @@ public:
 };
 
 #endif // TESTS_EVENTS_EVENT_MANAGER_TEST_ACCESS_HPP
-

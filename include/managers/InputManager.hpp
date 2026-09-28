@@ -15,32 +15,53 @@
 #include <vector>
 #include "utils/Vector2D.hpp"
 
-enum mouse_buttons { LEFT = 0, MIDDLE = 1, RIGHT = 2 };
+enum mouse_buttons {
+    LEFT = 0,
+    MIDDLE = 1,
+    RIGHT = 2
+};
 
 class InputManager {
- public:
+public:
     // -------------------------------------------------------------------------
     // Command-pattern types
     // -------------------------------------------------------------------------
 
-    enum class Command : uint32_t
-    {
+    enum class Command : uint32_t {
         // Movement — composed into direction vector at call site
-        MoveUp, MoveDown, MoveLeft, MoveRight,
+        MoveUp,
+        MoveDown,
+        MoveLeft,
+        MoveRight,
         // Gameplay
-        AttackLight, Interact, OpenInventory, Pause,
+        AttackLight,
+        Interact,
+        OpenInventory,
+        Pause,
         WorldInteract,   // LMB world click (mouse pos read from getMousePosition())
-        ZoomIn, ZoomOut,
+        ZoomIn,
+        ZoomOut,
         // Hotbar selection (v1: select-only; use action TBD)
-        HotbarSlot1, HotbarSlot2, HotbarSlot3, HotbarSlot4, HotbarSlot5,
-        HotbarSlot6, HotbarSlot7, HotbarSlot8, HotbarSlot9,
+        HotbarSlot1,
+        HotbarSlot2,
+        HotbarSlot3,
+        HotbarSlot4,
+        HotbarSlot5,
+        HotbarSlot6,
+        HotbarSlot7,
+        HotbarSlot8,
+        HotbarSlot9,
         // Menu
-        MenuConfirm, MenuCancel, MenuUp, MenuDown, MenuLeft, MenuRight,
+        MenuConfirm,
+        MenuCancel,
+        MenuUp,
+        MenuDown,
+        MenuLeft,
+        MenuRight,
         COUNT
     };
 
-    enum class InputSource : uint8_t
-    {
+    enum class InputSource : uint8_t {
         Keyboard,             // code = SDL_Scancode
         MouseButton,          // code = 0/1/2 (LEFT/MIDDLE/RIGHT)
         GamepadButton,        // code = SDL_GamepadButton
@@ -50,21 +71,18 @@ class InputManager {
 
     // Device grouping used by the Controls UI and by rebind capture filtering.
     // Keyboard + mouse share one category; all gamepad inputs share the other.
-    enum class DeviceCategory : uint8_t
-    {
+    enum class DeviceCategory : uint8_t {
         KeyboardMouse = 0,
-        Controller    = 1,
+        Controller = 1,
     };
 
-    static constexpr DeviceCategory categoryOf(InputSource s) noexcept
-    {
+    static constexpr DeviceCategory categoryOf(InputSource s) noexcept {
         return (s == InputSource::Keyboard || s == InputSource::MouseButton)
-                   ? DeviceCategory::KeyboardMouse
-                   : DeviceCategory::Controller;
+            ? DeviceCategory::KeyboardMouse
+            : DeviceCategory::Controller;
     }
 
-    struct InputBinding
-    {
+    struct InputBinding {
         InputSource source;
         int code;
     };
@@ -139,8 +157,7 @@ class InputManager {
         }
     }
 
-    static InputManager& Instance()
-    {
+    static InputManager& Instance() {
         static InputManager instance;
         return instance;
     }
@@ -186,7 +203,7 @@ class InputManager {
     // Main thread only — see command query comment above.
     void refreshCommandState();
 
- private:
+private:
     struct GamepadState {
         SDL_JoystickID instanceId{0};
         SDL_Gamepad* pGamepad{nullptr};

@@ -55,12 +55,12 @@ inline constexpr ShaderBinaryKind getPreferredShaderBinaryKind() {
 
 inline constexpr const char* getShaderBinaryExtension() {
     switch (getPreferredShaderBinaryKind()) {
-    case ShaderBinaryKind::SPIRV:
-        return ".spv";
-    case ShaderBinaryKind::MSL:
-        return ".metal";
-    case ShaderBinaryKind::DXIL:
-        return ".dxil";
+        case ShaderBinaryKind::SPIRV:
+            return ".spv";
+        case ShaderBinaryKind::MSL:
+            return ".metal";
+        case ShaderBinaryKind::DXIL:
+            return ".dxil";
     }
 
     return "";

@@ -11,8 +11,7 @@
 /**
  * @brief Biological sex for creatures
  */
-enum class Sex : uint8_t
-{
+enum class Sex : uint8_t {
     Male = 0,
     Female = 1,
     Unknown = 2   // For creatures where sex is undefined/irrelevant

@@ -71,12 +71,12 @@ BOOST_AUTO_TEST_CASE(IndicesPerSpriteConstant) {
 
 BOOST_AUTO_TEST_CASE(MaxVerticesConstant) {
     BOOST_CHECK_EQUAL(SpriteBatch::MAX_VERTICES,
-                      SpriteBatch::MAX_SPRITES * SpriteBatch::VERTICES_PER_SPRITE);
+        SpriteBatch::MAX_SPRITES * SpriteBatch::VERTICES_PER_SPRITE);
 }
 
 BOOST_AUTO_TEST_CASE(MaxIndicesConstant) {
     BOOST_CHECK_EQUAL(SpriteBatch::MAX_INDICES,
-                      SpriteBatch::MAX_SPRITES * SpriteBatch::INDICES_PER_SPRITE);
+        SpriteBatch::MAX_SPRITES * SpriteBatch::INDICES_PER_SPRITE);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -308,8 +308,7 @@ BOOST_FIXTURE_TEST_CASE(LargeSpriteBatch, SpriteBatchTestFixture) {
     for (size_t i = 0; i < spriteCount; ++i) {
         batch.draw(
             float((i % 32) * 32), float((i / 32) * 32), 32, 32,
-            float(i % 100) * 32, float(i / 100) * 32, 32, 32
-        );
+            float(i % 100) * 32, float(i / 100) * 32, 32, 32);
     }
 
     BOOST_CHECK_EQUAL(batch.getSpriteCount(), spriteCount);

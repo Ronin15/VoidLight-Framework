@@ -18,15 +18,14 @@
 
 namespace VoidLight {
 
-void WorldHarvestInit::initialize(const WorldData& world)
-{
+void WorldHarvestInit::initialize(const WorldData& world) {
     if (world.grid.empty()) {
         WORLD_MANAGER_WARN("Cannot initialize resources - no world loaded");
         return;
     }
 
     WORLD_MANAGER_INFO(std::format("Initializing world resources for world: {}",
-                                   world.worldId));
+        world.worldId));
 
     const auto& resourceMgr = ResourceTemplateManager::Instance();
 
@@ -43,20 +42,20 @@ void WorldHarvestInit::initialize(const WorldData& world)
                 ++totalTiles;
 
                 switch (tile.biome) {
-                case Biome::FOREST:
-                    ++forestTiles;
-                    break;
-                case Biome::MOUNTAIN:
-                    ++mountainTiles;
-                    break;
-                case Biome::SWAMP:
-                    ++swampTiles;
-                    break;
-                case Biome::CELESTIAL:
-                    ++celestialTiles;
-                    break;
-                default:
-                    break;
+                    case Biome::FOREST:
+                        ++forestTiles;
+                        break;
+                    case Biome::MOUNTAIN:
+                        ++mountainTiles;
+                        break;
+                    case Biome::SWAMP:
+                        ++swampTiles;
+                        break;
+                    case Biome::CELESTIAL:
+                        ++celestialTiles;
+                        break;
+                    default:
+                        break;
                 }
 
                 if (tile.elevation > 0.7f) {
@@ -103,18 +102,18 @@ void WorldHarvestInit::initialize(const WorldData& world)
                     }
 
                     Vector2D pos(static_cast<float>(x) * TILE_SIZE + TILE_SIZE * 0.5f,
-                                 static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
+                        static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
 
                     EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax,
-                                                           respawnTime, worldId, harvestType);
+                        respawnTime, worldId, harvestType);
                     if (h.isValid()) {
                         ++spawned;
                     }
                 }
             }
             WORLD_MANAGER_INFO(std::format("Spawned {} harvestables of {} at {} obstacles",
-                                           spawned, handle.toString(),
-                                           obstacleTypeToString(targetObstacle)));
+                spawned, handle.toString(),
+                obstacleTypeToString(targetObstacle)));
         };
 
         auto spawnHarvestablesInBiome = [&](std::string_view resourceId,
@@ -124,7 +123,7 @@ void WorldHarvestInit::initialize(const WorldData& world)
                                             float respawnTime) {
             if (!handle.isValid()) {
                 WORLD_MANAGER_ERROR(std::format("Invalid resource handle for biome {}",
-                                                biomeToString(targetBiome)));
+                    biomeToString(targetBiome)));
                 return;
             }
             if (count <= 0) {
@@ -156,10 +155,10 @@ void WorldHarvestInit::initialize(const WorldData& world)
                     }
 
                     Vector2D pos(static_cast<float>(x) * TILE_SIZE + TILE_SIZE * 0.5f,
-                                 static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
+                        static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
 
                     EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax,
-                                                           respawnTime, worldId, harvestType);
+                        respawnTime, worldId, harvestType);
                     if (h.isValid()) {
                         ++spawned;
                     }
@@ -207,10 +206,10 @@ void WorldHarvestInit::initialize(const WorldData& world)
                     }
 
                     Vector2D pos(static_cast<float>(x) * TILE_SIZE + TILE_SIZE * 0.5f,
-                                 static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
+                        static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
 
                     EntityHandle h = edm.createHarvestable(pos, handle, yieldMin, yieldMax,
-                                                           respawnTime, worldId, harvestType);
+                        respawnTime, worldId, harvestType);
                     if (h.isValid()) {
                         ++spawned;
                     }
@@ -260,32 +259,32 @@ void WorldHarvestInit::initialize(const WorldData& world)
         if (forestTiles > 0) {
             auto enchantedWoodHandle = resourceMgr.getHandleById("enchanted_wood");
             spawnHarvestablesInBiome("enchanted_wood", enchantedWoodHandle, Biome::FOREST,
-                                     std::max(1, forestTiles / 40), 1, 2, 120.0f);
+                std::max(1, forestTiles / 40), 1, 2, 120.0f);
         }
 
         if (celestialTiles > 0) {
             auto crystalHandle = resourceMgr.getHandleById("crystal_essence");
             spawnHarvestablesInBiome("crystal_essence", crystalHandle, Biome::CELESTIAL,
-                                     std::max(1, celestialTiles / 30), 1, 2, 150.0f);
+                std::max(1, celestialTiles / 30), 1, 2, 150.0f);
         }
 
         if (swampTiles > 0) {
             auto voidSilkHandle = resourceMgr.getHandleById("void_silk");
             spawnHarvestablesInBiome("void_silk", voidSilkHandle, Biome::SWAMP,
-                                     std::max(1, swampTiles / 60), 1, 1, 200.0f);
+                std::max(1, swampTiles / 60), 1, 1, 200.0f);
         }
 
         if (mountainTiles > 0) {
             auto mountainStoneHandle = resourceMgr.getHandleById("stone");
             spawnHarvestablesInBiome("stone", mountainStoneHandle, Biome::MOUNTAIN,
-                                     std::max(1, mountainTiles / 25), 2, 5, 90.0f);
+                std::max(1, mountainTiles / 25), 2, 5, 90.0f);
         }
 
         if (highElevationTiles > 0) {
             auto enchantedStoneHandle = resourceMgr.getHandleById("enchanted_stone");
             spawnHarvestablesAtElevation("enchanted_stone", enchantedStoneHandle, 0.7f,
-                                         std::max(1, highElevationTiles / 30),
-                                         1, 3, 90.0f);
+                std::max(1, highElevationTiles / 30),
+                1, 3, 90.0f);
         }
 
         WORLD_MANAGER_INFO(std::format(

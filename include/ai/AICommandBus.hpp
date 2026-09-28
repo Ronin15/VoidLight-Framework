@@ -64,15 +64,15 @@ public:
     }
 
     void enqueueBehaviorMessage(EntityHandle targetHandle, size_t targetEdmIndex,
-                                uint8_t messageId, uint8_t param = 0);
+        uint8_t messageId, uint8_t param = 0);
     void enqueueBehaviorTransition(EntityHandle targetHandle, size_t targetEdmIndex,
-                                   const BehaviorConfigData& config);
+        const BehaviorConfigData& config);
     void enqueueFactionChange(EntityHandle targetHandle, size_t targetEdmIndex,
-                              uint8_t oldFaction, uint8_t newFaction);
+        uint8_t oldFaction, uint8_t newFaction);
     void enqueueMeleeFallbackEquip(EntityHandle targetHandle, size_t targetEdmIndex);
     void enqueueRangedAttack(EntityHandle attackerHandle, size_t attackerEdmIndex,
-                             const Vector2D& attackerPos, const Vector2D& targetPos,
-                             float damage, float attackRange, float projectileSpeed);
+        const Vector2D& attackerPos, const Vector2D& targetPos,
+        float damage, float attackRange, float projectileSpeed);
     void clearBehaviorMessages(EntityHandle targetHandle, size_t targetEdmIndex);
     void clearAll();
 

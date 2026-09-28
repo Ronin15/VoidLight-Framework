@@ -56,7 +56,7 @@ public:
      * @param camera Camera for spatial queries
      */
     void recordGPUDroppedItems(const VoidLight::GPUSceneContext& ctx,
-                               const VoidLight::Camera& camera);
+        const VoidLight::Camera& camera);
 
     /**
      * @brief Record containers to GPU sprite batch
@@ -64,7 +64,7 @@ public:
      * @param camera Camera for spatial queries
      */
     void recordGPUContainers(const VoidLight::GPUSceneContext& ctx,
-                             const VoidLight::Camera& camera);
+        const VoidLight::Camera& camera);
 
 private:
     // Update helpers - use camera-based queries for efficiency

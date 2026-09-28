@@ -41,7 +41,9 @@ void ResourceRenderController::updateDroppedItemAnimations(float deltaTime, cons
     Vector2D cameraCenter = camera.getPosition();
     const auto& viewport = camera.getViewport();
     float animationRadius = std::sqrt(viewport.width * viewport.width +
-                                      viewport.height * viewport.height) * 0.5f + ANIMATION_BUFFER;
+                                viewport.height * viewport.height) *
+            0.5f +
+        ANIMATION_BUFFER;
 
     m_visibleItemIndices.clear();
     wrm.queryDroppedItemsInRadius(cameraCenter, animationRadius, m_visibleItemIndices);
@@ -71,13 +73,13 @@ void ResourceRenderController::updateDroppedItemAnimations(float deltaTime, cons
 }
 
 void ResourceRenderController::updateContainerStates(float,
-                                                      const VoidLight::Camera&) {
+    const VoidLight::Camera&) {
     // Container open/close animations will be implemented when containers are added
     // For now, containers are static (just open or closed state)
 }
 
 void ResourceRenderController::recordGPUDroppedItems(const VoidLight::GPUSceneContext& ctx,
-                                                      const VoidLight::Camera& camera) {
+    const VoidLight::Camera& camera) {
     RESOURCE_RENDER_WARN_IF(!ctx.spriteBatch, "recordGPUDroppedItems: ctx.spriteBatch is null");
     if (!ctx.spriteBatch) { return; }
 
@@ -89,7 +91,8 @@ void ResourceRenderController::recordGPUDroppedItems(const VoidLight::GPUSceneCo
     Vector2D cameraCenter = ctx.cameraCenter;
     const auto& viewport = camera.getViewport();
     float visibleRadius = std::sqrt(viewport.width * viewport.width +
-                                    viewport.height * viewport.height) * 0.5f;
+                              viewport.height * viewport.height) *
+        0.5f;
 
     m_visibleItemIndices.clear();
     wrm.queryDroppedItemsInRadius(cameraCenter, visibleRadius, m_visibleItemIndices);
@@ -131,7 +134,7 @@ void ResourceRenderController::recordGPUDroppedItems(const VoidLight::GPUSceneCo
 }
 
 void ResourceRenderController::recordGPUContainers(const VoidLight::GPUSceneContext& ctx,
-                                                    const VoidLight::Camera& camera) {
+    const VoidLight::Camera& camera) {
     RESOURCE_RENDER_WARN_IF(!ctx.spriteBatch, "recordGPUContainers: ctx.spriteBatch is null");
     if (!ctx.spriteBatch) { return; }
 
@@ -143,7 +146,8 @@ void ResourceRenderController::recordGPUContainers(const VoidLight::GPUSceneCont
     Vector2D cameraCenter = ctx.cameraCenter;
     const auto& viewport = camera.getViewport();
     float visibleRadius = std::sqrt(viewport.width * viewport.width +
-                                    viewport.height * viewport.height) * 0.5f;
+                              viewport.height * viewport.height) *
+        0.5f;
 
     m_visibleContainerIndices.clear();
     wrm.queryContainersInRadius(cameraCenter, visibleRadius, m_visibleContainerIndices);

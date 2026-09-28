@@ -18,8 +18,7 @@
 #include <random>
 
 HarvestController::HarvestController(std::shared_ptr<Player> player)
-    : mp_player(player)
-{
+    : mp_player(player) {
     m_harvestableIndicesBuffer.reserve(32);
 }
 
@@ -106,7 +105,7 @@ bool HarvestController::startHarvest() {
     m_targetPosition = hot.transform.position;
 
     HARVEST_INFO(std::format("Started {} (duration: {:.1f}s)",
-                             config.actionVerb, m_harvestDuration));
+        config.actionVerb, m_harvestDuration));
 
     return true;
 }
@@ -249,8 +248,7 @@ void HarvestController::completeHarvest() {
                 harvestData.yieldResource,
                 oldQuantity,
                 newQuantity,
-                "harvested"
-            );
+                "harvested");
             EventManager::Instance().dispatchEvent(resourceChangeEvent);
         }
     } else {
@@ -267,12 +265,12 @@ void HarvestController::completeHarvest() {
         edm.createDroppedItem(spawnPos, harvestData.yieldResource, yield, worldId);
 
         HARVEST_INFO(std::format("Completed {} - {} x{} (dropped)",
-                                 VoidLight::harvestTypeToString(m_currentType),
-                                 harvestData.yieldResource.toString(), yield));
+            VoidLight::harvestTypeToString(m_currentType),
+            harvestData.yieldResource.toString(), yield));
     } else {
         HARVEST_INFO(std::format("Completed {} - {} x{} (added to inventory)",
-                                 VoidLight::harvestTypeToString(m_currentType),
-                                 harvestData.yieldResource.toString(), yield));
+            VoidLight::harvestTypeToString(m_currentType),
+            harvestData.yieldResource.toString(), yield));
     }
 
     // Mark harvestable as depleted
@@ -290,8 +288,7 @@ void HarvestController::completeHarvest() {
         static_cast<int>(m_currentTarget.getId()),
         tileX,
         tileY,
-        std::string(harvestData.yieldResource.toString())
-    );
+        std::string(harvestData.yieldResource.toString()));
     EventManager::Instance().dispatchEvent(harvestEvent);
 
     HARVEST_DEBUG(std::format("Fired HarvestResourceEvent at tile ({}, {})", tileX, tileY));

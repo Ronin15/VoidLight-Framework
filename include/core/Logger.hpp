@@ -20,74 +20,74 @@
 
 namespace VoidLight {
 enum class LogLevel : uint8_t {
-  CRITICAL = 0,     // Always logs (even in release for crashes)
-  ERROR_LEVEL = 1,  // Debug only (renamed to avoid macro conflicts)
-  WARNING = 2,      // Debug only
-  INFO = 3,         // Debug only
-  DEBUG_LEVEL = 4   // Debug only (renamed to avoid macro conflicts)
+    CRITICAL = 0,     // Always logs (even in release for crashes)
+    ERROR_LEVEL = 1,  // Debug only (renamed to avoid macro conflicts)
+    WARNING = 2,      // Debug only
+    INFO = 3,         // Debug only
+    DEBUG_LEVEL = 4   // Debug only (renamed to avoid macro conflicts)
 };
 
 #ifdef DEBUG
 // Full logging system in debug builds - lockless for safety
 class Logger {
 private:
-  static std::atomic<bool> s_benchmarkMode;
-  static std::mutex s_logMutex;
+    static std::atomic<bool> s_benchmarkMode;
+    static std::mutex s_logMutex;
 
 public:
-  static void SetBenchmarkMode(bool enabled) {
-    s_benchmarkMode.store(enabled, std::memory_order_relaxed);
-  }
-
-  static bool IsBenchmarkMode() {
-    return s_benchmarkMode.load(std::memory_order_relaxed);
-  }
-
-  static void Log(LogLevel level, const char *system,
-                  const std::string &message) {
-    if (s_benchmarkMode.load(std::memory_order_relaxed)) {
-      return;
+    static void SetBenchmarkMode(bool enabled) {
+        s_benchmarkMode.store(enabled, std::memory_order_relaxed);
     }
 
-    // Thread-safe logging with mutex protection
-    std::lock_guard<std::mutex> lock(s_logMutex);
-    printf("VoidLight Engine - [%s] %s: %s\n", system, getLevelString(level),
-           message.c_str());
-    if (level == LogLevel::ERROR_LEVEL || level == LogLevel::CRITICAL) {
-      fflush(stdout);
+    static bool IsBenchmarkMode() {
+        return s_benchmarkMode.load(std::memory_order_relaxed);
     }
-  }
-  static void Log(LogLevel level, const char *system, const char *message) {
-    if (s_benchmarkMode.load(std::memory_order_relaxed)) {
-      return;
-    }
+
+    static void Log(LogLevel level, const char* system,
+        const std::string& message) {
+        if (s_benchmarkMode.load(std::memory_order_relaxed)) {
+            return;
+        }
 
     // Thread-safe logging with mutex protection
-    std::lock_guard<std::mutex> lock(s_logMutex);
-    printf("VoidLight Engine - [%s] %s: %s\n", system, getLevelString(level),
-           message);
-    if (level == LogLevel::ERROR_LEVEL || level == LogLevel::CRITICAL) {
-      fflush(stdout);
+        std::lock_guard<std::mutex> lock(s_logMutex);
+        printf("VoidLight Engine - [%s] %s: %s\n", system, getLevelString(level),
+            message.c_str());
+        if (level == LogLevel::ERROR_LEVEL || level == LogLevel::CRITICAL) {
+            fflush(stdout);
+        }
     }
-  }
+    static void Log(LogLevel level, const char* system, const char* message) {
+        if (s_benchmarkMode.load(std::memory_order_relaxed)) {
+            return;
+        }
+
+    // Thread-safe logging with mutex protection
+        std::lock_guard<std::mutex> lock(s_logMutex);
+        printf("VoidLight Engine - [%s] %s: %s\n", system, getLevelString(level),
+            message);
+        if (level == LogLevel::ERROR_LEVEL || level == LogLevel::CRITICAL) {
+            fflush(stdout);
+        }
+    }
 
 private:
-  static const char *getLevelString(LogLevel level) {
-    switch (level) {
-    case LogLevel::CRITICAL:
-      return "CRITICAL";
-    case LogLevel::ERROR_LEVEL:
-      return "ERROR";
-    case LogLevel::WARNING:
-      return "WARNING";
-    case LogLevel::INFO:
-      return "INFO";
-    case LogLevel::DEBUG_LEVEL:
-      return "DEBUG";
-    default:
-      return "UNKNOWN";
+    static const char* getLevelString(LogLevel level) {
+        switch (level) {
+            case LogLevel::CRITICAL:
+                return "CRITICAL";
+            case LogLevel::ERROR_LEVEL:
+                return "ERROR";
+            case LogLevel::WARNING:
+                return "WARNING";
+            case LogLevel::INFO:
+                return "INFO";
+            case LogLevel::DEBUG_LEVEL:
+                return "DEBUG";
+            default:
+                return "UNKNOWN";
+        }
     }
-  }
 };
 
 // Debug build macros - full functionality
@@ -116,22 +116,22 @@ private:
 // Implementations in src/core/Logger.cpp
 class Logger {
 private:
-  static std::atomic<bool> s_benchmarkMode;
-  static std::mutex s_logMutex;
+    static std::atomic<bool> s_benchmarkMode;
+    static std::mutex s_logMutex;
 
 public:
-  static void SetBenchmarkMode(bool enabled) {
-    s_benchmarkMode.store(enabled, std::memory_order_relaxed);
-  }
+    static void SetBenchmarkMode(bool enabled) {
+        s_benchmarkMode.store(enabled, std::memory_order_relaxed);
+    }
 
-  static bool IsBenchmarkMode() {
-    return s_benchmarkMode.load(std::memory_order_relaxed);
-  }
+    static bool IsBenchmarkMode() {
+        return s_benchmarkMode.load(std::memory_order_relaxed);
+    }
 
   // Declarations only - implementations in Logger.cpp write to file
-  static void Log(const char *level, const char *system,
-                  const std::string &message);
-  static void Log(const char *level, const char *system, const char *message);
+    static void Log(const char* level, const char* system,
+        const std::string& message);
+    static void Log(const char* level, const char* system, const char* message);
 };
 
 #define VOIDLIGHT_CRITICAL(system, msg)                                           \

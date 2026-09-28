@@ -206,8 +206,7 @@ struct AICollisionTestFixture {
             false,
             0,
             1,
-            edmIndex
-        );
+            edmIndex);
         m_obstacleIds.push_back(edmId);
     }
 
@@ -229,7 +228,7 @@ struct AICollisionTestFixture {
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
         while (std::chrono::steady_clock::now() < deadline &&
-               !PathfinderManager::Instance().isGridReady()) {
+            !PathfinderManager::Instance().isGridReady()) {
             PathfinderManager::Instance().update();
             EventManager::Instance().update();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -308,15 +307,13 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
 
             Vector2D obstaclePos(
                 GRID_ORIGIN.getX() + col * GRID_SPACING,
-                GRID_ORIGIN.getY() + row * GRID_SPACING
-            );
+                GRID_ORIGIN.getY() + row * GRID_SPACING);
 
             createObstacle(
                 obstacleIdCounter++,
                 obstaclePos,
                 OBSTACLE_SIZE / 2.0f,
-                OBSTACLE_SIZE / 2.0f
-            );
+                OBSTACLE_SIZE / 2.0f);
             obstaclesCreated++;
         }
     }
@@ -364,15 +361,13 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     // Spawn entities in the center gap (row=2, col=2) to avoid spawning on obstacles
     const Vector2D SPAWN_CENTER(
         GRID_ORIGIN.getX() + 2 * GRID_SPACING,
-        GRID_ORIGIN.getY() + 2 * GRID_SPACING
-    );
+        GRID_ORIGIN.getY() + 2 * GRID_SPACING);
 
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         // Spawn in small cluster around center gap
         Vector2D startPos(
             SPAWN_CENTER.getX() + (i % 3 - 1) * 30.0f,
-            SPAWN_CENTER.getY() + (i / 3 - 1) * 30.0f
-        );
+            SPAWN_CENTER.getY() + (i / 3 - 1) * 30.0f);
 
         auto entity = createEntity(startPos);
         AIManager::Instance().assignBehavior(entity, "Wander");
@@ -449,13 +444,13 @@ BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
         const size_t idx = edm.getIndex(handle);
         BOOST_REQUIRE_NE(idx, SIZE_MAX);
         BOOST_CHECK_NE(edm.getHotDataByIndex(idx).collisionLayers,
-                       VoidLight::CollisionLayer::Layer_Enemy);
+            VoidLight::CollisionLayer::Layer_Enemy);
     }
 
     tickCollision(3);
     BOOST_CHECK_EQUAL(collision.getPerfStats().lastPairs, 0u);
     BOOST_CHECK_GE(edm.getActiveIndicesWithCollision().size(),
-                   static_cast<size_t>(NUM_ENTITIES));
+        static_cast<size_t>(NUM_ENTITIES));
 
     for (auto& handle : m_entityHandles) {
         if (handle.isValid()) {
@@ -472,7 +467,7 @@ BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
         BOOST_REQUIRE_NE(idx, SIZE_MAX);
         BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(idx).faction, 1);
         BOOST_CHECK_NE(edm.getHotDataByIndex(idx).collisionLayers,
-                       VoidLight::CollisionLayer::Layer_Enemy);
+            VoidLight::CollisionLayer::Layer_Enemy);
     }
 
     aiMgr.setStance(1, 0, FactionStance::Hostile);
@@ -480,7 +475,7 @@ BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
         const size_t idx = edm.getIndex(handle);
         BOOST_REQUIRE_NE(idx, SIZE_MAX);
         BOOST_CHECK_EQUAL(edm.getHotDataByIndex(idx).collisionLayers,
-                          VoidLight::CollisionLayer::Layer_Enemy);
+            VoidLight::CollisionLayer::Layer_Enemy);
     }
 
     tickCollision(3);
@@ -488,7 +483,7 @@ BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
     BOOST_CHECK_GT(collision.getPerfStats().lastPairs, 0u);
 #else
     BOOST_CHECK_GE(edm.getActiveIndicesWithCollision().size(),
-                   static_cast<size_t>(NUM_ENTITIES));
+        static_cast<size_t>(NUM_ENTITIES));
 #endif
 
     std::cout << "=== TEST 2: PASSED ===" << std::endl;
@@ -642,7 +637,7 @@ BOOST_AUTO_TEST_CASE(TestAICollisionPerformanceUnderLoad) {
     // Nearby Neutral wanderers stay Active collision participants. They do not
     // NPC-NPC pair, so lastPairs may be 0 with no Environment overlap.
     BOOST_CHECK_GE(EntityDataManager::Instance().getActiveIndicesWithCollision().size(),
-                   static_cast<size_t>(NUM_ENTITIES));
+        static_cast<size_t>(NUM_ENTITIES));
     BOOST_CHECK_GT(collisionStats.bodyCount, 0u);
 
     // Verify behaviors are registered

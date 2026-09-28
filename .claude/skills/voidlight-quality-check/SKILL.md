@@ -36,7 +36,7 @@ Each item is detailed in `references/checks.md` (section 3 in `references/standa
 
 1. **Compilation Quality** — zero-warning policy (uses an existing build; only build if asked).
 2. **Static Analysis (Branch/PR gate)** — 2.1 focused cppcheck, 2.2 focused clang-tidy.
-3. **Coding Standards** — naming, 4-space Allman, C++ API rules (no raw-pointer ownership / nullable raw pointers, no C-strings / raw arrays, unused params unnamed). See `references/standards.md`.
+3. **Coding Standards** — naming, `.clang-format` (K&R braces, 4-space), C++ API rules (no raw-pointer ownership / nullable raw pointers, no C-strings / raw arrays, unused params unnamed). See `references/standards.md`.
 4. **Threading Safety (CRITICAL)** — 4.1 no non-`thread_local` static state in threaded code, 4.2 `ThreadSystem` + `WorkerBudget` only (no raw threads / private pools / thread-count heuristics), 4.3 synchronization matches actual thread ownership.
 5. **Architecture Compliance (5.1–5.20)**
    - 5.1 GPU frame lifecycle — one present per frame; no clear/end/submit/present from GameStates.

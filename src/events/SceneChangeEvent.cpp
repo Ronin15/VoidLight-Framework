@@ -26,9 +26,8 @@ std::ostream& operator<<(std::ostream& os, const TransitionType& type) {
 
 // TransitionParams constructor (moved from header)
 TransitionParams::TransitionParams(float durationIn, TransitionType type)
-    : duration(durationIn)
-{
-    switch(type) {
+    : duration(durationIn) {
+    switch (type) {
         case TransitionType::Fade:
             transitionEffect = "fade";
             break;
@@ -217,7 +216,7 @@ bool SceneChangeEvent::checkConditions() {
 
     // Check all custom conditions using STL algorithm
     if (!std::all_of(m_conditions.begin(), m_conditions.end(),
-                     [](const auto& condition) { return condition(); })) {
+            [](const auto& condition) { return condition(); })) {
         return false;
     }
 
@@ -310,11 +309,10 @@ bool SceneChangeEvent::checkZoneCondition() const {
         float distSquared = dx * dx + dy * dy;
 
         return distSquared <= (m_zoneRadius * m_zoneRadius);
-    }
-    else if (m_zoneType == ZoneType::Rectangle) {
+    } else if (m_zoneType == ZoneType::Rectangle) {
         // Check if player is within rectangle bounds
         return playerPos.getX() >= m_zoneX1 && playerPos.getX() <= m_zoneX2 &&
-               playerPos.getY() >= m_zoneY1 && playerPos.getY() <= m_zoneY2;
+            playerPos.getY() >= m_zoneY1 && playerPos.getY() <= m_zoneY2;
     }
 
     return false;

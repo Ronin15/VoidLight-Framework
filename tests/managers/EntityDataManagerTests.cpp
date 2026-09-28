@@ -249,7 +249,7 @@ BOOST_AUTO_TEST_CASE(TestCreateMonsterAndAnimalAutoRegisterSuggestedBehavior) {
 
 BOOST_AUTO_TEST_CASE(TestCreatePlayer) {
     Vector2D position(300.0f, 400.0f);
-    EntityHandle handle = edm->registerPlayer(1,position);
+    EntityHandle handle = edm->registerPlayer(1, position);
 
     BOOST_CHECK(handle.isValid());
     BOOST_CHECK(handle.isPlayer());
@@ -284,7 +284,7 @@ BOOST_AUTO_TEST_CASE(TestCreateDroppedItem) {
 BOOST_AUTO_TEST_CASE(TestCreateProjectile) {
     Vector2D position(100.0f, 100.0f);
     Vector2D velocity(50.0f, 0.0f);
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createProjectile(position, velocity, owner, 25.0f, 3.0f);
 
     BOOST_CHECK(handle.isValid());
@@ -302,7 +302,7 @@ BOOST_AUTO_TEST_CASE(TestCreateProjectile) {
 
 BOOST_AUTO_TEST_CASE(TestCreateAreaEffect) {
     Vector2D position(200.0f, 200.0f);
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createAreaEffect(position, 50.0f, owner, 10.0f, 5.0f);
 
     BOOST_CHECK(handle.isValid());
@@ -338,7 +338,7 @@ BOOST_AUTO_TEST_CASE(TestCreateMultipleEntities) {
     // Create various entity types
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(300.0f, 300.0f));
+    edm->registerPlayer(1, Vector2D(300.0f, 300.0f));
     edm->createDroppedItem(Vector2D(400.0f, 400.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
     BOOST_CHECK_EQUAL(edm->getEntityCount(), 4);
@@ -744,10 +744,10 @@ BOOST_AUTO_TEST_CASE(TestGetItemData) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetProjectileData) {
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createProjectile(Vector2D(100.0f, 100.0f),
-                                                 Vector2D(50.0f, 0.0f),
-                                                 owner, 25.0f, 5.0f);
+        Vector2D(50.0f, 0.0f),
+        owner, 25.0f, 5.0f);
 
     const auto& projData = edm->getProjectileData(handle);
     BOOST_CHECK(approxEqual(projData.damage, 25.0f));
@@ -756,9 +756,9 @@ BOOST_AUTO_TEST_CASE(TestGetProjectileData) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetAreaEffectData) {
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createAreaEffect(Vector2D(200.0f, 200.0f),
-                                                 100.0f, owner, 15.0f, 10.0f);
+        100.0f, owner, 15.0f, 10.0f);
 
     const auto& effectData = edm->getAreaEffectData(handle);
     BOOST_CHECK(approxEqual(effectData.radius, 100.0f));
@@ -789,7 +789,7 @@ BOOST_AUTO_TEST_CASE(TestSetSimulationTier) {
 
     edm->setSimulationTier(handle, SimulationTier::Hibernated);
     BOOST_CHECK_EQUAL(static_cast<int>(edm->getHotData(handle).tier),
-                      static_cast<int>(SimulationTier::Hibernated));
+        static_cast<int>(SimulationTier::Hibernated));
 }
 
 BOOST_AUTO_TEST_CASE(TestUpdateSimulationTiers) {
@@ -849,7 +849,7 @@ BOOST_AUTO_TEST_CASE(TestEntityCountByTier) {
 
 BOOST_AUTO_TEST_CASE(TestPlayerAlwaysActive) {
     // Player should stay active regardless of distance
-    EntityHandle player = edm->registerPlayer(1,Vector2D(50000.0f, 50000.0f));
+    EntityHandle player = edm->registerPlayer(1, Vector2D(50000.0f, 50000.0f));
 
     edm->updateSimulationTiers(Vector2D(0.0f, 0.0f), 1500.0f, 10000.0f);
 
@@ -879,7 +879,7 @@ BOOST_AUTO_TEST_CASE(TestQueryEntitiesInRadius) {
 
 BOOST_AUTO_TEST_CASE(TestQueryEntitiesWithKindFilter) {
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(150.0f, 150.0f));
+    edm->registerPlayer(1, Vector2D(150.0f, 150.0f));
     edm->createDroppedItem(Vector2D(120.0f, 120.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
     std::vector<EntityHandle> found;
@@ -911,7 +911,7 @@ BOOST_AUTO_TEST_CASE(TestGetEntityCount) {
 BOOST_AUTO_TEST_CASE(TestGetEntityCountByKind) {
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(300.0f, 300.0f));
+    edm->registerPlayer(1, Vector2D(300.0f, 300.0f));
     edm->createDroppedItem(Vector2D(400.0f, 400.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
     BOOST_CHECK_EQUAL(edm->getEntityCount(EntityKind::NPC), 2);
@@ -923,7 +923,7 @@ BOOST_AUTO_TEST_CASE(TestGetEntityCountByKind) {
 BOOST_AUTO_TEST_CASE(TestGetIndicesByKind) {
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(300.0f, 300.0f));
+    edm->registerPlayer(1, Vector2D(300.0f, 300.0f));
 
     auto npcIndices = edm->getIndicesByKind(EntityKind::NPC);
     BOOST_CHECK_EQUAL(npcIndices.size(), 2);
@@ -1232,7 +1232,7 @@ BOOST_AUTO_TEST_CASE(TestAllCachedIndicesClearedComprehensive) {
     handles.push_back(edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard"));
 
     // Player (always active)
-    handles.push_back(edm->registerPlayer(1,Vector2D(300.0f, 300.0f)));
+    handles.push_back(edm->registerPlayer(1, Vector2D(300.0f, 300.0f)));
 
     // Items
     handles.push_back(edm->createDroppedItem(Vector2D(400.0f, 400.0f),
@@ -1597,7 +1597,7 @@ BOOST_AUTO_TEST_CASE(TestRangedWeaponConsumesCompatibleAmmunition) {
 
     BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
     BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
-                      CharacterData::CombatStyle::Ranged);
+        CharacterData::CombatStyle::Ranged);
     BOOST_CHECK_CLOSE(edm->getCharacterData(player).attackRange, 400.0f, 0.001f);
     BOOST_CHECK_CLOSE(edm->getCharacterData(player).projectileSpeed, 300.0f, 0.001f);
 
@@ -1627,7 +1627,7 @@ BOOST_AUTO_TEST_CASE(TestRangedWeaponWithoutAmmoDoesNotConsumeInventory) {
     BOOST_CHECK(!edm->consumeRequiredAmmoForRangedAttack(player, ammoChange));
 
     BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
-                      CharacterData::CombatStyle::Ranged);
+        CharacterData::CombatStyle::Ranged);
     BOOST_CHECK(!ammoChange.isValid());
 }
 

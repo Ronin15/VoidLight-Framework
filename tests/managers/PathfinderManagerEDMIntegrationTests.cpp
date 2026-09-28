@@ -333,7 +333,7 @@ BOOST_AUTO_TEST_CASE(StaleCompletionFromReusedSlotDoesNotOverwriteNewEntityPath)
     auto& cm = CollisionManager::Instance();
 
     BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
-                          "Expected active world for grid rebuild");
+        "Expected active world for grid rebuild");
     cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
     pm.rebuildGrid(false);
 
@@ -404,7 +404,7 @@ BOOST_AUTO_TEST_CASE(StaleCompletionFilteringStressLoop) {
     auto& cm = CollisionManager::Instance();
 
     BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
-                          "Expected active world for grid rebuild");
+        "Expected active world for grid rebuild");
     cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
     pm.rebuildGrid(false);
 
@@ -470,12 +470,12 @@ BOOST_AUTO_TEST_CASE(TestGridDroppedOnPrepareForStateTransition) {
     auto& cm = CollisionManager::Instance();
 
     BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
-                          "Expected active world for grid rebuild");
+        "Expected active world for grid rebuild");
     cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
     pm.rebuildGrid(false);
 
     BOOST_REQUIRE_MESSAGE(waitForGridReady(pm),
-                          "Expected grid rebuild to complete before transition");
+        "Expected grid rebuild to complete before transition");
     BOOST_REQUIRE(pm.isGridReady());
 
     pm.prepareForStateTransition();

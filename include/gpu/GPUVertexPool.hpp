@@ -43,7 +43,7 @@ public:
      * @return true on success
      */
     [[nodiscard]] bool init(SDL_GPUDevice* device, uint32_t vertexSize,
-              size_t maxVertices = DEFAULT_VERTEX_CAPACITY);
+        size_t maxVertices = DEFAULT_VERTEX_CAPACITY);
 
     /**
      * Shutdown and release all buffers.

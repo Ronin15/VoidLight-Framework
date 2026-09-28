@@ -14,97 +14,97 @@
 #include "gpu/GPURenderer.hpp"
 
 bool GameOverState::enter() {
-  auto& gameEngine = GameEngine::Instance();
-  auto& ui = UIManager::Instance();
+    auto& gameEngine = GameEngine::Instance();
+    auto& ui = UIManager::Instance();
 
-  gameEngine.setGlobalPause(true);
+    gameEngine.setGlobalPause(true);
 
   // Want silence on this screen; gameplay may still have been playing music.
-  SoundManager::Instance().stopMusic();
+    SoundManager::Instance().stopMusic();
 
   // Full-screen owner: ensure a clean UI slate before building this screen.
   // GameStateManager already clears UI on full-screen replace; this is defensive.
-  ui.prepareForStateTransition();
+    ui.prepareForStateTransition();
 
-  const int windowWidth = gameEngine.getWidthInPixels();
-  const int windowHeight = gameEngine.getHeightInPixels();
+    const int windowWidth = gameEngine.getWidthInPixels();
+    const int windowHeight = gameEngine.getHeightInPixels();
 
-  ui.createOverlay(windowWidth, windowHeight);
+    ui.createOverlay(windowWidth, windowHeight);
 
-  ui.createTitle("gameover_title",
-                 {0, UIConstants::TITLE_TOP_OFFSET * 8, windowWidth,
-                  UIConstants::DEFAULT_TITLE_HEIGHT},
-                 "Game Over");
-  ui.setTitleAlignment("gameover_title", UIAlignment::CENTER_CENTER);
-  ui.setComponentPositioning(
-      "gameover_title",
-      {UIPositionMode::CENTERED_H, 0, UIConstants::TITLE_TOP_OFFSET * 8, -1,
-       UIConstants::DEFAULT_TITLE_HEIGHT});
+    ui.createTitle("gameover_title",
+        {0, UIConstants::TITLE_TOP_OFFSET * 8, windowWidth,
+            UIConstants::DEFAULT_TITLE_HEIGHT},
+        "Game Over");
+    ui.setTitleAlignment("gameover_title", UIAlignment::CENTER_CENTER);
+    ui.setComponentPositioning(
+        "gameover_title",
+        {UIPositionMode::CENTERED_H, 0, UIConstants::TITLE_TOP_OFFSET * 8, -1,
+            UIConstants::DEFAULT_TITLE_HEIGHT});
 
-  ui.createLabel("gameover_message",
-                 {windowWidth / 2 - 250, windowHeight / 2 - 70, 500, 40},
-                 "The player has fallen.");
-  ui.setLabelAlignment("gameover_message", UIAlignment::CENTER_CENTER);
-  ui.setComponentPositioning("gameover_message",
-                             {UIPositionMode::CENTERED_BOTH, 0, -70, 500, 40});
+    ui.createLabel("gameover_message",
+        {windowWidth / 2 - 250, windowHeight / 2 - 70, 500, 40},
+        "The player has fallen.");
+    ui.setLabelAlignment("gameover_message", UIAlignment::CENTER_CENTER);
+    ui.setComponentPositioning("gameover_message",
+        {UIPositionMode::CENTERED_BOTH, 0, -70, 500, 40});
 
-  constexpr int buttonWidth = 220;
-  constexpr int buttonHeight = 45;
-  constexpr int buttonSpacing = 60;
+    constexpr int buttonWidth = 220;
+    constexpr int buttonHeight = 45;
+    constexpr int buttonSpacing = 60;
 
-  ui.createCenteredButton("gameover_retry_btn", 10, buttonWidth, buttonHeight,
-                          "Retry");
-  ui.createCenteredButton("gameover_mainmenu_btn", 10 + buttonSpacing,
-                          buttonWidth, buttonHeight, "Main Menu");
+    ui.createCenteredButton("gameover_retry_btn", 10, buttonWidth, buttonHeight,
+        "Retry");
+    ui.createCenteredButton("gameover_mainmenu_btn", 10 + buttonSpacing,
+        buttonWidth, buttonHeight, "Main Menu");
 
-  ui.setOnClick("gameover_retry_btn", [this]() {
-    mp_stateManager->changeState(m_returnState);
-  });
+    ui.setOnClick("gameover_retry_btn", [this]() {
+        mp_stateManager->changeState(m_returnState);
+    });
 
-  ui.setOnClick("gameover_mainmenu_btn", [this]() {
-    mp_stateManager->changeState(GameStateId::MAIN_MENU);
-  });
+    ui.setOnClick("gameover_mainmenu_btn", [this]() {
+        mp_stateManager->changeState(GameStateId::MAIN_MENU);
+    });
 
-  return true;
+    return true;
 }
 
 void GameOverState::update(float) {
-  auto& ui = UIManager::Instance();
-  if (!ui.isShutdown()) {
-    ui.update(0.0f);
-  }
+    auto& ui = UIManager::Instance();
+    if (!ui.isShutdown()) {
+        ui.update(0.0f);
+    }
 }
 
 void GameOverState::handleInput() {
-  const auto& inputMgr = InputManager::Instance();
+    const auto& inputMgr = InputManager::Instance();
 
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
-    mp_stateManager->changeState(m_returnState);
-  }
+    if (inputMgr.wasKeyPressed(SDL_SCANCODE_R)) {
+        mp_stateManager->changeState(m_returnState);
+    }
 
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_M)) {
-    mp_stateManager->changeState(GameStateId::MAIN_MENU);
-  }
+    if (inputMgr.wasKeyPressed(SDL_SCANCODE_M)) {
+        mp_stateManager->changeState(GameStateId::MAIN_MENU);
+    }
 }
 
 bool GameOverState::exit() {
   // Full-screen replace: GameStateManager clears all UI after this exit().
-  UIManager::Instance().clearKeyboardSelection();
-  return true;
+    UIManager::Instance().clearKeyboardSelection();
+    return true;
 }
 
 
 void GameOverState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
-  auto& ui = UIManager::Instance();
-  if (!ui.isShutdown()) {
-    ui.recordGPUVertices(gpuRenderer);
-  }
+    auto& ui = UIManager::Instance();
+    if (!ui.isShutdown()) {
+        ui.recordGPUVertices(gpuRenderer);
+    }
 }
 
 void GameOverState::renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                                SDL_GPURenderPass* swapchainPass) {
-  auto& ui = UIManager::Instance();
-  if (!ui.isShutdown()) {
-    ui.renderGPU(gpuRenderer, swapchainPass);
-  }
+    SDL_GPURenderPass* swapchainPass) {
+    auto& ui = UIManager::Instance();
+    if (!ui.isShutdown()) {
+        ui.renderGPU(gpuRenderer, swapchainPass);
+    }
 }

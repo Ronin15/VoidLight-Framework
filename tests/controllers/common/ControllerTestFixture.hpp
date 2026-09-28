@@ -32,11 +32,9 @@
  * Provides m_controller member of the specified type.
  */
 template <typename ControllerType>
-class ControllerTestFixture
-{
+class ControllerTestFixture {
 public:
-    ControllerTestFixture()
-    {
+    ControllerTestFixture() {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
         BOOST_REQUIRE(EventManager::Instance().init());
@@ -45,8 +43,7 @@ public:
         BOOST_REQUIRE(GameTimeManager::Instance().init(12.0f, 1.0f));
     }
 
-    ~ControllerTestFixture()
-    {
+    ~ControllerTestFixture() {
         // Clean up event handlers
         EventManager::Instance().clean();
     }

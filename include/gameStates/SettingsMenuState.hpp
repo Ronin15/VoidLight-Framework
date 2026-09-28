@@ -36,7 +36,7 @@ public:
 
     void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
     void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                     SDL_GPURenderPass* swapchainPass) override;
+        SDL_GPURenderPass* swapchainPass) override;
 
 private:
     /**
@@ -140,7 +140,7 @@ private:
 
     // Returns the stable UI component ID for a binding button
     static std::string bindingButtonId(InputManager::Command c,
-                                       InputManager::DeviceCategory cat);
+        InputManager::DeviceCategory cat);
 
     // Keyboard/gamepad navigation — the focus ring is rebuilt per-tab in
     // rebuildNavOrder() so body controls (checkboxes, sliders, binding rows)

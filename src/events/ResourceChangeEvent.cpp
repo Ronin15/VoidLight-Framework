@@ -9,8 +9,5 @@ const std::string ResourceChangeEvent::EVENT_TYPE = "ResourceChangeEvent";
 
 ResourceChangeEvent::ResourceChangeEvent(
     EntityHandle ownerHandle, VoidLight::ResourceHandle resourceHandle,
-    int oldQuantity, int newQuantity, const std::string &changeReason)
-    : m_ownerHandle(ownerHandle),
-      m_resourceHandle(resourceHandle),
-      m_oldQuantity(oldQuantity), m_newQuantity(newQuantity),
-      m_changeReason(changeReason) {}
+    int oldQuantity, int newQuantity, const std::string& changeReason)
+    : m_ownerHandle(ownerHandle), m_resourceHandle(resourceHandle), m_oldQuantity(oldQuantity), m_newQuantity(newQuantity), m_changeReason(changeReason) {}

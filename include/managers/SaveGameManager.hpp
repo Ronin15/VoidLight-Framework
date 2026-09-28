@@ -107,7 +107,6 @@ public:
     void setSaveDirectory(const std::string& directory);
 
 
-
     // Clean up resources
     void clean();
 

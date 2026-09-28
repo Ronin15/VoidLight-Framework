@@ -42,8 +42,8 @@ bool handleStartDelay(BehaviorContext& ctx, VoidLight::WanderStateData& wander, 
 }
 
 float calculateMoveDistance(BehaviorData& shared, VoidLight::WanderStateData& wander,
-                            const Vector2D& position, float baseDistance,
-                            const VoidLight::WanderBehaviorConfig& config) {
+    const Vector2D& position, float baseDistance,
+    const VoidLight::WanderBehaviorConfig& config) {
     int nearbyCount = shared.cachedNearbyCount;
     float moveDistance = baseDistance;
 
@@ -66,8 +66,8 @@ float calculateMoveDistance(BehaviorData& shared, VoidLight::WanderStateData& wa
 }
 
 void applyBoundaryAvoidance(VoidLight::WanderStateData& wander, const Vector2D& position,
-                            const VoidLight::WanderBehaviorConfig& config,
-                            const BehaviorContext& ctx) {
+    const VoidLight::WanderBehaviorConfig& config,
+    const BehaviorContext& ctx) {
     if (!ctx.worldBoundsValid) {
         return;
     }
@@ -101,18 +101,18 @@ void applyBoundaryAvoidance(VoidLight::WanderStateData& wander, const Vector2D& 
 }
 
 void handlePathfinding(const BehaviorContext& ctx, const Vector2D& dest,
-                       const VoidLight::WanderBehaviorConfig& config) {
+    const VoidLight::WanderBehaviorConfig& config) {
     Vector2D position = ctx.transform.position;
     float distanceToGoalSq = (dest - position).lengthSquared();
     if (distanceToGoalSq < 64.0f * 64.0f || !ctx.pathData) return;
 
     auto& pathData = *ctx.pathData;
     const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
-                              pathData.progressTimer < 0.8f);
+        pathData.progressTimer < 0.8f);
     bool needsNewPath = false;
     if (!skipRefresh) {
         needsNewPath = !pathData.hasPath || pathData.navIndex >= pathData.pathLength ||
-                       pathData.pathUpdateTimer > config.pathRefreshInterval;
+            pathData.pathUpdateTimer > config.pathRefreshInterval;
     }
 
     bool stuckOnObstacle = pathData.progressTimer > 0.8f;
@@ -130,14 +130,14 @@ void handlePathfinding(const BehaviorContext& ctx, const Vector2D& dest,
 
         if (goalChanged) {
             PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, position, dest,
-                                                           PathfinderManager::Priority::Normal);
+                PathfinderManager::Priority::Normal);
             pathData.pathRequestCooldown = config.pathRequestCooldown;
         }
     }
 }
 
 void chooseNewDirection(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
-                        const VoidLight::WanderBehaviorConfig&, float envSpeed) {
+    const VoidLight::WanderBehaviorConfig&, float envSpeed) {
     float angle = s_angleDistribution(s_rng);
     wander.currentDirection = Vector2D(std::cos(angle), std::sin(angle));
     if (wander.movementStarted) {
@@ -146,7 +146,7 @@ void chooseNewDirection(BehaviorContext& ctx, VoidLight::WanderStateData& wander
 }
 
 void handleMovement(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
-                    const VoidLight::WanderBehaviorConfig& config, float envSpeed) {
+    const VoidLight::WanderBehaviorConfig& config, float envSpeed) {
     auto& shared = ctx.sharedState;
     float baseDistance = config.baseGoalDistance;
     Vector2D position = ctx.transform.position;
@@ -232,7 +232,7 @@ void handleMovement(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
     }
 
     const float jitterThresholdSq = (envSpeed * config.jitterThresholdMultiplier) *
-                                    (envSpeed * config.jitterThresholdMultiplier);
+        (envSpeed * config.jitterThresholdMultiplier);
     if (speedSq < jitterThresholdSq && speedSq >= stallSpeedSq) {
         float jitter = (s_angleDistribution(s_rng) - static_cast<float>(M_PI)) * 0.1f;
         Vector2D dir = wander.currentDirection;
@@ -259,7 +259,7 @@ void handleMovement(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
 namespace Behaviors {
 
 void initWander(size_t edmIndex, const VoidLight::WanderBehaviorConfig&,
-                VoidLight::WanderStateData& state) {
+    VoidLight::WanderStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Wander);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -285,7 +285,7 @@ void initWander(size_t edmIndex, const VoidLight::WanderBehaviorConfig&,
 }
 
 void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& config,
-                   VoidLight::WanderStateData& state) {
+    VoidLight::WanderStateData& state) {
     auto& shared = ctx.sharedState;
     if (!shared.isValid()) return;
     const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;

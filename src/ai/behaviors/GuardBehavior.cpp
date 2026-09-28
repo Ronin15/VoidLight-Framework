@@ -71,7 +71,7 @@ float getAttackEngageRange(const CharacterData* charData) {
 }
 
 void processGuardMessages(BehaviorData& shared, VoidLight::GuardStateData& guard,
-                          const VoidLight::GuardBehaviorConfig&) {
+    const VoidLight::GuardBehaviorConfig&) {
     for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
         uint8_t msgId = shared.pendingMessages[i].messageId;
 
@@ -83,8 +83,7 @@ void processGuardMessages(BehaviorData& shared, VoidLight::GuardStateData& guard
                 break;
 
             case BehaviorMessage::CALM_DOWN:
-                if (guard.currentAlertLevel > 0)
-                {
+                if (guard.currentAlertLevel > 0) {
                     guard.currentAlertLevel--;
                     guard.alertDecayTimer = 0.0f;
                 }
@@ -97,8 +96,7 @@ void processGuardMessages(BehaviorData& shared, VoidLight::GuardStateData& guard
                 break;
 
             case BehaviorMessage::DISTRESS:
-                if (guard.currentAlertLevel < 1)
-                {
+                if (guard.currentAlertLevel < 1) {
                     guard.currentAlertLevel = 1;
                     guard.alertTimer = 0.0f;
                     guard.alertDecayTimer = 0.0f;
@@ -175,11 +173,11 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
     Vector2D currentPos = ctx.transform.position;
 
     const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
-                              pathData.progressTimer < 0.8f);
+        pathData.progressTimer < 0.8f);
     bool needsPath = false;
     if (!skipRefresh) {
         needsPath = !pathData.hasPath || pathData.navIndex >= pathData.pathLength ||
-                    pathData.pathUpdateTimer > PATH_TTL;
+            pathData.pathUpdateTimer > PATH_TTL;
     }
 
     if (!skipRefresh && !needsPath && pathData.hasPath && pathData.pathLength > 0) {
@@ -192,7 +190,7 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
 
     if (needsPath && pathData.pathRequestCooldown <= 0.0f) {
         PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, currentPos, targetPos,
-                                                        PathfinderManager::Priority::Normal);
+            PathfinderManager::Priority::Normal);
         pathData.pathRequestCooldown = 0.3f + (ctx.entityId % 200) * 0.001f;
     }
 
@@ -228,8 +226,8 @@ void moveToPosition(BehaviorContext& ctx, EntityDataManager& edm, const Vector2D
 }
 
 EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& isEnemyFaction,
-                          uint8_t& witnessAlertLevel, Vector2D& witnessLocation,
-                          const VoidLight::GuardStateData& guard) {
+    uint8_t& witnessAlertLevel, Vector2D& witnessLocation,
+    const VoidLight::GuardStateData& guard) {
     isEnemyFaction = false;
     witnessAlertLevel = 0;
 
@@ -303,7 +301,7 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
 }
 
 void updateAlertLevel(VoidLight::GuardStateData& guard, bool threatPresent,
-                      bool isEnemyFaction, float escalationMultiplier) {
+    bool isEnemyFaction, float escalationMultiplier) {
     if (threatPresent) {
         guard.threatSightingTimer = 0.0f;
         guard.hasActiveThreat = true;
@@ -332,7 +330,7 @@ void updateAlertLevel(VoidLight::GuardStateData& guard, bool threatPresent,
 namespace Behaviors {
 
 void initGuard(size_t edmIndex, const VoidLight::GuardBehaviorConfig&,
-               VoidLight::GuardStateData& state) {
+    VoidLight::GuardStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Guard);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -371,7 +369,7 @@ void initGuard(size_t edmIndex, const VoidLight::GuardBehaviorConfig&,
 }
 
 void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& config,
-                  VoidLight::GuardStateData& guard) {
+    VoidLight::GuardStateData& guard) {
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
@@ -444,12 +442,10 @@ void executeGuard(BehaviorContext& ctx, const VoidLight::GuardBehaviorConfig& co
 
     updateAlertLevel(guard, threatPresent, isEnemyFaction, guard.escalationMultiplier);
 
-    if (guard.currentAlertLevel >= 3 && ctx.memoryData.isValid())
-    {
+    if (guard.currentAlertLevel >= 3 && ctx.memoryData.isValid()) {
         float fear = ctx.memoryData.emotions.fear;
         float effectiveBravery = ctx.memoryData.personality.bravery + 0.1f;
-        if (fear > 0.7f && effectiveBravery < 0.3f)
-        {
+        if (fear > 0.7f && effectiveBravery < 0.3f) {
             switchBehavior(ctx.edmIndex, BehaviorType::Flee);
             return;
         }

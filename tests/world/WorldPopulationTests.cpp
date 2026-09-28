@@ -27,8 +27,7 @@ using namespace VoidLight;
 
 namespace {
 
-WorldGenerationConfig makePopulatedWorldConfig(int seed)
-{
+WorldGenerationConfig makePopulatedWorldConfig(int seed) {
     WorldGenerationConfig config;
     config.width = 100;
     config.height = 100;
@@ -48,22 +47,19 @@ struct NpcSnapshot {
     uint8_t faction{0};
 };
 
-[[nodiscard]] std::vector<NpcSnapshot> collectNpcs()
-{
+[[nodiscard]] std::vector<NpcSnapshot> collectNpcs() {
     auto& edm = EntityDataManager::Instance();
     auto npcSpan = edm.getIndicesByKind(EntityKind::NPC);
     std::vector<NpcSnapshot> npcs;
     npcs.reserve(npcSpan.size());
-    for (size_t idx : npcSpan)
-    {
+    for (size_t idx : npcSpan) {
         EntityHandle handle = edm.getHandle(idx);
-        if (!handle.isValid() || edm.getIndex(handle) == SIZE_MAX)
-        {
+        if (!handle.isValid() || edm.getIndex(handle) == SIZE_MAX) {
             continue;
         }
         const auto& charData = edm.getCharacterDataByIndex(idx);
         npcs.push_back({handle, charData.isMerchant(), charData.homeRole,
-                        charData.behaviorType, charData.faction});
+            charData.behaviorType, charData.faction});
     }
     return npcs;
 }
@@ -71,22 +67,19 @@ struct NpcSnapshot {
 } // namespace
 
 struct ThreadSystemFixture {
-    ThreadSystemFixture()
-    {
+    ThreadSystemFixture() {
         if (!ThreadSystem::Instance().init()) {
             throw std::runtime_error("Failed to initialize ThreadSystem for world population tests");
         }
     }
-    ~ThreadSystemFixture()
-    {
+    ~ThreadSystemFixture() {
         ThreadSystem::Instance().clean();
     }
 };
 BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 
 struct WorldPopulationFixture {
-    WorldPopulationFixture()
-    {
+    WorldPopulationFixture() {
         BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
@@ -97,8 +90,7 @@ struct WorldPopulationFixture {
         BOOST_REQUIRE(WorldManager::Instance().init());
     }
 
-    ~WorldPopulationFixture()
-    {
+    ~WorldPopulationFixture() {
         WorldManager::Instance().clean();
         WorldResourceManager::Instance().clean();
         AIManager::Instance().clean();
@@ -112,8 +104,7 @@ struct WorldPopulationFixture {
 
 BOOST_FIXTURE_TEST_SUITE(WorldPopulationTestSuite, WorldPopulationFixture)
 
-BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
-{
+BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs) {
     auto& worldMgr = WorldManager::Instance();
     BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
 
@@ -122,7 +113,7 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
     BOOST_CHECK(worldMgr.isWorldPopulated(worldId));
     BOOST_CHECK_GT(worldMgr.getPopulatedNpcCount(worldId), 0u);
     BOOST_CHECK_LE(worldMgr.getPopulatedNpcCount(worldId),
-                   WorldPopulation::MAX_POPULATED_NPCS_PER_WORLD);
+        WorldPopulation::MAX_POPULATED_NPCS_PER_WORLD);
 
     const auto npcs = collectNpcs();
     BOOST_REQUIRE(!npcs.empty());
@@ -135,28 +126,22 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
     size_t guardCount = 0;
     size_t wanderCount = 0;
     size_t wildernessCount = 0;
-    for (const auto& npc : npcs)
-    {
+    for (const auto& npc : npcs) {
         BOOST_CHECK_EQUAL(npc.behaviorType, npc.homeRole);
         BOOST_CHECK_NE(npc.homeRole, static_cast<uint8_t>(BehaviorType::None));
-        if (npc.merchant)
-        {
+        if (npc.merchant) {
             ++merchantCount;
         }
-        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Idle))
-        {
+        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Idle)) {
             ++idleCount;
         }
-        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Guard))
-        {
+        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Guard)) {
             ++guardCount;
         }
-        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Wander))
-        {
+        if (npc.homeRole == static_cast<uint8_t>(BehaviorType::Wander)) {
             ++wanderCount;
         }
-        if (npc.faction == 1)
-        {
+        if (npc.faction == 1) {
             BOOST_CHECK_EQUAL(npc.homeRole, static_cast<uint8_t>(BehaviorType::Chase));
             BOOST_CHECK(AIManager::Instance().getStance(1, 0) == FactionStance::Neutral);
             ++wildernessCount;
@@ -170,8 +155,7 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorldPopulatesSettlementNpcs)
     BOOST_CHECK_LE(wildernessCount, WorldPopulation::MAX_WILDERNESS_NPCS_PER_WORLD);
 }
 
-BOOST_AUTO_TEST_CASE(TestUnloadThenReloadReplacesPopulatedNpcs)
-{
+BOOST_AUTO_TEST_CASE(TestUnloadThenReloadReplacesPopulatedNpcs) {
     auto& worldMgr = WorldManager::Instance();
     auto& edm = EntityDataManager::Instance();
 
@@ -183,8 +167,7 @@ BOOST_AUTO_TEST_CASE(TestUnloadThenReloadReplacesPopulatedNpcs)
     BOOST_REQUIRE(!firstNpcs.empty());
     std::vector<EntityHandle> firstHandles;
     firstHandles.reserve(firstNpcs.size());
-    for (const auto& npc : firstNpcs)
-    {
+    for (const auto& npc : firstNpcs) {
         firstHandles.push_back(npc.handle);
     }
 
@@ -192,8 +175,7 @@ BOOST_AUTO_TEST_CASE(TestUnloadThenReloadReplacesPopulatedNpcs)
     BOOST_CHECK(!worldMgr.isWorldPopulated(firstWorldId));
     BOOST_CHECK_EQUAL(worldMgr.getPopulatedNpcCount(firstWorldId), 0u);
     BOOST_CHECK(worldMgr.getSettlements().empty());
-    for (const EntityHandle& handle : firstHandles)
-    {
+    for (const EntityHandle& handle : firstHandles) {
         BOOST_CHECK_EQUAL(edm.getIndex(handle), SIZE_MAX);
     }
 
@@ -206,18 +188,15 @@ BOOST_AUTO_TEST_CASE(TestUnloadThenReloadReplacesPopulatedNpcs)
 
     const auto secondNpcs = collectNpcs();
     BOOST_REQUIRE(!secondNpcs.empty());
-    for (const EntityHandle& handle : firstHandles)
-    {
+    for (const EntityHandle& handle : firstHandles) {
         BOOST_CHECK_EQUAL(edm.getIndex(handle), SIZE_MAX);
     }
-    for (const auto& npc : secondNpcs)
-    {
+    for (const auto& npc : secondNpcs) {
         BOOST_CHECK_NE(edm.getIndex(npc.handle), SIZE_MAX);
     }
 }
 
-BOOST_AUTO_TEST_CASE(TestSettlementPointQueries)
-{
+BOOST_AUTO_TEST_CASE(TestSettlementPointQueries) {
     auto& worldMgr = WorldManager::Instance();
     BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
 
@@ -245,8 +224,7 @@ BOOST_AUTO_TEST_CASE(TestSettlementPointQueries)
     BOOST_CHECK(!worldMgr.findSettlementAtPixel(outsidePixelX, centerPixelY).has_value());
 }
 
-BOOST_AUTO_TEST_CASE(TestPauseDoesNotPopulate)
-{
+BOOST_AUTO_TEST_CASE(TestPauseDoesNotPopulate) {
     // GamePlayState::pause/resume never call loadNewWorld. This suite
     // asserts the populate registry is unchanged under AI pause.
     auto& worldMgr = WorldManager::Instance();
@@ -263,8 +241,7 @@ BOOST_AUTO_TEST_CASE(TestPauseDoesNotPopulate)
     BOOST_CHECK_EQUAL(worldMgr.getPopulatedNpcCount(worldId), countAfterLoad);
 }
 
-BOOST_AUTO_TEST_CASE(TestDistantPopulatedNpcsRetier)
-{
+BOOST_AUTO_TEST_CASE(TestDistantPopulatedNpcsRetier) {
     auto& worldMgr = WorldManager::Instance();
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
@@ -275,12 +252,10 @@ BOOST_AUTO_TEST_CASE(TestDistantPopulatedNpcsRetier)
     edm.updateSimulationTiers(Vector2D(0.0f, 0.0f), 50.0f, 100.0f);
 
     bool sawNonActive = false;
-    for (const auto& npc : npcs)
-    {
+    for (const auto& npc : npcs) {
         const size_t idx = edm.getIndex(npc.handle);
         BOOST_REQUIRE_NE(idx, SIZE_MAX);
-        if (edm.getHotDataByIndex(idx).tier != SimulationTier::Active)
-        {
+        if (edm.getHotDataByIndex(idx).tier != SimulationTier::Active) {
             sawNonActive = true;
             break;
         }
@@ -288,8 +263,7 @@ BOOST_AUTO_TEST_CASE(TestDistantPopulatedNpcsRetier)
     BOOST_CHECK(sawNonActive);
 }
 
-BOOST_AUTO_TEST_CASE(TestUnloadDestroysHarvestablesWithoutEdmTransition)
-{
+BOOST_AUTO_TEST_CASE(TestUnloadDestroysHarvestablesWithoutEdmTransition) {
     // Public unload drains NPCs and immediately destroys static harvestables.
     // No EntityDataManager::prepareForStateTransition is required.
     auto& worldMgr = WorldManager::Instance();
@@ -308,8 +282,7 @@ BOOST_AUTO_TEST_CASE(TestUnloadDestroysHarvestablesWithoutEdmTransition)
     BOOST_CHECK(!worldMgr.isWorldPopulated(worldId));
 }
 
-BOOST_AUTO_TEST_CASE(TestSpawnNpcHelperBehaviorOverride)
-{
+BOOST_AUTO_TEST_CASE(TestSpawnNpcHelperBehaviorOverride) {
     auto& edm = EntityDataManager::Instance();
 
     EntityHandle guard = spawnNpc(Vector2D(32.0f, 32.0f), "Human", "Guard");
@@ -321,7 +294,7 @@ BOOST_AUTO_TEST_CASE(TestSpawnNpcHelperBehaviorOverride)
     BOOST_CHECK_EQUAL(guardData.behaviorType, static_cast<uint8_t>(BehaviorType::Guard));
 
     EntityHandle warrior = spawnNpc(Vector2D(64.0f, 32.0f), "Human", "Warrior",
-                                    Sex::Unknown, 1, "Attack");
+        Sex::Unknown, 1, "Attack");
     BOOST_REQUIRE(warrior.isValid());
     const size_t warriorIdx = edm.getIndex(warrior);
     BOOST_REQUIRE_NE(warriorIdx, SIZE_MAX);
@@ -331,8 +304,7 @@ BOOST_AUTO_TEST_CASE(TestSpawnNpcHelperBehaviorOverride)
     BOOST_CHECK_EQUAL(warriorData.faction, 1);
 }
 
-BOOST_AUTO_TEST_CASE(TestClearPopulatedNpcsKeepsWorld)
-{
+BOOST_AUTO_TEST_CASE(TestClearPopulatedNpcsKeepsWorld) {
     auto& worldMgr = WorldManager::Instance();
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
@@ -351,8 +323,7 @@ BOOST_AUTO_TEST_CASE(TestClearPopulatedNpcsKeepsWorld)
     BOOST_CHECK(collectNpcs().empty());
 }
 
-BOOST_AUTO_TEST_CASE(TestPopulateUsesSettlementFaction)
-{
+BOOST_AUTO_TEST_CASE(TestPopulateUsesSettlementFaction) {
     WorldData world;
     world.worldId = "settlement-faction";
     constexpr int kSize = 16;
@@ -371,16 +342,14 @@ BOOST_AUTO_TEST_CASE(TestPopulateUsesSettlementFaction)
     BOOST_REQUIRE(!handles.empty());
 
     auto& edm = EntityDataManager::Instance();
-    for (const EntityHandle& handle : handles)
-    {
+    for (const EntityHandle& handle : handles) {
         const size_t idx = edm.getIndex(handle);
         BOOST_REQUIRE_NE(idx, SIZE_MAX);
         BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(idx).faction, record.faction);
     }
 }
 
-BOOST_AUTO_TEST_CASE(TestQueryTerritoryAtVillageCenter)
-{
+BOOST_AUTO_TEST_CASE(TestQueryTerritoryAtVillageCenter) {
     auto& worldMgr = WorldManager::Instance();
     BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
 
@@ -407,8 +376,8 @@ BOOST_AUTO_TEST_CASE(TestQueryTerritoryAtVillageCenter)
     const float outsidePixelX =
         centerPixelX + static_cast<float>(record.radiusTiles + 1) * TILE_SIZE;
     BOOST_CHECK(!AIManager::Instance()
-                     .queryTerritoryAtPixel(outsidePixelX, centerPixelY)
-                     .has_value());
+            .queryTerritoryAtPixel(outsidePixelX, centerPixelY)
+            .has_value());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

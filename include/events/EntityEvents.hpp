@@ -89,7 +89,7 @@ public:
      * @param knockback Optional knockback force
      */
     DamageEvent(EntityEventType eventType, EntityHandle source, EntityHandle target,
-                float damage, const Vector2D& knockback = Vector2D(0.0f, 0.0f))
+        float damage, const Vector2D& knockback = Vector2D(0.0f, 0.0f))
         : m_name("DamageEvent")
         , m_eventType(eventType)
         , m_source(source)
@@ -108,7 +108,7 @@ public:
      * @param knockback Knockback force vector
      */
     void configure(EntityHandle source, EntityHandle target,
-                   float damage, const Vector2D& knockback) {
+        float damage, const Vector2D& knockback) {
         m_eventType = EntityEventType::DamageIntent;
         m_source = source;
         m_target = target;
@@ -176,7 +176,7 @@ public:
      * @param killer EntityHandle of killer (if any)
      */
     DeathEvent(EntityEventType eventType, EntityHandle entity,
-               EntityHandle killer = EntityHandle{})
+        EntityHandle killer = EntityHandle{})
         : m_name("DeathEvent")
         , m_eventType(eventType)
         , m_entity(entity)
@@ -288,8 +288,8 @@ public:
      * @param location World position where theft occurred
      */
     TheftEvent(EntityHandle thief, EntityHandle victim,
-               VoidLight::ResourceHandle stolenItem, int quantity,
-               const Vector2D& location)
+        VoidLight::ResourceHandle stolenItem, int quantity,
+        const Vector2D& location)
         : m_name("TheftEvent")
         , m_thief(thief)
         , m_victim(victim)

@@ -101,26 +101,22 @@ BOOST_AUTO_TEST_CASE(TestTaskPriorities) {
     VoidLight::ThreadSystem::Instance().enqueueTask(
         lowPriorityTask,
         VoidLight::TaskPriority::Low,
-        "Low priority task"
-    );
+        "Low priority task");
 
     VoidLight::ThreadSystem::Instance().enqueueTask(
         normalPriorityTask,
         VoidLight::TaskPriority::Normal,
-        "Normal priority task"
-    );
+        "Normal priority task");
 
     VoidLight::ThreadSystem::Instance().enqueueTask(
         highPriorityTask,
         VoidLight::TaskPriority::High,
-        "High priority task"
-    );
+        "High priority task");
 
     VoidLight::ThreadSystem::Instance().enqueueTask(
         criticalPriorityTask,
         VoidLight::TaskPriority::Critical,
-        "Critical priority task"
-    );
+        "Critical priority task");
 
     // Wait for tasks to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -144,8 +140,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleTasks) {
                 counter++;
             },
             VoidLight::TaskPriority::Normal,
-            "Counter increment task"
-        );
+            "Counter increment task");
     }
 
     // Wait for all tasks to complete with proper timeout calculation
@@ -172,8 +167,7 @@ BOOST_AUTO_TEST_CASE(TestConcurrentTaskResults) {
                 return i;
             },
             VoidLight::TaskPriority::Normal,
-            "Return index task " + std::to_string(i)
-        ));
+            "Return index task " + std::to_string(i)));
     }
 
     // Collect results and verify
@@ -197,8 +191,7 @@ BOOST_AUTO_TEST_CASE(TestTasksWithExceptions) {
             return 0; // Never reached
         },
         VoidLight::TaskPriority::Normal,
-        "Exception-throwing task"
-    );
+        "Exception-throwing task");
 
     // Check that the exception is properly propagated
     BOOST_CHECK_THROW(future.get(), std::runtime_error);
@@ -221,8 +214,7 @@ BOOST_AUTO_TEST_CASE(TestConcurrencyIsolation) {
                 sharedValue++;
             },
             VoidLight::TaskPriority::Normal,
-            "Synchronized increment task"
-        ));
+            "Synchronized increment task"));
     }
 
     // Wait for all tasks to complete
@@ -245,8 +237,7 @@ BOOST_AUTO_TEST_CASE(TestBusyFlag) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         },
         VoidLight::TaskPriority::Normal,
-        "Long-running task"
-    );
+        "Long-running task");
 
     // Check if system reports as busy
     bool busyDuringTask = VoidLight::ThreadSystem::Instance().isBusy();
@@ -278,12 +269,10 @@ BOOST_AUTO_TEST_CASE(TestNestedTasks) {
                     counter++;
                 },
                 VoidLight::TaskPriority::High,
-                "Nested task"
-            );
+                "Nested task");
         },
         VoidLight::TaskPriority::Normal,
-        "Parent task"
-    );
+        "Parent task");
 
     // Wait for both tasks to complete with longer timeout
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
@@ -318,8 +307,7 @@ BOOST_AUTO_TEST_CASE(TestLoadBalancing) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             },
             VoidLight::TaskPriority::Normal,
-            "Thread ID recording task " + std::to_string(i)
-        ));
+            "Thread ID recording task " + std::to_string(i)));
     }
 
     // Wait for all tasks to complete
@@ -373,8 +361,7 @@ BOOST_AUTO_TEST_CASE(TestTaskStats) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             },
             VoidLight::TaskPriority::Normal,
-            "Stats test task"
-        ));
+            "Stats test task"));
     }
 
     // Wait for all tasks to complete
@@ -415,8 +402,7 @@ BOOST_AUTO_TEST_CASE(TestQueueOverflowProtection) {
                 return temp;
             },
             VoidLight::TaskPriority::Normal,
-            "Load test task"
-        ));
+            "Load test task"));
 
         // Check queue size periodically
         if (i % 500 == 0) {
@@ -442,7 +428,6 @@ BOOST_AUTO_TEST_CASE(TestQueueOverflowProtection) {
 }
 
 
-
 BOOST_AUTO_TEST_CASE(TestBurstTaskSubmission) {
     // Simulate burst conditions like what AIManager might create
     std::cout << "Testing burst task submission patterns..." << std::endl;
@@ -462,8 +447,7 @@ BOOST_AUTO_TEST_CASE(TestBurstTaskSubmission) {
                     std::this_thread::sleep_for(std::chrono::microseconds(100));
                 },
                 VoidLight::TaskPriority::Normal,
-                "Burst task"
-            ));
+                "Burst task"));
         }
 
         size_t queueAfter = VoidLight::ThreadSystem::Instance().getQueueSize();

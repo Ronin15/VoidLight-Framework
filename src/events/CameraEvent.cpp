@@ -7,10 +7,9 @@
 
 std::string CameraModeChangedEvent::getModeString(Mode mode) const {
     switch (mode) {
-        case Mode::Free:   return "Free";
+        case Mode::Free: return "Free";
         case Mode::Follow: return "Follow";
-        case Mode::Fixed:  return "Fixed";
-        default:           return "Unknown";
+        case Mode::Fixed: return "Fixed";
+        default: return "Unknown";
     }
 }
-

@@ -14,7 +14,7 @@ namespace VoidLight {
 struct CollisionInfo {
     EntityID a{0};
     EntityID b{0};
-    Vector2D normal{0,0};
+    Vector2D normal{0, 0};
     float penetration{0.0f};
     bool trigger{false};
 

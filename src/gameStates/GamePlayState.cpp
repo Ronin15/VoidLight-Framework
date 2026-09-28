@@ -52,164 +52,161 @@
 
 // Constructor/destructor defined here where GPUSceneRecorder is complete (for unique_ptr)
 GamePlayState::GamePlayState()
-    : m_transitioningToLoading{false}, m_transitioningToGameOver{false},
-      mp_Player{nullptr}, m_initialized{false},
-      m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{},
-      m_stanceChangedEventToken{} {}
+    : m_transitioningToLoading{false}, m_transitioningToGameOver{false}, mp_Player{nullptr}, m_initialized{false}, m_dayNightEventToken{}, m_weatherEventToken{}, m_harvestEventToken{}, m_stanceChangedEventToken{} {}
 
 GamePlayState::~GamePlayState() = default;
 
 bool GamePlayState::enter() {
   // Cache GameEngine reference at function start
-  auto &gameEngine = GameEngine::Instance();
+    auto& gameEngine = GameEngine::Instance();
 
   // Reset transition flag when entering state
-  m_transitioningToLoading = false;
-  m_transitioningToGameOver = false;
+    m_transitioningToLoading = false;
+    m_transitioningToGameOver = false;
 
   // Check if world needs to be loaded
-  if (!m_worldLoaded) {
-    GAMEPLAY_INFO("World not loaded yet - will transition to LoadingState on "
-                  "first update");
-    m_needsLoading = true;
-    m_worldLoaded = true; // Mark as loaded to prevent loop on re-entry
-    return true;          // Will transition to loading screen in update()
-  }
+    if (!m_worldLoaded) {
+        GAMEPLAY_INFO("World not loaded yet - will transition to LoadingState on "
+                      "first update");
+        m_needsLoading = true;
+        m_worldLoaded = true; // Mark as loaded to prevent loop on re-entry
+        return true;          // Will transition to loading screen in update()
+    }
 
   // Resume after Loading (or menu) now that this state owns the exclusive window.
-  gameEngine.setGlobalPause(false);
+    gameEngine.setGlobalPause(false);
 
   // World is loaded - proceed with normal initialization
-  GAMEPLAY_INFO("World already loaded - initializing gameplay");
+    GAMEPLAY_INFO("World already loaded - initializing gameplay");
 
-  try {
+    try {
     // Local references for init-only managers (not cached as members)
-    auto &gameTimeMgr = GameTimeManager::Instance();
+        auto& gameTimeMgr = GameTimeManager::Instance();
 
     // Create player one tile east of the first settlement so HUD/trade
     // meet populated NPCs without overlapping the center merchant.
     // Fall back to screen center when the world has no settlements.
-    mp_Player = std::make_shared<Player>();
-    mp_Player->ensurePhysicsBodyRegistered();
-    mp_Player->initializeInventory();
+        mp_Player = std::make_shared<Player>();
+        mp_Player->ensurePhysicsBodyRegistered();
+        mp_Player->initializeInventory();
 
-    Vector2D spawnPos(gameEngine.getWidthInPixels() / 2.0,
-                      gameEngine.getHeightInPixels() / 2.0);
-    const auto settlements = WorldManager::Instance().getSettlements();
-    if (!settlements.empty()) {
-      const auto& home = settlements.front();
-      spawnPos = Vector2D(
-          (static_cast<float>(home.centerTileX) + 1.5f) * VoidLight::TILE_SIZE,
-          (static_cast<float>(home.centerTileY) + 0.5f) * VoidLight::TILE_SIZE);
-    }
-    mp_Player->setPosition(spawnPos);
-    spawnStarterGearChest();
+        Vector2D spawnPos(gameEngine.getWidthInPixels() / 2.0,
+            gameEngine.getHeightInPixels() / 2.0);
+        const auto settlements = WorldManager::Instance().getSettlements();
+        if (!settlements.empty()) {
+            const auto& home = settlements.front();
+            spawnPos = Vector2D(
+                (static_cast<float>(home.centerTileX) + 1.5f) * VoidLight::TILE_SIZE,
+                (static_cast<float>(home.centerTileY) + 0.5f) * VoidLight::TILE_SIZE);
+        }
+        mp_Player->setPosition(spawnPos);
+        spawnStarterGearChest();
 
     // Set player handle in AIManager for collision culling reference point
-    AIManager::Instance().setPlayerHandle(mp_Player->getHandle());
+        AIManager::Instance().setPlayerHandle(mp_Player->getHandle());
 
     // Initialize camera (world already loaded)
-    initializeCamera();
+        initializeCamera();
 
     // Create GPU scene recorder for coordinated GPU rendering
-    m_gpuSceneRecorder = std::make_unique<VoidLight::GPUSceneRecorder>();
+        m_gpuSceneRecorder = std::make_unique<VoidLight::GPUSceneRecorder>();
 
     // Register controllers with the registry
-    m_controllers.add<WeatherController>();
-    m_controllers.add<DayNightController>();
-    m_controllers.add<CombatController>(mp_Player);
-    m_controllers.add<HudController>(mp_Player);
-    auto& inventoryCtrl = m_controllers.add<InventoryController>(mp_Player);
-    m_controllers.add<HarvestController>(mp_Player);
-    m_controllers.add<ResourceRenderController>();
+        m_controllers.add<WeatherController>();
+        m_controllers.add<DayNightController>();
+        m_controllers.add<CombatController>(mp_Player);
+        m_controllers.add<HudController>(mp_Player);
+        auto& inventoryCtrl = m_controllers.add<InventoryController>(mp_Player);
+        m_controllers.add<HarvestController>(mp_Player);
+        m_controllers.add<ResourceRenderController>();
 
     // Social controller (handles both relationship management and trade UI)
-    m_controllers.add<SocialController>(mp_Player);
+        m_controllers.add<SocialController>(mp_Player);
 
     // Enable automatic weather changes
-    gameTimeMgr.enableAutoWeather(true);
+        gameTimeMgr.enableAutoWeather(true);
     // Normal pacing (Release/ReleaseSafe/Profile)
-    gameTimeMgr.setWeatherCheckInterval(4.0f);
-    gameTimeMgr.setTimeScale(60.0f);
+        gameTimeMgr.setWeatherCheckInterval(4.0f);
+        gameTimeMgr.setTimeScale(60.0f);
     // Debug: faster changes for testing seasons/weather
-    VOIDLIGHT_DEBUG_ONLY(
-        gameTimeMgr.setWeatherCheckInterval(1.0f);
-        gameTimeMgr.setTimeScale(3600.0f);
-    );
+        VOIDLIGHT_DEBUG_ONLY(
+            gameTimeMgr.setWeatherCheckInterval(1.0f);
+            gameTimeMgr.setTimeScale(3600.0f);)
+        ;
 
     // Cache UI manager reference for better performance
-    auto &ui = UIManager::Instance();
+        auto& ui = UIManager::Instance();
 
     // Full-screen owner: ensure a clean UI slate before building gameplay UI.
     // GameStateManager already clears UI on full-screen replace; this is
     // defensive if enter() is reached without that path.
-    ui.prepareForStateTransition();
+        ui.prepareForStateTransition();
 
     // Create event log for time/weather messages
-    ui.createEventLog("event_log",
-                      {10, ui.getHeightInPixels() - 200, 730, 180}, 7);
-    UIPositioning eventLogPos;
-    eventLogPos.mode = UIPositionMode::BOTTOM_ALIGNED;
-    eventLogPos.offsetX = 10;
-    eventLogPos.offsetY = 20;
-    eventLogPos.fixedHeight = 180;
-    eventLogPos.widthPercent = UIConstants::EVENT_LOG_WIDTH_PERCENT;
-    ui.setComponentPositioning("event_log", eventLogPos);
+        ui.createEventLog("event_log",
+            {10, ui.getHeightInPixels() - 200, 730, 180}, 7);
+        UIPositioning eventLogPos;
+        eventLogPos.mode = UIPositionMode::BOTTOM_ALIGNED;
+        eventLogPos.offsetX = 10;
+        eventLogPos.offsetY = 20;
+        eventLogPos.fixedHeight = 180;
+        eventLogPos.widthPercent = UIConstants::EVENT_LOG_WIDTH_PERCENT;
+        ui.setComponentPositioning("event_log", eventLogPos);
 
     // Create time status label at top-right of screen (no panel, just label)
-    int const barHeight = UIConstants::STATUS_BAR_HEIGHT;
-    int labelPadding = UIConstants::STATUS_BAR_LABEL_PADDING;
+        int const barHeight = UIConstants::STATUS_BAR_HEIGHT;
+        int labelPadding = UIConstants::STATUS_BAR_LABEL_PADDING;
 
-    ui.createLabel("time_label",
-                   {labelPadding, 6, ui.getWidthInPixels() - 2 * labelPadding,
-                    barHeight - 12},
-                   "");
+        ui.createLabel("time_label",
+            {labelPadding, 6, ui.getWidthInPixels() - 2 * labelPadding,
+                barHeight - 12},
+            "");
 
     // Right-align the text within the label
-    ui.setLabelAlignment("time_label", UIAlignment::CENTER_RIGHT);
+        ui.setLabelAlignment("time_label", UIAlignment::CENTER_RIGHT);
 
     // Full-width label driven by setComponentPositioning — disable auto-sizing
     // so setText() updates don't shrink bounds back to content width.
-    ui.enableAutoSizing("time_label", false);
+        ui.enableAutoSizing("time_label", false);
 
     // Full-width positioning for resize handling
-    UIPositioning labelPos;
-    labelPos.mode = UIPositionMode::TOP_ALIGNED;
-    labelPos.offsetX = labelPadding;
-    labelPos.offsetY = 6;                    // Small vertical offset from top
-    labelPos.fixedWidth = -2 * labelPadding; // Full width minus margins
-    labelPos.fixedHeight = barHeight - 12;
-    ui.setComponentPositioning("time_label", labelPos);
+        UIPositioning labelPos;
+        labelPos.mode = UIPositionMode::TOP_ALIGNED;
+        labelPos.offsetX = labelPadding;
+        labelPos.offsetY = 6;                    // Small vertical offset from top
+        labelPos.fixedWidth = -2 * labelPadding; // Full width minus margins
+        labelPos.fixedHeight = barHeight - 12;
+        ui.setComponentPositioning("time_label", labelPos);
 
     // Pre-allocate status buffer for zero per-frame allocations
-    m_statusBuffer.reserve(256);
+        m_statusBuffer.reserve(256);
 
     // Create FPS counter label (top-left, initially hidden, toggled with F2)
-    ui.createLabel(
-        "fps",
-        {labelPadding, 6, UIConstants::FPS_COUNTER_WIDTH, barHeight - 12},
-        "FPS: --");
-    ui.setComponentVisible("fps", false);
+        ui.createLabel(
+            "fps",
+            {labelPadding, 6, UIConstants::FPS_COUNTER_WIDTH, barHeight - 12},
+            "FPS: --");
+        ui.setComponentVisible("fps", false);
     // Fixed width covers Retina-scaled "FPS: nnn.n" in 1280x720 windowed mode
     // without per-setText font metrics on every FPS update.
-    ui.enableAutoSizing("fps", false);
-    UIPositioning fpsPos;
-    fpsPos.mode = UIPositionMode::TOP_ALIGNED;
-    fpsPos.offsetX = labelPadding;
-    fpsPos.offsetY = 6;
-    fpsPos.fixedWidth = UIConstants::FPS_COUNTER_WIDTH;
-    fpsPos.fixedHeight = barHeight - 12;
-    ui.setComponentPositioning("fps", fpsPos);
+        ui.enableAutoSizing("fps", false);
+        UIPositioning fpsPos;
+        fpsPos.mode = UIPositionMode::TOP_ALIGNED;
+        fpsPos.offsetX = labelPadding;
+        fpsPos.offsetY = 6;
+        fpsPos.fixedWidth = UIConstants::FPS_COUNTER_WIDTH;
+        fpsPos.fixedHeight = barHeight - 12;
+        ui.setComponentPositioning("fps", fpsPos);
 
-    inventoryCtrl.initializeInventoryUI();
-    auto& hudCtrl = *m_controllers.get<HudController>();
-    hudCtrl.initializeActionHUD();
-    hudCtrl.initializeHotbarUI();
+        inventoryCtrl.initializeInventoryUI();
+        auto& hudCtrl = *m_controllers.get<HudController>();
+        hudCtrl.initializeActionHUD();
+        hudCtrl.initializeHotbarUI();
 
     // Subscribe all controllers at once
-    m_controllers.subscribeAll();
+        m_controllers.subscribeAll();
 
-    registerEventHandlers();
+        registerEventHandlers();
 
     // Start open-world background music loop. Use the default per-track
     // volume (1.0) so the audible level always equals SoundManager's music
@@ -219,163 +216,235 @@ bool GamePlayState::enter() {
     // Settings-menu adjustments made while this track is already playing.
     // SoundManager itself delays the actual start (see
     // SoundManager::MUSIC_START_DELAY_SEC) so this call is not immediate.
-    SoundManager::Instance().playMusic("music_adventure_loop");
+        SoundManager::Instance().playMusic("music_adventure_loop");
 
     // Mark as initialized for future pause/resume cycles
-    m_initialized = true;
+        m_initialized = true;
 
-    GAMEPLAY_INFO("GamePlayState initialization complete");
-  } catch (const std::exception &e) {
-    GAMEPLAY_ERROR(std::format(
-        "Exception during GamePlayState initialization: {}", e.what()));
-    return false;
-  }
+        GAMEPLAY_INFO("GamePlayState initialization complete");
+    } catch (const std::exception& e) {
+        GAMEPLAY_ERROR(std::format(
+            "Exception during GamePlayState initialization: {}", e.what()));
+        return false;
+    }
 
-  return true;
+    return true;
 }
 
 void GamePlayState::update(float deltaTime) {
   // Cache manager references for better performance
-  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
-  auto &ui = UIManager::Instance();
+    GameTimeManager& gameTimeMgr = GameTimeManager::Instance();
+    auto& ui = UIManager::Instance();
 
   // Check if we need to transition to loading screen (do this in update, not
   // enter)
-  if (m_needsLoading) {
-    m_needsLoading = false; // Clear flag
+    if (m_needsLoading) {
+        m_needsLoading = false; // Clear flag
 
-    GAMEPLAY_INFO("Transitioning to LoadingState for world generation");
+        GAMEPLAY_INFO("Transitioning to LoadingState for world generation");
 
     // Create world configuration for gameplay
-    VoidLight::WorldGenerationConfig config;
-    config.width = 200; // Standard gameplay world
-    config.height = 200;
-    config.seed = static_cast<int>(std::time(nullptr));
-    config.elevationFrequency = 0.018f;  // Lower frequency = larger biome regions
-    config.humidityFrequency = 0.012f;
-    config.waterLevel = 0.28f;
-    config.mountainLevel = 0.72f;
+        VoidLight::WorldGenerationConfig config;
+        config.width = 200; // Standard gameplay world
+        config.height = 200;
+        config.seed = static_cast<int>(std::time(nullptr));
+        config.elevationFrequency = 0.018f;  // Lower frequency = larger biome regions
+        config.humidityFrequency = 0.012f;
+        config.waterLevel = 0.28f;
+        config.mountainLevel = 0.72f;
 
     // Configure LoadingState and transition to it
-    auto *loadingState = dynamic_cast<LoadingState *>(
-        mp_stateManager->getState(GameStateId::LOADING).get());
-    if (loadingState) {
-      loadingState->configure(GameStateId::GAME_PLAY, config);
+        auto* loadingState = dynamic_cast<LoadingState*>(
+            mp_stateManager->getState(GameStateId::LOADING).get());
+        if (loadingState) {
+            loadingState->configure(GameStateId::GAME_PLAY, config);
       // Set flag before transitioning to preserve m_worldLoaded in exit()
-      m_transitioningToLoading = true;
+            m_transitioningToLoading = true;
       // Use changeState (called from update) to properly exit and re-enter
-      mp_stateManager->changeState(GameStateId::LOADING);
-    }
+            mp_stateManager->changeState(GameStateId::LOADING);
+        }
 
-    return; // Don't continue with rest of update
-  }
+        return; // Don't continue with rest of update
+    }
 
   // Update game time (advances calendar, dispatches time events)
-  gameTimeMgr.update(deltaTime);
+    gameTimeMgr.update(deltaTime);
 
   // Update player if it exists
-  if (mp_Player) {
-    mp_Player->update(deltaTime);
+    if (mp_Player) {
+        mp_Player->update(deltaTime);
 
     // Update all IUpdatable controllers (combat cooldowns, stamina regen, etc.)
-    m_controllers.updateAll(deltaTime);
+        m_controllers.updateAll(deltaTime);
 
     // Update data-driven NPCs (animations handled by NPCRenderController)
-    m_npcRenderCtrl.update(deltaTime);
+        m_npcRenderCtrl.update(deltaTime);
 
-    auto& hudCtrl = *m_controllers.get<HudController>();
-    auto& harvestCtrl = *m_controllers.get<HarvestController>();
-    hudCtrl.setHarvestProgress(harvestCtrl.isHarvesting(), harvestCtrl.getProgress());
+        auto& hudCtrl = *m_controllers.get<HudController>();
+        auto& harvestCtrl = *m_controllers.get<HarvestController>();
+        hudCtrl.setHarvestProgress(harvestCtrl.isHarvesting(), harvestCtrl.getProgress());
 
-    if (!mp_Player->isAlive() && !m_transitioningToGameOver) {
-      m_transitioningToGameOver = true;
+        if (!mp_Player->isAlive() && !m_transitioningToGameOver) {
+            m_transitioningToGameOver = true;
 
-      if (!mp_stateManager->hasState(GameStateId::GAME_OVER)) {
-        mp_stateManager->addState(std::make_unique<GameOverState>());
-      }
-      if (auto* gameOverState = dynamic_cast<GameOverState*>(
-              mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
+            if (!mp_stateManager->hasState(GameStateId::GAME_OVER)) {
+                mp_stateManager->addState(std::make_unique<GameOverState>());
+            }
+            if (auto* gameOverState = dynamic_cast<GameOverState*>(
+                    mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
         // Sticky return target: always re-pin before transition so a prior
         // death in another state cannot leave Retry pointed at the wrong id.
-        gameOverState->setReturnState(GameStateId::GAME_PLAY);
-      }
+                gameOverState->setReturnState(GameStateId::GAME_PLAY);
+            }
 
-      mp_stateManager->changeState(GameStateId::GAME_OVER);
-      return;
+            mp_stateManager->changeState(GameStateId::GAME_OVER);
+            return;
+        }
     }
-  }
 
   // Update camera (follows player automatically)
-  updateCamera(deltaTime);
+    updateCamera(deltaTime);
 
   // Update resource animations (dropped items bobbing, etc.) - camera-based culling
-  if (auto* resourceCtrl = m_controllers.get<ResourceRenderController>(); resourceCtrl && m_camera) {
-    resourceCtrl->update(deltaTime, *m_camera);
-  }
+    if (auto* resourceCtrl = m_controllers.get<ResourceRenderController>(); resourceCtrl && m_camera) {
+        resourceCtrl->update(deltaTime, *m_camera);
+    }
 
   // Update day/night controller (handles GPU lighting via shader)
-  if (auto* dayNightCtrl = m_controllers.get<DayNightController>()) {
-    dayNightCtrl->update(deltaTime);
-  }
+    if (auto* dayNightCtrl = m_controllers.get<DayNightController>()) {
+        dayNightCtrl->update(deltaTime);
+    }
 
   // Update time status bar only when events fire (event-driven, not per-frame)
-  if (m_statusBarDirty) {
-    m_statusBarDirty = false;
-    m_statusBuffer.clear();
-    std::format_to(std::back_inserter(m_statusBuffer),
-                   "Day {} {}, Year {} | {} {} | {} | {}F | {}",
-                   gameTimeMgr.getDayOfMonth(),
-                   gameTimeMgr.getCurrentMonthName(), gameTimeMgr.getGameYear(),
-                   gameTimeMgr.formatCurrentTime(),
-                   gameTimeMgr.getTimeOfDayName(), gameTimeMgr.getSeasonName(),
-                   static_cast<int>(gameTimeMgr.getCurrentTemperature()),
-                   m_controllers.get<WeatherController>()->getCurrentWeatherString());
-    ui.setText("time_label", m_statusBuffer);
-  }
+    if (m_statusBarDirty) {
+        m_statusBarDirty = false;
+        m_statusBuffer.clear();
+        std::format_to(std::back_inserter(m_statusBuffer),
+            "Day {} {}, Year {} | {} {} | {} | {}F | {}",
+            gameTimeMgr.getDayOfMonth(),
+            gameTimeMgr.getCurrentMonthName(), gameTimeMgr.getGameYear(),
+            gameTimeMgr.formatCurrentTime(),
+            gameTimeMgr.getTimeOfDayName(), gameTimeMgr.getSeasonName(),
+            static_cast<int>(gameTimeMgr.getCurrentTemperature()),
+            m_controllers.get<WeatherController>()->getCurrentWeatherString());
+        ui.setText("time_label", m_statusBuffer);
+    }
 
   // Update UI
-  if (!ui.isShutdown()) {
-    ui.update(deltaTime);
-  }
+    if (!ui.isShutdown()) {
+        ui.update(deltaTime);
+    }
 
   // Inventory display is refreshed by InventoryController on resource changes.
 }
 
 bool GamePlayState::exit() {
   // Cache manager references for better performance
-  AIManager &aiMgr = AIManager::Instance();
-  BackgroundSimulationManager &bgSimMgr = BackgroundSimulationManager::Instance();
-  EntityDataManager &edm = EntityDataManager::Instance();
-  CollisionManager &collisionMgr = CollisionManager::Instance();
-  PathfinderManager &pathfinderMgr = PathfinderManager::Instance();
-  ParticleManager &particleMgr = ParticleManager::Instance();
-  WorldManager &worldMgr = WorldManager::Instance();
-  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
-  auto &wrm = WorldResourceManager::Instance();
-  auto &eventMgr = EventManager::Instance();
+    AIManager& aiMgr = AIManager::Instance();
+    BackgroundSimulationManager& bgSimMgr = BackgroundSimulationManager::Instance();
+    EntityDataManager& edm = EntityDataManager::Instance();
+    CollisionManager& collisionMgr = CollisionManager::Instance();
+    PathfinderManager& pathfinderMgr = PathfinderManager::Instance();
+    ParticleManager& particleMgr = ParticleManager::Instance();
+    WorldManager& worldMgr = WorldManager::Instance();
+    GameTimeManager& gameTimeMgr = GameTimeManager::Instance();
+    auto& wrm = WorldResourceManager::Instance();
+    auto& eventMgr = EventManager::Instance();
 
   // Music: leave playing for destinations that replace the track in enter()
   // (MainMenuState, re-entry after Loading). Destinations that want silence
   // (GameOverState) call stopMusic() in their own enter().
-  if (auto* socialCtrl = m_controllers.get<SocialController>();
-      socialCtrl && socialCtrl->isTrading()) {
-    socialCtrl->closeTrade();
-  }
+    if (auto* socialCtrl = m_controllers.get<SocialController>();
+        socialCtrl && socialCtrl->isTrading()) {
+        socialCtrl->closeTrade();
+    }
 
-  if (m_transitioningToLoading) {
+    if (m_transitioningToLoading) {
     // Transitioning to LoadingState - do cleanup but preserve m_worldLoaded
     // flag This prevents infinite loop when returning from LoadingState
 
     // Reset the flag after using it
-    m_transitioningToLoading = false;
-    m_transitioningToGameOver = false;
+        m_transitioningToLoading = false;
+        m_transitioningToGameOver = false;
 
     // Clear NPCs before manager cleanup (NPCs hold EDM indices)
-    aiMgr.destroyAllNPCsForStateTransition();
+        aiMgr.destroyAllNPCsForStateTransition();
 
     // Unsubscribe event handlers before clearing controllers
     // (handlers capture `this` and call m_controllers.get<>() which returns
     // nullptr after clear)
+        unregisterEventHandlers();
+
+        aiMgr.prepareForStateTransition();
+        ProjectileManager::Instance().prepareForStateTransition();
+        bgSimMgr.prepareForStateTransition();
+        worldMgr.prepareForStateTransition();
+
+    // Unload world before WRM/EventManager transition cleanup so persistent
+    // world-unload handlers and WRM reverse lookups are still available.
+        if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
+            worldMgr.unloadWorld();
+      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
+      // infinite loop when LoadingState returns to this state
+        }
+
+        if (wrm.isInitialized()) {
+            wrm.prepareForStateTransition();
+        }
+
+        eventMgr.prepareForStateTransition();
+
+        if (collisionMgr.isInitialized() && !collisionMgr.isShutdown()) {
+            collisionMgr.prepareForStateTransition();
+        }
+
+        if (pathfinderMgr.isInitialized() && !pathfinderMgr.isShutdown()) {
+            pathfinderMgr.prepareForStateTransition();
+        }
+
+        edm.prepareForStateTransition();
+        VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
+
+        if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+            particleMgr.prepareForStateTransition();
+        }
+
+        WorldManager::Instance().setActiveCamera(nullptr);
+        if (mp_Player) {
+            mp_Player->setCamera(nullptr);
+        }
+
+    // Clean up camera and GPU scene recorder
+        m_camera.reset();
+
+    // UI: full-screen replace clears via GameStateManager after this exit();
+    // LoadingState::enter() rebuilds the loading screen.
+
+    // Destroy all controllers so re-entry creates fresh instances with valid refs
+        m_controllers.clear();
+
+    // Reset player
+        mp_Player = nullptr;
+
+    // Reset initialized flag so state re-initializes after loading
+        m_initialized = false;
+
+    // Keep m_worldLoaded = true to remember we've already been through loading
+        return true;
+    }
+
+  // Full exit (going to main menu, other states, or shutting down)
+    m_transitioningToGameOver = false;
+
+    if (auto* socialCtrl = m_controllers.get<SocialController>();
+        socialCtrl && socialCtrl->isTrading()) {
+        socialCtrl->closeTrade();
+    }
+
+  // Clear NPCs before manager cleanup (NPCs hold EDM indices)
+    aiMgr.destroyAllNPCsForStateTransition();
+
+  // Unsubscribe from event handlers before EventManager teardown.
     unregisterEventHandlers();
 
     aiMgr.prepareForStateTransition();
@@ -383,830 +452,756 @@ bool GamePlayState::exit() {
     bgSimMgr.prepareForStateTransition();
     worldMgr.prepareForStateTransition();
 
-    // Unload world before WRM/EventManager transition cleanup so persistent
-    // world-unload handlers and WRM reverse lookups are still available.
+  // Unload world before WRM/EventManager transition cleanup so persistent
+  // world-unload handlers and WRM reverse lookups are still available.
     if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-      worldMgr.unloadWorld();
-      // CRITICAL: DO NOT reset m_worldLoaded here - keep it true to prevent
-      // infinite loop when LoadingState returns to this state
+        worldMgr.unloadWorld();
+    // CRITICAL: Only reset m_worldLoaded when actually unloading a world
+    // This prevents infinite loop when transitioning to LoadingState (no world
+    // yet)
+        m_worldLoaded = false;
     }
 
     if (wrm.isInitialized()) {
-      wrm.prepareForStateTransition();
+        wrm.prepareForStateTransition();
     }
 
     eventMgr.prepareForStateTransition();
 
     if (collisionMgr.isInitialized() && !collisionMgr.isShutdown()) {
-      collisionMgr.prepareForStateTransition();
+        collisionMgr.prepareForStateTransition();
     }
 
     if (pathfinderMgr.isInitialized() && !pathfinderMgr.isShutdown()) {
-      pathfinderMgr.prepareForStateTransition();
+        pathfinderMgr.prepareForStateTransition();
     }
 
     edm.prepareForStateTransition();
     VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
 
+  // Simple particle cleanup
     if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
-      particleMgr.prepareForStateTransition();
+        particleMgr.prepareForStateTransition();
     }
 
     WorldManager::Instance().setActiveCamera(nullptr);
     if (mp_Player) {
-      mp_Player->setCamera(nullptr);
+        mp_Player->setCamera(nullptr);
     }
 
-    // Clean up camera and GPU scene recorder
-    m_camera.reset();
-
-    // UI: full-screen replace clears via GameStateManager after this exit();
-    // LoadingState::enter() rebuilds the loading screen.
-
-    // Destroy all controllers so re-entry creates fresh instances with valid refs
-    m_controllers.clear();
-
-    // Reset player
-    mp_Player = nullptr;
-
-    // Reset initialized flag so state re-initializes after loading
-    m_initialized = false;
-
-    // Keep m_worldLoaded = true to remember we've already been through loading
-    return true;
-  }
-
-  // Full exit (going to main menu, other states, or shutting down)
-  m_transitioningToGameOver = false;
-
-  if (auto* socialCtrl = m_controllers.get<SocialController>();
-      socialCtrl && socialCtrl->isTrading()) {
-    socialCtrl->closeTrade();
-  }
-
-  // Clear NPCs before manager cleanup (NPCs hold EDM indices)
-  aiMgr.destroyAllNPCsForStateTransition();
-
-  // Unsubscribe from event handlers before EventManager teardown.
-  unregisterEventHandlers();
-
-  aiMgr.prepareForStateTransition();
-  ProjectileManager::Instance().prepareForStateTransition();
-  bgSimMgr.prepareForStateTransition();
-  worldMgr.prepareForStateTransition();
-
-  // Unload world before WRM/EventManager transition cleanup so persistent
-  // world-unload handlers and WRM reverse lookups are still available.
-  if (worldMgr.isInitialized() && worldMgr.hasActiveWorld()) {
-    worldMgr.unloadWorld();
-    // CRITICAL: Only reset m_worldLoaded when actually unloading a world
-    // This prevents infinite loop when transitioning to LoadingState (no world
-    // yet)
-    m_worldLoaded = false;
-  }
-
-  if (wrm.isInitialized()) {
-    wrm.prepareForStateTransition();
-  }
-
-  eventMgr.prepareForStateTransition();
-
-  if (collisionMgr.isInitialized() && !collisionMgr.isShutdown()) {
-    collisionMgr.prepareForStateTransition();
-  }
-
-  if (pathfinderMgr.isInitialized() && !pathfinderMgr.isShutdown()) {
-    pathfinderMgr.prepareForStateTransition();
-  }
-
-  edm.prepareForStateTransition();
-  VoidLight::WorkerBudgetManager::Instance().prepareForStateTransition();
-
-  // Simple particle cleanup
-  if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
-    particleMgr.prepareForStateTransition();
-  }
-
-  WorldManager::Instance().setActiveCamera(nullptr);
-  if (mp_Player) {
-    mp_Player->setCamera(nullptr);
-  }
-
   // Clean up camera and GPU scene recorder first to stop world rendering
-  m_camera.reset();
+    m_camera.reset();
 
   // UI: full-screen replace clears via GameStateManager after this exit();
   // destination enter() rebuilds its own UI.
 
   // Reset player
-  mp_Player = nullptr;
+    mp_Player = nullptr;
 
   // Destroy all controllers so re-entry creates fresh instances with valid refs
-  m_controllers.clear();
-  gameTimeMgr.enableAutoWeather(false);
+    m_controllers.clear();
+    gameTimeMgr.enableAutoWeather(false);
 
   // Stop ambient particles after event teardown so no new weather callbacks fire.
-  stopAmbientParticles();
+    stopAmbientParticles();
 
   // Reset initialization flag for next fresh start
-  m_initialized = false;
+    m_initialized = false;
 
-  return true;
+    return true;
 }
 
 
 void GamePlayState::registerEventHandlers() {
-  auto &eventMgr = EventManager::Instance();
+    auto& eventMgr = EventManager::Instance();
 
-  m_dayNightEventToken = eventMgr.registerHandlerWithToken(
-      EventTypeId::Time,
-      [this](const EventData &data) { onTimePeriodChanged(data); });
-  m_dayNightSubscribed = true;
+    m_dayNightEventToken = eventMgr.registerHandlerWithToken(
+        EventTypeId::Time,
+        [this](const EventData& data) { onTimePeriodChanged(data); });
+    m_dayNightSubscribed = true;
 
-  m_weatherEventToken = eventMgr.registerHandlerWithToken(
-      EventTypeId::Weather,
-      [this](const EventData &data) {
-        ParticleManager::Instance().handleWeatherEvent(data);
-        onWeatherChanged(data);
-      });
-  m_weatherSubscribed = true;
+    m_weatherEventToken = eventMgr.registerHandlerWithToken(
+        EventTypeId::Weather,
+        [this](const EventData& data) {
+            ParticleManager::Instance().handleWeatherEvent(data);
+            onWeatherChanged(data);
+        });
+    m_weatherSubscribed = true;
 
-  m_harvestEventToken = eventMgr.registerHandlerWithToken(
-      EventTypeId::Harvest, [](const EventData &data) {
-        if (!data.isActive() || !data.event) {
-          return;
-        }
+    m_harvestEventToken = eventMgr.registerHandlerWithToken(
+        EventTypeId::Harvest, [](const EventData& data) {
+            if (!data.isActive() || !data.event) {
+                return;
+            }
 
-        auto harvestEvent =
-            std::dynamic_pointer_cast<HarvestResourceEvent>(data.event);
-        if (!harvestEvent) {
-          return;
-        }
+            auto harvestEvent =
+                std::dynamic_pointer_cast<HarvestResourceEvent>(data.event);
+            if (!harvestEvent) {
+                return;
+            }
 
-        WorldManager::Instance().handleHarvestResource(
-            harvestEvent->getEntityId(), harvestEvent->getTargetX(),
-            harvestEvent->getTargetY());
-      });
-  m_harvestSubscribed = true;
+            WorldManager::Instance().handleHarvestResource(
+                harvestEvent->getEntityId(), harvestEvent->getTargetX(),
+                harvestEvent->getTargetY());
+        });
+    m_harvestSubscribed = true;
 
-  m_stanceChangedEventToken = eventMgr.registerHandlerWithToken(
-      EventTypeId::StanceChanged, [this](const EventData &data) {
-        if (!data.isActive() || !data.event || !mp_Player) {
-          return;
-        }
+    m_stanceChangedEventToken = eventMgr.registerHandlerWithToken(
+        EventTypeId::StanceChanged, [this](const EventData& data) {
+            if (!data.isActive() || !data.event || !mp_Player) {
+                return;
+            }
 
-        const auto *stanceEvent =
-            dynamic_cast<const StanceChangedEvent *>(data.event.get());
-        if (!stanceEvent) {
-          return;
-        }
+            const auto* stanceEvent =
+                dynamic_cast<const StanceChangedEvent*>(data.event.get());
+            if (!stanceEvent) {
+                return;
+            }
 
-        auto &edm = EntityDataManager::Instance();
-        const EntityHandle playerHandle = mp_Player->getHandle();
-        const size_t playerIdx = edm.getIndex(playerHandle);
-        if (playerIdx == SIZE_MAX) {
-          return;
-        }
+            auto& edm = EntityDataManager::Instance();
+            const EntityHandle playerHandle = mp_Player->getHandle();
+            const size_t playerIdx = edm.getIndex(playerHandle);
+            if (playerIdx == SIZE_MAX) {
+                return;
+            }
 
-        const uint8_t playerFaction =
-            edm.getCharacterDataByIndex(playerIdx).faction;
-        if (stanceEvent->getFromFaction() != playerFaction &&
-            stanceEvent->getTowardFaction() != playerFaction) {
-          return;
-        }
+            const uint8_t playerFaction =
+                edm.getCharacterDataByIndex(playerIdx).faction;
+            if (stanceEvent->getFromFaction() != playerFaction &&
+                stanceEvent->getTowardFaction() != playerFaction) {
+                return;
+            }
 
-        std::string_view stanceName = "Neutral";
-        switch (stanceEvent->getNewStance()) {
-        case FactionStance::Allied:
-          stanceName = "Allied";
-          break;
-        case FactionStance::Neutral:
-          stanceName = "Neutral";
-          break;
-        case FactionStance::Hostile:
-          stanceName = "Hostile";
-          break;
-        }
+            std::string_view stanceName = "Neutral";
+            switch (stanceEvent->getNewStance()) {
+                case FactionStance::Allied:
+                    stanceName = "Allied";
+                    break;
+                case FactionStance::Neutral:
+                    stanceName = "Neutral";
+                    break;
+                case FactionStance::Hostile:
+                    stanceName = "Hostile";
+                    break;
+            }
 
-        if (stanceEvent->getSettlementId() != 0) {
-          UIManager::Instance().addEventLogEntry(
-              "event_log",
-              std::format("Settlement {}: faction {} is now {} toward faction {}",
-                          stanceEvent->getSettlementId(),
-                          stanceEvent->getFromFaction(), stanceName,
-                          stanceEvent->getTowardFaction()));
-        } else {
-          UIManager::Instance().addEventLogEntry(
-              "event_log",
-              std::format("Faction {} is now {} toward faction {}",
-                          stanceEvent->getFromFaction(), stanceName,
-                          stanceEvent->getTowardFaction()));
-        }
-      });
-  m_stanceChangedSubscribed = true;
+            if (stanceEvent->getSettlementId() != 0) {
+                UIManager::Instance().addEventLogEntry(
+                    "event_log",
+                    std::format("Settlement {}: faction {} is now {} toward faction {}",
+                        stanceEvent->getSettlementId(),
+                        stanceEvent->getFromFaction(), stanceName,
+                        stanceEvent->getTowardFaction()));
+            } else {
+                UIManager::Instance().addEventLogEntry(
+                    "event_log",
+                    std::format("Faction {} is now {} toward faction {}",
+                        stanceEvent->getFromFaction(), stanceName,
+                        stanceEvent->getTowardFaction()));
+            }
+        });
+    m_stanceChangedSubscribed = true;
 }
 
 void GamePlayState::unregisterEventHandlers() {
-  auto &eventMgr = EventManager::Instance();
+    auto& eventMgr = EventManager::Instance();
 
-  if (m_dayNightSubscribed) {
-    eventMgr.removeHandler(m_dayNightEventToken);
-    m_dayNightSubscribed = false;
-  }
+    if (m_dayNightSubscribed) {
+        eventMgr.removeHandler(m_dayNightEventToken);
+        m_dayNightSubscribed = false;
+    }
 
-  if (m_weatherSubscribed) {
-    eventMgr.removeHandler(m_weatherEventToken);
-    m_weatherSubscribed = false;
-  }
+    if (m_weatherSubscribed) {
+        eventMgr.removeHandler(m_weatherEventToken);
+        m_weatherSubscribed = false;
+    }
 
-  if (m_harvestSubscribed) {
-    eventMgr.removeHandler(m_harvestEventToken);
-    m_harvestSubscribed = false;
-  }
+    if (m_harvestSubscribed) {
+        eventMgr.removeHandler(m_harvestEventToken);
+        m_harvestSubscribed = false;
+    }
 
-  if (m_stanceChangedSubscribed) {
-    eventMgr.removeHandler(m_stanceChangedEventToken);
-    m_stanceChangedSubscribed = false;
-  }
+    if (m_stanceChangedSubscribed) {
+        eventMgr.removeHandler(m_stanceChangedEventToken);
+        m_stanceChangedSubscribed = false;
+    }
 }
 
 void GamePlayState::pause() {
   // Hide gameplay UI when paused (PauseState overlays on top)
-  auto &ui = UIManager::Instance();
-  ui.setComponentVisible("event_log", false);
-  ui.setComponentVisible("time_label", false);
-  ui.setComponentVisible("fps", false);
+    auto& ui = UIManager::Instance();
+    ui.setComponentVisible("event_log", false);
+    ui.setComponentVisible("time_label", false);
+    ui.setComponentVisible("fps", false);
 
-  if (auto* hudCtrl = m_controllers.get<HudController>()) {
-    hudCtrl->setVisible(false);
-  }
-
-  if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
-    inventoryCtrl->cancelDragOperation();
-    if (inventoryCtrl->isInventoryVisible()) {
-      ui.setComponentVisible(InventoryController::INVENTORY_PANEL_ID, false);
+    if (auto* hudCtrl = m_controllers.get<HudController>()) {
+        hudCtrl->setVisible(false);
     }
-  }
 
-  if (auto* socialCtrl = m_controllers.get<SocialController>();
-      socialCtrl && socialCtrl->isTrading()) {
-    socialCtrl->closeTrade();
-  }
+    if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
+        inventoryCtrl->cancelDragOperation();
+        if (inventoryCtrl->isInventoryVisible()) {
+            ui.setComponentVisible(InventoryController::INVENTORY_PANEL_ID, false);
+        }
+    }
+
+    if (auto* socialCtrl = m_controllers.get<SocialController>();
+        socialCtrl && socialCtrl->isTrading()) {
+        socialCtrl->closeTrade();
+    }
 
   // Stop player movement to prevent drift during pause
-  if (mp_Player) {
-    mp_Player->setVelocity(Vector2D(0, 0));
-  }
+    if (mp_Player) {
+        mp_Player->setVelocity(Vector2D(0, 0));
+    }
 
   // Suspend all controllers (unsubscribe from events during pause)
-  m_controllers.suspendAll();
+    m_controllers.suspendAll();
 
-  GAMEPLAY_INFO("GamePlayState paused");
+    GAMEPLAY_INFO("GamePlayState paused");
 }
 
 void GamePlayState::resume() {
   // Show gameplay UI when resuming from pause
-  auto &ui = UIManager::Instance();
+    auto& ui = UIManager::Instance();
 
   // Popping Pause leaves its dim overlay unless we remove it here. Full-stack
   // leave to MainMenu clears UI in GameStateManager after exits.
-  ui.removeOverlay();
+    ui.removeOverlay();
 
-  ui.setComponentVisible("event_log", true);
-  ui.setComponentVisible("time_label", true);
+    ui.setComponentVisible("event_log", true);
+    ui.setComponentVisible("time_label", true);
 
   // Restore FPS counter visibility if it was enabled
-  if (m_fpsVisible) {
-    ui.setComponentVisible("fps", true);
-  }
+    if (m_fpsVisible) {
+        ui.setComponentVisible("fps", true);
+    }
 
-  if (auto* hudCtrl = m_controllers.get<HudController>()) {
-    hudCtrl->setVisible(true);
-  }
+    if (auto* hudCtrl = m_controllers.get<HudController>()) {
+        hudCtrl->setVisible(true);
+    }
 
-  if (auto* inventoryCtrl = m_controllers.get<InventoryController>();
-      inventoryCtrl && inventoryCtrl->isInventoryVisible()) {
-    inventoryCtrl->setInventoryVisible(true);
-  }
+    if (auto* inventoryCtrl = m_controllers.get<InventoryController>();
+        inventoryCtrl && inventoryCtrl->isInventoryVisible()) {
+        inventoryCtrl->setInventoryVisible(true);
+    }
 
   // Resume all controllers (re-subscribe to events after pause)
-  m_controllers.resumeAll();
+    m_controllers.resumeAll();
 
-  GAMEPLAY_INFO("GamePlayState resumed");
+    GAMEPLAY_INFO("GamePlayState resumed");
 }
 
 void GamePlayState::handleInput() {
   // Loading-intent enter() returns before controllers exist. The next frame
   // still delivers handleInput() before update() transitions to LoadingState.
-  if (!m_initialized) {
-    return;
-  }
+    if (!m_initialized) {
+        return;
+    }
 
   // Cache manager references for better performance
-  const InputManager &inputMgr = InputManager::Instance();
-  auto &ui = UIManager::Instance();
+    const InputManager& inputMgr = InputManager::Instance();
+    auto& ui = UIManager::Instance();
 
   // Trade dialog is modal — it consumes all input so Pause cannot fire behind it.
-  auto* socialCtrl = m_controllers.get<SocialController>();
-  if (socialCtrl && socialCtrl->isTrading()) {
-    socialCtrl->handleTradeInput(inputMgr);
-    return;
-  }
-
-  if (inputMgr.isCommandPressed(InputManager::Command::Pause)) {
-    // Create PauseState if it doesn't exist
-    if (!mp_stateManager->hasState(GameStateId::PAUSE)) {
-      mp_stateManager->addState(std::make_unique<PauseState>());
+    auto* socialCtrl = m_controllers.get<SocialController>();
+    if (socialCtrl && socialCtrl->isTrading()) {
+        socialCtrl->handleTradeInput(inputMgr);
+        return;
     }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::Pause)) {
+    // Create PauseState if it doesn't exist
+        if (!mp_stateManager->hasState(GameStateId::PAUSE)) {
+            mp_stateManager->addState(std::make_unique<PauseState>());
+        }
     // pushState will call pause() which handles UI hiding and player velocity
-    mp_stateManager->pushState(GameStateId::PAUSE);
-    return;
-  }
+        mp_stateManager->pushState(GameStateId::PAUSE);
+        return;
+    }
 
   // Developer debug shortcut — return to main menu. Intentionally not rebindable.
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_B)) {
-    mp_stateManager->changeState(GameStateId::MAIN_MENU);
-  }
+    if (inputMgr.wasKeyPressed(SDL_SCANCODE_B)) {
+        mp_stateManager->changeState(GameStateId::MAIN_MENU);
+    }
 
   // Inventory toggle
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_F2)) {
-    m_fpsVisible = !m_fpsVisible;
-    ui.setComponentVisible("fps", m_fpsVisible);
-  }
-
-  if (inputMgr.isCommandPressed(InputManager::Command::OpenInventory)) {
-    toggleInventoryDisplay();
-  }
-
-  if (auto* hudCtrl = m_controllers.get<HudController>()) {
-    if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
-      inventoryCtrl->handleHotbarAssignmentInput(*hudCtrl);
+    if (inputMgr.wasKeyPressed(SDL_SCANCODE_F2)) {
+        m_fpsVisible = !m_fpsVisible;
+        ui.setComponentVisible("fps", m_fpsVisible);
     }
-    hudCtrl->handleHotbarInput();
-  }
+
+    if (inputMgr.isCommandPressed(InputManager::Command::OpenInventory)) {
+        toggleInventoryDisplay();
+    }
+
+    if (auto* hudCtrl = m_controllers.get<HudController>()) {
+        if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
+            inventoryCtrl->handleHotbarAssignmentInput(*hudCtrl);
+        }
+        hudCtrl->handleHotbarInput();
+    }
 
   // Combat — attack command (default: F, rebindable via Controls settings)
-  if (inputMgr.isCommandPressed(InputManager::Command::AttackLight) && mp_Player) {
-    m_controllers.get<CombatController>()->tryAttack();
-  }
+    if (inputMgr.isCommandPressed(InputManager::Command::AttackLight) && mp_Player) {
+        m_controllers.get<CombatController>()->tryAttack();
+    }
 
-  VOIDLIGHT_DEBUG_ONLY(
+    VOIDLIGHT_DEBUG_ONLY(
   // Debug: R spawns a faction-1 Warrior and marks mutual Hostile stance
   // so Attack/Chase may acquire the player. Not in the populate registry.
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
-    Vector2D playerPos = mp_Player->getPosition();
-    Vector2D spawnPos = playerPos + Vector2D(150.0f, 0.0f);
-    EntityHandle npc = VoidLight::spawnNpc(spawnPos, "Human", "Warrior",
-                                           Sex::Unknown, 1);
-    if (!npc.isValid()) {
-      GAMESTATE_WARN("Failed to spawn debug Warrior");
-    } else {
-      auto& edm = EntityDataManager::Instance();
-      const EntityHandle playerHandle = mp_Player->getHandle();
-      const size_t playerIdx = edm.getIndex(playerHandle);
-      uint8_t playerFaction = 0;
-      if (playerIdx != SIZE_MAX) {
-        playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
-      }
-      auto& aiMgr = AIManager::Instance();
-      aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
-      aiMgr.setStance(playerFaction, 1, FactionStance::Hostile);
-    }
-  }
+        if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
+            Vector2D playerPos = mp_Player->getPosition();
+            Vector2D spawnPos = playerPos + Vector2D(150.0f, 0.0f);
+            EntityHandle npc = VoidLight::spawnNpc(spawnPos, "Human", "Warrior",
+                Sex::Unknown, 1);
+            if (!npc.isValid()) {
+                GAMESTATE_WARN("Failed to spawn debug Warrior");
+            } else {
+                auto& edm = EntityDataManager::Instance();
+                const EntityHandle playerHandle = mp_Player->getHandle();
+                const size_t playerIdx = edm.getIndex(playerHandle);
+                uint8_t playerFaction = 0;
+                if (playerIdx != SIZE_MAX) {
+                    playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
+                }
+                auto& aiMgr = AIManager::Instance();
+                aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
+                aiMgr.setStance(playerFaction, 1, FactionStance::Hostile);
+            }
+        }
 
   // Debug: Space to fire projectile (test hook)
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_SPACE) && mp_Player) {
-    auto& edm = EntityDataManager::Instance();
-    Vector2D playerPos = mp_Player->getPosition();
-    EntityHandle playerHandle = mp_Player->getHandle();
+        if (inputMgr.wasKeyPressed(SDL_SCANCODE_SPACE) && mp_Player) {
+            auto& edm = EntityDataManager::Instance();
+            Vector2D playerPos = mp_Player->getPosition();
+            EntityHandle playerHandle = mp_Player->getHandle();
 
     // Direction based on player facing
-    float dirX = (mp_Player->getFlip() == SDL_FLIP_HORIZONTAL) ? -1.0f : 1.0f;
-    constexpr float PROJECTILE_SPEED = 300.0f;
-    Vector2D velocity(dirX * PROJECTILE_SPEED, 0.0f);
+            float dirX = (mp_Player->getFlip() == SDL_FLIP_HORIZONTAL) ? -1.0f : 1.0f;
+            constexpr float PROJECTILE_SPEED = 300.0f;
+            Vector2D velocity(dirX * PROJECTILE_SPEED, 0.0f);
 
     // Offset spawn slightly in front of player
-    Vector2D spawnPos = playerPos + Vector2D(dirX * 20.0f, 0.0f);
+            Vector2D spawnPos = playerPos + Vector2D(dirX * 20.0f, 0.0f);
 
-    edm.createProjectile(spawnPos, velocity, playerHandle, 15.0f, 3.0f);
-  }
-  )
+            edm.createProjectile(spawnPos, velocity, playerHandle, 15.0f, 3.0f);
+        })
 
   // Interaction — trade/pickup/harvest command (default: E, rebindable)
-  if (inputMgr.isCommandPressed(InputManager::Command::Interact) && mp_Player) {
-    if (!tryOpenNearbyMerchantTrade()) {
-      auto& inventoryCtrl = *m_controllers.get<InventoryController>();
-      if (!inventoryCtrl.tryOpenNearbyContainer() &&
-          !inventoryCtrl.attemptPickup()) {
-        auto& harvestCtrl = *m_controllers.get<HarvestController>();
-        harvestCtrl.startHarvest();
-      }
+    if (inputMgr.isCommandPressed(InputManager::Command::Interact) && mp_Player) {
+        if (!tryOpenNearbyMerchantTrade()) {
+            auto& inventoryCtrl = *m_controllers.get<InventoryController>();
+            if (!inventoryCtrl.tryOpenNearbyContainer() &&
+                !inventoryCtrl.attemptPickup()) {
+                auto& harvestCtrl = *m_controllers.get<HarvestController>();
+                harvestCtrl.startHarvest();
+            }
+        }
     }
-  }
   // Note: HarvestController handles movement cancellation automatically in update()
   // via position-based detection (MOVEMENT_CANCEL_THRESHOLD)
 
   // Camera zoom controls (rebindable via Controls settings)
-  if (inputMgr.isCommandPressed(InputManager::Command::ZoomIn) && m_camera) {
-    m_camera->zoomIn();
-  }
-  if (inputMgr.isCommandPressed(InputManager::Command::ZoomOut) && m_camera) {
-    m_camera->zoomOut();
-  }
+    if (inputMgr.isCommandPressed(InputManager::Command::ZoomIn) && m_camera) {
+        m_camera->zoomIn();
+    }
+    if (inputMgr.isCommandPressed(InputManager::Command::ZoomOut) && m_camera) {
+        m_camera->zoomOut();
+    }
 
-  VOIDLIGHT_DEBUG_ONLY(
+    VOIDLIGHT_DEBUG_ONLY(
   // Debug time speed controls: < (comma) = normal speed, > (period) = max speed
-  GameTimeManager &gameTimeMgr = GameTimeManager::Instance();
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_COMMA)) {
-    gameTimeMgr.setTimeScale(60.0f);
-    GAMEPLAY_INFO("Time scale set to NORMAL (60x)");
-    ui.addEventLogEntry("event_log", "Time: NORMAL speed (60x)");
-  }
-  if (inputMgr.wasKeyPressed(SDL_SCANCODE_PERIOD)) {
-    gameTimeMgr.setTimeScale(3600.0f);
-    GAMEPLAY_INFO("Time scale set to MAX (3600x)");
-    ui.addEventLogEntry("event_log", "Time: MAX speed (3600x)");
-  }
-  )
+        GameTimeManager& gameTimeMgr = GameTimeManager::Instance();
+        if (inputMgr.wasKeyPressed(SDL_SCANCODE_COMMA)) {
+            gameTimeMgr.setTimeScale(60.0f);
+            GAMEPLAY_INFO("Time scale set to NORMAL (60x)");
+            ui.addEventLogEntry("event_log", "Time: NORMAL speed (60x)");
+        }
+        if (inputMgr.wasKeyPressed(SDL_SCANCODE_PERIOD)) {
+            gameTimeMgr.setTimeScale(3600.0f);
+            GAMEPLAY_INFO("Time scale set to MAX (3600x)");
+            ui.addEventLogEntry("event_log", "Time: MAX speed (3600x)");
+        })
 
   // Mouse input for world interaction
-  if (inputMgr.getMouseButtonState(LEFT) && m_camera) {
-    Vector2D const mousePos = inputMgr.getMousePosition();
+    if (inputMgr.getMouseButtonState(LEFT) && m_camera) {
+        Vector2D const mousePos = inputMgr.getMousePosition();
 
-    if (!ui.isClickOnUI(mousePos)) {
-      Vector2D worldPos = m_camera->screenToWorld(mousePos);
-      int const tileX =
-          static_cast<int>(worldPos.getX() / VoidLight::TILE_SIZE);
-      int const tileY =
-          static_cast<int>(worldPos.getY() / VoidLight::TILE_SIZE);
+        if (!ui.isClickOnUI(mousePos)) {
+            Vector2D worldPos = m_camera->screenToWorld(mousePos);
+            int const tileX =
+                static_cast<int>(worldPos.getX() / VoidLight::TILE_SIZE);
+            int const tileY =
+                static_cast<int>(worldPos.getY() / VoidLight::TILE_SIZE);
 
-      auto &worldMgr = WorldManager::Instance();
-      if (worldMgr.isValidPosition(tileX, tileY)) {
-        const auto biome = worldMgr.getTileBiomeAt(tileX, tileY);
-        const auto obstacleType = worldMgr.getTileObstacleTypeAt(tileX, tileY);
+            auto& worldMgr = WorldManager::Instance();
+            if (worldMgr.isValidPosition(tileX, tileY)) {
+                const auto biome = worldMgr.getTileBiomeAt(tileX, tileY);
+                const auto obstacleType = worldMgr.getTileObstacleTypeAt(tileX, tileY);
         // Log tile information for debugging
-        GAMEPLAY_DEBUG_IF(
-            biome.has_value() && obstacleType.has_value(),
-            std::format("Clicked tile ({}, {}) - Biome: {}, Obstacle: {}",
+                GAMEPLAY_DEBUG_IF(
+                    biome.has_value() && obstacleType.has_value(),
+                    std::format("Clicked tile ({}, {}) - Biome: {}, Obstacle: {}",
                         tileX, tileY, static_cast<int>(*biome),
                         static_cast<int>(*obstacleType)));
-      }
+            }
+        }
     }
-  }
 }
 
 void GamePlayState::spawnStarterGearChest() {
-  if (!mp_Player) {
-    return;
-  }
-
-  auto& edm = EntityDataManager::Instance();
-  auto& resourceManager = ResourceTemplateManager::Instance();
-  const Vector2D chestPosition = mp_Player->getPosition() + Vector2D(72.0f, 0.0f);
-  const EntityHandle chest =
-      edm.createContainer(chestPosition, ContainerType::Chest, 12, 0);
-  if (!chest.isValid()) {
-    GAMEPLAY_WARN("Failed to create starter gear chest");
-    return;
-  }
-
-  auto& container = edm.getContainerData(chest);
-  constexpr std::array<std::string_view, 6> starterGearIds{
-      "wooden_sword",
-      "wooden_shield",
-      "old_shirt",
-      "old_pants",
-      "worn_boots",
-      "cloth_gloves"};
-
-  for (std::string_view gearId : starterGearIds) {
-    const auto handle = resourceManager.getHandleById(std::string(gearId));
-    if (!handle.isValid()) {
-      GAMEPLAY_WARN(std::format("Starter gear '{}' not found", gearId));
-      continue;
+    if (!mp_Player) {
+        return;
     }
 
-    if (!edm.addToInventory(container.inventoryIndex, handle, 1)) {
-      GAMEPLAY_WARN(std::format("Failed to add starter gear '{}' to chest", gearId));
+    auto& edm = EntityDataManager::Instance();
+    auto& resourceManager = ResourceTemplateManager::Instance();
+    const Vector2D chestPosition = mp_Player->getPosition() + Vector2D(72.0f, 0.0f);
+    const EntityHandle chest =
+        edm.createContainer(chestPosition, ContainerType::Chest, 12, 0);
+    if (!chest.isValid()) {
+        GAMEPLAY_WARN("Failed to create starter gear chest");
+        return;
     }
-  }
+
+    auto& container = edm.getContainerData(chest);
+    constexpr std::array<std::string_view, 6> starterGearIds{
+        "wooden_sword",
+        "wooden_shield",
+        "old_shirt",
+        "old_pants",
+        "worn_boots",
+        "cloth_gloves"};
+
+    for (std::string_view gearId : starterGearIds) {
+        const auto handle = resourceManager.getHandleById(std::string(gearId));
+        if (!handle.isValid()) {
+            GAMEPLAY_WARN(std::format("Starter gear '{}' not found", gearId));
+            continue;
+        }
+
+        if (!edm.addToInventory(container.inventoryIndex, handle, 1)) {
+            GAMEPLAY_WARN(std::format("Failed to add starter gear '{}' to chest", gearId));
+        }
+    }
 }
 
 void GamePlayState::toggleInventoryDisplay() {
-  if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
-    inventoryCtrl->toggleInventoryDisplay();
-  }
+    if (auto* inventoryCtrl = m_controllers.get<InventoryController>()) {
+        inventoryCtrl->toggleInventoryDisplay();
+    }
 }
 
 bool GamePlayState::tryOpenNearbyMerchantTrade() {
-  if (!mp_Player) {
-    return false;
-  }
-
-  auto* socialCtrl = m_controllers.get<SocialController>();
-  if (!socialCtrl) {
-    return false;
-  }
-
-  auto& edm = EntityDataManager::Instance();
-  auto& aiMgr = AIManager::Instance();
-  Vector2D const playerPos = mp_Player->getPosition();
-
-  m_nearbyHandlesBuffer.clear();
-  aiMgr.scanActiveHandlesInRadius(playerPos, 100.0f, m_nearbyHandlesBuffer, true);
-
-  for (const auto& handle : m_nearbyHandlesBuffer) {
-    if (!handle.isValid() || handle.getKind() != EntityKind::NPC) {
-      continue;
+    if (!mp_Player) {
+        return false;
     }
 
-    if (edm.isNPCMerchant(handle) && socialCtrl->openTrade(handle)) {
-      return true;
+    auto* socialCtrl = m_controllers.get<SocialController>();
+    if (!socialCtrl) {
+        return false;
     }
-  }
 
-  return false;
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    Vector2D const playerPos = mp_Player->getPosition();
+
+    m_nearbyHandlesBuffer.clear();
+    aiMgr.scanActiveHandlesInRadius(playerPos, 100.0f, m_nearbyHandlesBuffer, true);
+
+    for (const auto& handle : m_nearbyHandlesBuffer) {
+        if (!handle.isValid() || handle.getKind() != EntityKind::NPC) {
+            continue;
+        }
+
+        if (edm.isNPCMerchant(handle) && socialCtrl->openTrade(handle)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void GamePlayState::initializeCamera() {
   // Initialize camera at player's position to avoid any interpolation jitter
-  Vector2D playerPosition =
-      mp_Player ? mp_Player->getPosition() : Vector2D(0, 0);
+    Vector2D playerPosition =
+        mp_Player ? mp_Player->getPosition() : Vector2D(0, 0);
 
   // Create camera with position, then sync viewport from the active GPU renderer.
-  m_camera = std::make_unique<VoidLight::Camera>();
-  m_camera->setPosition(playerPosition);
-  m_camera->syncViewportWithEngine();
+    m_camera = std::make_unique<VoidLight::Camera>();
+    m_camera->setPosition(playerPosition);
+    m_camera->syncViewportWithEngine();
 
-  GAMEPLAY_INFO(std::format("Camera initialized: pos=({}, {}), viewport={}x{}",
-                                 playerPosition.getX(), playerPosition.getY(),
-                                 m_camera->getViewport().width, m_camera->getViewport().height));
+    GAMEPLAY_INFO(std::format("Camera initialized: pos=({}, {}), viewport={}x{}",
+        playerPosition.getX(), playerPosition.getY(),
+        m_camera->getViewport().width, m_camera->getViewport().height));
 
   // Configure camera to follow player
-  if (mp_Player) {
+    if (mp_Player) {
     // Set target and enable follow mode
-    std::weak_ptr<Entity> playerAsEntity =
-        std::static_pointer_cast<Entity>(mp_Player);
-    m_camera->setTarget(playerAsEntity);
-    m_camera->setMode(VoidLight::Camera::Mode::Follow);
+        std::weak_ptr<Entity> playerAsEntity =
+            std::static_pointer_cast<Entity>(mp_Player);
+        m_camera->setTarget(playerAsEntity);
+        m_camera->setMode(VoidLight::Camera::Mode::Follow);
 
     // Camera follow tuning lives in Camera::Config defaults — uniform across states.
 
     // Provide camera to player for screen-to-world coordinate conversion
-    mp_Player->setCamera(m_camera.get());
+        mp_Player->setCamera(m_camera.get());
 
     // Camera auto-synchronizes world bounds on update
-  }
+    }
 
   // Register camera with WorldManager for chunk texture updates
-  WorldManager::Instance().setActiveCamera(m_camera.get());
+    WorldManager::Instance().setActiveCamera(m_camera.get());
 }
 
 void GamePlayState::updateCamera(float deltaTime) {
   // Defensive null check (camera always initialized in enter(), but kept for
   // safety)
-  if (m_camera) {
+    if (m_camera) {
     // Sync viewport with current window size (handles resize events)
-    m_camera->syncViewportWithEngine();
+        m_camera->syncViewportWithEngine();
 
     // Update camera position and following logic
-    m_camera->update(deltaTime);
-  }
+        m_camera->update(deltaTime);
+    }
 }
 
 // Removed setupCameraForWorld(): camera manages world bounds itself
 
-void GamePlayState::onTimePeriodChanged(const EventData &data) {
-  if (!data.event) {
-    return;
-  }
+void GamePlayState::onTimePeriodChanged(const EventData& data) {
+    if (!data.event) {
+        return;
+    }
 
-  auto timeEvent = std::static_pointer_cast<TimeEvent>(data.event);
-  TimeEventType eventType = timeEvent->getTimeEventType();
+    auto timeEvent = std::static_pointer_cast<TimeEvent>(data.event);
+    TimeEventType eventType = timeEvent->getTimeEventType();
 
   // Mark status bar dirty on any time event (hour, day, season changes)
-  m_statusBarDirty = true;
+    m_statusBarDirty = true;
 
   // Only process visual changes for TimePeriodChangedEvent
-  if (eventType != TimeEventType::TimePeriodChanged) {
-    return;
-  }
+    if (eventType != TimeEventType::TimePeriodChanged) {
+        return;
+    }
 
-  auto periodEvent =
-      std::static_pointer_cast<TimePeriodChangedEvent>(data.event);
+    auto periodEvent =
+        std::static_pointer_cast<TimePeriodChangedEvent>(data.event);
   // Track current period for weather change handling
-  m_currentTimePeriod = periodEvent->getPeriod();
+    m_currentTimePeriod = periodEvent->getPeriod();
 
   // Update ambient particles for the new time period
-  updateAmbientParticles(m_currentTimePeriod);
+    updateAmbientParticles(m_currentTimePeriod);
 
   // Add event log entry for the time period change
-  UIManager::Instance().addEventLogEntry(
-      "event_log",
-      std::string(m_controllers.get<DayNightController>()->getCurrentPeriodDescription()));
+    UIManager::Instance().addEventLogEntry(
+        "event_log",
+        std::string(m_controllers.get<DayNightController>()->getCurrentPeriodDescription()));
 
-  GAMEPLAY_DEBUG(std::format("Day/night transition started to period: {}",
-                             periodEvent->getPeriodName()));
+    GAMEPLAY_DEBUG(std::format("Day/night transition started to period: {}",
+        periodEvent->getPeriodName()));
 }
 
 void GamePlayState::updateAmbientParticles(TimePeriod period) {
   // Only spawn ambient particles during clear weather
-  if (m_controllers.get<WeatherController>()->getCurrentWeather() != WeatherType::Clear) {
-    if (m_ambientParticlesActive) {
-      stopAmbientParticles();
+    if (m_controllers.get<WeatherController>()->getCurrentWeather() != WeatherType::Clear) {
+        if (m_ambientParticlesActive) {
+            stopAmbientParticles();
+        }
+        return;
     }
-    return;
-  }
 
   // OPTIMIZATION: Only stop/start particles if the period actually changed
   // This avoids particle thrashing when called repeatedly with the same period
-  if (m_ambientParticlesActive && period == m_lastAmbientPeriod) {
-    return; // No change, particles already running for this period
-  }
+    if (m_ambientParticlesActive && period == m_lastAmbientPeriod) {
+        return; // No change, particles already running for this period
+    }
 
-  const auto &gameEngine = GameEngine::Instance();
-  Vector2D screenCenter(gameEngine.getWidthInPixels() / 2.0f,
-                        gameEngine.getHeightInPixels() / 2.0f);
+    const auto& gameEngine = GameEngine::Instance();
+    Vector2D screenCenter(gameEngine.getWidthInPixels() / 2.0f,
+        gameEngine.getHeightInPixels() / 2.0f);
 
   // Stop existing ambient particles only when period changed
-  if (m_ambientParticlesActive) {
-    stopAmbientParticles();
-  }
+    if (m_ambientParticlesActive) {
+        stopAmbientParticles();
+    }
 
   // Cache ParticleManager reference for multiple effect calls
-  auto &particleMgr = ParticleManager::Instance();
+    auto& particleMgr = ParticleManager::Instance();
 
   // Start appropriate particles for the new period
-  switch (period) {
-  case TimePeriod::Morning:
+    switch (period) {
+        case TimePeriod::Morning:
     // Light dust motes in morning sunlight
-    m_ambientDustEffectId = particleMgr.playIndependentEffect(
-        ParticleEffectType::AmbientDust, screenCenter, 0.6f, -1.0f, "ambient");
-    break;
+            m_ambientDustEffectId = particleMgr.playIndependentEffect(
+                ParticleEffectType::AmbientDust, screenCenter, 0.6f, -1.0f, "ambient");
+            break;
 
-  case TimePeriod::Day:
+        case TimePeriod::Day:
     // Subtle dust particles during the day
-    m_ambientDustEffectId = particleMgr.playIndependentEffect(
-        ParticleEffectType::AmbientDust, screenCenter, 0.4f, -1.0f, "ambient");
-    break;
+            m_ambientDustEffectId = particleMgr.playIndependentEffect(
+                ParticleEffectType::AmbientDust, screenCenter, 0.4f, -1.0f, "ambient");
+            break;
 
-  case TimePeriod::Evening:
+        case TimePeriod::Evening:
     // Golden dust in evening light
-    m_ambientDustEffectId = particleMgr.playIndependentEffect(
-        ParticleEffectType::AmbientDust, screenCenter, 0.8f, -1.0f, "ambient");
-    break;
+            m_ambientDustEffectId = particleMgr.playIndependentEffect(
+                ParticleEffectType::AmbientDust, screenCenter, 0.8f, -1.0f, "ambient");
+            break;
 
-  case TimePeriod::Night:
+        case TimePeriod::Night:
     // Fireflies at night
-    m_ambientFireflyEffectId = particleMgr.playIndependentEffect(
-        ParticleEffectType::AmbientFirefly, screenCenter, 1.0f, -1.0f,
-        "ambient");
-    break;
-  }
+            m_ambientFireflyEffectId = particleMgr.playIndependentEffect(
+                ParticleEffectType::AmbientFirefly, screenCenter, 1.0f, -1.0f,
+                "ambient");
+            break;
+    }
 
-  m_lastAmbientPeriod = period;
-  m_ambientParticlesActive = true;
+    m_lastAmbientPeriod = period;
+    m_ambientParticlesActive = true;
 }
 
 void GamePlayState::stopAmbientParticles() {
-  if (m_ambientDustEffectId != 0 || m_ambientFireflyEffectId != 0) {
-    auto &particleMgr = ParticleManager::Instance();
+    if (m_ambientDustEffectId != 0 || m_ambientFireflyEffectId != 0) {
+        auto& particleMgr = ParticleManager::Instance();
 
-    if (m_ambientDustEffectId != 0) {
-      particleMgr.stopIndependentEffect(m_ambientDustEffectId);
-      m_ambientDustEffectId = 0;
+        if (m_ambientDustEffectId != 0) {
+            particleMgr.stopIndependentEffect(m_ambientDustEffectId);
+            m_ambientDustEffectId = 0;
+        }
+
+        if (m_ambientFireflyEffectId != 0) {
+            particleMgr.stopIndependentEffect(m_ambientFireflyEffectId);
+            m_ambientFireflyEffectId = 0;
+        }
     }
 
-    if (m_ambientFireflyEffectId != 0) {
-      particleMgr.stopIndependentEffect(m_ambientFireflyEffectId);
-      m_ambientFireflyEffectId = 0;
-    }
-  }
-
-  m_ambientParticlesActive = false;
+    m_ambientParticlesActive = false;
 }
 
-void GamePlayState::onWeatherChanged(const EventData &data) {
-  if (!data.event) {
-    return;
-  }
+void GamePlayState::onWeatherChanged(const EventData& data) {
+    if (!data.event) {
+        return;
+    }
 
-  auto weatherEvent = std::static_pointer_cast<WeatherEvent>(data.event);
-  WeatherType newWeather = weatherEvent->getWeatherType();
+    auto weatherEvent = std::static_pointer_cast<WeatherEvent>(data.event);
+    WeatherType newWeather = weatherEvent->getWeatherType();
 
   // OPTIMIZATION: Skip if weather hasn't actually changed (deduplication)
-  if (newWeather == m_lastWeatherType) {
-    return;
-  }
-  m_lastWeatherType = newWeather;
+    if (newWeather == m_lastWeatherType) {
+        return;
+    }
+    m_lastWeatherType = newWeather;
 
   // Mark status bar dirty for weather display update
-  m_statusBarDirty = true;
+    m_statusBarDirty = true;
 
   // Re-evaluate ambient particles based on current time period and new weather
-  updateAmbientParticles(m_currentTimePeriod);
+    updateAmbientParticles(m_currentTimePeriod);
 
   // Add event log entry for the weather change
-  UIManager::Instance().addEventLogEntry(
-      "event_log",
-      std::string(m_controllers.get<WeatherController>()->getCurrentWeatherDescription()));
+    UIManager::Instance().addEventLogEntry(
+        "event_log",
+        std::string(m_controllers.get<WeatherController>()->getCurrentWeatherDescription()));
 
-  GAMEPLAY_DEBUG(weatherEvent->getWeatherTypeString());
+    GAMEPLAY_DEBUG(weatherEvent->getWeatherTypeString());
 }
 
-void GamePlayState::recordGPUSceneVertices(VoidLight::GPURenderer &gpuRenderer,
-                                           float interpolationAlpha) {
+void GamePlayState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
+    float interpolationAlpha) {
   // Skip if world not active or GPU scene recorder not initialized
-  if (!m_camera || !m_gpuSceneRecorder) {
-    return;
-  }
+    if (!m_camera || !m_gpuSceneRecorder) {
+        return;
+    }
 
   // Begin scene-data recording before the engine-owned scene pass opens
-  auto ctx = m_gpuSceneRecorder->beginRecording(gpuRenderer, *m_camera, interpolationAlpha);
-  if (!ctx) {
-    return;
-  }
+    auto ctx = m_gpuSceneRecorder->beginRecording(gpuRenderer, *m_camera, interpolationAlpha);
+    if (!ctx) {
+        return;
+    }
 
   // Record world tile vertices (draws to ctx.spriteBatch)
-  auto &worldMgr = WorldManager::Instance();
-  worldMgr.recordGPU(*ctx.spriteBatch, ctx.cameraX, ctx.cameraY,
-                     ctx.viewWidth, ctx.viewHeight, ctx.zoom);
+    auto& worldMgr = WorldManager::Instance();
+    worldMgr.recordGPU(*ctx.spriteBatch, ctx.cameraX, ctx.cameraY,
+        ctx.viewWidth, ctx.viewHeight, ctx.zoom);
 
   // Record world resources managed outside world tiles (dropped items, containers)
-  if (auto* resourceCtrl = m_controllers.get<ResourceRenderController>()) {
-    resourceCtrl->recordGPUDroppedItems(ctx, *m_camera);
-    resourceCtrl->recordGPUContainers(ctx, *m_camera);
-  }
+    if (auto* resourceCtrl = m_controllers.get<ResourceRenderController>()) {
+        resourceCtrl->recordGPUDroppedItems(ctx, *m_camera);
+        resourceCtrl->recordGPUContainers(ctx, *m_camera);
+    }
 
   // Record NPCs after resources to preserve SDL render-order parity.
-  m_npcRenderCtrl.recordGPU(ctx);
+    m_npcRenderCtrl.recordGPU(ctx);
 
   // Record projectiles after NPCs (rendered on top of NPCs)
-  m_projectileRenderCtrl.recordGPU(ctx);
+    m_projectileRenderCtrl.recordGPU(ctx);
 
   // End sprite batch recording before switching to entity batch
-  m_gpuSceneRecorder->endSpriteBatch();
+    m_gpuSceneRecorder->endSpriteBatch();
 
   // Record player vertices (uses entity batch - separate texture)
-  if (mp_Player) {
-    mp_Player->recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
-  }
+    if (mp_Player) {
+        mp_Player->recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
+    }
 
   // Record particle vertices (uses particle pool)
-  auto &particleMgr = ParticleManager::Instance();
-  if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
-    particleMgr.recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
-  }
+    auto& particleMgr = ParticleManager::Instance();
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+        particleMgr.recordGPUVertices(gpuRenderer, ctx.cameraX, ctx.cameraY, interpolationAlpha);
+    }
 
   // End scene-data recording before UI vertices are recorded
-  m_gpuSceneRecorder->endRecording();
+    m_gpuSceneRecorder->endRecording();
 }
 
-void GamePlayState::recordGPUUIVertices(VoidLight::GPURenderer &gpuRenderer) {
+void GamePlayState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
   // Update FPS display if visible (must happen BEFORE recording UI vertices)
-  auto &ui = UIManager::Instance();
-  if (m_fpsVisible) {
-    float const currentFPS = mp_stateManager->getCurrentFPS();
+    auto& ui = UIManager::Instance();
+    if (m_fpsVisible) {
+        float const currentFPS = mp_stateManager->getCurrentFPS();
     // Only update UI text if FPS changed by more than 0.05 (avoids flicker)
-    if (std::abs(currentFPS - m_lastDisplayedFPS) > 0.05f) {
-      m_fpsBuffer.clear();
-      std::format_to(std::back_inserter(m_fpsBuffer), "FPS: {:.1f}",
-                     currentFPS);
-      ui.setText("fps", m_fpsBuffer);
-      m_lastDisplayedFPS = currentFPS;
+        if (std::abs(currentFPS - m_lastDisplayedFPS) > 0.05f) {
+            m_fpsBuffer.clear();
+            std::format_to(std::back_inserter(m_fpsBuffer), "FPS: {:.1f}",
+                currentFPS);
+            ui.setText("fps", m_fpsBuffer);
+            m_lastDisplayedFPS = currentFPS;
+        }
     }
-  }
 
-  ui.recordGPUVertices(gpuRenderer);
+    ui.recordGPUVertices(gpuRenderer);
 }
 
-void GamePlayState::renderGPUScene(VoidLight::GPURenderer &gpuRenderer,
-                                   SDL_GPURenderPass *scenePass,
-                                   float) {
-  if (!m_camera || !m_gpuSceneRecorder) {
-    return;
-  }
+void GamePlayState::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
+    SDL_GPURenderPass* scenePass,
+    float) {
+    if (!m_camera || !m_gpuSceneRecorder) {
+        return;
+    }
 
   // Render previously recorded scene data into the engine-owned scene pass
-  m_gpuSceneRecorder->renderRecordedScene(gpuRenderer, scenePass);
+    m_gpuSceneRecorder->renderRecordedScene(gpuRenderer, scenePass);
 
   // Render player (entity batch)
-  if (mp_Player) {
-    mp_Player->renderGPU(gpuRenderer, scenePass);
-  }
+    if (mp_Player) {
+        mp_Player->renderGPU(gpuRenderer, scenePass);
+    }
 
   // Render particles (particle pool)
-  auto &particleMgr = ParticleManager::Instance();
-  if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
-    particleMgr.renderGPU(gpuRenderer, scenePass);
-  }
+    auto& particleMgr = ParticleManager::Instance();
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+        particleMgr.renderGPU(gpuRenderer, scenePass);
+    }
 }
 
-void GamePlayState::renderGPUUI(VoidLight::GPURenderer &gpuRenderer,
-                                SDL_GPURenderPass *swapchainPass) {
+void GamePlayState::renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
+    SDL_GPURenderPass* swapchainPass) {
   // Day/night lighting is handled by the composite shader (DayNightController updates GPURenderer)
 
   // Render UI
-  auto &ui = UIManager::Instance();
-  ui.renderGPU(gpuRenderer, swapchainPass);
+    auto& ui = UIManager::Instance();
+    ui.renderGPU(gpuRenderer, swapchainPass);
 }

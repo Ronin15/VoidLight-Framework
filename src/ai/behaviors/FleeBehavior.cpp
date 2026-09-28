@@ -22,7 +22,7 @@ constexpr size_t MAX_SAFE_ZONES = 4;
 constexpr float CROWD_ANALYSIS_INTERVAL = 0.25f;
 
 void processFleeMessages(BehaviorData& shared, VoidLight::FleeStateData& flee,
-                         const VoidLight::FleeBehaviorConfig& config) {
+    const VoidLight::FleeBehaviorConfig& config) {
     for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
         uint8_t msgId = shared.pendingMessages[i].messageId;
 
@@ -70,7 +70,7 @@ Vector2D findNearestSafeZone(const BehaviorContext& ctx, const VoidLight::FleeSt
 }
 
 Vector2D avoidBoundaries(const Vector2D& position, const Vector2D& direction, float padding,
-                         float boundsMinX, float boundsMinY, float boundsMaxX, float boundsMaxY) {
+    float boundsMinX, float boundsMinY, float boundsMaxX, float boundsMaxY) {
     Vector2D adjustedDir = direction;
     float worldMinX = boundsMinX + padding;
     float worldMinY = boundsMinY + padding;
@@ -93,9 +93,9 @@ Vector2D avoidBoundaries(const Vector2D& position, const Vector2D& direction, fl
 }
 
 Vector2D calculateFleeDirection(const Vector2D& entityPos, const Vector2D& threatPos,
-                                const VoidLight::FleeStateData& flee, float padding,
-                                float boundsMinX, float boundsMinY,
-                                float boundsMaxX, float boundsMaxY) {
+    const VoidLight::FleeStateData& flee, float padding,
+    float boundsMinX, float boundsMinY,
+    float boundsMaxX, float boundsMaxY) {
     Vector2D fleeDir = entityPos - threatPos;
 
     if (fleeDir.length() < 0.001f) {
@@ -112,7 +112,7 @@ Vector2D calculateFleeDirection(const Vector2D& entityPos, const Vector2D& threa
 }
 
 float calculateFleeSpeedModifier(const VoidLight::FleeStateData& flee,
-                                 const VoidLight::FleeBehaviorConfig& config) {
+    const VoidLight::FleeBehaviorConfig& config) {
     float modifier = 1.0f;
 
     if (flee.isInPanic) modifier *= config.panicSpeedMultiplier;
@@ -127,7 +127,7 @@ float calculateFleeSpeedModifier(const VoidLight::FleeStateData& flee,
 }
 
 void updateStamina(VoidLight::FleeStateData& flee, float deltaTime, bool fleeing,
-                   const VoidLight::FleeBehaviorConfig& config) {
+    const VoidLight::FleeBehaviorConfig& config) {
     if (fleeing) {
         flee.currentStamina -= config.staminaDrain * deltaTime;
         flee.currentStamina = std::max(0.0f, flee.currentStamina);
@@ -138,8 +138,8 @@ void updateStamina(VoidLight::FleeStateData& flee, float deltaTime, bool fleeing
 }
 
 bool tryFollowPathToGoal(BehaviorContext& ctx, const VoidLight::FleeStateData& flee,
-                         const Vector2D& goal, float speed,
-                         const VoidLight::FleeBehaviorConfig& config) {
+    const Vector2D& goal, float speed,
+    const VoidLight::FleeBehaviorConfig& config) {
     if (!ctx.pathData) return false;
 
     auto& pathData = *ctx.pathData;
@@ -150,7 +150,7 @@ bool tryFollowPathToGoal(BehaviorContext& ctx, const VoidLight::FleeStateData& f
     const float GOAL_CHANGE_THRESH_SQUARED = config.goalChangeThreshold * config.goalChangeThreshold;
 
     const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
-                              pathData.progressTimer < noProgressWindow);
+        pathData.progressTimer < noProgressWindow);
     auto& edm = EntityDataManager::Instance();
     bool needRefresh = !pathData.hasPath || pathData.navIndex >= pathData.pathLength;
 
@@ -176,7 +176,7 @@ bool tryFollowPathToGoal(BehaviorContext& ctx, const VoidLight::FleeStateData& f
         if (goalChanged) {
             auto& pf = PathfinderManager::Instance();
             pf.requestPathToEDM(ctx.edmIndex, pf.clampToWorldBounds(currentPos, 100.0f), goal,
-                               PathfinderManager::Priority::High);
+                PathfinderManager::Priority::High);
             pathData.pathRequestCooldown = 0.8f;
         }
     }
@@ -201,19 +201,19 @@ bool tryFollowPathToGoal(BehaviorContext& ctx, const VoidLight::FleeStateData& f
 }
 
 void updatePanicFlee(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
-                     const Vector2D& threatPos,
-                     const VoidLight::FleeBehaviorConfig& config,
-                     float envSpeed) {
+    const Vector2D& threatPos,
+    const VoidLight::FleeBehaviorConfig& config,
+    float envSpeed) {
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.directionChangeTimer > 0.2f || flee.fleeDirection.length() < 0.001f) {
         flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
-                                           ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
+            ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
         float randomAngle = s_angleVariation(s_rng) * 0.8f;
         float cos_a = std::cos(randomAngle);
         float sin_a = std::sin(randomAngle);
         Vector2D rotated(flee.fleeDirection.getX() * cos_a - flee.fleeDirection.getY() * sin_a,
-                        flee.fleeDirection.getX() * sin_a + flee.fleeDirection.getY() * cos_a);
+            flee.fleeDirection.getX() * sin_a + flee.fleeDirection.getY() * cos_a);
         flee.fleeDirection = rotated;
         flee.directionChangeTimer = 0.0f;
     }
@@ -223,15 +223,15 @@ void updatePanicFlee(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
 }
 
 void updateStrategicRetreat(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
-                            const Vector2D& threatPos,
-                            const VoidLight::FleeBehaviorConfig& config,
-                            float envSpeed) {
+    const Vector2D& threatPos,
+    const VoidLight::FleeBehaviorConfig& config,
+    float envSpeed) {
     auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.directionChangeTimer > 1.0f || flee.fleeDirection.length() < 0.001f) {
         flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
-                                           ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
+            ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
         flee.directionChangeTimer = 0.0f;
     }
 
@@ -258,9 +258,9 @@ void updateStrategicRetreat(BehaviorContext& ctx, VoidLight::FleeStateData& flee
 }
 
 void updateEvasiveManeuver(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
-                           const Vector2D& threatPos,
-                           const VoidLight::FleeBehaviorConfig& config,
-                           float envSpeed) {
+    const Vector2D& threatPos,
+    const VoidLight::FleeBehaviorConfig& config,
+    float envSpeed) {
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.zigzagTimer > config.zigzagInterval) {
@@ -269,14 +269,14 @@ void updateEvasiveManeuver(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
     }
 
     Vector2D baseFleeDir = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
-                                           ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
+        ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
 
     float zigzagAngleRad = (config.zigzagAngle * static_cast<float>(M_PI) / 180.0f) * flee.zigzagDirection;
     float cos_z = std::cos(zigzagAngleRad);
     float sin_z = std::sin(zigzagAngleRad);
 
     Vector2D zigzagDir(baseFleeDir.getX() * cos_z - baseFleeDir.getY() * sin_z,
-                      baseFleeDir.getX() * sin_z + baseFleeDir.getY() * cos_z);
+        baseFleeDir.getX() * sin_z + baseFleeDir.getY() * cos_z);
 
     flee.fleeDirection = normalizeVector(zigzagDir);
 
@@ -285,9 +285,9 @@ void updateEvasiveManeuver(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
 }
 
 void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
-                     const Vector2D& threatPos,
-                     const VoidLight::FleeBehaviorConfig& config,
-                     float envSpeed) {
+    const Vector2D& threatPos,
+    const VoidLight::FleeBehaviorConfig& config,
+    float envSpeed) {
     auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
@@ -302,7 +302,7 @@ void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
     }
 
     flee.fleeDirection = calculateFleeDirection(currentPos, threatPos, flee, config.worldPadding,
-                                           ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
+        ctx.worldMinX, ctx.worldMinY, ctx.worldMaxX, ctx.worldMaxY);
 
     Vector2D safeZoneTarget = findNearestSafeZone(ctx, flee);
     if (safeZoneTarget.lengthSquared() > 0.01f) {
@@ -324,7 +324,7 @@ void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
 namespace Behaviors {
 
 void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config,
-              VoidLight::FleeStateData& state) {
+    VoidLight::FleeStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Flee);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -355,7 +355,7 @@ void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config,
 }
 
 void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& config,
-                 VoidLight::FleeStateData& flee) {
+    VoidLight::FleeStateData& flee) {
     if (!ctx.sharedState.isValid() || !ctx.pathData) return;
 
     auto& shared = ctx.sharedState;

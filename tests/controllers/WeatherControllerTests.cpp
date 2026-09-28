@@ -151,8 +151,7 @@ BOOST_AUTO_TEST_CASE(TestAllWeatherTypes) {
         {WeatherType::Stormy, "Stormy"},
         {WeatherType::Foggy, "Foggy"},
         {WeatherType::Snowy, "Snowy"},
-        {WeatherType::Windy, "Windy"}
-    };
+        {WeatherType::Windy, "Windy"}};
 
     for (const auto& tc : testCases) {
         auto event = std::make_shared<WeatherCheckEvent>(Season::Spring, tc.type);
@@ -291,14 +290,13 @@ BOOST_AUTO_TEST_CASE(TestAllWeatherDescriptions) {
     };
 
     WeatherDescTestCase testCases[] = {
-        {WeatherType::Clear,  "Clear skies"},
+        {WeatherType::Clear, "Clear skies"},
         {WeatherType::Cloudy, "Clouds gather"},
-        {WeatherType::Rainy,  "Rain begins"},
+        {WeatherType::Rainy, "Rain begins"},
         {WeatherType::Stormy, "Storm approaches"},
-        {WeatherType::Foggy,  "Fog rolls in"},
-        {WeatherType::Snowy,  "Snow falls"},
-        {WeatherType::Windy,  "Wind picks up"}
-    };
+        {WeatherType::Foggy, "Fog rolls in"},
+        {WeatherType::Snowy, "Snow falls"},
+        {WeatherType::Windy, "Wind picks up"}};
 
     for (const auto& tc : testCases) {
         auto event = std::make_shared<WeatherCheckEvent>(Season::Spring, tc.type);

@@ -30,10 +30,8 @@ BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 
 namespace {
 
-struct CrowdRuntimeFixture
-{
-    CrowdRuntimeFixture()
-    {
+struct CrowdRuntimeFixture {
+    CrowdRuntimeFixture() {
         BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
         BOOST_REQUIRE(BackgroundSimulationManager::Instance().init());
@@ -43,16 +41,14 @@ struct CrowdRuntimeFixture
         VOIDLIGHT_STATS_ONLY(AIInternal::ResetCrowdStats();)
     }
 
-    ~CrowdRuntimeFixture()
-    {
+    ~CrowdRuntimeFixture() {
         CollisionManager::Instance().clean();
         BackgroundSimulationManager::Instance().clean();
         EntityDataManager::Instance().clean();
         EventManager::Instance().clean();
     }
 
-    EntityHandle createCollidableNPC(const Vector2D& pos)
-    {
+    EntityHandle createCollidableNPC(const Vector2D& pos) {
         auto& edm = EntityDataManager::Instance();
         EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
         size_t index = edm.getIndex(handle);
@@ -65,8 +61,7 @@ struct CrowdRuntimeFixture
         return handle;
     }
 
-    void activateCollisionAt(const Vector2D& referencePoint)
-    {
+    void activateCollisionAt(const Vector2D& referencePoint) {
         EntityDataManager::Instance().updateSimulationTiers(referencePoint, 1500.0f, 10000.0f);
         BackgroundSimulationManager::Instance().update(referencePoint, 0.016f);
         CollisionManager::Instance().update(0.016f);
@@ -77,8 +72,7 @@ struct CrowdRuntimeFixture
 
 BOOST_FIXTURE_TEST_SUITE(CrowdQueryTests, CrowdRuntimeFixture)
 
-BOOST_AUTO_TEST_CASE(TestEmptyQueriesReuseCacheAndUpdateStats)
-{
+BOOST_AUTO_TEST_CASE(TestEmptyQueriesReuseCacheAndUpdateStats) {
     createCollidableNPC(Vector2D(100.0f, 100.0f));
     activateCollisionAt(Vector2D(100.0f, 100.0f));
     AIInternal::InvalidateSpatialCache(1);
@@ -102,16 +96,14 @@ BOOST_AUTO_TEST_CASE(TestEmptyQueriesReuseCacheAndUpdateStats)
     BOOST_REQUIRE_EQUAL(reusableBuffer.size(), 1u);
 
     VOIDLIGHT_STATS_ONLY(
-    const auto stats = AIInternal::GetCrowdStats();
-    BOOST_CHECK_EQUAL(stats.queryCount, 2u);
-    BOOST_CHECK_EQUAL(stats.cacheMisses, 1u);
-    BOOST_CHECK_EQUAL(stats.cacheHits, 1u);
-    BOOST_CHECK_EQUAL(stats.resultsCount, 0u);
-    )
+        const auto stats = AIInternal::GetCrowdStats();
+        BOOST_CHECK_EQUAL(stats.queryCount, 2u);
+        BOOST_CHECK_EQUAL(stats.cacheMisses, 1u);
+        BOOST_CHECK_EQUAL(stats.cacheHits, 1u);
+        BOOST_CHECK_EQUAL(stats.resultsCount, 0u);)
 }
 
-BOOST_AUTO_TEST_CASE(TestCacheInvalidationAndBufferReuse)
-{
+BOOST_AUTO_TEST_CASE(TestCacheInvalidationAndBufferReuse) {
     auto& bufferA = AIInternal::GetNearbyPositionBuffer();
     bufferA.clear();
     bufferA.push_back(Vector2D(1.0f, 2.0f));
@@ -122,13 +114,12 @@ BOOST_AUTO_TEST_CASE(TestCacheInvalidationAndBufferReuse)
     BOOST_CHECK_CLOSE(bufferB[0].getX(), 1.0f, 0.001f);
 
     VOIDLIGHT_STATS_ONLY(
-    AIInternal::ResetCrowdStats();
-    const auto cleared = AIInternal::GetCrowdStats();
-    BOOST_CHECK_EQUAL(cleared.queryCount, 0u);
-    BOOST_CHECK_EQUAL(cleared.cacheHits, 0u);
-    BOOST_CHECK_EQUAL(cleared.cacheMisses, 0u);
-    BOOST_CHECK_EQUAL(cleared.resultsCount, 0u);
-    )
+        AIInternal::ResetCrowdStats();
+        const auto cleared = AIInternal::GetCrowdStats();
+        BOOST_CHECK_EQUAL(cleared.queryCount, 0u);
+        BOOST_CHECK_EQUAL(cleared.cacheHits, 0u);
+        BOOST_CHECK_EQUAL(cleared.cacheMisses, 0u);
+        BOOST_CHECK_EQUAL(cleared.resultsCount, 0u);)
 }
 
 BOOST_AUTO_TEST_SUITE_END()

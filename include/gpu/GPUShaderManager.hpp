@@ -29,11 +29,11 @@ struct ShaderCacheKey {
 
     bool operator==(const ShaderCacheKey& other) const noexcept {
         return basePath == other.basePath &&
-               stage == other.stage &&
-               info.numSamplers == other.info.numSamplers &&
-               info.numStorageTextures == other.info.numStorageTextures &&
-               info.numStorageBuffers == other.info.numStorageBuffers &&
-               info.numUniformBuffers == other.info.numUniformBuffers;
+            stage == other.stage &&
+            info.numSamplers == other.info.numSamplers &&
+            info.numStorageTextures == other.info.numStorageTextures &&
+            info.numStorageBuffers == other.info.numStorageBuffers &&
+            info.numUniformBuffers == other.info.numUniformBuffers;
     }
 };
 
@@ -77,8 +77,8 @@ public:
      * @return Loaded shader, or nullptr on failure
      */
     SDL_GPUShader* loadShader(const std::string& basePath,
-                              SDL_GPUShaderStage stage,
-                              const ShaderInfo& info);
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info);
 
     /**
      * Get a previously loaded shader by name.
@@ -86,15 +86,15 @@ public:
      * @return Shader pointer, or nullptr if not found
      */
     SDL_GPUShader* getShader(const std::string& name,
-                             SDL_GPUShaderStage stage,
-                             const ShaderInfo& info) const;
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info) const;
 
     /**
      * Check if a shader is already loaded.
      */
     bool hasShader(const std::string& name,
-                   SDL_GPUShaderStage stage,
-                   const ShaderInfo& info) const;
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info) const;
 
 private:
     GPUShaderManager() = default;
@@ -108,35 +108,34 @@ private:
      * Load SPIR-V binary shader.
      */
     SDL_GPUShader* loadSPIRV(const std::string& path,
-                             SDL_GPUShaderStage stage,
-                             const ShaderInfo& info);
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info);
 
     /**
      * Load MSL (Metal Shading Language) source.
      */
     SDL_GPUShader* loadMSL(const std::string& path,
-                           SDL_GPUShaderStage stage,
-                           const ShaderInfo& info,
-                           const std::string& entryPoint);
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info,
+        const std::string& entryPoint);
 
     /**
      * Load DXIL binary shader.
      */
     SDL_GPUShader* loadDXIL(const std::string& path,
-                            SDL_GPUShaderStage stage,
-                            const ShaderInfo& info);
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info);
 
     std::string resolveShaderPath(const std::string& basePath,
-                                  SDL_GPUShaderStage stage) const;
+        SDL_GPUShaderStage stage) const;
     ShaderCacheKey makeCacheKey(const std::string& basePath,
-                                SDL_GPUShaderStage stage,
-                                const ShaderInfo& info) const;
+        SDL_GPUShaderStage stage,
+        const ShaderInfo& info) const;
 
     SDL_GPUDevice* m_device{nullptr};
     std::unordered_map<ShaderCacheKey, SDL_GPUShader*, ShaderCacheKeyHash> m_shaders;
     GPUPlatformConfig::ShaderBinaryKind m_shaderBinaryKind{
-        GPUPlatformConfig::ShaderBinaryKind::SPIRV
-    };
+        GPUPlatformConfig::ShaderBinaryKind::SPIRV};
 };
 
 } // namespace VoidLight

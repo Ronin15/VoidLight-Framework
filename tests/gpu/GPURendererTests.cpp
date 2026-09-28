@@ -170,8 +170,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(FrameCycleTests)
 
 BOOST_FIXTURE_TEST_CASE(BeginFrameAcquiresCommandBuffer, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -189,8 +188,7 @@ BOOST_FIXTURE_TEST_CASE(BeginFrameAcquiresCommandBuffer, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(BeginScenePassEndsCopyPass, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -211,8 +209,7 @@ BOOST_FIXTURE_TEST_CASE(BeginScenePassEndsCopyPass, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(BeginSwapchainPassEndsScenePass, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -231,8 +228,7 @@ BOOST_FIXTURE_TEST_CASE(BeginSwapchainPassEndsScenePass, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(EndFrameSubmitsCommandBuffer, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -248,8 +244,7 @@ BOOST_FIXTURE_TEST_CASE(EndFrameSubmitsCommandBuffer, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(MultipleFrameCycles, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -446,8 +441,7 @@ BOOST_FIXTURE_TEST_CASE(SetDayNightParams, RendererTestFixture) {
 }
 
 BOOST_FIXTURE_TEST_CASE(RenderCompositeInSwapchainPass, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);

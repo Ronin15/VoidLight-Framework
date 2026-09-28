@@ -13,8 +13,7 @@ GPUPipeline::~GPUPipeline() {
 
 GPUPipeline::GPUPipeline(GPUPipeline&& other) noexcept
     : m_pipeline(other.m_pipeline)
-    , m_device(other.m_device)
-{
+    , m_device(other.m_device) {
     other.m_pipeline = nullptr;
     other.m_device = nullptr;
 }
@@ -59,15 +58,15 @@ bool GPUPipeline::create(SDL_GPUDevice* device, const PipelineConfig& config) {
         colorTarget.blend_state.dst_alpha_blendfactor = config.dstAlphaFactor;
         colorTarget.blend_state.alpha_blend_op = config.alphaBlendOp;
         colorTarget.blend_state.color_write_mask = SDL_GPU_COLORCOMPONENT_R |
-                                                    SDL_GPU_COLORCOMPONENT_G |
-                                                    SDL_GPU_COLORCOMPONENT_B |
-                                                    SDL_GPU_COLORCOMPONENT_A;
+            SDL_GPU_COLORCOMPONENT_G |
+            SDL_GPU_COLORCOMPONENT_B |
+            SDL_GPU_COLORCOMPONENT_A;
     } else {
         colorTarget.blend_state.enable_blend = false;
         colorTarget.blend_state.color_write_mask = SDL_GPU_COLORCOMPONENT_R |
-                                                    SDL_GPU_COLORCOMPONENT_G |
-                                                    SDL_GPU_COLORCOMPONENT_B |
-                                                    SDL_GPU_COLORCOMPONENT_A;
+            SDL_GPU_COLORCOMPONENT_G |
+            SDL_GPU_COLORCOMPONENT_B |
+            SDL_GPU_COLORCOMPONENT_A;
     }
 
     // Build rasterizer state
@@ -89,10 +88,12 @@ bool GPUPipeline::create(SDL_GPUDevice* device, const PipelineConfig& config) {
     SDL_GPUVertexInputState vertexInput{};
     vertexInput.num_vertex_buffers = config.vertexBufferCount;
     vertexInput.vertex_buffer_descriptions = config.vertexBufferCount > 0
-        ? config.vertexBuffers.data() : nullptr;
+        ? config.vertexBuffers.data()
+        : nullptr;
     vertexInput.num_vertex_attributes = config.vertexAttributeCount;
     vertexInput.vertex_attributes = config.vertexAttributeCount > 0
-        ? config.vertexAttributes.data() : nullptr;
+        ? config.vertexAttributes.data()
+        : nullptr;
 
     // Build pipeline create info
     SDL_GPUGraphicsPipelineCreateInfo createInfo{};
@@ -125,9 +126,9 @@ void GPUPipeline::release() {
 }
 
 PipelineConfig GPUPipeline::createSpriteConfig(SDL_GPUShader* vertShader,
-                                                SDL_GPUShader* fragShader,
-                                                SDL_GPUTextureFormat colorFormat,
-                                                bool alpha) {
+    SDL_GPUShader* fragShader,
+    SDL_GPUTextureFormat colorFormat,
+    bool alpha) {
     PipelineConfig config{};
     config.vertexShader = vertShader;
     config.fragmentShader = fragShader;
@@ -175,9 +176,9 @@ PipelineConfig GPUPipeline::createSpriteConfig(SDL_GPUShader* vertShader,
 }
 
 PipelineConfig GPUPipeline::createParticleConfig(SDL_GPUShader* vertShader,
-                                                  SDL_GPUShader* fragShader,
-                                                  SDL_GPUTextureFormat colorFormat,
-                                                  bool additive) {
+    SDL_GPUShader* fragShader,
+    SDL_GPUTextureFormat colorFormat,
+    bool additive) {
     PipelineConfig config{};
     config.vertexShader = vertShader;
     config.fragmentShader = fragShader;
@@ -223,8 +224,8 @@ PipelineConfig GPUPipeline::createParticleConfig(SDL_GPUShader* vertShader,
 }
 
 PipelineConfig GPUPipeline::createPrimitiveConfig(SDL_GPUShader* vertShader,
-                                                   SDL_GPUShader* fragShader,
-                                                   SDL_GPUTextureFormat colorFormat) {
+    SDL_GPUShader* fragShader,
+    SDL_GPUTextureFormat colorFormat) {
     PipelineConfig config{};
     config.vertexShader = vertShader;
     config.fragmentShader = fragShader;
@@ -259,8 +260,8 @@ PipelineConfig GPUPipeline::createPrimitiveConfig(SDL_GPUShader* vertShader,
 }
 
 PipelineConfig GPUPipeline::createCompositeConfig(SDL_GPUShader* vertShader,
-                                                   SDL_GPUShader* fragShader,
-                                                   SDL_GPUTextureFormat colorFormat) {
+    SDL_GPUShader* fragShader,
+    SDL_GPUTextureFormat colorFormat) {
     PipelineConfig config{};
     config.vertexShader = vertShader;
     config.fragmentShader = fragShader;

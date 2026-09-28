@@ -144,7 +144,7 @@ public:
      */
     [[nodiscard]] bool hasWork() const noexcept {
         return m_hasNonActiveEntities.load(std::memory_order_acquire) ||
-               m_tiersDirty.load(std::memory_order_acquire);
+            m_tiersDirty.load(std::memory_order_acquire);
     }
 
     // Configuration
@@ -228,9 +228,9 @@ private:
     // Batch processing (follows AIManager pattern)
     void processSingleThreaded(float deltaTime, const std::vector<size_t>& indices);
     void processMultiThreaded(float deltaTime, const std::vector<size_t>& indices,
-                              size_t batchCount, size_t batchSize);
+        size_t batchCount, size_t batchSize);
     void processBatch(float deltaTime, const std::vector<size_t>& indices,
-                      size_t startIdx, size_t endIdx);
+        size_t startIdx, size_t endIdx);
 
     // Type-specific simplified simulation
     void simulateNPC(float deltaTime, size_t index);

@@ -13,8 +13,7 @@ using namespace VoidLight;
 
 namespace {
 
-void briefPause()
-{
+void briefPause() {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
 }
 
@@ -22,8 +21,7 @@ void briefPause()
 
 BOOST_AUTO_TEST_SUITE(FrameProfilerStateTests)
 
-BOOST_AUTO_TEST_CASE(TestOverlayAndSuppressionState)
-{
+BOOST_AUTO_TEST_CASE(TestOverlayAndSuppressionState) {
     auto& profiler = FrameProfiler::Instance();
     const double originalThreshold = profiler.getThresholdMs();
     const bool originalOverlayVisible = profiler.isOverlayVisible();
@@ -60,8 +58,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(FrameProfilerTimingTests)
 
-BOOST_AUTO_TEST_CASE(TestScopedTimersRecordDurations)
-{
+BOOST_AUTO_TEST_CASE(TestScopedTimersRecordDurations) {
     auto& profiler = FrameProfiler::Instance();
     const double originalThreshold = profiler.getThresholdMs();
     const uint64_t baseFrameCount = profiler.getFrameCount();
@@ -101,8 +98,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 #else
 
-BOOST_AUTO_TEST_CASE(TestReleaseStubNoOps)
-{
+BOOST_AUTO_TEST_CASE(TestReleaseStubNoOps) {
     auto& profiler = FrameProfiler::Instance();
     profiler.setThresholdMs(12.5);
     profiler.toggleOverlay();

@@ -98,118 +98,118 @@ BOOST_GLOBAL_FIXTURE(InputManagerTestFixture);
 
 // Static helper functions for use in tests
 namespace TestHelpers {
-    void injectKeyEvent(SDL_Scancode scancode, bool isDown, bool repeat = false) {
-        SDL_Event event;
-        SDL_zero(event);
-        event.type = isDown ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
-        event.key.scancode = scancode;
-        event.key.mod = SDL_KMOD_NONE;
-        event.key.repeat = repeat;
-        SDL_PushEvent(&event);
-    }
+void injectKeyEvent(SDL_Scancode scancode, bool isDown, bool repeat = false) {
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = isDown ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+    event.key.scancode = scancode;
+    event.key.mod = SDL_KMOD_NONE;
+    event.key.repeat = repeat;
+    SDL_PushEvent(&event);
+}
 
-    void injectMouseButtonEvent(int button, bool isDown, float x, float y) {
-        SDL_Event event;
-        SDL_zero(event);
-        event.type = isDown ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
-        event.button.button = button;
-        event.button.x = x;
-        event.button.y = y;
-        event.button.clicks = 1;
-        SDL_PushEvent(&event);
-    }
+void injectMouseButtonEvent(int button, bool isDown, float x, float y) {
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = isDown ? SDL_EVENT_MOUSE_BUTTON_DOWN : SDL_EVENT_MOUSE_BUTTON_UP;
+    event.button.button = button;
+    event.button.x = x;
+    event.button.y = y;
+    event.button.clicks = 1;
+    SDL_PushEvent(&event);
+}
 
-    void injectMouseMotionEvent(float x, float y) {
-        SDL_Event event;
-        SDL_zero(event);
-        event.type = SDL_EVENT_MOUSE_MOTION;
-        event.motion.x = x;
-        event.motion.y = y;
-        event.motion.xrel = 0.0f;
-        event.motion.yrel = 0.0f;
-        SDL_PushEvent(&event);
-    }
+void injectMouseMotionEvent(float x, float y) {
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = SDL_EVENT_MOUSE_MOTION;
+    event.motion.x = x;
+    event.motion.y = y;
+    event.motion.xrel = 0.0f;
+    event.motion.yrel = 0.0f;
+    SDL_PushEvent(&event);
+}
 
-    void injectGamepadDeviceEvent(Uint32 eventType, SDL_JoystickID instanceId) {
-        SDL_Event event;
-        SDL_zero(event);
-        event.type = eventType;
-        event.gdevice.which = instanceId;
-        SDL_PushEvent(&event);
-    }
+void injectGamepadDeviceEvent(Uint32 eventType, SDL_JoystickID instanceId) {
+    SDL_Event event;
+    SDL_zero(event);
+    event.type = eventType;
+    event.gdevice.which = instanceId;
+    SDL_PushEvent(&event);
+}
 
-    SDL_JoystickID attachVirtualGamepad() {
-        SDL_VirtualJoystickDesc desc;
-        SDL_INIT_INTERFACE(&desc);
-        desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
-        desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
-        desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
-        desc.axis_mask =
-            (1u << SDL_GAMEPAD_AXIS_LEFTX) |
-            (1u << SDL_GAMEPAD_AXIS_LEFTY) |
-            (1u << SDL_GAMEPAD_AXIS_RIGHTX) |
-            (1u << SDL_GAMEPAD_AXIS_RIGHTY) |
-            (1u << SDL_GAMEPAD_AXIS_LEFT_TRIGGER) |
-            (1u << SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
-        desc.button_mask = 0xFFFFFFFFu;
-        desc.name = "Test Virtual Gamepad";
-        return SDL_AttachVirtualJoystick(&desc);
-    }
+SDL_JoystickID attachVirtualGamepad() {
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    desc.axis_mask =
+        (1u << SDL_GAMEPAD_AXIS_LEFTX) |
+        (1u << SDL_GAMEPAD_AXIS_LEFTY) |
+        (1u << SDL_GAMEPAD_AXIS_RIGHTX) |
+        (1u << SDL_GAMEPAD_AXIS_RIGHTY) |
+        (1u << SDL_GAMEPAD_AXIS_LEFT_TRIGGER) |
+        (1u << SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+    desc.button_mask = 0xFFFFFFFFu;
+    desc.name = "Test Virtual Gamepad";
+    return SDL_AttachVirtualJoystick(&desc);
+}
 
-    void clearEventQueue() {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
+void clearEventQueue() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
             // Discard all events
-        }
     }
+}
 
     // Process pending SDL events and route to InputManager handlers
     // This simulates what GameEngine::handleEvents() does after the refactoring
-    void processEvents() {
-        InputManager& inputMgr = InputManager::Instance();
-        inputMgr.clearFrameInput();
+void processEvents() {
+    InputManager& inputMgr = InputManager::Instance();
+    inputMgr.clearFrameInput();
 
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_EVENT_KEY_DOWN:
-                    inputMgr.onKeyDown(event);
-                    break;
-                case SDL_EVENT_KEY_UP:
-                    inputMgr.onKeyUp(event);
-                    break;
-                case SDL_EVENT_MOUSE_MOTION:
-                    inputMgr.onMouseMove(event);
-                    break;
-                case SDL_EVENT_MOUSE_BUTTON_DOWN:
-                    inputMgr.onMouseButtonDown(event);
-                    break;
-                case SDL_EVENT_MOUSE_BUTTON_UP:
-                    inputMgr.onMouseButtonUp(event);
-                    break;
-                case SDL_EVENT_GAMEPAD_AXIS_MOTION:
-                    inputMgr.onGamepadAxisMove(event);
-                    break;
-                case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-                    inputMgr.onGamepadButtonDown(event);
-                    break;
-                case SDL_EVENT_GAMEPAD_BUTTON_UP:
-                    inputMgr.onGamepadButtonUp(event);
-                    break;
-                case SDL_EVENT_GAMEPAD_ADDED:
-                    inputMgr.onGamepadAdded(event);
-                    break;
-                case SDL_EVENT_GAMEPAD_REMOVED:
-                    inputMgr.onGamepadRemoved(event);
-                    break;
-                case SDL_EVENT_GAMEPAD_REMAPPED:
-                    inputMgr.onGamepadRemapped(event);
-                    break;
-                default:
-                    break;
-            }
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_EVENT_KEY_DOWN:
+                inputMgr.onKeyDown(event);
+                break;
+            case SDL_EVENT_KEY_UP:
+                inputMgr.onKeyUp(event);
+                break;
+            case SDL_EVENT_MOUSE_MOTION:
+                inputMgr.onMouseMove(event);
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                inputMgr.onMouseButtonDown(event);
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                inputMgr.onMouseButtonUp(event);
+                break;
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION:
+                inputMgr.onGamepadAxisMove(event);
+                break;
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
+                inputMgr.onGamepadButtonDown(event);
+                break;
+            case SDL_EVENT_GAMEPAD_BUTTON_UP:
+                inputMgr.onGamepadButtonUp(event);
+                break;
+            case SDL_EVENT_GAMEPAD_ADDED:
+                inputMgr.onGamepadAdded(event);
+                break;
+            case SDL_EVENT_GAMEPAD_REMOVED:
+                inputMgr.onGamepadRemoved(event);
+                break;
+            case SDL_EVENT_GAMEPAD_REMAPPED:
+                inputMgr.onGamepadRemapped(event);
+                break;
+            default:
+                break;
         }
     }
+}
 }
 
 // ============================================================================

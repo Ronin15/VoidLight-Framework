@@ -32,8 +32,7 @@ enum class WeatherType;
 /**
  * @brief Weather probability configuration for a season
  */
-struct WeatherProbabilities
-{
+struct WeatherProbabilities {
     float clear{0.40f};
     float cloudy{0.25f};
     float rainy{0.15f};
@@ -46,8 +45,7 @@ struct WeatherProbabilities
 /**
  * @brief Environmental configuration for a specific season
  */
-struct SeasonConfig
-{
+struct SeasonConfig {
     float sunriseHour{6.0f};
     float sunsetHour{18.0f};
     float minTemperature{50.0f};
@@ -65,8 +63,7 @@ struct SeasonConfig
 /**
  * @brief Definition of a calendar month
  */
-struct CalendarMonth
-{
+struct CalendarMonth {
     std::string name;
     int dayCount{30};
     Season season{Season::Spring};
@@ -75,8 +72,7 @@ struct CalendarMonth
 /**
  * @brief Calendar configuration with months
  */
-struct CalendarConfig
-{
+struct CalendarConfig {
     std::vector<CalendarMonth> months;
 
     /**

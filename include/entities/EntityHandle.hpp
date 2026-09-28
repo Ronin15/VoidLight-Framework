@@ -77,8 +77,8 @@ constexpr bool hasHealth(EntityKind kind) noexcept {
 /// Returns true if this entity kind can have an inventory
 constexpr bool hasInventory(EntityKind kind) noexcept {
     return kind == EntityKind::Player ||
-           kind == EntityKind::NPC ||
-           kind == EntityKind::Container;
+        kind == EntityKind::NPC ||
+        kind == EntityKind::Container;
 }
 
 /// Returns true if this entity kind participates in physics/collision
@@ -96,8 +96,8 @@ constexpr bool hasAI(EntityKind kind) noexcept {
 /// Static pool entities: Resources that don't move and use immediate (not deferred) destruction
 constexpr bool usesStaticPool(EntityKind kind) noexcept {
     return kind == EntityKind::DroppedItem ||
-           kind == EntityKind::Container ||
-           kind == EntityKind::Harvestable;
+        kind == EntityKind::Container ||
+        kind == EntityKind::Harvestable;
 }
 
 /// Returns true if this entity kind should be rendered
@@ -108,27 +108,27 @@ constexpr bool isRenderable(EntityKind kind) noexcept {
 /// Returns string name for EntityKind (for debugging)
 constexpr const char* kindToString(EntityKind kind) noexcept {
     switch (kind) {
-        case EntityKind::Player:      return "Player";
-        case EntityKind::NPC:         return "NPC";
+        case EntityKind::Player: return "Player";
+        case EntityKind::NPC: return "NPC";
         case EntityKind::DroppedItem: return "DroppedItem";
-        case EntityKind::Container:   return "Container";
+        case EntityKind::Container: return "Container";
         case EntityKind::Harvestable: return "Harvestable";
-        case EntityKind::Projectile:  return "Projectile";
-        case EntityKind::AreaEffect:  return "AreaEffect";
-        case EntityKind::Prop:           return "Prop";
-        case EntityKind::Trigger:        return "Trigger";
+        case EntityKind::Projectile: return "Projectile";
+        case EntityKind::AreaEffect: return "AreaEffect";
+        case EntityKind::Prop: return "Prop";
+        case EntityKind::Trigger: return "Trigger";
         case EntityKind::StaticObstacle: return "StaticObstacle";
-        default:                         return "Unknown";
+        default: return "Unknown";
     }
 }
 
 /// Returns string name for SimulationTier (for debugging)
 constexpr const char* tierToString(SimulationTier tier) noexcept {
     switch (tier) {
-        case SimulationTier::Active:     return "Active";
+        case SimulationTier::Active: return "Active";
         case SimulationTier::Background: return "Background";
         case SimulationTier::Hibernated: return "Hibernated";
-        default:                         return "Unknown";
+        default: return "Unknown";
     }
 }
 
@@ -172,12 +172,11 @@ struct EntityHandle {
 
     // Construct with all components
     constexpr EntityHandle(IDType entityId, EntityKind entityKind,
-                          Generation entityGeneration) noexcept
+        Generation entityGeneration) noexcept
         : id(entityId)
         , kind(entityKind)
         , padding{}
-        , generation(entityGeneration)
-    {
+        , generation(entityGeneration) {
     }
 
     // Validity check
@@ -253,7 +252,7 @@ struct EntityHandle {
             return "EntityHandle::INVALID";
         }
         return std::format("EntityHandle({}:{}:{})",
-                          id, EntityTraits::kindToString(kind), generation);
+            id, EntityTraits::kindToString(kind), generation);
     }
 };
 

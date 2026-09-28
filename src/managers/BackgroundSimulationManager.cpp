@@ -95,7 +95,7 @@ void BackgroundSimulationManager::update(const Vector2D& referencePoint, float d
     // === PHASE 1: Periodic tier recalculation (every 60 frames) ===
     m_framesSinceTierUpdate++;
     bool needsTierUpdate = m_tiersDirty.load(std::memory_order_acquire) ||
-                           m_framesSinceTierUpdate >= TIER_UPDATE_INTERVAL;
+        m_framesSinceTierUpdate >= TIER_UPDATE_INTERVAL;
 
     if (needsTierUpdate) {
         setReferencePoint(referencePoint);
@@ -139,7 +139,7 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
     // Copy to local buffer (span may be invalidated during processing)
     m_backgroundIndices.clear();
     m_backgroundIndices.insert(m_backgroundIndices.end(),
-                               backgroundSpan.begin(), backgroundSpan.end());
+        backgroundSpan.begin(), backgroundSpan.end());
 
     // Use background indices directly - processBatch already filters by kind/alive.
     // WorkerBudget learns from the full background count (close enough for threading decisions).
@@ -191,8 +191,8 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
 
     // Report ONLY batch time for adaptive tuning (not index retrieval/threading decision)
     budgetMgr.reportExecution(VoidLight::SystemType::BackgroundSim,
-                              entityCount, useThreading,
-                              actualBatchCount, batchMs);
+        entityCount, useThreading,
+        actualBatchCount, batchMs);
 
     VOIDLIGHT_DEBUG_ONLY(
         // Rolling log every 60 seconds (600 updates at 10Hz)
@@ -201,8 +201,7 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
                 "Entities: {}, Avg: {:.2f}ms [{}]",
                 entityCount, m_perf.avgUpdateMs,
                 useThreading ? std::format("{} batches", actualBatchCount) : "single"));
-        }
-    )
+        })
 }
 
 void BackgroundSimulationManager::waitForAsyncCompletion() {
@@ -257,14 +256,14 @@ void BackgroundSimulationManager::updateTiers() {
 // ============================================================================
 
 void BackgroundSimulationManager::processSingleThreaded(float deltaTime,
-                                                        const std::vector<size_t>& indices) {
+    const std::vector<size_t>& indices) {
     processBatch(deltaTime, indices, 0, indices.size());
 }
 
 void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
-                                                       const std::vector<size_t>& indices,
-                                                       size_t batchCount,
-                                                       size_t batchSize) {
+    const std::vector<size_t>& indices,
+    size_t batchCount,
+    size_t batchSize) {
     auto& threadSystem = VoidLight::ThreadSystem::Instance();
 
     // Clear previous futures (reuse capacity)
@@ -301,8 +300,7 @@ void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
                 }
             },
             VoidLight::TaskPriority::Low,  // Background sim is low priority
-            "BGSim_Batch"
-        );
+            "BGSim_Batch");
 
         {
             std::lock_guard<std::mutex> lock(m_futuresMutex);
@@ -315,9 +313,9 @@ void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
 }
 
 void BackgroundSimulationManager::processBatch(float deltaTime,
-                                               const std::vector<size_t>& indices,
-                                               size_t startIdx,
-                                               size_t endIdx) {
+    const std::vector<size_t>& indices,
+    size_t startIdx,
+    size_t endIdx) {
     auto& edm = EntityDataManager::Instance();
 
     for (size_t i = startIdx; i < endIdx; ++i) {
@@ -364,7 +362,7 @@ void BackgroundSimulationManager::simulateNPC(float deltaTime, size_t index) {
     constexpr float MIN_VELOCITY_SQ = 0.1f;  // Stop if velocity is negligible
 
     float velMagSq = transform.velocity.getX() * transform.velocity.getX() +
-                     transform.velocity.getY() * transform.velocity.getY();
+        transform.velocity.getY() * transform.velocity.getY();
 
     if (velMagSq > MIN_VELOCITY_SQ) {
         // Apply velocity to position

@@ -157,8 +157,7 @@ BOOST_GLOBAL_FIXTURE(ProjectileScalingModuleCleanup);
 
 BOOST_FIXTURE_TEST_SUITE(ProjectileScalingTests, ProjectileScalingFixture)
 
-BOOST_AUTO_TEST_CASE(PrintHeader)
-{
+BOOST_AUTO_TEST_CASE(PrintHeader) {
     const auto& budget = VoidLight::WorkerBudgetManager::Instance().getBudget();
 
     std::cout << "\n=== Projectile Scaling Benchmark ===\n";
@@ -172,8 +171,7 @@ BOOST_AUTO_TEST_CASE(PrintHeader)
 // ---------------------------------------------------------------------------
 // Projectile Entity Scaling (Primary benchmark)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(ProjectileScaling)
-{
+BOOST_AUTO_TEST_CASE(ProjectileScaling) {
     std::cout << "--- Projectile Entity Scaling ---\n";
     std::cout << std::setw(12) << "Projectiles"
               << std::setw(12) << "Time (ms)"
@@ -197,7 +195,8 @@ BOOST_AUTO_TEST_CASE(ProjectileScaling)
 
         // Verify projectile count
         size_t activeCount = EntityDataManager::Instance()
-            .getIndicesByKind(EntityKind::Projectile).size();
+                                 .getIndicesByKind(EntityKind::Projectile)
+                                 .size();
 
         int iterations = std::max(50, 300000 / static_cast<int>(count));
         double medianMs = runBenchmark(iterations);
@@ -239,8 +238,7 @@ BOOST_AUTO_TEST_CASE(ProjectileScaling)
 // ---------------------------------------------------------------------------
 // Threading Mode Comparison
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(ThreadingModeComparison)
-{
+BOOST_AUTO_TEST_CASE(ThreadingModeComparison) {
     std::cout << "--- Threading Mode Comparison ---\n";
     std::cout << "(Small counts likely single-threaded, large counts multi-threaded)\n";
     std::cout << std::setw(12) << "Projectiles"
@@ -280,8 +278,7 @@ BOOST_AUTO_TEST_CASE(ThreadingModeComparison)
 // ---------------------------------------------------------------------------
 // SIMD Throughput Analysis
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(SIMDThroughput)
-{
+BOOST_AUTO_TEST_CASE(SIMDThroughput) {
     std::cout << "--- SIMD 4-Wide Throughput ---\n";
     std::cout << "Measuring position integration throughput (SIMD 4-wide batching)\n";
     std::cout << std::setw(12) << "Projectiles"

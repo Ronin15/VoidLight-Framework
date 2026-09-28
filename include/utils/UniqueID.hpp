@@ -17,30 +17,30 @@ namespace VoidLight {
      * application's lifetime. It uses a static atomic counter to ensure
      * uniqueness even in multi-threaded environments.
      */
-    class UniqueID {
-    public:
-        using IDType = uint64_t;
+class UniqueID {
+public:
+    using IDType = uint64_t;
 
         /**
          * @brief Generates a new unique ID.
          * @return A new, unique 64-bit integer.
          */
-        static IDType generate() {
+    static IDType generate() {
             // Atomically increment the counter and return the new value.
             // The first ID generated will be 1.
-            return m_nextID++;
-        }
+        return m_nextID++;
+    }
 
         /**
          * @brief A constant representing an invalid or uninitialized ID.
          */
-        static constexpr IDType INVALID_ID = 0;
+    static constexpr IDType INVALID_ID = 0;
 
-    private:
+private:
         // Static atomic counter to ensure thread-safe ID generation.
         // Starts at 1, so that INVALID_ID (0) is never generated.
-        static inline std::atomic<IDType> m_nextID{1};
-    };
+    static inline std::atomic<IDType> m_nextID{1};
+};
 
 } // namespace VoidLight
 

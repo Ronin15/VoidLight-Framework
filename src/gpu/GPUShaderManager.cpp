@@ -99,8 +99,8 @@ void GPUShaderManager::shutdown() {
 }
 
 SDL_GPUShader* GPUShaderManager::loadShader(const std::string& basePath,
-                                             SDL_GPUShaderStage stage,
-                                             const ShaderInfo& info) {
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info) {
     if (!m_device) {
         GAMEENGINE_ERROR("GPUShaderManager::loadShader: not initialized");
         return nullptr;
@@ -116,18 +116,18 @@ SDL_GPUShader* GPUShaderManager::loadShader(const std::string& basePath,
     SDL_GPUShader* shader = nullptr;
 
     switch (m_shaderBinaryKind) {
-    case GPUPlatformConfig::ShaderBinaryKind::SPIRV:
-        shader = loadSPIRV(resolvedPath, stage, info);
-        break;
-    case GPUPlatformConfig::ShaderBinaryKind::MSL: {
-        const std::string entryPoint =
-            (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? "vertexMain" : "fragmentMain";
-        shader = loadMSL(resolvedPath, stage, info, entryPoint);
-        break;
-    }
-    case GPUPlatformConfig::ShaderBinaryKind::DXIL:
-        shader = loadDXIL(resolvedPath, stage, info);
-        break;
+        case GPUPlatformConfig::ShaderBinaryKind::SPIRV:
+            shader = loadSPIRV(resolvedPath, stage, info);
+            break;
+        case GPUPlatformConfig::ShaderBinaryKind::MSL: {
+            const std::string entryPoint =
+                (stage == SDL_GPU_SHADERSTAGE_VERTEX) ? "vertexMain" : "fragmentMain";
+            shader = loadMSL(resolvedPath, stage, info, entryPoint);
+            break;
+        }
+        case GPUPlatformConfig::ShaderBinaryKind::DXIL:
+            shader = loadDXIL(resolvedPath, stage, info);
+            break;
     }
 
     if (shader) {
@@ -139,22 +139,21 @@ SDL_GPUShader* GPUShaderManager::loadShader(const std::string& basePath,
 }
 
 SDL_GPUShader* GPUShaderManager::getShader(const std::string& name,
-                                           SDL_GPUShaderStage stage,
-                                           const ShaderInfo& info) const {
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info) const {
     auto it = m_shaders.find(makeCacheKey(name, stage, info));
     return (it != m_shaders.end()) ? it->second : nullptr;
 }
 
 bool GPUShaderManager::hasShader(const std::string& name,
-                                 SDL_GPUShaderStage stage,
-                                 const ShaderInfo& info) const {
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info) const {
     return m_shaders.find(makeCacheKey(name, stage, info)) != m_shaders.end();
 }
 
 SDL_GPUShader* GPUShaderManager::loadSPIRV(const std::string& path,
-                                           SDL_GPUShaderStage stage,
-                                           const ShaderInfo& info)
-{
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info) {
     std::vector<uint8_t> buffer;
     if (!readShaderFile(path, buffer)) {
         return nullptr;
@@ -181,10 +180,9 @@ SDL_GPUShader* GPUShaderManager::loadSPIRV(const std::string& path,
 }
 
 SDL_GPUShader* GPUShaderManager::loadMSL(const std::string& path,
-                                          SDL_GPUShaderStage stage,
-                                          const ShaderInfo& info,
-                                          const std::string& entryPoint)
-{
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info,
+    const std::string& entryPoint) {
     std::vector<uint8_t> buffer;
     if (!readShaderFile(path, buffer)) {
         return nullptr;
@@ -203,8 +201,7 @@ SDL_GPUShader* GPUShaderManager::loadMSL(const std::string& path,
 
     SDL_GPUShader* shader = SDL_CreateGPUShader(m_device, &createInfo);
 
-    if (!shader)
-    {
+    if (!shader) {
         GAMEENGINE_ERROR(std::format("Failed to create MSL shader {}: {}", path, SDL_GetError()));
     }
 
@@ -212,9 +209,8 @@ SDL_GPUShader* GPUShaderManager::loadMSL(const std::string& path,
 }
 
 SDL_GPUShader* GPUShaderManager::loadDXIL(const std::string& path,
-                                          SDL_GPUShaderStage stage,
-                                          const ShaderInfo& info)
-{
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info) {
     std::vector<uint8_t> buffer;
     if (!readShaderFile(path, buffer)) {
         return nullptr;
@@ -241,22 +237,22 @@ SDL_GPUShader* GPUShaderManager::loadDXIL(const std::string& path,
 }
 
 std::string GPUShaderManager::resolveShaderPath(const std::string& basePath,
-                                                SDL_GPUShaderStage) const {
+    SDL_GPUShaderStage) const {
     switch (m_shaderBinaryKind) {
-    case GPUPlatformConfig::ShaderBinaryKind::SPIRV:
-        return ResourcePath::resolve(basePath + ".spv");
-    case GPUPlatformConfig::ShaderBinaryKind::MSL:
-        return ResourcePath::resolve(basePath + ".metal");
-    case GPUPlatformConfig::ShaderBinaryKind::DXIL:
-        return ResourcePath::resolve(basePath + ".dxil");
+        case GPUPlatformConfig::ShaderBinaryKind::SPIRV:
+            return ResourcePath::resolve(basePath + ".spv");
+        case GPUPlatformConfig::ShaderBinaryKind::MSL:
+            return ResourcePath::resolve(basePath + ".metal");
+        case GPUPlatformConfig::ShaderBinaryKind::DXIL:
+            return ResourcePath::resolve(basePath + ".dxil");
     }
 
     return ResourcePath::resolve(basePath);
 }
 
 ShaderCacheKey GPUShaderManager::makeCacheKey(const std::string& basePath,
-                                              SDL_GPUShaderStage stage,
-                                              const ShaderInfo& info) const {
+    SDL_GPUShaderStage stage,
+    const ShaderInfo& info) const {
     return ShaderCacheKey{resolveShaderPath(basePath, stage), stage, info};
 }
 

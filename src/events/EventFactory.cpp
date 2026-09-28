@@ -50,20 +50,20 @@ void EventFactory::registerBuiltInEventCreators() {
 
     registerCustomEventCreator("MerchantSpawn", [this](const EventDefinition& def) {
         std::string merchantClass = def.params.count("merchantClass")
-                                        ? def.params.at("merchantClass")
-                                        : "GeneralMerchant";
+            ? def.params.at("merchantClass")
+            : "GeneralMerchant";
         std::string merchantRace = def.params.count("merchantRace")
-                                       ? def.params.at("merchantRace")
-                                       : "Human";
+            ? def.params.at("merchantRace")
+            : "Human";
         int count = static_cast<int>(def.numParams.count("count")
-                                         ? def.numParams.at("count")
-                                         : 1.0f);
+                ? def.numParams.at("count")
+                : 1.0f);
         float spawnRadius = def.numParams.count("spawnRadius")
-                                ? def.numParams.at("spawnRadius")
-                                : 0.0f;
+            ? def.numParams.at("spawnRadius")
+            : 0.0f;
 
         return createMerchantSpawnEvent(def.name, merchantClass, merchantRace,
-                                        count, spawnRadius);
+            count, spawnRadius);
     });
 
     // Particle effect creator
@@ -183,7 +183,7 @@ EventPtr EventFactory::createEvent(const EventDefinition& def) {
 }
 
 EventPtr EventFactory::createWeatherEvent(const std::string& name, const std::string& weatherType,
-                                         float intensity, float transitionTime) {
+    float intensity, float transitionTime) {
     // Create the weather event
     auto event = std::make_shared<WeatherEvent>(name, weatherType);
 
@@ -215,7 +215,7 @@ EventPtr EventFactory::createWeatherEvent(const std::string& name, const std::st
 }
 
 EventPtr EventFactory::createSceneChangeEvent(const std::string& name, const std::string& targetScene,
-                                            const std::string& transitionType, float duration) {
+    const std::string& transitionType, float duration) {
     // Create the scene change event
     auto event = std::make_shared<SceneChangeEvent>(name, targetScene);
 
@@ -259,7 +259,7 @@ EventPtr EventFactory::createSceneChangeEvent(const std::string& name, const std
 }
 
 EventPtr EventFactory::createNPCSpawnEvent(const std::string& name, const std::string& npcType,
-                                         int count, float spawnRadius) {
+    int count, float spawnRadius) {
     // Create spawn parameters
     SpawnParameters params;
     params.npcType = npcType;
@@ -282,10 +282,10 @@ EventPtr EventFactory::createNPCSpawnEvent(const std::string& name, const std::s
 }
 
 EventPtr EventFactory::createMerchantSpawnEvent(const std::string& name,
-                                                const std::string& merchantClass,
-                                                const std::string& merchantRace,
-                                                int count,
-                                                float spawnRadius) {
+    const std::string& merchantClass,
+    const std::string& merchantRace,
+    int count,
+    float spawnRadius) {
     MerchantSpawnParameters params;
     params.merchantClass = merchantClass.empty() ? "GeneralMerchant" : merchantClass;
     params.merchantRace = merchantRace.empty() ? "Human" : merchantRace;
@@ -298,19 +298,19 @@ EventPtr EventFactory::createMerchantSpawnEvent(const std::string& name,
 }
 
 EventPtr EventFactory::createParticleEffectEvent(const std::string& name,
-                                       const std::string& effectName,
-                                       float x, float y,
-                                       float intensity,
-                                       float duration,
-                                       const std::string& groupTag,
-                                       const std::string& soundEffect) {
+    const std::string& effectName,
+    float x, float y,
+    float intensity,
+    float duration,
+    const std::string& groupTag,
+    const std::string& soundEffect) {
     ParticleEffectType effectType = ParticleEffectEvent::stringToEffectType(effectName);
     auto event = std::make_shared<ParticleEffectEvent>(name, effectType, x, y, intensity, duration, groupTag, soundEffect);
     return std::static_pointer_cast<Event>(event);
 }
 
 EventPtr EventFactory::createWorldLoadedEvent(const std::string&, const std::string& worldId,
-                                    int width, int height) {
+    int width, int height) {
     auto event = std::make_shared<WorldLoadedEvent>(worldId, width, height);
     return std::static_pointer_cast<Event>(event);
 }
@@ -326,13 +326,13 @@ EventPtr EventFactory::createTileChangedEvent(const std::string&, int x, int y, 
 }
 
 EventPtr EventFactory::createWorldGeneratedEvent(const std::string&, const std::string& worldId,
-                                       int width, int height, float generationTime) {
+    int width, int height, float generationTime) {
     auto event = std::make_shared<WorldGeneratedEvent>(worldId, width, height, generationTime);
     return std::static_pointer_cast<Event>(event);
 }
 
 EventPtr EventFactory::createCameraMovedEvent(const std::string&,
-                                    float newX, float newY, float oldX, float oldY) {
+    float newX, float newY, float oldX, float oldY) {
     auto event = std::make_shared<CameraMovedEvent>(Vector2D(newX, newY), Vector2D(oldX, oldY));
     return std::static_pointer_cast<Event>(event);
 }
@@ -350,11 +350,11 @@ EventPtr EventFactory::createCameraShakeEvent(const std::string&, float duration
 }
 
 EventPtr EventFactory::createResourceChangeEvent(const std::string&,
-                                       uint32_t resourceId,
-                                       uint16_t resourceGen,
-                                       int oldQuantity,
-                                       int newQuantity,
-                                       const std::string& reason) {
+    uint32_t resourceId,
+    uint16_t resourceGen,
+    int oldQuantity,
+    int newQuantity,
+    const std::string& reason) {
     VoidLight::ResourceHandle handle(resourceId, resourceGen);
     // Owner is unknown at factory-level, use invalid handle
     auto event = std::make_shared<ResourceChangeEvent>(EntityHandle{}, handle, oldQuantity, newQuantity, reason);
@@ -362,13 +362,13 @@ EventPtr EventFactory::createResourceChangeEvent(const std::string&,
 }
 
 void EventFactory::registerCustomEventCreator(const std::string& eventType,
-                                           std::function<EventPtr(const EventDefinition&)> creatorFunc) {
+    std::function<EventPtr(const EventDefinition&)> creatorFunc) {
     m_eventCreators[eventType] = std::move(creatorFunc);
 }
 
 std::vector<EventPtr> EventFactory::createEventSequence(const std::string& name,
-                                                     const std::vector<EventDefinition>& events,
-                                                     bool) {
+    const std::vector<EventDefinition>& events,
+    bool) {
     std::vector<EventPtr> createdEvents;
     createdEvents.reserve(events.size());
 
@@ -397,7 +397,7 @@ TransitionType EventFactory::getTransitionTypeFromString(const std::string& tran
     // Convert string to lowercase for case-insensitive comparison
     std::string type = transitionType;
     std::transform(type.begin(), type.end(), type.begin(),
-                  [](unsigned char c) { return std::tolower(c); });
+        [](unsigned char c) { return std::tolower(c); });
 
     if (type == "fade") return TransitionType::Fade;
     if (type == "dissolve") return TransitionType::Dissolve;

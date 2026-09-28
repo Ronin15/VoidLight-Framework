@@ -30,8 +30,7 @@
 class Player;
 class Entity;
 
-class CombatController : public ControllerBase, public IUpdatable
-{
+class CombatController : public ControllerBase, public IUpdatable {
 public:
     /**
      * @brief Construct CombatController with required player reference

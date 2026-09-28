@@ -21,8 +21,8 @@ GPUSceneRecorder::GPUSceneRecorder(GPUSceneRecorder&&) noexcept = default;
 GPUSceneRecorder& GPUSceneRecorder::operator=(GPUSceneRecorder&&) noexcept = default;
 
 GPUSceneContext GPUSceneRecorder::beginRecording(GPURenderer& gpuRenderer,
-                                                 Camera& camera,
-                                                 float interpolationAlpha) {
+    Camera& camera,
+    float interpolationAlpha) {
     PROFILE_RENDER_GPU(RenderPhase::BeginScene);
 
     GPUSceneContext ctx;
@@ -75,10 +75,10 @@ GPUSceneContext GPUSceneRecorder::beginRecording(GPURenderer& gpuRenderer,
 
     // Begin sprite batch with atlas texture
     spriteBatch.begin(writePtr, vertexPool.getMaxVertices(),
-                      atlasTexture->texture->get(), gpuRenderer.getNearestSampler(),
-                      static_cast<float>(atlasTexture->width),
-                      static_cast<float>(atlasTexture->height),
-                      static_cast<float>(gpuRenderer.getSceneTexture()->getHeight()));
+        atlasTexture->texture->get(), gpuRenderer.getNearestSampler(),
+        static_cast<float>(atlasTexture->width),
+        static_cast<float>(atlasTexture->height),
+        static_cast<float>(gpuRenderer.getSceneTexture()->getHeight()));
 
     // Store state for later phases
     m_recordingActive = true;
@@ -132,7 +132,7 @@ void GPUSceneRecorder::endRecording() {
 }
 
 void GPUSceneRecorder::renderRecordedScene(GPURenderer& gpuRenderer,
-                                           SDL_GPURenderPass* scenePass) {
+    SDL_GPURenderPass* scenePass) {
     PROFILE_RENDER_GPU(RenderPhase::WorldTiles);
 
     auto& spriteBatch = gpuRenderer.getSpriteBatch();
@@ -161,7 +161,7 @@ void GPUSceneRecorder::renderRecordedScene(GPURenderer& gpuRenderer,
 
     // Issue draw call using the pre-recorded sprites
     spriteBatch.render(scenePass, gpuRenderer.getSpriteAlphaPipeline(),
-                       vertexPool.getGPUBuffer());
+        vertexPool.getGPUBuffer());
 }
 
 } // namespace VoidLight

@@ -30,4 +30,3 @@ struct AABB {
 } // namespace VoidLight
 
 #endif // AABB_HPP
-

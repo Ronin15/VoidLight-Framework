@@ -74,9 +74,9 @@ public:
      * @param targetHeight Height of the render target in pixels
      */
     void begin(SpriteVertex* writePtr, size_t maxVertices,
-               SDL_GPUTexture* texture, SDL_GPUSampler* sampler,
-               float textureWidth, float textureHeight,
-               float targetHeight);
+        SDL_GPUTexture* texture, SDL_GPUSampler* sampler,
+        float textureWidth, float textureHeight,
+        float targetHeight);
 
     /**
      * Draw a sprite from atlas coordinates.
@@ -94,24 +94,24 @@ public:
      * @param a Alpha (0-255)
      */
     void draw(float srcX, float srcY, float srcW, float srcH,
-              float dstX, float dstY, float dstW, float dstH,
-              uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
+        float dstX, float dstY, float dstW, float dstH,
+        uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 
     /**
      * Draw a sprite using normalized texture coordinates.
      */
     void drawUV(float u0, float v0, float u1, float v1,
-                float dstX, float dstY, float dstW, float dstH,
-                uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
+        float dstX, float dstY, float dstW, float dstH,
+        uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 
     /**
      * Draw a sprite using normalized texture coordinates, rotated around its center.
      * @param angleRad Rotation angle in radians (0 = right-facing, positive = clockwise in Y-down engine space)
      */
     void drawUVRotated(float u0, float v0, float u1, float v1,
-                       float dstX, float dstY, float dstW, float dstH,
-                       float angleRad,
-                       uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
+        float dstX, float dstY, float dstW, float dstH,
+        float angleRad,
+        uint8_t r = 255, uint8_t g = 255, uint8_t b = 255, uint8_t a = 255);
 
     /**
      * End recording and return vertex count.
@@ -137,8 +137,8 @@ public:
      * @param vertexBuffer GPU vertex buffer (from vertex pool)
      */
     void render(SDL_GPURenderPass* pass,
-                SDL_GPUGraphicsPipeline* pipeline,
-                SDL_GPUBuffer* vertexBuffer);
+        SDL_GPUGraphicsPipeline* pipeline,
+        SDL_GPUBuffer* vertexBuffer);
 
     /**
      * Get current sprite count.
@@ -172,13 +172,13 @@ public:
 
 private:
     void addQuad(float x0, float y0, float x1, float y1,
-                 float u0, float v0, float u1, float v1,
-                 uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+        float u0, float v0, float u1, float v1,
+        uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
     void addQuadRotated(float cx, float cy, float halfW, float halfH,
-                        float cosA, float sinA,
-                        float u0, float v0, float u1, float v1,
-                        uint8_t r, uint8_t g, uint8_t b, uint8_t a);
+        float cosA, float sinA,
+        float u0, float v0, float u1, float v1,
+        uint8_t r, uint8_t g, uint8_t b, uint8_t a);
 
     SDL_GPUDevice* m_device{nullptr};
     SDL_GPUTexture* m_texture{nullptr};

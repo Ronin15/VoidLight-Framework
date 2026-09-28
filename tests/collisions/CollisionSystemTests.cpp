@@ -30,32 +30,29 @@ using namespace VoidLight;
 
 BOOST_AUTO_TEST_SUITE(AABBTests)
 
-BOOST_AUTO_TEST_CASE(TestAABBBasicProperties)
-{
+BOOST_AUTO_TEST_CASE(TestAABBBasicProperties) {
     AABB aabb(10.0f, 20.0f, 5.0f, 7.5f);
-    
+
     BOOST_CHECK_CLOSE(aabb.left(), 5.0f, 0.01f);
     BOOST_CHECK_CLOSE(aabb.right(), 15.0f, 0.01f);
     BOOST_CHECK_CLOSE(aabb.top(), 12.5f, 0.01f);
     BOOST_CHECK_CLOSE(aabb.bottom(), 27.5f, 0.01f);
 }
 
-BOOST_AUTO_TEST_CASE(TestAABBIntersection)
-{
+BOOST_AUTO_TEST_CASE(TestAABBIntersection) {
     AABB aabb1(10.0f, 10.0f, 5.0f, 5.0f);  // center at (10,10), size 10x10
     AABB aabb2(15.0f, 10.0f, 3.0f, 3.0f);  // center at (15,10), size 6x6
     AABB aabb3(20.0f, 10.0f, 2.0f, 2.0f);  // center at (20,10), size 4x4
-    
+
     BOOST_CHECK(aabb1.intersects(aabb2));  // Should overlap
     BOOST_CHECK(aabb2.intersects(aabb1));  // Symmetry
     BOOST_CHECK(!aabb1.intersects(aabb3)); // Should not overlap
     BOOST_CHECK(!aabb3.intersects(aabb1)); // Symmetry
 }
 
-BOOST_AUTO_TEST_CASE(TestAABBContainsPoint)
-{
+BOOST_AUTO_TEST_CASE(TestAABBContainsPoint) {
     AABB aabb(10.0f, 10.0f, 5.0f, 5.0f);
-    
+
     BOOST_CHECK(aabb.contains(Vector2D(10.0f, 10.0f)));  // Center
     BOOST_CHECK(aabb.contains(Vector2D(5.0f, 5.0f)));    // Corner
     BOOST_CHECK(aabb.contains(Vector2D(15.0f, 15.0f)));  // Opposite corner
@@ -63,16 +60,15 @@ BOOST_AUTO_TEST_CASE(TestAABBContainsPoint)
     BOOST_CHECK(!aabb.contains(Vector2D(0.0f, 0.0f)));   // Outside
 }
 
-BOOST_AUTO_TEST_CASE(TestAABBClosestPoint)
-{
+BOOST_AUTO_TEST_CASE(TestAABBClosestPoint) {
     AABB aabb(10.0f, 10.0f, 5.0f, 5.0f);
-    
+
     // Point inside should return itself
     Vector2D inside(10.0f, 10.0f);
     Vector2D closest1 = aabb.closestPoint(inside);
     BOOST_CHECK_CLOSE(closest1.getX(), inside.getX(), 0.01f);
     BOOST_CHECK_CLOSE(closest1.getY(), inside.getY(), 0.01f);
-    
+
     // Point outside should clamp to edge
     Vector2D outside(20.0f, 20.0f);
     Vector2D closest2 = aabb.closestPoint(outside);
@@ -84,43 +80,41 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(SpatialHashTests)
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashInsertAndQuery)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashInsertAndQuery) {
     HierarchicalSpatialHash spatialHash;
-    
+
     // Insert a few entities
     AABB aabb1(16.0f, 16.0f, 8.0f, 8.0f);  // Single cell
     AABB aabb2(48.0f, 16.0f, 8.0f, 8.0f);  // Different cell
     AABB aabb3(32.0f, 32.0f, 16.0f, 16.0f); // Spans multiple cells
-    
+
     size_t id1 = 1, id2 = 2, id3 = 3;
     spatialHash.insert(id1, aabb1);
     spatialHash.insert(id2, aabb2);
     spatialHash.insert(id3, aabb3);
-    
+
     // Query first cell area
     std::vector<size_t> results;
     AABB queryArea(16.0f, 16.0f, 16.0f, 16.0f);
     spatialHash.queryRegion(queryArea, results);
-    
+
     BOOST_CHECK_GE(results.size(), 1);
     BOOST_CHECK(std::find(results.begin(), results.end(), id1) != results.end());
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashRemove)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashRemove) {
     HierarchicalSpatialHash spatialHash;
-    
+
     EntityID id1 = 1;
     AABB aabb1(16.0f, 16.0f, 8.0f, 8.0f);
-    
+
     spatialHash.insert(id1, aabb1);
-    
+
     // Verify it's there
     std::vector<size_t> results;
     spatialHash.queryRegion(aabb1, results);
     BOOST_CHECK_GE(results.size(), 1);
-    
+
     // Remove and verify it's gone
     spatialHash.remove(id1);
     results.clear();
@@ -128,10 +122,9 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashRemove)
     BOOST_CHECK(std::find(results.begin(), results.end(), id1) == results.end());
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashUpdate)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashUpdate) {
     HierarchicalSpatialHash spatialHash;
-    
+
     size_t id1 = 1;
     AABB oldAABB(100.0f, 100.0f, 8.0f, 8.0f);  // Coarse cell (0,0)
     AABB newAABB(300.0f, 300.0f, 8.0f, 8.0f);  // Coarse cell (1,1)
@@ -140,20 +133,19 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashUpdate)
 
     // Update position
     spatialHash.update(id1, oldAABB, newAABB);
-    
+
     // Should not be found in old area
     std::vector<size_t> oldResults;
     spatialHash.queryRegion(oldAABB, oldResults);
     BOOST_CHECK(std::find(oldResults.begin(), oldResults.end(), id1) == oldResults.end());
-    
+
     // Should be found in new area
     std::vector<size_t> newResults;
     spatialHash.queryRegion(newAABB, newResults);
     BOOST_CHECK(std::find(newResults.begin(), newResults.end(), id1) != newResults.end());
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashSmallAndLargeMovement)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashSmallAndLargeMovement) {
     // Testing small moves within same coarse region vs large moves to different regions
     HierarchicalSpatialHash spatialHash;
 
@@ -187,19 +179,18 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashSmallAndLargeMovement)
     BOOST_CHECK(std::find(results4.begin(), results4.end(), id) != results4.end());
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashClear)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashClear) {
     HierarchicalSpatialHash spatialHash;
-    
+
     // Add several entities
     for (EntityID id = 1; id <= 5; ++id) {
         AABB aabb(id * 16.0f, id * 16.0f, 8.0f, 8.0f);
         spatialHash.insert(id, aabb);
     }
-    
+
     // Clear all
     spatialHash.clear();
-    
+
     // Query should return nothing
     std::vector<size_t> results;
     AABB largeQuery(0.0f, 0.0f, 200.0f, 200.0f);
@@ -207,24 +198,22 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashClear)
     BOOST_CHECK_EQUAL(results.size(), 0);
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashNoDuplicates)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashNoDuplicates) {
     HierarchicalSpatialHash spatialHash; // Small cells to force multi-cell entities
-    
+
     size_t id1 = 1;
     AABB largeAABB(24.0f, 24.0f, 20.0f, 20.0f); // Spans multiple cells
     spatialHash.insert(id1, largeAABB);
-    
+
     // Query overlapping the entity should return it only once
     std::vector<size_t> results;
     spatialHash.queryRegion(largeAABB, results);
-    
+
     int count = std::count(results.begin(), results.end(), id1);
     BOOST_CHECK_EQUAL(count, 1);
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashBatchOperationsAndStats)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashBatchOperationsAndStats) {
     HierarchicalSpatialHash spatialHash;
     spatialHash.reserve(8);
     spatialHash.reserveRegions(4);
@@ -232,8 +221,7 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashBatchOperationsAndStats)
     const std::vector<std::pair<size_t, AABB>> inserts{
         {1, AABB(32.0f, 32.0f, 8.0f, 8.0f)},
         {2, AABB(96.0f, 32.0f, 8.0f, 8.0f)},
-        {3, AABB(160.0f, 32.0f, 8.0f, 8.0f)}
-    };
+        {3, AABB(160.0f, 32.0f, 8.0f, 8.0f)}};
 
     spatialHash.insertBatch(inserts);
 
@@ -242,8 +230,7 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashBatchOperationsAndStats)
 
     const std::vector<std::tuple<size_t, AABB, AABB>> updates{
         {1, AABB(32.0f, 32.0f, 8.0f, 8.0f), AABB(224.0f, 32.0f, 8.0f, 8.0f)},
-        {2, AABB(96.0f, 32.0f, 8.0f, 8.0f), AABB(96.0f, 96.0f, 8.0f, 8.0f)}
-    };
+        {2, AABB(96.0f, 32.0f, 8.0f, 8.0f), AABB(96.0f, 96.0f, 8.0f, 8.0f)}};
     spatialHash.updateBatch(updates);
 
     std::vector<size_t> movedResults;
@@ -251,8 +238,7 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashBatchOperationsAndStats)
     BOOST_CHECK(std::find(movedResults.begin(), movedResults.end(), 1) != movedResults.end());
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashThreadSafeBoundsQueryMatchesRegularQuery)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashThreadSafeBoundsQueryMatchesRegularQuery) {
     HierarchicalSpatialHash spatialHash;
     spatialHash.insert(7, AABB(64.0f, 64.0f, 12.0f, 12.0f));
     spatialHash.insert(8, AABB(96.0f, 64.0f, 12.0f, 12.0f));
@@ -279,86 +265,84 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(CollisionPerformanceTests)
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashPerformance)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashPerformance) {
     const int NUM_ENTITIES = 1000;
     const int NUM_QUERIES = 100;
     const float WORLD_SIZE = 1000.0f;
-    
+
     HierarchicalSpatialHash spatialHash;
-    
+
     // Generate random entities
     std::mt19937 rng(42); // Fixed seed for reproducible results
     std::uniform_real_distribution<float> posDist(0.0f, WORLD_SIZE);
     std::uniform_real_distribution<float> sizeDist(5.0f, 25.0f);
-    
+
     std::vector<std::pair<EntityID, AABB>> entities;
-    
+
     // Insertion performance test
     auto startInsert = std::chrono::high_resolution_clock::now();
-    
+
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         EntityID id = static_cast<EntityID>(i + 1);
         float x = posDist(rng);
         float y = posDist(rng);
         float halfW = sizeDist(rng);
         float halfH = sizeDist(rng);
-        
+
         AABB aabb(x, y, halfW, halfH);
         entities.emplace_back(id, aabb);
         spatialHash.insert(id, aabb);
     }
-    
+
     auto endInsert = std::chrono::high_resolution_clock::now();
     auto insertDuration = std::chrono::duration_cast<std::chrono::microseconds>(endInsert - startInsert);
-    
-    BOOST_TEST_MESSAGE("Inserted " << NUM_ENTITIES << " entities in " 
-                      << insertDuration.count() << " microseconds ("
-                      << (insertDuration.count() / NUM_ENTITIES) << " μs per entity)");
-    
+
+    BOOST_TEST_MESSAGE("Inserted " << NUM_ENTITIES << " entities in "
+                                   << insertDuration.count() << " microseconds ("
+                                   << (insertDuration.count() / NUM_ENTITIES) << " μs per entity)");
+
     // Query performance test
     std::vector<size_t> results;
     int totalFound = 0;
-    
+
     auto startQuery = std::chrono::high_resolution_clock::now();
-    
+
     for (int i = 0; i < NUM_QUERIES; ++i) {
         float queryX = posDist(rng);
         float queryY = posDist(rng);
         float querySize = 100.0f; // Fixed query size
-        
+
         AABB queryArea(queryX, queryY, querySize, querySize);
         results.clear();
         spatialHash.queryRegion(queryArea, results);
         totalFound += results.size();
     }
-    
+
     auto endQuery = std::chrono::high_resolution_clock::now();
     auto queryDuration = std::chrono::duration_cast<std::chrono::microseconds>(endQuery - startQuery);
-    
-    BOOST_TEST_MESSAGE("Performed " << NUM_QUERIES << " queries in " 
-                      << queryDuration.count() << " microseconds ("
-                      << (queryDuration.count() / NUM_QUERIES) << " μs per query)");
+
+    BOOST_TEST_MESSAGE("Performed " << NUM_QUERIES << " queries in "
+                                    << queryDuration.count() << " microseconds ("
+                                    << (queryDuration.count() / NUM_QUERIES) << " μs per query)");
     BOOST_TEST_MESSAGE("Average entities found per query: " << (totalFound / NUM_QUERIES));
-    
+
     // Performance requirements (adjust based on target performance)
     BOOST_CHECK_LT(insertDuration.count() / NUM_ENTITIES, 50); // < 50μs per insertion
     BOOST_CHECK_LT(queryDuration.count() / NUM_QUERIES, 100);  // < 100μs per query
 }
 
-BOOST_AUTO_TEST_CASE(TestSpatialHashUpdatePerformance)
-{
+BOOST_AUTO_TEST_CASE(TestSpatialHashUpdatePerformance) {
     const int NUM_ENTITIES = 500;
     const int NUM_UPDATES = 1000;
     const float WORLD_SIZE = 500.0f;
-    
+
     HierarchicalSpatialHash spatialHash;
-    
+
     std::mt19937 rng(42);
     std::uniform_real_distribution<float> posDist(0.0f, WORLD_SIZE);
     std::uniform_real_distribution<float> sizeDist(5.0f, 15.0f);
     std::uniform_int_distribution<int> idDist(1, NUM_ENTITIES);
-    
+
     // Insert initial entities
     std::vector<std::pair<size_t, AABB>> entities;
     for (int i = 0; i < NUM_ENTITIES; ++i) {
@@ -372,10 +356,10 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashUpdatePerformance)
         entities.emplace_back(id, aabb);
         spatialHash.insert(id, aabb);
     }
-    
+
     // Update performance test
     auto startUpdate = std::chrono::high_resolution_clock::now();
-    
+
     for (int i = 0; i < NUM_UPDATES; ++i) {
         // Pick random entity to update
         int entityIndex = idDist(rng) - 1;
@@ -392,14 +376,14 @@ BOOST_AUTO_TEST_CASE(TestSpatialHashUpdatePerformance)
         spatialHash.update(id, oldAABB, newAABB);
         entities[entityIndex].second = newAABB;
     }
-    
+
     auto endUpdate = std::chrono::high_resolution_clock::now();
     auto updateDuration = std::chrono::duration_cast<std::chrono::microseconds>(endUpdate - startUpdate);
-    
-    BOOST_TEST_MESSAGE("Performed " << NUM_UPDATES << " updates in " 
-                      << updateDuration.count() << " microseconds ("
-                      << (updateDuration.count() / NUM_UPDATES) << " μs per update)");
-    
+
+    BOOST_TEST_MESSAGE("Performed " << NUM_UPDATES << " updates in "
+                                    << updateDuration.count() << " microseconds ("
+                                    << (updateDuration.count() / NUM_UPDATES) << " μs per update)");
+
     // Performance requirement
     BOOST_CHECK_LT(updateDuration.count() / NUM_UPDATES, 75); // < 75μs per update
 }
@@ -408,89 +392,87 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(CollisionStressTests)
 
-BOOST_AUTO_TEST_CASE(TestHighDensityCollisions)
-{
+BOOST_AUTO_TEST_CASE(TestHighDensityCollisions) {
     const int ENTITIES_PER_CELL = 20;
     const int GRID_SIZE = 10;
     const float CELL_SIZE = 50.0f;
     const int TOTAL_ENTITIES = ENTITIES_PER_CELL * GRID_SIZE * GRID_SIZE;
-    
+
     HierarchicalSpatialHash spatialHash;
-    
+
     std::mt19937 rng(123);
     std::uniform_real_distribution<float> offsetDist(-20.0f, 20.0f);
-    
+
     // Place multiple entities in each grid cell
     EntityID currentId = 1;
     for (int gridX = 0; gridX < GRID_SIZE; ++gridX) {
         for (int gridY = 0; gridY < GRID_SIZE; ++gridY) {
             float cellCenterX = (gridX + 0.5f) * CELL_SIZE;
             float cellCenterY = (gridY + 0.5f) * CELL_SIZE;
-            
+
             for (int e = 0; e < ENTITIES_PER_CELL; ++e) {
                 float x = cellCenterX + offsetDist(rng);
                 float y = cellCenterY + offsetDist(rng);
                 AABB aabb(x, y, 5.0f, 5.0f);
-                
+
                 spatialHash.insert(currentId++, aabb);
             }
         }
     }
-    
+
     // Query each cell and verify reasonable entity counts
     int totalQueriesChecked = 0;
     for (int gridX = 0; gridX < GRID_SIZE; ++gridX) {
         for (int gridY = 0; gridY < GRID_SIZE; ++gridY) {
             float cellCenterX = (gridX + 0.5f) * CELL_SIZE;
             float cellCenterY = (gridY + 0.5f) * CELL_SIZE;
-            
+
             AABB queryArea(cellCenterX, cellCenterY, CELL_SIZE * 0.4f, CELL_SIZE * 0.4f);
             std::vector<size_t> results;
             spatialHash.queryRegion(queryArea, results);
-            
+
             // Should find at least some entities in each dense cell
             BOOST_CHECK_GE(results.size(), 1);
             totalQueriesChecked++;
         }
     }
-    
-    BOOST_TEST_MESSAGE("Stress test completed with " << TOTAL_ENTITIES 
-                      << " entities across " << totalQueriesChecked << " cells");
+
+    BOOST_TEST_MESSAGE("Stress test completed with " << TOTAL_ENTITIES
+                                                     << " entities across " << totalQueriesChecked << " cells");
 }
 
-BOOST_AUTO_TEST_CASE(TestBoundaryConditions)
-{
+BOOST_AUTO_TEST_CASE(TestBoundaryConditions) {
     HierarchicalSpatialHash spatialHash;
-    
+
     // Test entities exactly on cell boundaries
     EntityID id1 = 1;
     AABB boundaryAABB(32.0f, 32.0f, 1.0f, 1.0f); // Exactly on boundary
     spatialHash.insert(id1, boundaryAABB);
-    
+
     // Query should find it in adjacent cells
     std::vector<size_t> results;
     AABB queryArea(31.0f, 31.0f, 2.0f, 2.0f);
     spatialHash.queryRegion(queryArea, results);
-    
+
     BOOST_CHECK_GE(results.size(), 1);
     BOOST_CHECK(std::find(results.begin(), results.end(), id1) != results.end());
-    
+
     // Test very large entities
     EntityID id2 = 2;
     AABB largeAABB(64.0f, 64.0f, 100.0f, 100.0f); // Spans many cells
     spatialHash.insert(id2, largeAABB);
-    
+
     // Should be found in multiple query areas
     AABB query1(0.0f, 0.0f, 32.0f, 32.0f);
     AABB query2(128.0f, 128.0f, 32.0f, 32.0f);
-    
+
     std::vector<size_t> results1, results2;
     spatialHash.queryRegion(query1, results1);
     spatialHash.queryRegion(query2, results2);
-    
+
     bool foundInFirst = std::find(results1.begin(), results1.end(), id2) != results1.end();
     bool foundInSecond = std::find(results2.begin(), results2.end(), id2) != results2.end();
-    
+
     BOOST_CHECK(foundInFirst || foundInSecond); // Should be found in at least one
 }
 
@@ -501,8 +483,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // Movables (NPCs, players) are managed by EntityDataManager only
 BOOST_AUTO_TEST_SUITE(EDMCentricCollisionTests)
 
-BOOST_AUTO_TEST_CASE(TestStaticMovableSeparation)
-{
+BOOST_AUTO_TEST_CASE(TestStaticMovableSeparation) {
     // Initialize managers
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -518,12 +499,12 @@ BOOST_AUTO_TEST_CASE(TestStaticMovableSeparation)
     size_t staticEdmIndex = edm.getStaticIndex(staticHandle);
     EntityID staticId = staticHandle.getId();
     CollisionManager::Instance().addStaticBody(staticId, testAABB.center, testAABB.halfSize,
-                                                CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
+        CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
 
     // Create movable entity via EDM (NPCs)
     Vector2D npcPos(150.0f, 150.0f);
-    EntityHandle npcHandle = edm.createNPCWithRaceClass( npcPos, "Human", "Guard");
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
     size_t npcIdx = edm.getIndex(npcHandle);
     auto& npcHot = edm.getHotDataByIndex(npcIdx);
     npcHot.setCollisionEnabled(true);
@@ -546,8 +527,7 @@ BOOST_AUTO_TEST_CASE(TestStaticMovableSeparation)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes)
-{
+BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes) {
     // Test that broadphase performance is improved with separate static/movable storage
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -572,7 +552,7 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes)
         size_t staticEdmIndex = edm.getStaticIndex(staticHandle);
         EntityID id = staticHandle.getId();
         CollisionManager::Instance().addStaticBody(id, aabb.center, aabb.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                    false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
+            false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
         staticBodies.push_back(id);
     }
 
@@ -582,7 +562,7 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes)
         float y = 500.0f + static_cast<float>(i / 5) * 32.0f;
         Vector2D pos(x, y);
 
-        EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+        EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
         size_t idx = edm.getIndex(handle);
         auto& hot = edm.getHotDataByIndex(idx);
         hot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -620,8 +600,8 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes)
     BOOST_CHECK_LT(avgCycleTimeMs, 1.0); // < 1ms per collision cycle
 
     BOOST_TEST_MESSAGE("Dual storage broadphase: " << perfStats.lastBroadphaseMs << "ms, "
-                      << "Total: " << perfStats.lastTotalMs << "ms, "
-                      << "Avg cycle: " << avgCycleTimeMs << "ms");
+                                                   << "Total: " << perfStats.lastTotalMs << "ms, "
+                                                   << "Avg cycle: " << avgCycleTimeMs << "ms");
 
     // Clean up
     for (EntityID id : staticBodies) {
@@ -635,8 +615,7 @@ BOOST_AUTO_TEST_CASE(TestBroadphasePerformanceWithDualHashes)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM)
-{
+BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM) {
     // Test that batch movable updates work correctly with EDM-centric system
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -654,7 +633,7 @@ BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM)
         EntityID id = 30000 + i;
         Vector2D pos(i * 20.0f, i * 20.0f);
 
-        EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+        EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
         size_t idx = edm.getIndex(handle);
         auto& hot = edm.getHotDataByIndex(idx);
         hot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -690,10 +669,10 @@ BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM)
     BOOST_CHECK_CLOSE(hot0.transform.position.getY(), 100.0f, 1.0f);
 
     // Verify last body was also updated correctly
-    size_t idxLast = edm.getIndex(movableHandles[NUM_MOVABLE_BODIES-1]);
+    size_t idxLast = edm.getIndex(movableHandles[NUM_MOVABLE_BODIES - 1]);
     const auto& hotLast = edm.getHotDataByIndex(idxLast);
-    float expectedX = (NUM_MOVABLE_BODIES-1) * 25.0f + 100.0f;
-    float expectedY = (NUM_MOVABLE_BODIES-1) * 25.0f + 100.0f;
+    float expectedX = (NUM_MOVABLE_BODIES - 1) * 25.0f + 100.0f;
+    float expectedY = (NUM_MOVABLE_BODIES - 1) * 25.0f + 100.0f;
     BOOST_CHECK_CLOSE(hotLast.transform.position.getX(), expectedX, 1.0f);
     BOOST_CHECK_CLOSE(hotLast.transform.position.getY(), expectedY, 1.0f);
 
@@ -702,7 +681,7 @@ BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM)
     BOOST_CHECK_LT(avgUpdateTimeUs, 20.0); // < 20μs per body update
 
     BOOST_TEST_MESSAGE("Batch updated " << NUM_MOVABLE_BODIES << " movable bodies in "
-                      << duration.count() << "μs (" << avgUpdateTimeUs << "μs/body)");
+                                        << duration.count() << "μs (" << avgUpdateTimeUs << "μs/body)");
 
     // Clean up
     for (EntityID id : movableIds) {
@@ -713,8 +692,7 @@ BOOST_AUTO_TEST_CASE(TestMovableBatchUpdateWithEDM)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation)
-{
+BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation) {
     // Test that static body cache is properly invalidated when static bodies change
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -729,12 +707,12 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation)
     size_t staticEdmIndex = edm.getStaticIndex(staticHandle);
     EntityID staticId = staticHandle.getId();
     CollisionManager::Instance().addStaticBody(staticId, staticAABB.center, staticAABB.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
 
     // Add a movable body near the static body via EDM
     EntityID movableId = 40001;
     Vector2D movablePos(220.0f, 220.0f);
-    EntityHandle movableHandle = edm.createNPCWithRaceClass( movablePos, "Human", "Guard");
+    EntityHandle movableHandle = edm.createNPCWithRaceClass(movablePos, "Human", "Guard");
     size_t movableIdx = edm.getIndex(movableHandle);
     auto& movableHot = edm.getHotDataByIndex(movableIdx);
     movableHot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -753,7 +731,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation)
     size_t staticEdmIndex2 = edm.getStaticIndex(staticHandle2);
     EntityID staticId2 = staticHandle2.getId();
     CollisionManager::Instance().addStaticBody(staticId2, staticAABB2.center, staticAABB2.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex2);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex2);
 
     // Verify cache invalidation by checking that static body count is correct
     BOOST_CHECK_EQUAL(CollisionManager::Instance().getStaticBodyCount(), 2);
@@ -773,8 +751,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation)
-{
+BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation) {
     // Test trigger area creation and basic functionality
     BOOST_REQUIRE(CollisionManager::Instance().init());
 
@@ -785,8 +762,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation)
         VoidLight::TriggerTag::Water,
         VoidLight::TriggerType::EventOnly,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy
-    );
+        CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy);
 
     BOOST_CHECK_NE(triggerId, 0); // Should return valid ID
     BOOST_CHECK(CollisionManager::Instance().isTrigger(triggerId));
@@ -797,8 +773,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation)
         VoidLight::TriggerTag::Lava,
         VoidLight::TriggerType::EventOnly,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Player
-    );
+        CollisionLayer::Layer_Player);
 
     BOOST_CHECK_NE(triggerId2, 0);
     BOOST_CHECK(CollisionManager::Instance().isTrigger(triggerId2));
@@ -815,8 +790,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation)
     CollisionManager::Instance().clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestTriggerCooldowns)
-{
+BOOST_AUTO_TEST_CASE(TestTriggerCooldowns) {
     // Test trigger cooldown functionality
     BOOST_REQUIRE(CollisionManager::Instance().init());
 
@@ -827,8 +801,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerCooldowns)
     EntityID triggerId = CollisionManager::Instance().createTriggerAreaAt(
         50.0f, 50.0f, 20.0f, 20.0f,
         VoidLight::TriggerTag::Portal,
-        VoidLight::TriggerType::EventOnly
-    );
+        VoidLight::TriggerType::EventOnly);
 
     // Set specific cooldown for this trigger
     CollisionManager::Instance().setTriggerCooldown(triggerId, 2.0f);
@@ -841,8 +814,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerCooldowns)
     CollisionManager::Instance().clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestBodyLayerFiltering)
-{
+BOOST_AUTO_TEST_CASE(TestBodyLayerFiltering) {
     // Test collision layer filtering functionality via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -856,7 +828,7 @@ BOOST_AUTO_TEST_CASE(TestBodyLayerFiltering)
 
     // Add movables via EDM
     EntityHandle playerHandle = edm.registerPlayer(playerId, pos, 16.0f, 16.0f);
-    EntityHandle npcHandle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
 
     // Set layers on EDM hot data - Player collides with NPCs and environment
     size_t playerIdx = edm.getIndex(playerHandle);
@@ -878,7 +850,7 @@ BOOST_AUTO_TEST_CASE(TestBodyLayerFiltering)
     size_t envEdmIndex = edm.getStaticIndex(envHandle);
     EntityID environmentId = envHandle.getId();
     CollisionManager::Instance().addStaticBody(environmentId, aabb.center, aabb.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), envEdmIndex);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), envEdmIndex);
 
     // Verify layer settings on EDM entities
     BOOST_CHECK(playerHot.hasCollision());
@@ -894,8 +866,7 @@ BOOST_AUTO_TEST_CASE(TestBodyLayerFiltering)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestBodyEnableDisable)
-{
+BOOST_AUTO_TEST_CASE(TestBodyEnableDisable) {
     // Test body enable/disable functionality via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -905,7 +876,7 @@ BOOST_AUTO_TEST_CASE(TestBodyEnableDisable)
     Vector2D pos(150.0f, 150.0f);
 
     // Create movable via EDM
-    EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+    EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
     size_t idx = edm.getIndex(handle);
     auto& hot = edm.getHotDataByIndex(idx);
     hot.collisionLayers = CollisionLayer::Layer_Player;
@@ -929,8 +900,7 @@ BOOST_AUTO_TEST_CASE(TestBodyEnableDisable)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestBodyResize)
-{
+BOOST_AUTO_TEST_CASE(TestBodyResize) {
     // Test body resize functionality via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -968,8 +938,7 @@ BOOST_AUTO_TEST_CASE(TestBodyResize)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestVelocityManagement)
-{
+BOOST_AUTO_TEST_CASE(TestVelocityManagement) {
     // Test velocity setting via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -980,7 +949,7 @@ BOOST_AUTO_TEST_CASE(TestVelocityManagement)
     Vector2D velocity(15.0f, 10.0f);
 
     // Register with EDM (the single source of truth for movables)
-    EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+    EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
     size_t idx = edm.getIndex(handle);
     auto& hot = edm.getHotDataByIndex(idx);
     hot.collisionLayers = CollisionLayer::Layer_Player;
@@ -1019,8 +988,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // Collision Info and Index Tests
 BOOST_AUTO_TEST_SUITE(CollisionInfoTests)
 
-BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity)
-{
+BOOST_AUTO_TEST_CASE(TestCollisionInfoIndicesIntegrity) {
     // CRITICAL TEST: Verify that our CollisionInfo index optimization works correctly
     // This test validates that indexA and indexB are properly populated
     // EDM-CENTRIC: Movables must be registered in EDM to participate in collision
@@ -1117,26 +1085,26 @@ struct CollisionIntegrationFixture {
         if (!VoidLight::ThreadSystem::Exists()) {
             BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init()); // Auto-detect system threads
         }
-        
+
         // Initialize EventManager for event testing
         BOOST_REQUIRE(EventManager::Instance().init());
-        
+
         // Initialize CollisionManager
         BOOST_REQUIRE(CollisionManager::Instance().init());
-        
+
         eventCount = 0;
         lastEventPosition = Vector2D(0, 0);
         lastEventRadius = 0.0f;
         lastEventDescription = "";
     }
-    
+
     ~CollisionIntegrationFixture() {
         // Clean up in reverse order (following established pattern)
         CollisionManager::Instance().clean();
         EventManager::Instance().clean();
         // Note: Don't clean ThreadSystem as it's shared across tests
     }
-    
+
     // Event tracking variables
     std::atomic<int> eventCount{0};
     Vector2D lastEventPosition;
@@ -1144,8 +1112,7 @@ struct CollisionIntegrationFixture {
     std::string lastEventDescription;
 };
 
-BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrationFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrationFixture) {
     // Subscribe to collision obstacle changed events
     auto token = EventManager::Instance().registerHandlerWithToken(
         EventTypeId::CollisionObstacleChanged,
@@ -1160,7 +1127,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrat
                 }
             }
         });
-    
+
     // Test 1: Adding a static body should trigger an event
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1172,7 +1139,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrat
     EntityID staticId = staticHandle.getId();
 
     CollisionManager::Instance().addStaticBody(staticId, staticAABB.center, staticAABB.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
 
     // Process deferred events - CollisionManager fires events in Deferred mode
     // so we need to drain all events to ensure deterministic test behavior
@@ -1184,14 +1151,14 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrat
     BOOST_CHECK_CLOSE(lastEventPosition.getY(), staticPos.getY(), 0.01f);
     BOOST_CHECK_GT(lastEventRadius, 32.0f); // Should be radius + safety margin
     BOOST_CHECK(lastEventDescription.find("Static obstacle added") != std::string::npos);
-    
+
     // Test 2: Adding a movable body via EDM should NOT trigger a CollisionObstacleChanged event
     // (Movables don't fire these events - only static obstacles do)
     EntityID movableId = 1001;
     Vector2D movablePos(150.0f, 250.0f);
     int previousEventCount = eventCount.load();
 
-    EntityHandle handle = edm.createNPCWithRaceClass( movablePos, "Human", "Guard");
+    EntityHandle handle = edm.createNPCWithRaceClass(movablePos, "Human", "Guard");
     size_t idx = edm.getIndex(handle);
     auto& hot = edm.getHotDataByIndex(idx);
     hot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -1217,8 +1184,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionManagerEventNotification, CollisionIntegrat
     EventManager::Instance().removeHandler(token);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestNonProjectileCollisionPairsAreNotEventManagerEvents, CollisionIntegrationFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestNonProjectileCollisionPairsAreNotEventManagerEvents, CollisionIntegrationFixture) {
     std::atomic<int> collisionEventCount{0};
     auto token = EventManager::Instance().registerHandlerWithToken(
         EventTypeId::Collision,
@@ -1262,8 +1228,7 @@ BOOST_FIXTURE_TEST_CASE(TestNonProjectileCollisionPairsAreNotEventManagerEvents,
     EventManager::Instance().removeHandler(token);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestCollisionEventRadiusCalculation, CollisionIntegrationFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestCollisionEventRadiusCalculation, CollisionIntegrationFixture) {
     // Subscribe to events
     auto token = EventManager::Instance().registerHandlerWithToken(
         EventTypeId::CollisionObstacleChanged,
@@ -1276,7 +1241,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventRadiusCalculation, CollisionIntegratio
                 }
             }
         });
-    
+
     // Test different sized obstacles produce appropriate radii
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1287,7 +1252,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventRadiusCalculation, CollisionIntegratio
     size_t smallEdmIndex = edm.getStaticIndex(smallHandle);
     EntityID smallId = smallHandle.getId();
     CollisionManager::Instance().addStaticBody(smallId, smallAABB.center, smallAABB.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), smallEdmIndex);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), smallEdmIndex);
     EventManager::Instance().drainAllDeferredEvents();
 
     float smallRadius = lastEventRadius;
@@ -1300,13 +1265,13 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventRadiusCalculation, CollisionIntegratio
     size_t largeEdmIndex = edm.getStaticIndex(largeHandle);
     EntityID largeId = largeHandle.getId();
     CollisionManager::Instance().addStaticBody(largeId, largeAABB.center, largeAABB.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), largeEdmIndex);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), largeEdmIndex);
     EventManager::Instance().drainAllDeferredEvents();
 
     float largeRadius = lastEventRadius;
     BOOST_CHECK_GT(largeRadius, smallRadius); // Large should have larger radius
     BOOST_CHECK_GT(largeRadius, 50.0f); // Should be larger than half-size + margin
-    
+
     // Clean up
     CollisionManager::Instance().removeCollisionBody(smallId);
     CollisionManager::Instance().removeCollisionBody(largeId);
@@ -1314,11 +1279,10 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventRadiusCalculation, CollisionIntegratio
     EventManager::Instance().removeHandler(token);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestCollisionEventPerformanceImpact, CollisionIntegrationFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestCollisionEventPerformanceImpact, CollisionIntegrationFixture) {
     // Test that event firing doesn't significantly impact collision performance
     std::atomic<int> eventCount{0};
-    
+
     // Subscribe to events but don't do heavy work
     auto token = EventManager::Instance().registerHandlerWithToken(
         EventTypeId::CollisionObstacleChanged,
@@ -1327,7 +1291,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventPerformanceImpact, CollisionIntegratio
                 eventCount++;
             }
         });
-    
+
     const int numBodies = 100;
     std::vector<EntityID> bodies;
 
@@ -1343,7 +1307,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventPerformanceImpact, CollisionIntegratio
         size_t staticEdmIndex = edm.getStaticIndex(staticHandle);
         EntityID id = staticHandle.getId();
         CollisionManager::Instance().addStaticBody(id, aabb.center, aabb.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                    false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
+            false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
         bodies.push_back(id);
     }
 
@@ -1358,18 +1322,18 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventPerformanceImpact, CollisionIntegratio
     int actualEvents = eventCount.load();
     BOOST_CHECK_EQUAL(actualEvents, static_cast<int>(numBodies));
     BOOST_TEST_MESSAGE("Event dispatch performance: " << actualEvents << "/" << numBodies
-                      << " events processed");
-    
+                                                      << " events processed");
+
     // Performance check: shouldn't take more than 20ms total (generous for test environment)
     BOOST_CHECK_LT(duration.count(), 20000); // 20ms = 20,000 microseconds
-    
-    // Average time per body should be reasonable  
+
+    // Average time per body should be reasonable
     double avgTimePerBody = static_cast<double>(duration.count()) / numBodies;
     BOOST_CHECK_LT(avgTimePerBody, 200.0); // 200 microseconds per body max
-    
-    BOOST_TEST_MESSAGE("Added " << numBodies << " static bodies with events in " 
-                      << duration.count() << " μs (" << avgTimePerBody << " μs/body)");
-    
+
+    BOOST_TEST_MESSAGE("Added " << numBodies << " static bodies with events in "
+                                << duration.count() << " μs (" << avgTimePerBody << " μs/body)");
+
     // Clean up
     for (EntityID id : bodies) {
         CollisionManager::Instance().removeCollisionBody(id);
@@ -1378,8 +1342,7 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionEventPerformanceImpact, CollisionIntegratio
     EventManager::Instance().removeHandler(token);
 }
 
-BOOST_AUTO_TEST_CASE(TestTriggerEventNotifications)
-{
+BOOST_AUTO_TEST_CASE(TestTriggerEventNotifications) {
     // Test that trigger events are properly generated
     std::atomic<int> triggerEventCount{0};
     Vector2D lastTriggerPosition;
@@ -1405,8 +1368,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerEventNotifications)
     EntityID triggerId = CollisionManager::Instance().createTriggerAreaAt(
         300.0f, 300.0f, 30.0f, 30.0f,
         VoidLight::TriggerTag::Water,
-        VoidLight::TriggerType::EventOnly
-    );
+        VoidLight::TriggerType::EventOnly);
 
     BOOST_CHECK(CollisionManager::Instance().isTrigger(triggerId));
 
@@ -1418,8 +1380,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerEventNotifications)
     EventManager::Instance().removeHandler(token);
 }
 
-BOOST_AUTO_TEST_CASE(TestWorldBounds)
-{
+BOOST_AUTO_TEST_CASE(TestWorldBounds) {
     // Test world bounds functionality
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1434,7 +1395,7 @@ BOOST_AUTO_TEST_CASE(TestWorldBounds)
     EntityID bodyId = 9000;
     Vector2D validPosition(500.0f, 400.0f);
 
-    EntityHandle handle = edm.createNPCWithRaceClass( validPosition, "Human", "Guard");
+    EntityHandle handle = edm.createNPCWithRaceClass(validPosition, "Human", "Guard");
     size_t idx = edm.getIndex(handle);
     auto& hot = edm.getHotDataByIndex(idx);
     hot.collisionLayers = CollisionLayer::Layer_Player;
@@ -1451,8 +1412,7 @@ BOOST_AUTO_TEST_CASE(TestWorldBounds)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestLayerCollisionFiltering)
-{
+BOOST_AUTO_TEST_CASE(TestLayerCollisionFiltering) {
     // Test that collision detection respects layer filtering via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1464,7 +1424,7 @@ BOOST_AUTO_TEST_CASE(TestLayerCollisionFiltering)
     Vector2D overlappingPos(400.0f, 400.0f);
 
     EntityHandle handle1 = edm.registerPlayer(player1Id, overlappingPos, 16.0f, 16.0f);
-    EntityHandle handle2 = edm.createNPCWithRaceClass( overlappingPos, "Human", "Guard");
+    EntityHandle handle2 = edm.createNPCWithRaceClass(overlappingPos, "Human", "Guard");
 
     // Set both as players with masks that exclude Layer_Player
     size_t idx1 = edm.getIndex(handle1);
@@ -1496,8 +1456,7 @@ BOOST_AUTO_TEST_CASE(TestLayerCollisionFiltering)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestMixedBodyTypeInteractions)
-{
+BOOST_AUTO_TEST_CASE(TestMixedBodyTypeInteractions) {
     // Test interactions between different body types
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1514,10 +1473,10 @@ BOOST_AUTO_TEST_CASE(TestMixedBodyTypeInteractions)
     size_t staticEdmIndex = edm.getStaticIndex(staticHandle);
     EntityID staticId = staticHandle.getId();
     CollisionManager::Instance().addStaticBody(staticId, aabb.center, aabb.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-                                                false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), staticEdmIndex);
 
     // Add movable body via EDM
-    EntityHandle movableHandle = edm.createNPCWithRaceClass( position, "Human", "Guard");
+    EntityHandle movableHandle = edm.createNPCWithRaceClass(position, "Human", "Guard");
     size_t movableIdx = edm.getIndex(movableHandle);
     auto& movableHot = edm.getHotDataByIndex(movableIdx);
     movableHot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -1528,8 +1487,7 @@ BOOST_AUTO_TEST_CASE(TestMixedBodyTypeInteractions)
     triggerId = CollisionManager::Instance().createTriggerAreaAt(
         position.getX(), position.getY(), 25.0f, 25.0f,
         VoidLight::TriggerTag::Checkpoint,
-        VoidLight::TriggerType::EventOnly
-    );
+        VoidLight::TriggerType::EventOnly);
 
     // Verify static body type in CollisionManager
     BOOST_CHECK(!CollisionManager::Instance().isTrigger(staticId));
@@ -1560,8 +1518,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // Spatial Hash Edge Case Tests
 BOOST_AUTO_TEST_SUITE(CollisionSpatialHashTests)
 
-BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
-{
+BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases) {
     // Test spatial partitioning edge cases for static bodies in CollisionManager
     // Note: Movables are now in EDM, so these tests focus on static body spatial hashing
     if (!VoidLight::ThreadSystem::Exists()) {
@@ -1582,8 +1539,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
     CollisionManager::Instance().addStaticBody(
         boundaryId, boundaryAABB.center, boundaryAABB.halfSize,
         CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), boundaryEdmIndex
-    );
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), boundaryEdmIndex);
 
     // Should be findable via area query
     std::vector<EntityID> results;
@@ -1599,8 +1555,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
     CollisionManager::Instance().addStaticBody(
         largeId, largeAABB.center, largeAABB.halfSize,
         CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), largeEdmIndex
-    );
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), largeEdmIndex);
 
     // Should be findable from multiple query regions
     AABB queryTopLeft(50.0f, 50.0f, 20.0f, 20.0f);
@@ -1626,8 +1581,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
     CollisionManager::Instance().addStaticBody(
         extremeId, extremeAABB.center, extremeAABB.halfSize,
         CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), extremeEdmIndex
-    );
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), extremeEdmIndex);
 
     // Should still be queryable
     results.clear();
@@ -1643,8 +1597,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
     CollisionManager::Instance().addStaticBody(
         zeroId, zeroAABB.center, zeroAABB.halfSize,
         CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), zeroEdmIndex
-    );
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), zeroEdmIndex);
 
     // Should still be tracked and queryable
     results.clear();
@@ -1662,8 +1615,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
     CollisionManager::Instance().addStaticBody(
         movingId, movingAABB.center, movingAABB.halfSize,
         CollisionLayer::Layer_Environment, 0xFFFFFFFFu,
-        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), movingEdmIndex
-    );
+        false, 0, static_cast<uint8_t>(VoidLight::TriggerType::Physical), movingEdmIndex);
 
     // Move across fine cell boundaries multiple times
     for (int i = 1; i <= 5; ++i) {
@@ -1671,8 +1623,7 @@ BOOST_AUTO_TEST_CASE(TestGridHashEdgeCases)
         AABB newAABB(newPos.getX(), newPos.getY(), 15.0f, 15.0f);
 
         CollisionManager::Instance().updateCollisionBodyPosition(
-            movingId, newAABB.center
-        );
+            movingId, newAABB.center);
 
         // Should still be queryable at new position
         results.clear();
@@ -1697,8 +1648,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // Tests for EDM batch position updates - critical for AI entity movement optimization
 BOOST_AUTO_TEST_SUITE(EDMBatchUpdateTests)
 
-BOOST_AUTO_TEST_CASE(TestEDMBatchPositionUpdate)
-{
+BOOST_AUTO_TEST_CASE(TestEDMBatchPositionUpdate) {
     // EDM-CENTRIC: Test batch position updates via EntityDataManager
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1714,7 +1664,7 @@ BOOST_AUTO_TEST_CASE(TestEDMBatchPositionUpdate)
         entityIds.push_back(id);
         Vector2D pos(100.0f + i * 10.0f, 100.0f + i * 10.0f);
 
-        EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+        EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
         size_t idx = edm.getIndex(handle);
         auto& hot = edm.getHotDataByIndex(idx);
         hot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -1752,8 +1702,7 @@ BOOST_AUTO_TEST_CASE(TestEDMBatchPositionUpdate)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestEDMMultiBatchUpdates)
-{
+BOOST_AUTO_TEST_CASE(TestEDMMultiBatchUpdates) {
     // EDM-CENTRIC: Test multiple batch updates (like AIManager does per-thread)
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1771,7 +1720,7 @@ BOOST_AUTO_TEST_CASE(TestEDMMultiBatchUpdates)
             batchEntityIds[batch].push_back(id);
             Vector2D pos(50.0f + batch * 200.0f + i * 5.0f, 50.0f + i * 5.0f);
 
-            EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+            EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
             size_t idx = edm.getIndex(handle);
             auto& hot = edm.getHotDataByIndex(idx);
             hot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -1817,8 +1766,7 @@ BOOST_AUTO_TEST_CASE(TestEDMMultiBatchUpdates)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestEDMBatchUpdatePerformance)
-{
+BOOST_AUTO_TEST_CASE(TestEDMBatchUpdatePerformance) {
     // EDM-CENTRIC: Measure performance of batch position updates via EDM
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1834,7 +1782,7 @@ BOOST_AUTO_TEST_CASE(TestEDMBatchUpdatePerformance)
         entityIds.push_back(id);
         Vector2D pos(static_cast<float>(i % 50) * 20.0f, static_cast<float>(i / 50) * 20.0f);
 
-        EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+        EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
         size_t idx = edm.getIndex(handle);
         auto& hot = edm.getHotDataByIndex(idx);
         hot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -1859,8 +1807,8 @@ BOOST_AUTO_TEST_CASE(TestEDMBatchUpdatePerformance)
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
     BOOST_TEST_MESSAGE("EDM batch update of " << NUM_ENTITIES << " entities x 100 iterations: "
-                      << duration.count() << " μs ("
-                      << (duration.count() / 100) << " μs per batch)");
+                                              << duration.count() << " μs ("
+                                              << (duration.count() / 100) << " μs per batch)");
 
     // Performance requirement: batch update should be fast (< 1ms per batch of 500)
     BOOST_CHECK_LT(duration.count() / 100, 1000);
@@ -1878,8 +1826,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // Tests for NEEDS_TRIGGER_DETECTION flag-based trigger detection optimization
 BOOST_AUTO_TEST_SUITE(TriggerDetectionOptimizationTests)
 
-BOOST_AUTO_TEST_CASE(TestTriggerDetectionFlag)
-{
+BOOST_AUTO_TEST_CASE(TestTriggerDetectionFlag) {
     // Test that NEEDS_TRIGGER_DETECTION flag is properly set and queried
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1901,7 +1848,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerDetectionFlag)
     // Create NPC - should NOT have NEEDS_TRIGGER_DETECTION flag by default
     EntityID npcId = 50001;
     Vector2D npcPos(200.0f, 200.0f);
-    EntityHandle npcHandle = edm.createNPCWithRaceClass( npcPos, "Human", "Guard");
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
     size_t npcIdx = edm.getIndex(npcHandle);
     auto& npcHot = edm.getHotDataByIndex(npcIdx);
 
@@ -1943,8 +1890,7 @@ BOOST_AUTO_TEST_CASE(TestTriggerDetectionFlag)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestEventOnlyTriggerDetection)
-{
+BOOST_AUTO_TEST_CASE(TestEventOnlyTriggerDetection) {
     // Test that EventOnly triggers are detected via spatial queries
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -1969,8 +1915,7 @@ BOOST_AUTO_TEST_CASE(TestEventOnlyTriggerDetection)
         VoidLight::TriggerTag::Water,
         VoidLight::TriggerType::EventOnly,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Player
-    );
+        CollisionLayer::Layer_Player);
 
     // Create EventOnly trigger at distant position Y (NOT overlapping)
     EntityID farTriggerId = CollisionManager::Instance().createTriggerAreaAt(
@@ -1978,8 +1923,7 @@ BOOST_AUTO_TEST_CASE(TestEventOnlyTriggerDetection)
         VoidLight::TriggerTag::Lava,
         VoidLight::TriggerType::EventOnly,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Player
-    );
+        CollisionLayer::Layer_Player);
 
     // Update BGM to populate active indices
     bgm.update(playerPos, 0.016f);
@@ -2005,8 +1949,7 @@ BOOST_AUTO_TEST_CASE(TestEventOnlyTriggerDetection)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection)
-{
+BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection) {
     // Test that NPCs with NEEDS_TRIGGER_DETECTION flag can fire trigger events
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -2019,7 +1962,7 @@ BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection)
     // Create NPC with NEEDS_TRIGGER_DETECTION enabled
     EntityID npcId = 52000;
     Vector2D npcPos(150.0f, 150.0f);
-    EntityHandle npcHandle = edm.createNPCWithRaceClass( npcPos, "Human", "Guard");
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
     size_t npcIdx = edm.getIndex(npcHandle);
     auto& npcHot = edm.getHotDataByIndex(npcIdx);
     npcHot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -2080,8 +2023,7 @@ BOOST_AUTO_TEST_CASE(TestNPCTriggerDetection)
     edm.clean();
 }
 
-BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection)
-{
+BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection) {
     // Test that sweep-and-prune path works correctly for large entity counts
     auto& edm = EntityDataManager::Instance();
     BOOST_REQUIRE(edm.init());
@@ -2104,7 +2046,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection)
         float y = static_cast<float>(i / 10) * 100.0f + 50.0f;
         Vector2D npcPos(x, y);
 
-        EntityHandle npcHandle = edm.createNPCWithRaceClass( npcPos, "Human", "Guard");
+        EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
         size_t npcIdx = edm.getIndex(npcHandle);
         auto& npcHot = edm.getHotDataByIndex(npcIdx);
         npcHot.collisionLayers = CollisionLayer::Layer_Enemy;
@@ -2125,8 +2067,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection)
             VoidLight::TriggerTag::Water,
             VoidLight::TriggerType::EventOnly,
             CollisionLayer::Layer_Environment,
-            CollisionLayer::Layer_Enemy
-        );
+            CollisionLayer::Layer_Enemy);
         triggerIds.push_back(triggerId);
     }
 
@@ -2138,7 +2079,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection)
     BOOST_CHECK_GE(triggerDetectionIndices.size(), 50u);  // Should be above threshold
 
     BOOST_TEST_MESSAGE("Trigger detection entities: " << triggerDetectionIndices.size()
-                      << " (sweep threshold: 50)");
+                                                      << " (sweep threshold: 50)");
 
     // Measure performance of trigger detection with many entities
     auto start = std::chrono::high_resolution_clock::now();
@@ -2152,7 +2093,7 @@ BOOST_AUTO_TEST_CASE(TestSweepAndPruneTriggerDetection)
 
     double avgUpdateMs = static_cast<double>(duration.count()) / 10.0 / 1000.0;
     BOOST_TEST_MESSAGE("Average collision update with " << NUM_NPCS
-                      << " trigger-detecting NPCs: " << avgUpdateMs << "ms");
+                                                        << " trigger-detecting NPCs: " << avgUpdateMs << "ms");
 
     // Performance check: should complete reasonably fast even with many entities
     BOOST_CHECK_LT(avgUpdateMs, 5.0);  // < 5ms per update

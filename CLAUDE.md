@@ -113,7 +113,7 @@ Boost.Test names are the `BOOST_AUTO_TEST_CASE` name (suite prefix optional); co
 
 ### C++ and APIs
 
-- C++20, 4-space indent, Allman braces.
+- C++20, 4-space indent, K&R braces (opening brace on the same line, including functions and classes). `.clang-format` is authoritative: run `clang-format -i <files>` on every C++ file you edit.
 - Naming: UpperCamelCase types, lowerCamelCase functions/vars, `m_`/`mp_` members, ALL_CAPS constants.
 - Prefer RAII, smart pointers, forward declarations, and non-trivial logic in `.cpp`. Use `.hpp` for C++ headers and `.h` for C headers.
 - Use `const T&` for read-only non-trivial inputs, `T&` for mutation, and value for primitives.

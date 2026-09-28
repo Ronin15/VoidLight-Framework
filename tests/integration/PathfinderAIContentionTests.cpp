@@ -82,7 +82,7 @@ struct ContentionFixture {
         EventManager::Instance().update();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
         while (std::chrono::steady_clock::now() < deadline &&
-               !PathfinderManager::Instance().isGridReady()) {
+            !PathfinderManager::Instance().isGridReady()) {
             PathfinderManager::Instance().update();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
@@ -130,7 +130,8 @@ struct ContentionFixture {
             Vector2D start(startBase.getX() + static_cast<float>(i) * startStep, startBase.getY());
             Vector2D goal(goalBase.getX() + static_cast<float>(i) * startStep, goalBase.getY());
             BOOST_CHECK_GT(pm.requestPathToEDM(
-                idx, start, goal, PathfinderManager::Priority::Normal), 0U);
+                               idx, start, goal, PathfinderManager::Priority::Normal),
+                0U);
         }
     }
 

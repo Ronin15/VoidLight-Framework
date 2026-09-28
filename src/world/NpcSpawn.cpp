@@ -10,12 +10,11 @@
 namespace VoidLight {
 
 EntityHandle spawnNpc(const Vector2D& position,
-                      const std::string& race,
-                      const std::string& charClass,
-                      Sex sex,
-                      uint8_t factionOverride,
-                      const std::string& behaviorOverride)
-{
+    const std::string& race,
+    const std::string& charClass,
+    Sex sex,
+    uint8_t factionOverride,
+    const std::string& behaviorOverride) {
     EntityHandle handle = EntityDataManager::Instance().createNPCWithRaceClass(
         position, race, charClass, sex, factionOverride);
     if (!handle.isValid() || behaviorOverride.empty()) {

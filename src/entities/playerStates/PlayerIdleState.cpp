@@ -33,9 +33,9 @@ bool PlayerIdleState::hasInputDetected() const {
     const InputManager& input = InputManager::Instance();
 
     // Directional commands (keyboard W/A/S/D and gamepad left stick)
-    if (input.isCommandDown(InputManager::Command::MoveUp)    ||
-        input.isCommandDown(InputManager::Command::MoveDown)  ||
-        input.isCommandDown(InputManager::Command::MoveLeft)  ||
+    if (input.isCommandDown(InputManager::Command::MoveUp) ||
+        input.isCommandDown(InputManager::Command::MoveDown) ||
+        input.isCommandDown(InputManager::Command::MoveLeft) ||
         input.isCommandDown(InputManager::Command::MoveRight)) {
         return true;
     }

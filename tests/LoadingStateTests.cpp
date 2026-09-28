@@ -27,27 +27,22 @@
 
 namespace {
 
-class TestMainMenuState final : public GameState
-{
+class TestMainMenuState final : public GameState {
 public:
-    static void reset()
-    {
+    static void reset() {
         s_entered.store(false, std::memory_order_release);
         s_exited.store(false, std::memory_order_release);
     }
 
-    static bool entered()
-    {
+    static bool entered() {
         return s_entered.load(std::memory_order_acquire);
     }
 
-    static bool exited()
-    {
+    static bool exited() {
         return s_exited.load(std::memory_order_acquire);
     }
 
-    bool enter() override
-    {
+    bool enter() override {
         s_entered.store(true, std::memory_order_release);
         return true;
     }
@@ -55,14 +50,12 @@ public:
     void update(float) override {}
     void handleInput() override {}
 
-    bool exit() override
-    {
+    bool exit() override {
         s_exited.store(true, std::memory_order_release);
         return true;
     }
 
-    GameStateId getStateId() const override
-    {
+    GameStateId getStateId() const override {
         return GameStateId::MAIN_MENU;
     }
 

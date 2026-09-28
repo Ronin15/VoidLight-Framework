@@ -89,7 +89,8 @@ struct PowerProfileConfig {
 };
 
 void printConfig(const PowerProfileConfig& config) {
-    std::cout << "\n" << std::string(60, '=') << "\n";
+    std::cout << "\n"
+              << std::string(60, '=') << "\n";
     std::cout << "Power Profiling Configuration\n";
     std::cout << std::string(60, '=') << "\n";
     std::cout << std::format("  Entity Count:     {} entities\n", config.entityCount);
@@ -226,20 +227,17 @@ int main(int argc, char* argv[]) {
             auto frameTime = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart).count();
             if (frameTime < targetFrameTimeUs) {
                 std::this_thread::sleep_for(
-                    std::chrono::microseconds(targetFrameTimeUs - frameTime)
-                );
+                    std::chrono::microseconds(targetFrameTimeUs - frameTime));
             }
 
             frameCount++;
 
             // Periodic progress output
             if (config.verbose && frameCount % 60 == 0) {
-                auto elapsed_secs = std::chrono::duration_cast<std::chrono::seconds>(
-                    std::chrono::steady_clock::now() - benchmarkStartTime
-                ).count();
+                auto elapsed_secs = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - benchmarkStartTime).count();
                 std::cout << std::format("  Frame {:6d} (t={:3d}s)\n",
-                                       frameCount,
-                                       static_cast<int>(elapsed_secs));
+                    frameCount,
+                    static_cast<int>(elapsed_secs));
             }
         }
 

@@ -125,9 +125,9 @@ void PlayerRunningState::handleRunningAnimation(float deltaTime) {
 bool PlayerRunningState::hasInputDetected() const {
     const InputManager& input = InputManager::Instance();
 
-    if (input.isCommandDown(InputManager::Command::MoveUp)    ||
-        input.isCommandDown(InputManager::Command::MoveDown)  ||
-        input.isCommandDown(InputManager::Command::MoveLeft)  ||
+    if (input.isCommandDown(InputManager::Command::MoveUp) ||
+        input.isCommandDown(InputManager::Command::MoveDown) ||
+        input.isCommandDown(InputManager::Command::MoveLeft) ||
         input.isCommandDown(InputManager::Command::MoveRight)) {
         return true;
     }

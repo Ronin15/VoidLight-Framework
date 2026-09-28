@@ -135,15 +135,15 @@ public:
      * SDL_GPU pipeline, sampler, vertex-buffer, and draw-call submission.
      */
     void renderUIBatches(SDL_GPURenderPass* pass,
-                         uint32_t primitiveVertexCount,
-                         std::span<const UITextureDrawBatch> imageBatches,
-                         std::span<const UITextDrawBatch> textBatches);
+        uint32_t primitiveVertexCount,
+        std::span<const UITextureDrawBatch> imageBatches,
+        std::span<const UITextDrawBatch> textBatches);
 
     /**
      * Push composite uniforms.
      */
     void pushCompositeUniforms(const SDL_GPURenderPass* pass,
-                                float subPixelX, float subPixelY, float zoom);
+        float subPixelX, float subPixelY, float zoom);
 
     /**
      * Set day/night ambient lighting parameters.
@@ -180,7 +180,7 @@ public:
      * @param out Output matrix (16 floats)
      */
     static void createOrthoMatrix(float left, float right, float bottom, float top,
-                                   float* out);
+        float* out);
 
 private:
     GPURenderer() = default;

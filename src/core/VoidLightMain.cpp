@@ -31,162 +31,159 @@ constexpr std::string_view GAME_NAME{"Game Template"};
 // only on the GameState interface and GameStateManager, preserving the
 // Core -> Managers -> GameStates dependency direction.
 static void registerInitialStates(GameStateManager& stateManager) {
-  stateManager.addState(std::make_unique<LogoState>());
-  stateManager.addState(
-      std::make_unique<LoadingState>()); // Shared loading screen state
-  stateManager.addState(std::make_unique<MainMenuState>());
-  stateManager.addState(std::make_unique<SettingsMenuState>());
-  stateManager.addState(std::make_unique<GamePlayState>());
-  stateManager.addState(std::make_unique<GameOverState>());
-  stateManager.addState(std::make_unique<AIDemoState>());
-  stateManager.addState(std::make_unique<EventDemoState>());
+    stateManager.addState(std::make_unique<LogoState>());
+    stateManager.addState(
+        std::make_unique<LoadingState>()); // Shared loading screen state
+    stateManager.addState(std::make_unique<MainMenuState>());
+    stateManager.addState(std::make_unique<SettingsMenuState>());
+    stateManager.addState(std::make_unique<GamePlayState>());
+    stateManager.addState(std::make_unique<GameOverState>());
+    stateManager.addState(std::make_unique<AIDemoState>());
+    stateManager.addState(std::make_unique<EventDemoState>());
 }
 
 int main(int, char*[]) {
-  GAMEENGINE_INFO(std::format("Initializing {}", GAME_NAME));
-  THREADSYSTEM_INFO("Initializing Thread System");
+    GAMEENGINE_INFO(std::format("Initializing {}", GAME_NAME));
+    THREADSYSTEM_INFO("Initializing Thread System");
 
   // Initialize the thread system with default capacity
   // Cache ThreadSystem reference for better performance
-  VoidLight::ThreadSystem& threadSystem = VoidLight::ThreadSystem::Instance();
+    VoidLight::ThreadSystem& threadSystem = VoidLight::ThreadSystem::Instance();
 
   // Initialize thread system first
-  try {
-    if (!threadSystem.init()) {
-      THREADSYSTEM_CRITICAL("Failed to initialize thread system");
-      return -1;
+    try {
+        if (!threadSystem.init()) {
+            THREADSYSTEM_CRITICAL("Failed to initialize thread system");
+            return -1;
+        }
+    } catch (const std::exception& e) {
+        THREADSYSTEM_CRITICAL(std::format("Exception during thread system init: {}", e.what()));
+        return -1;
     }
-  } catch (const std::exception& e) {
-    THREADSYSTEM_CRITICAL(std::format("Exception during thread system init: {}", e.what()));
-    return -1;
-  }
 
-  THREADSYSTEM_INFO(std::format("Thread system initialized with {} worker threads and capacity for {} parallel tasks",
-                                threadSystem.getThreadCount(), threadSystem.getQueueCapacity()));
+    THREADSYSTEM_INFO(std::format("Thread system initialized with {} worker threads and capacity for {} parallel tasks",
+        threadSystem.getThreadCount(), threadSystem.getQueueCapacity()));
 
   // Cache GameEngine reference
-  GameEngine& gameEngine = GameEngine::Instance();
+    GameEngine& gameEngine = GameEngine::Instance();
 
   // Initialize GameEngine (SDL, ResourcePath, settings, window, and all managers)
-  if (!gameEngine.init(GAME_NAME)) {
-    GAMEENGINE_CRITICAL(std::format("Init {} Failed", GAME_NAME));
+    if (!gameEngine.init(GAME_NAME)) {
+        GAMEENGINE_CRITICAL(std::format("Init {} Failed", GAME_NAME));
 
     // CRITICAL: Always clean up on init failure to prevent memory corruption
     // during static destruction of partially initialized managers
-    GAMEENGINE_INFO("Cleaning up after initialization failure");
-    gameEngine.clean();
+        GAMEENGINE_INFO("Cleaning up after initialization failure");
+        gameEngine.clean();
 
-    return -1;
-  }
+        return -1;
+    }
 
-  GAMEENGINE_INFO(std::format("Frame timing configured: {}",
-                              gameEngine.isUsingSoftwareFrameLimiting()
-                              ? "software frame limiting"
-                              : "hardware VSync"));
+    GAMEENGINE_INFO(std::format("Frame timing configured: {}",
+        gameEngine.isUsingSoftwareFrameLimiting()
+            ? "software frame limiting"
+            : "hardware VSync"));
 
   // Register all concrete game states now that the engine and its managers are
   // fully initialized, then push the initial state before starting main loop.
-  registerInitialStates(*gameEngine.getGameStateManager());
-  gameEngine.getGameStateManager()->pushState(GameStateId::LOGO);
+    registerInitialStates(*gameEngine.getGameStateManager());
+    gameEngine.getGameStateManager()->pushState(GameStateId::LOGO);
 
   // Suppress hitch detection for first few frames while engine stabilizes
-  VoidLight::FrameProfiler::Instance().suppressFrames(10);
+    VoidLight::FrameProfiler::Instance().suppressFrames(10);
 
-  GAMEENGINE_INFO("Starting Main Loop");
+    GAMEENGINE_INFO("Starting Main Loop");
 
   // Get TimestepManager reference for main loop
-  TimestepManager& ts = gameEngine.getTimestepManager();
+    TimestepManager& ts = gameEngine.getTimestepManager();
 
-  VOIDLIGHT_DEBUG_ONLY(
+    VOIDLIGHT_DEBUG_ONLY(
   // Update performance tracking (DEBUG only)
-  static constexpr size_t PERF_SAMPLE_COUNT = 10;
-  std::array<double, PERF_SAMPLE_COUNT> updateSamples{};
-  size_t sampleIndex = 0;
-  size_t intervalUpdateIterations = 0;
-  auto lastPerfLogTime = std::chrono::high_resolution_clock::now();
-  )
+        static constexpr size_t PERF_SAMPLE_COUNT = 10;
+        std::array<double, PERF_SAMPLE_COUNT> updateSamples{};
+        size_t sampleIndex = 0;
+        size_t intervalUpdateIterations = 0;
+        auto lastPerfLogTime = std::chrono::high_resolution_clock::now();)
 
   // Main game loop - classic fixed timestep pattern
   // Updates drain accumulator, THEN render reads alpha - no race conditions
-  while (gameEngine.isRunning()) {
-    PROFILE_FRAME_BEGIN();
+    while (gameEngine.isRunning()) {
+        PROFILE_FRAME_BEGIN();
 
     // Start frame timing (adds delta to accumulator)
-    ts.startFrame();
+        ts.startFrame();
 
     // Process SDL events (must be on main thread)
-    {
-      PROFILE_PHASE(VoidLight::FramePhase::Events);
-      gameEngine.handleEvents();
-    }
-    if (!gameEngine.isRunning()) {
-      break;
-    }
+        {
+            PROFILE_PHASE(VoidLight::FramePhase::Events);
+            gameEngine.handleEvents();
+        }
+        if (!gameEngine.isRunning()) {
+            break;
+        }
 
     // Fixed timestep updates - run until accumulator is drained
-    VOIDLIGHT_DEBUG_ONLY(
-    auto updateStart = std::chrono::high_resolution_clock::now();
-    size_t updateIterations = 0;
-    )
+        VOIDLIGHT_DEBUG_ONLY(
+            auto updateStart = std::chrono::high_resolution_clock::now();
+            size_t updateIterations = 0;)
 
-    {
-      PROFILE_PHASE(VoidLight::FramePhase::Update);
-      while (gameEngine.isRunning() && ts.shouldUpdate()) {
-        gameEngine.update(ts.getUpdateDeltaTime());
-        VOIDLIGHT_DEBUG_ONLY(++updateIterations;)
-      }
-    }
-    if (!gameEngine.isRunning()) {
-      break;
-    }
+        {
+            PROFILE_PHASE(VoidLight::FramePhase::Update);
+            while (gameEngine.isRunning() && ts.shouldUpdate()) {
+                gameEngine.update(ts.getUpdateDeltaTime());
+                VOIDLIGHT_DEBUG_ONLY(++updateIterations;)
+            }
+        }
+        if (!gameEngine.isRunning()) {
+            break;
+        }
 
-    VOIDLIGHT_DEBUG_ONLY(
-    auto updateEnd = std::chrono::high_resolution_clock::now();
-    double updateMs = std::chrono::duration<double, std::milli>(updateEnd - updateStart).count();
-    updateSamples[sampleIndex++ % PERF_SAMPLE_COUNT] = updateMs;
-    intervalUpdateIterations += updateIterations;
+        VOIDLIGHT_DEBUG_ONLY(
+            auto updateEnd = std::chrono::high_resolution_clock::now();
+            double updateMs = std::chrono::duration<double, std::milli>(updateEnd - updateStart).count();
+            updateSamples[sampleIndex++ % PERF_SAMPLE_COUNT] = updateMs;
+            intervalUpdateIterations += updateIterations;
 
-    double secondsSinceLastLog = std::chrono::duration<double>(updateEnd - lastPerfLogTime).count();
-    if (secondsSinceLastLog >= TimestepManager::PERF_LOG_INTERVAL_SECONDS) {
-      lastPerfLogTime = updateEnd;
-      double avgMs = std::accumulate(updateSamples.begin(), updateSamples.end(), 0.0) / PERF_SAMPLE_COUNT;
-      double frameBudgetMs = 1000.0 / ts.getTargetFPS();
-      double utilizationPercent = (avgMs / frameBudgetMs) * 100.0;
-      GAMEENGINE_DEBUG(std::format("Update performance: {:.2f}ms avg ({:.1f}% frame budget)",
-                                   avgMs, utilizationPercent));
-      GAMEENGINE_DEBUG(std::format("Update stats: iterations:{}, frameMs:{}, vsync:{}, softwareLimit:{}",
-                                   intervalUpdateIterations, ts.getFrameTimeMs(),
-                                   gameEngine.isVSyncEnabled(),
-                                   ts.isUsingSoftwareFrameLimiting()));
-      intervalUpdateIterations = 0;
-    }
-    )
+            double secondsSinceLastLog = std::chrono::duration<double>(updateEnd - lastPerfLogTime).count();
+            if (secondsSinceLastLog >= TimestepManager::PERF_LOG_INTERVAL_SECONDS) {
+                lastPerfLogTime = updateEnd;
+                double avgMs = std::accumulate(updateSamples.begin(), updateSamples.end(), 0.0) / PERF_SAMPLE_COUNT;
+                double frameBudgetMs = 1000.0 / ts.getTargetFPS();
+                double utilizationPercent = (avgMs / frameBudgetMs) * 100.0;
+                GAMEENGINE_DEBUG(std::format("Update performance: {:.2f}ms avg ({:.1f}% frame budget)",
+                    avgMs, utilizationPercent));
+                GAMEENGINE_DEBUG(std::format("Update stats: iterations:{}, frameMs:{}, vsync:{}, softwareLimit:{}",
+                    intervalUpdateIterations, ts.getFrameTimeMs(),
+                    gameEngine.isVSyncEnabled(),
+                    ts.isUsingSoftwareFrameLimiting()));
+                intervalUpdateIterations = 0;
+            })
 
     // Render with interpolation alpha (calculated from remaining accumulator)
-    {
-      PROFILE_PHASE(VoidLight::FramePhase::Render);
-      gameEngine.render();
-    }
+        {
+            PROFILE_PHASE(VoidLight::FramePhase::Render);
+            gameEngine.render();
+        }
 
     // Present (vsync wait) - separate from render for accurate profiling
-    {
-      PROFILE_PHASE(VoidLight::FramePhase::Present);
-      gameEngine.present();
-    }
+        {
+            PROFILE_PHASE(VoidLight::FramePhase::Present);
+            gameEngine.present();
+        }
 
     // End-of-frame cleanup (entity destruction queue, deferred work)
     // Runs after render/present while GPU finishes — uses idle CPU time
-    gameEngine.processBackgroundTasks();
+        gameEngine.processBackgroundTasks();
 
     // End frame (VSync or software frame limiting)
-    ts.endFrame();
+        ts.endFrame();
 
-    PROFILE_FRAME_END();  // Hitch check + console log happens here
-  }
+        PROFILE_FRAME_END();  // Hitch check + console log happens here
+    }
 
-  GAMEENGINE_INFO(std::format("Game {} shutting down", GAME_NAME));
+    GAMEENGINE_INFO(std::format("Game {} shutting down", GAME_NAME));
 
-  gameEngine.clean();
+    gameEngine.clean();
 
-  return 0;
+    return 0;
 }

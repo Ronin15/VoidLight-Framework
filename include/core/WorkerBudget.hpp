@@ -118,8 +118,8 @@ public:
      * @return Pair of {batchCount, batchSize}
      */
     std::pair<size_t, size_t> getBatchStrategy(SystemType system,
-                                                size_t workloadSize,
-                                                size_t optimalWorkers);
+        size_t workloadSize,
+        size_t optimalWorkers);
 
     /**
      * @brief Determine if threading should be used for current workload
@@ -158,7 +158,7 @@ public:
      * @param totalTimeMs Total time for processing to complete
      */
     void reportExecution(SystemType system, size_t workloadSize,
-                         bool wasThreaded, size_t batchCount, double totalTimeMs);
+        bool wasThreaded, size_t batchCount, double totalTimeMs);
 
     /**
      * @brief Get expected throughput for multi-threaded mode (for debugging/logging)

@@ -102,9 +102,9 @@ public:
      * @param alpha If true, enables alpha blending; if false, opaque
      */
     static PipelineConfig createSpriteConfig(SDL_GPUShader* vertShader,
-                                              SDL_GPUShader* fragShader,
-                                              SDL_GPUTextureFormat colorFormat,
-                                              bool alpha);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat,
+        bool alpha);
 
     /**
      * Create a particle pipeline configuration.
@@ -113,23 +113,23 @@ public:
      *                 blending.
      */
     static PipelineConfig createParticleConfig(SDL_GPUShader* vertShader,
-                                                SDL_GPUShader* fragShader,
-                                                SDL_GPUTextureFormat colorFormat,
-                                                bool additive = false);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat,
+        bool additive = false);
 
     /**
      * Create a primitive (colored quad) pipeline configuration.
      */
     static PipelineConfig createPrimitiveConfig(SDL_GPUShader* vertShader,
-                                                 SDL_GPUShader* fragShader,
-                                                 SDL_GPUTextureFormat colorFormat);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat);
 
     /**
      * Create a fullscreen composite pipeline configuration.
      */
     static PipelineConfig createCompositeConfig(SDL_GPUShader* vertShader,
-                                                 SDL_GPUShader* fragShader,
-                                                 SDL_GPUTextureFormat colorFormat);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat);
 
 private:
     SDL_GPUGraphicsPipeline* m_pipeline{nullptr};

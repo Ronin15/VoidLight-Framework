@@ -28,15 +28,13 @@
 #include "utils/Vector2D.hpp"
 #include <cstdint>
 
-namespace VoidLight
-{
+namespace VoidLight {
 
 // ============================================================================
 // IDLE STATE (~48 bytes)
 // ============================================================================
 
-struct IdleStateData
-{
+struct IdleStateData {
     Vector2D originalPosition;   // 8 bytes
     Vector2D currentOffset;      // 8 bytes
     float movementTimer{0.0f};
@@ -52,8 +50,7 @@ struct IdleStateData
 // WANDER STATE (~68 bytes)
 // ============================================================================
 
-struct WanderStateData
-{
+struct WanderStateData {
     Vector2D currentDirection;   // 8 bytes
     Vector2D previousVelocity;   // 8 bytes
     Vector2D lastStallPosition;  // 8 bytes
@@ -72,8 +69,7 @@ struct WanderStateData
 // CHASE STATE (~80 bytes)
 // ============================================================================
 
-struct ChaseStateData
-{
+struct ChaseStateData {
     Vector2D lastKnownTargetPos;      // Last known target position
     Vector2D currentDirection;         // Current movement direction
     Vector2D lastStallPosition;        // Position when stall was detected
@@ -97,8 +93,7 @@ struct ChaseStateData
 // PATROL STATE (subset of guard fields used by patrol)
 // ============================================================================
 
-struct PatrolStateData
-{
+struct PatrolStateData {
     Vector2D patrolTargets[4];        // The 4 assigned patrol waypoints (persistent; NOT the EDM
                                       // waypoint slot, which the pathfinder overwrites with nav nodes)
     Vector2D currentPatrolTarget;     // Current target waypoint position
@@ -113,8 +108,7 @@ struct PatrolStateData
 // FLEE STATE (~136 bytes with safe zones)
 // ============================================================================
 
-struct FleeStateData
-{
+struct FleeStateData {
     Vector2D lastThreatPosition;
     Vector2D fleeDirection;
     Vector2D lastKnownSafeDirection;
@@ -143,8 +137,7 @@ struct FleeStateData
 // FOLLOW STATE (~72 bytes)
 // ============================================================================
 
-struct FollowStateData
-{
+struct FollowStateData {
     Vector2D lastTargetPosition;
     Vector2D currentVelocity;
     Vector2D desiredPosition;
@@ -164,8 +157,7 @@ struct FollowStateData
 // GUARD STATE (~176 bytes with patrol waypoints)
 // ============================================================================
 
-struct GuardStateData
-{
+struct GuardStateData {
     Vector2D assignedPosition;
     Vector2D lastKnownThreatPosition;
     Vector2D investigationTarget;
@@ -208,8 +200,7 @@ struct GuardStateData
 // ATTACK STATE
 // ============================================================================
 
-struct AttackStateData
-{
+struct AttackStateData {
     Vector2D lastTargetPosition;
     Vector2D attackPosition;
     Vector2D retreatPosition;

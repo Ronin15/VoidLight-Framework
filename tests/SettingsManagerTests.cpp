@@ -340,7 +340,7 @@ BOOST_AUTO_TEST_CASE(TestThreadSafety) {
 
     // Launch multiple threads doing concurrent operations
     for (int t = 0; t < numThreads; ++t) {
-        threads.emplace_back([&settings, t, count=operationsPerThread]() {
+        threads.emplace_back([&settings, t, count = operationsPerThread]() {
             for (int i = 0; i < count; ++i) {
                 std::string category = "category" + std::to_string(t);
                 std::string key = "key" + std::to_string(i);

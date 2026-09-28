@@ -10,9 +10,9 @@
 #include <cstdint>
 
 static_assert(static_cast<uint8_t>(TimePeriod::Night) == 3,
-              "TimePeriod table is indexed Morning=0 .. Night=3");
+    "TimePeriod table is indexed Morning=0 .. Night=3");
 static_assert(static_cast<uint8_t>(WeatherType::Custom) == 7,
-              "WeatherType table is indexed Clear=0 .. Custom=7");
+    "WeatherType table is indexed Clear=0 .. Custom=7");
 
 namespace {
 
@@ -43,26 +43,24 @@ constexpr EnvironmentScaleRow kWeatherScales[] = {
 static_assert(sizeof(kTimeScales) / sizeof(kTimeScales[0]) == 4);
 static_assert(sizeof(kWeatherScales) / sizeof(kWeatherScales[0]) == 8);
 
-[[nodiscard]] float clampEnvironmentScale(float value)
-{
+[[nodiscard]] float clampEnvironmentScale(float value) {
     return std::clamp(value, kEnvironmentScaleMin, kEnvironmentScaleMax);
 }
 
 } // namespace
 
 EnvironmentSnapshot combineEnvironmentScales(TimePeriod period, WeatherType weather,
-                                             float visibility)
-{
+    float visibility) {
     const auto timeIndex = static_cast<uint8_t>(period);
     const auto weatherIndex = static_cast<uint8_t>(weather);
     const EnvironmentScaleRow& timeScales =
         (timeIndex <= static_cast<uint8_t>(TimePeriod::Night))
-            ? kTimeScales[timeIndex]
-            : kTimeScales[static_cast<uint8_t>(TimePeriod::Day)];
+        ? kTimeScales[timeIndex]
+        : kTimeScales[static_cast<uint8_t>(TimePeriod::Day)];
     const EnvironmentScaleRow& weatherScales =
         (weatherIndex <= static_cast<uint8_t>(WeatherType::Custom))
-            ? kWeatherScales[weatherIndex]
-            : kWeatherScales[static_cast<uint8_t>(WeatherType::Clear)];
+        ? kWeatherScales[weatherIndex]
+        : kWeatherScales[static_cast<uint8_t>(WeatherType::Clear)];
 
     EnvironmentSnapshot out;
     out.visibility = std::clamp(visibility, 0.0f, 1.0f);

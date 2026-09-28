@@ -21,10 +21,10 @@
 class StanceChangedEvent : public Event {
 public:
     StanceChangedEvent(uint8_t fromFaction,
-                       uint8_t towardFaction,
-                       FactionStance oldStance,
-                       FactionStance newStance,
-                       uint32_t settlementId = 0)
+        uint8_t towardFaction,
+        FactionStance oldStance,
+        FactionStance newStance,
+        uint32_t settlementId = 0)
         : m_fromFaction(fromFaction)
         , m_towardFaction(towardFaction)
         , m_oldStance(oldStance)
@@ -59,10 +59,10 @@ public:
     [[nodiscard]] uint32_t getSettlementId() const { return m_settlementId; }
 
     void set(uint8_t fromFaction,
-             uint8_t towardFaction,
-             FactionStance oldStance,
-             FactionStance newStance,
-             uint32_t settlementId) {
+        uint8_t towardFaction,
+        FactionStance oldStance,
+        FactionStance newStance,
+        uint32_t settlementId) {
         m_fromFaction = fromFaction;
         m_towardFaction = towardFaction;
         m_oldStance = oldStance;

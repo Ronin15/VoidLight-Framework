@@ -52,7 +52,7 @@ bool isAtWaypoint(const Vector2D& position, const Vector2D& waypoint, float radi
 namespace Behaviors {
 
 void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config,
-                VoidLight::PatrolStateData& state) {
+    VoidLight::PatrolStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Patrol);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -80,30 +80,26 @@ void initPatrol(size_t edmIndex, const VoidLight::PatrolBehaviorConfig& config,
 }
 
 void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& config,
-                   VoidLight::PatrolStateData& patrol) {
+    VoidLight::PatrolStateData& patrol) {
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
     const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
-    {
-        switch (shared.pendingMessages[i].messageId)
-        {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        switch (shared.pendingMessages[i].messageId) {
             case BehaviorMessage::PANIC:
                 shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::CALM_DOWN:
-                if (ctx.memoryData.isValid())
-                {
+                if (ctx.memoryData.isValid()) {
                     ctx.memoryData.emotions.fear = std::max(0.0f, ctx.memoryData.emotions.fear - 0.5f);
                 }
                 break;
             case BehaviorMessage::RAISE_ALERT:
-                if (ctx.memoryData.personality.bravery < 0.4f)
-                {
+                if (ctx.memoryData.personality.bravery < 0.4f) {
                     shared.pendingMessageCount = 0;
                     switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                     return;
@@ -146,7 +142,7 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
     if (isAtWaypoint(currentPos, currentWaypoint, config.waypointReachedRadius)) {
         patrol.patrolMoveTimer += elapsed;
         if (patrol.patrolMoveTimer >= applyCautionScale(config.waypointCooldown,
-                                                        ctx.envSnapshot.cautionScale)) {
+                                          ctx.envSnapshot.cautionScale)) {
             patrol.currentPatrolIndex = (patrol.currentPatrolIndex + 1) % 4;
             patrol.patrolMoveTimer = 0.0f;
             patrol.currentPatrolTarget = patrol.patrolTargets[patrol.currentPatrolIndex];
@@ -164,13 +160,13 @@ void executePatrol(BehaviorContext& ctx, const VoidLight::PatrolBehaviorConfig& 
         }
 
         bool needsPath = !pathData.hasPath || pathData.navIndex >= pathData.pathLength ||
-                         pathData.pathUpdateTimer > config.pathRequestCooldown;
+            pathData.pathUpdateTimer > config.pathRequestCooldown;
 
         if (needsPath && pathData.pathRequestCooldown <= 0.0f) {
             PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, currentPos, currentWaypoint,
-                                                           PathfinderManager::Priority::Normal);
+                PathfinderManager::Priority::Normal);
             pathData.pathRequestCooldown = config.pathRequestCooldown +
-                                           s_cooldownVariation(s_rng) * config.pathRequestCooldownVariation;
+                s_cooldownVariation(s_rng) * config.pathRequestCooldownVariation;
         }
 
         if (pathData.isFollowingPath()) {

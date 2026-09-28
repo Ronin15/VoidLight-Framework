@@ -29,9 +29,9 @@
 // ============================================================================
 
 // SSE2 detection (x86-64)
-#if defined(__SSE2__) || \
+#if defined(__SSE2__) ||  \
     (defined(_MSC_VER) && \
-     (defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)))
+        (defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)))
 #define VOIDLIGHT_SIMD_SSE2 1
 #include <emmintrin.h>
 #endif
@@ -66,14 +66,14 @@ namespace SIMD {
  * Maps to __m128 on x86 or float32x4_t on ARM
  */
 #if defined(VOIDLIGHT_SIMD_SSE2)
-    using Float4 = __m128;
+using Float4 = __m128;
 #elif defined(VOIDLIGHT_SIMD_NEON)
-    using Float4 = float32x4_t;
+using Float4 = float32x4_t;
 #else
     // Scalar fallback
-    struct Float4 {
-        float data[4];
-    };
+struct Float4 {
+    float data[4];
+};
 #endif
 
 /**
@@ -81,14 +81,14 @@ namespace SIMD {
  * Maps to __m128i on x86 or uint32x4_t on ARM
  */
 #if defined(VOIDLIGHT_SIMD_SSE2)
-    using Int4 = __m128i;
+using Int4 = __m128i;
 #elif defined(VOIDLIGHT_SIMD_NEON)
-    using Int4 = uint32x4_t;
+using Int4 = uint32x4_t;
 #else
     // Scalar fallback
-    struct Int4 {
-        int data[4];
-    };
+struct Int4 {
+    int data[4];
+};
 #endif
 
 /**
@@ -96,14 +96,14 @@ namespace SIMD {
  * Maps to __m128i on x86 or uint8x16_t on ARM
  */
 #if defined(VOIDLIGHT_SIMD_SSE2)
-    using Byte16 = __m128i;
+using Byte16 = __m128i;
 #elif defined(VOIDLIGHT_SIMD_NEON)
-    using Byte16 = uint8x16_t;
+using Byte16 = uint8x16_t;
 #else
     // Scalar fallback
-    struct Byte16 {
-        uint8_t data[16];
-    };
+struct Byte16 {
+    uint8_t data[16];
+};
 #endif
 
 // ============================================================================
@@ -348,9 +348,9 @@ inline int movemask(Float4 v) {
     uint32x4_t const mask = vreinterpretq_u32_f32(v);
     uint32x4_t const shifted = vshrq_n_u32(mask, 31); // Extract sign bits
     uint32_t const result = vgetq_lane_u32(shifted, 0) |
-                     (vgetq_lane_u32(shifted, 1) << 1) |
-                     (vgetq_lane_u32(shifted, 2) << 2) |
-                     (vgetq_lane_u32(shifted, 3) << 3);
+        (vgetq_lane_u32(shifted, 1) << 1) |
+        (vgetq_lane_u32(shifted, 2) << 2) |
+        (vgetq_lane_u32(shifted, 3) << 3);
     return static_cast<int>(result);
 #else
     // Use std::bit_cast for portable type-punning (C++20)
@@ -476,9 +476,9 @@ inline int movemask_int(Int4 v) {
     // Similar to float movemask
     uint32x4_t const shifted = vshrq_n_u32(v, 31);
     uint32_t const result = vgetq_lane_u32(shifted, 0) |
-                     (vgetq_lane_u32(shifted, 1) << 1) |
-                     (vgetq_lane_u32(shifted, 2) << 2) |
-                     (vgetq_lane_u32(shifted, 3) << 3);
+        (vgetq_lane_u32(shifted, 1) << 1) |
+        (vgetq_lane_u32(shifted, 2) << 2) |
+        (vgetq_lane_u32(shifted, 3) << 3);
     return static_cast<int>(result);
 #else
     int result = 0;
@@ -499,7 +499,7 @@ inline Int4 set_int4(int32_t x, int32_t y, int32_t z, int32_t w) {
     return _mm_set_epi32(w, z, y, x); // Note: SSE uses reverse order
 #elif defined(VOIDLIGHT_SIMD_NEON)
     const uint32_t data[4] = {static_cast<uint32_t>(x), static_cast<uint32_t>(y),
-                              static_cast<uint32_t>(z), static_cast<uint32_t>(w)};
+        static_cast<uint32_t>(z), static_cast<uint32_t>(w)};
     return vld1q_u32(data);
 #else
     Int4 result;
@@ -565,7 +565,7 @@ inline Int4 bitwise_or_int(Int4 a, Int4 b) {
 /**
  * @brief Right shift (logical) integer vector by N bits
  */
-template<int N>
+template <int N>
 inline Int4 shift_right_int(Int4 v) {
 #if defined(VOIDLIGHT_SIMD_SSE2)
     return _mm_srli_epi32(v, N);
@@ -681,7 +681,7 @@ inline int movemask_byte(Byte16 v) {
     uint8x16_t const msbs = vshrq_n_u8(v, 7);
 
     // 2. Create a vector of powers of 2 to scale the bits.
-    const uint8_t p[] = { 1, 2, 4, 8, 16, 32, 64, 128 };
+    const uint8_t p[] = {1, 2, 4, 8, 16, 32, 64, 128};
     uint8x8_t const powers = vld1_u8(p);
 
     // 3. Multiply the low and high 8 bytes of MSBs with the powers vector.
@@ -739,7 +739,7 @@ inline Byte16 setzero_byte() {
  * @brief Shuffle float lanes (SSE-style)
  * For cross-platform code, prefer using higher-level operations
  */
-template<int i0, int i1, int i2, int i3>
+template <int i0, int i1, int i2, int i3>
 inline Float4 shuffle(Float4 a, Float4 b) {
 #if defined(VOIDLIGHT_SIMD_SSE2)
     return _mm_shuffle_ps(a, b, _MM_SHUFFLE(i3, i2, i1, i0));
@@ -767,7 +767,7 @@ inline Float4 shuffle(Float4 a, Float4 b) {
 /**
  * @brief Extract single float from vector
  */
-template<int lane>
+template <int lane>
 inline float extract_lane(Float4 v) {
 #if defined(VOIDLIGHT_SIMD_SSE2)
     return _mm_cvtss_f32(_mm_shuffle_ps(v, v, _MM_SHUFFLE(lane, lane, lane, lane)));

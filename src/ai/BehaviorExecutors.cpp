@@ -313,14 +313,14 @@ void clearPendingMessages(size_t edmIndex) {
 // Updated from main thread before batch processing; read by worker threads.
 // Sequential game loop ordering guarantees happens-before.
 namespace {
-    struct CachedBounds {
-        float minX{0.0f};
-        float minY{0.0f};
-        float maxX{0.0f};
-        float maxY{0.0f};
-        bool valid{false};
-    };
-    CachedBounds s_cachedBounds;
+struct CachedBounds {
+    float minX{0.0f};
+    float minY{0.0f};
+    float maxX{0.0f};
+    float maxY{0.0f};
+    bool valid{false};
+};
+CachedBounds s_cachedBounds;
 } // anonymous namespace
 
 void cacheWorldBounds() {
@@ -349,15 +349,14 @@ bool getCachedWorldBounds(float& minX, float& minY, float& maxX, float& maxY) {
 
 void deferBehaviorMessage(size_t targetEdmIndex, uint8_t messageId, uint8_t param) {
     auto& edm = EntityDataManager::Instance();
-    t_deferredBehaviorMessages.push_back({
-        edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param, 0});
+    t_deferredBehaviorMessages.push_back({edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param, 0});
 }
 
 void collectDeferredBehaviorMessages(
     std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& out) {
     out.insert(out.end(),
-               std::make_move_iterator(t_deferredBehaviorMessages.begin()),
-               std::make_move_iterator(t_deferredBehaviorMessages.end()));
+        std::make_move_iterator(t_deferredBehaviorMessages.begin()),
+        std::make_move_iterator(t_deferredBehaviorMessages.end()));
     t_deferredBehaviorMessages.clear();
 }
 

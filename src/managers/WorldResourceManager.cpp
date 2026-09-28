@@ -509,7 +509,7 @@ size_t WorldResourceManager::getHarvestableCount(const WorldId& worldId) const {
 }
 
 void WorldResourceManager::copyHarvestableIndices(const WorldId& worldId,
-                                                  std::vector<size_t>& out) const {
+    std::vector<size_t>& out) const {
     out.clear();
     std::shared_lock lock(m_registryMutex);
 
@@ -555,7 +555,7 @@ void WorldResourceManager::registerDroppedItem(size_t edmIndex, const Vector2D& 
     }
 
     WORLD_RESOURCE_DEBUG(std::format("Registered dropped item {} at ({:.1f}, {:.1f}) to world {}",
-                                      edmIndex, position.getX(), position.getY(), worldId));
+        edmIndex, position.getX(), position.getY(), worldId));
 }
 
 void WorldResourceManager::unregisterDroppedItem(size_t edmIndex) {
@@ -602,7 +602,7 @@ void WorldResourceManager::registerContainerSpatial(size_t edmIndex, const Vecto
     m_containerToWorld[edmIndex] = worldId;
 
     WORLD_RESOURCE_DEBUG(std::format("Registered container spatial {} at ({:.1f}, {:.1f}) to world {}",
-                                      edmIndex, position.getX(), position.getY(), worldId));
+        edmIndex, position.getX(), position.getY(), worldId));
 }
 
 void WorldResourceManager::unregisterContainerSpatial(size_t edmIndex) {
@@ -621,7 +621,7 @@ void WorldResourceManager::unregisterContainerSpatial(size_t edmIndex) {
 }
 
 size_t WorldResourceManager::queryContainersInRadius(const Vector2D& center, float radius,
-                                                      std::vector<size_t>& outIndices) const {
+    std::vector<size_t>& outIndices) const {
     if (!m_initialized.load(std::memory_order_acquire)) {
         outIndices.clear();
         return 0;
@@ -650,7 +650,7 @@ size_t WorldResourceManager::queryContainersInRadius(const Vector2D& center, flo
 // ============================================================================
 
 size_t WorldResourceManager::queryDroppedItemsInRadius(const Vector2D& center, float radius,
-                                                        std::vector<size_t>& outIndices) const {
+    std::vector<size_t>& outIndices) const {
     if (!m_initialized.load(std::memory_order_acquire)) {
         outIndices.clear();
         return 0;
@@ -699,7 +699,7 @@ size_t WorldResourceManager::queryDroppedItemsInRadius(const Vector2D& center, f
 }
 
 size_t WorldResourceManager::queryHarvestablesInRadius(const Vector2D& center, float radius,
-                                                        std::vector<size_t>& outIndices) const {
+    std::vector<size_t>& outIndices) const {
     if (!m_initialized.load(std::memory_order_acquire)) {
         outIndices.clear();
         return 0;

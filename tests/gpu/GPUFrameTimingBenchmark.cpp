@@ -30,12 +30,12 @@ enum class BenchmarkMode : uint8_t {
 
 const char* toString(BenchmarkMode mode) {
     switch (mode) {
-    case BenchmarkMode::Particle: return "particle";
-    case BenchmarkMode::Primitive: return "primitive";
-    case BenchmarkMode::Sprite: return "sprite";
-    case BenchmarkMode::UI: return "ui";
-    case BenchmarkMode::Mixed: return "mixed";
-    default: return "unknown";
+        case BenchmarkMode::Particle: return "particle";
+        case BenchmarkMode::Primitive: return "primitive";
+        case BenchmarkMode::Sprite: return "sprite";
+        case BenchmarkMode::UI: return "ui";
+        case BenchmarkMode::Mixed: return "mixed";
+        default: return "unknown";
     }
 }
 
@@ -124,11 +124,11 @@ struct SampleSet {
 };
 
 void writeColorQuads(VoidLight::GPUVertexPool& pool,
-                     uint32_t quadCount,
-                     float viewportWidth,
-                     float viewportHeight,
-                     float quadSize,
-                     uint32_t colorSeed) {
+    uint32_t quadCount,
+    float viewportWidth,
+    float viewportHeight,
+    float quadSize,
+    uint32_t colorSeed) {
     auto* vertices = static_cast<VoidLight::ColorVertex*>(pool.getMappedPtr());
     if (!vertices) {
         pool.setWrittenVertexCount(0);
@@ -153,12 +153,12 @@ void writeColorQuads(VoidLight::GPUVertexPool& pool,
         const uint8_t g = static_cast<uint8_t>(64 + ((i + colorSeed) * 29) % 191);
         const uint8_t b = static_cast<uint8_t>(64 + ((i + colorSeed) * 53) % 191);
 
-        vertices[offset + 0] = {x,            y,            r, g, b, 255};
-        vertices[offset + 1] = {x + quadSize, y,            r, g, b, 255};
+        vertices[offset + 0] = {x, y, r, g, b, 255};
+        vertices[offset + 1] = {x + quadSize, y, r, g, b, 255};
         vertices[offset + 2] = {x + quadSize, y + quadSize, r, g, b, 255};
         vertices[offset + 3] = {x + quadSize, y + quadSize, r, g, b, 255};
-        vertices[offset + 4] = {x,            y + quadSize, r, g, b, 255};
-        vertices[offset + 5] = {x,            y,            r, g, b, 255};
+        vertices[offset + 4] = {x, y + quadSize, r, g, b, 255};
+        vertices[offset + 5] = {x, y, r, g, b, 255};
         offset += 6;
     }
 
@@ -166,11 +166,11 @@ void writeColorQuads(VoidLight::GPUVertexPool& pool,
 }
 
 void renderColorQuads(VoidLight::GPURenderer& renderer,
-                      VoidLight::GPUVertexPool& pool,
-                      SDL_GPUGraphicsPipeline* pipeline,
-                      SDL_GPURenderPass* pass,
-                      float width,
-                      float height) {
+    VoidLight::GPUVertexPool& pool,
+    SDL_GPUGraphicsPipeline* pipeline,
+    SDL_GPURenderPass* pass,
+    float width,
+    float height) {
     if (!pass || !pipeline) {
         return;
     }
@@ -195,13 +195,13 @@ void renderColorQuads(VoidLight::GPURenderer& renderer,
 }
 
 void writeSpriteQuads(VoidLight::SpriteBatch& batch,
-                      VoidLight::GPUVertexPool& pool,
-                      const GPUTextureData& atlasData,
-                      SDL_GPUSampler* sampler,
-                      uint32_t quadCount,
-                      float width,
-                      float height,
-                      float quadSize) {
+    VoidLight::GPUVertexPool& pool,
+    const GPUTextureData& atlasData,
+    SDL_GPUSampler* sampler,
+    uint32_t quadCount,
+    float width,
+    float height,
+    float quadSize) {
     auto* vertices = static_cast<VoidLight::SpriteVertex*>(pool.getMappedPtr());
     if (!vertices) {
         pool.setWrittenVertexCount(0);
@@ -209,7 +209,7 @@ void writeSpriteQuads(VoidLight::SpriteBatch& batch,
     }
 
     batch.begin(vertices, pool.getMaxVertices(), atlasData.texture->get(), sampler,
-                atlasData.width, atlasData.height, height);
+        atlasData.width, atlasData.height, height);
 
     const float columns = 40.0f;
     const float spacing = quadSize + 4.0f;
@@ -226,12 +226,12 @@ void writeSpriteQuads(VoidLight::SpriteBatch& batch,
 }
 
 void renderSpriteBatch(VoidLight::GPURenderer& renderer,
-                       VoidLight::SpriteBatch& batch,
-                       VoidLight::GPUVertexPool& pool,
-                       SDL_GPURenderPass* pass,
-                       SDL_GPUGraphicsPipeline* pipeline,
-                       float width,
-                       float height) {
+    VoidLight::SpriteBatch& batch,
+    VoidLight::GPUVertexPool& pool,
+    SDL_GPURenderPass* pass,
+    SDL_GPUGraphicsPipeline* pipeline,
+    float width,
+    float height) {
     if (!pass) {
         return;
     }
@@ -243,9 +243,9 @@ void renderSpriteBatch(VoidLight::GPURenderer& renderer,
 }
 
 void writeUISprites(VoidLight::GPUVertexPool& pool,
-                    uint32_t quadCount,
-                    float width,
-                    float height) {
+    uint32_t quadCount,
+    float width,
+    float height) {
     auto* vertices = static_cast<VoidLight::SpriteVertex*>(pool.getMappedPtr());
     if (!vertices) {
         pool.setWrittenVertexCount(0);
@@ -269,12 +269,12 @@ void writeUISprites(VoidLight::GPUVertexPool& pool,
         const float top = height - y;
         const float bottom = top - quadSize;
         const uint8_t a = static_cast<uint8_t>(128 + (i % 128));
-        vertices[offset + 0] = {x,            top,    0.0f, 0.0f, 255, 255, 255, a};
-        vertices[offset + 1] = {x + quadSize, top,    1.0f, 0.0f, 255, 255, 255, a};
+        vertices[offset + 0] = {x, top, 0.0f, 0.0f, 255, 255, 255, a};
+        vertices[offset + 1] = {x + quadSize, top, 1.0f, 0.0f, 255, 255, 255, a};
         vertices[offset + 2] = {x + quadSize, bottom, 1.0f, 1.0f, 255, 255, 255, a};
         vertices[offset + 3] = {x + quadSize, bottom, 1.0f, 1.0f, 255, 255, 255, a};
-        vertices[offset + 4] = {x,            bottom, 0.0f, 1.0f, 255, 255, 255, a};
-        vertices[offset + 5] = {x,            top,    0.0f, 0.0f, 255, 255, 255, a};
+        vertices[offset + 4] = {x, bottom, 0.0f, 1.0f, 255, 255, 255, a};
+        vertices[offset + 5] = {x, top, 0.0f, 0.0f, 255, 255, 255, a};
         offset += 6;
     }
 
@@ -282,8 +282,8 @@ void writeUISprites(VoidLight::GPUVertexPool& pool,
 }
 
 void renderUISprites(VoidLight::GPURenderer& renderer,
-                     const GPUTextureData& atlasData,
-                     SDL_GPURenderPass* pass) {
+    const GPUTextureData& atlasData,
+    SDL_GPURenderPass* pass) {
     if (!pass) {
         return;
     }
@@ -298,9 +298,7 @@ void renderUISprites(VoidLight::GPURenderer& renderer,
         VoidLight::UITextureDrawBatch{
             .texture = atlasData.texture->get(),
             .vertexOffset = 0,
-            .vertexCount = static_cast<uint32_t>(vertexCount)
-        }
-    };
+            .vertexCount = static_cast<uint32_t>(vertexCount)}};
     renderer.renderUIBatches(pass, 0, imageBatches, {});
 }
 
@@ -317,8 +315,7 @@ int main(int argc, char* argv[]) {
     SDL_Window* window = SDL_CreateWindow(
         "GPU Frame Timing Benchmark",
         1280, 720,
-        SDL_WINDOW_RESIZABLE
-    );
+        SDL_WINDOW_RESIZABLE);
     if (!window) {
         std::cerr << std::format("SDL_CreateWindow failed: {}\n", SDL_GetError());
         SDL_Quit();
@@ -410,14 +407,14 @@ int main(int argc, char* argv[]) {
         if (config.m_mode == BenchmarkMode::Sprite || config.m_mode == BenchmarkMode::Mixed) {
             const uint32_t count = (config.m_mode == BenchmarkMode::Mixed) ? config.m_quadCount / 5 : config.m_quadCount;
             writeSpriteQuads(renderer.getSpriteBatch(), renderer.getSpriteVertexPool(), *atlasData,
-                             renderer.getNearestSampler(), count, sceneWidth, sceneHeight, 16.0f);
+                renderer.getNearestSampler(), count, sceneWidth, sceneHeight, 16.0f);
             renderer.getSpriteBatch().end();
         }
 
         if (config.m_mode == BenchmarkMode::Mixed) {
             const uint32_t count = config.m_quadCount / 5;
             writeSpriteQuads(renderer.getEntityBatch(), renderer.getEntityVertexPool(), *atlasData,
-                             renderer.getNearestSampler(), count, sceneWidth, sceneHeight, 24.0f);
+                renderer.getNearestSampler(), count, sceneWidth, sceneHeight, 24.0f);
             renderer.getEntityBatch().end();
         }
 
@@ -430,14 +427,14 @@ int main(int argc, char* argv[]) {
 
         SDL_GPURenderPass* scenePass = renderer.beginScenePass();
         renderColorQuads(renderer, renderer.getParticleVertexPool(),
-                         renderer.getParticlePipeline(), scenePass, sceneWidth, sceneHeight);
+            renderer.getParticlePipeline(), scenePass, sceneWidth, sceneHeight);
         renderColorQuads(renderer, renderer.getPrimitiveVertexPool(),
-                         renderer.getPrimitivePipeline(), scenePass, sceneWidth, sceneHeight);
+            renderer.getPrimitivePipeline(), scenePass, sceneWidth, sceneHeight);
         if (atlasData && atlasData->texture) {
             renderSpriteBatch(renderer, renderer.getSpriteBatch(), renderer.getSpriteVertexPool(),
-                              scenePass, renderer.getSpriteAlphaPipeline(), sceneWidth, sceneHeight);
+                scenePass, renderer.getSpriteAlphaPipeline(), sceneWidth, sceneHeight);
             renderSpriteBatch(renderer, renderer.getEntityBatch(), renderer.getEntityVertexPool(),
-                              scenePass, renderer.getSpriteAlphaPipeline(), sceneWidth, sceneHeight);
+                scenePass, renderer.getSpriteAlphaPipeline(), sceneWidth, sceneHeight);
         }
 
         SDL_GPURenderPass* swapchainPass = renderer.beginSwapchainPass();
@@ -459,14 +456,13 @@ int main(int argc, char* argv[]) {
                 frameMs,
                 profiler.getRenderTimeMs(VoidLight::RenderPhase::GPUSwapchainWait),
                 profiler.getRenderTimeMs(VoidLight::RenderPhase::GPUUpload),
-                profiler.getRenderTimeMs(VoidLight::RenderPhase::GPUSubmit)
-            );
+                profiler.getRenderTimeMs(VoidLight::RenderPhase::GPUSubmit));
         }
     }
 
     std::cout << std::format("GPU frame benchmark: mode={}, {} warmup, {} measured, {} quads/workload\n",
-                             toString(config.m_mode), config.m_warmupFrames,
-                             config.m_measureFrames, config.m_quadCount);
+        toString(config.m_mode), config.m_warmupFrames,
+        config.m_measureFrames, config.m_quadCount);
     std::cout << std::format("  Avg frame time:   {:.3f} ms\n", SampleSet::average(samples.m_frameTimes));
     std::cout << std::format("  Avg swapchain:    {:.3f} ms\n", SampleSet::average(samples.m_swapchainTimes));
     std::cout << std::format("  Avg GPU upload:   {:.3f} ms\n", SampleSet::average(samples.m_uploadTimes));

@@ -130,20 +130,20 @@ public:
     // ========================================================================
 
     TradeResult tryBuy(EntityHandle npcHandle,
-                       VoidLight::ResourceHandle itemHandle,
-                       int quantity = 1);
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1);
 
     TradeResult trySell(EntityHandle npcHandle,
-                        VoidLight::ResourceHandle itemHandle,
-                        int quantity = 1);
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1);
 
     [[nodiscard]] float calculateBuyPrice(EntityHandle npcHandle,
-                                          VoidLight::ResourceHandle itemHandle,
-                                          int quantity = 1) const;
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1) const;
 
     [[nodiscard]] float calculateSellPrice(EntityHandle npcHandle,
-                                           VoidLight::ResourceHandle itemHandle,
-                                           int quantity = 1) const;
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1) const;
 
     // ========================================================================
     // SOCIAL — Interactions & Memory
@@ -156,8 +156,8 @@ public:
      * based on item value. NPCs remember gifts and become more friendly.
      */
     bool tryGift(EntityHandle npcHandle,
-                 VoidLight::ResourceHandle itemHandle,
-                 int quantity = 1);
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1);
 
     /**
      * @brief Record a social interaction for AI-owned NPC state application
@@ -167,16 +167,16 @@ public:
      * MemoryType::Interaction and updates NPC emotions.
      */
     void recordInteraction(EntityHandle npcHandle,
-                           InteractionType type,
-                           float value = 0.0f);
+        InteractionType type,
+        float value = 0.0f);
 
     /**
      * @brief Report a theft — records memory, fires event, alerts guards
      */
     void reportTheft(EntityHandle thief,
-                     EntityHandle victim,
-                     VoidLight::ResourceHandle stolenItem,
-                     int quantity = 1);
+        EntityHandle victim,
+        VoidLight::ResourceHandle stolenItem,
+        int quantity = 1);
 
     /**
      * @brief Alert guards within range to a crime location
@@ -254,10 +254,10 @@ private:
     void recordGift(EntityHandle npcHandle, float giftValue);
     // --- Utility ---
     void dispatchResourceChange(EntityHandle ownerHandle,
-                                VoidLight::ResourceHandle resourceHandle,
-                                int oldQuantity,
-                                int newQuantity,
-                                const std::string& reason) const;
+        VoidLight::ResourceHandle resourceHandle,
+        int oldQuantity,
+        int newQuantity,
+        const std::string& reason) const;
     [[nodiscard]] float getItemBaseValue(VoidLight::ResourceHandle itemHandle) const;
 
     // Player reference

@@ -23,11 +23,11 @@ namespace VoidLight {
  * both homeRole and the current behaviorType.
  */
 [[nodiscard]] EntityHandle spawnNpc(const Vector2D& position,
-                                    const std::string& race,
-                                    const std::string& charClass,
-                                    Sex sex = Sex::Unknown,
-                                    uint8_t factionOverride = 0xFF,
-                                    const std::string& behaviorOverride = {});
+    const std::string& race,
+    const std::string& charClass,
+    Sex sex = Sex::Unknown,
+    uint8_t factionOverride = 0xFF,
+    const std::string& behaviorOverride = {});
 
 }
 

@@ -18,8 +18,7 @@ TimestepManager::TimestepManager(float targetFPS, float fixedTimestep)
     , m_currentFPS(0.0f)
     , m_smoothingAlpha(0.03f)
     , m_shouldRender(true)
-    , m_firstFrame(true)
-{
+    , m_firstFrame(true) {
     auto currentTime = std::chrono::steady_clock::now();
     m_frameStart = currentTime;
     m_lastFrameTime = currentTime;
@@ -67,20 +66,20 @@ double TimestepManager::snapDeltaToCadence(double deltaTime) const {
 
 void TimestepManager::startFrame() {
     auto currentTime = std::chrono::steady_clock::now();
-    
+
     if (m_firstFrame) {
         m_firstFrame = false;
         m_lastFrameTime = currentTime;
         m_frameStart = currentTime;
         return;
     }
-    
+
     // Calculate frame delta time in seconds
     auto deltaTimeNs = std::chrono::duration_cast<std::chrono::nanoseconds>(currentTime - m_lastFrameTime);
     double deltaTimeMs = static_cast<double>(deltaTimeNs.count()) / 1000000.0;
     m_lastFrameTime = currentTime;
     m_frameStart = currentTime;
-    
+
     // Update frame time in milliseconds (for getFrameTimeMs() API)
     m_lastFrameTimeMs = static_cast<uint32_t>(deltaTimeMs);
 
@@ -96,10 +95,10 @@ void TimestepManager::startFrame() {
     deltaTime = snapDeltaToCadence(deltaTime);
 
     m_accumulator += deltaTime;
-    
+
     // Always render once per frame
     m_shouldRender = true;
-    
+
     // Update FPS counter
     updateFPS();
 }

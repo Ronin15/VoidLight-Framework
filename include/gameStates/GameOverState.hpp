@@ -9,12 +9,12 @@
 #include "gameStates/GameState.hpp"
 
 class GameOverState : public GameState {
- public:
-  bool enter() override;
-  void update(float deltaTime) override;
-  void handleInput() override;
-  bool exit() override;
-  GameStateId getStateId() const override { return GameStateId::GAME_OVER; }
+public:
+    bool enter() override;
+    void update(float deltaTime) override;
+    void handleInput() override;
+    bool exit() override;
+    GameStateId getStateId() const override { return GameStateId::GAME_OVER; }
 
   // Sets which state Retry returns to (e.g. GAME_PLAY, AI_DEMO, or EVENT_DEMO
   // if those callers set a return state). Callers must set this before
@@ -22,16 +22,16 @@ class GameOverState : public GameState {
   // enter() runs before any of this state's own code could otherwise re-derive
   // the caller's identity. Main Menu always goes to MAIN_MENU regardless of
   // this value.
-  void setReturnState(GameStateId state) { m_returnState = state; }
+    void setReturnState(GameStateId state) { m_returnState = state; }
 
-  void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
-  void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                   SDL_GPURenderPass* swapchainPass) override;
+    void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
+    void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
+        SDL_GPURenderPass* swapchainPass) override;
 
- private:
+private:
   // Retry destination — set via setReturnState() by the state that routed
   // here (GamePlayState, AIDemoState, EventDemoState). Defaults to GAME_PLAY.
-  GameStateId m_returnState = GameStateId::GAME_PLAY;
+    GameStateId m_returnState = GameStateId::GAME_PLAY;
 };
 
 #endif  // GAME_OVER_STATE_HPP

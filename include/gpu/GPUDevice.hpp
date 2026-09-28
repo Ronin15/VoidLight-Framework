@@ -50,7 +50,7 @@ public:
      * Query if a texture format is supported with given usage flags.
      */
     bool supportsFormat(SDL_GPUTextureFormat format,
-                        SDL_GPUTextureUsageFlags usage) const;
+        SDL_GPUTextureUsageFlags usage) const;
 
     /**
      * Get the device driver name (e.g., "vulkan", "metal", "direct3d12").

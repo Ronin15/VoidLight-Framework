@@ -179,9 +179,9 @@ BOOST_FIXTURE_TEST_CASE(GetShaderFormats, GPUTestFixture) {
     BOOST_CHECK((formats & requestedFormats) == requestedFormats);
 
     BOOST_TEST_MESSAGE("Shader formats - SPIRV: " << hasSPIRV
-                       << ", MSL: " << hasMSL
-                       << ", DXBC: " << hasDXBC
-                       << ", DXIL: " << hasDXIL);
+                                                  << ", MSL: " << hasMSL
+                                                  << ", DXBC: " << hasDXBC
+                                                  << ", DXIL: " << hasDXIL);
 
     device.shutdown();
 }
@@ -236,7 +236,7 @@ BOOST_FIXTURE_TEST_CASE(GetDriverName, GPUTestFixture) {
     BOOST_CHECK(driverName != nullptr);
     BOOST_CHECK(strlen(driverName) > 0);
     BOOST_CHECK_EQUAL(std::string(driverName),
-                      std::string(VoidLight::GPUPlatformConfig::getPreferredDriverName()));
+        std::string(VoidLight::GPUPlatformConfig::getPreferredDriverName()));
 
     BOOST_TEST_MESSAGE("GPU driver: " << driverName);
 
@@ -259,22 +259,19 @@ BOOST_FIXTURE_TEST_CASE(SupportsCommonFormats, GPUTestFixture) {
     // Test common texture formats for sampler usage
     bool supportsRGBA = device.supportsFormat(
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_SAMPLER
-    );
+        SDL_GPU_TEXTUREUSAGE_SAMPLER);
     BOOST_CHECK(supportsRGBA);
 
     // Test color target support
     bool supportsColorTarget = device.supportsFormat(
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
-    );
+        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
     BOOST_CHECK(supportsColorTarget);
 
     // Test combined sampler + color target (for render-to-texture)
     bool supportsBoth = device.supportsFormat(
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
-    );
+        SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
     BOOST_CHECK(supportsBoth);
 
     device.shutdown();

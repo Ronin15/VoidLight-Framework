@@ -596,7 +596,7 @@ BOOST_AUTO_TEST_CASE(TestCreateAtlasImage) {
     const UIRect sourceRect{16, 32, 24, 24};
     ui.createPanel("image_parent", UIRect{80, 80, 80, 80});
     ui.createAtlasImage("atlas_image", UIRect{100, 100, 32, 32},
-                        "atlas", sourceRect, "image_parent");
+        "atlas", sourceRect, "image_parent");
 
     BOOST_CHECK(ui.hasComponent("atlas_image"));
     BOOST_CHECK_EQUAL(ui.getTexture("atlas_image"), "atlas");
