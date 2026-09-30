@@ -431,16 +431,6 @@ void AIManager::update(float deltaTime) {
         // Apply worker-computed path completions before behavior reads PathData.
         PathfinderManager::Instance().commitCompletedPaths();
 
-        // Drain main-thread TLS (tests and any main-thread defer) into the bus
-        // before the pre-pass commit so messages queued before this update apply
-        // in the same frame's behavior execute.
-        m_singleBatchMessages.clear();
-        Behaviors::collectDeferredBehaviorMessages(m_singleBatchMessages);
-        for (const auto& msg : m_singleBatchMessages) {
-            VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
-                msg.targetHandle, msg.targetEdmIndex, msg.messageId, msg.param);
-        }
-
         // Commit queued cross-thread commands before reading per-entity behavior state.
         // Order matters: faction changes keep indices coherent before scans;
         // equipment swaps update current combat stats before attack configs are read;

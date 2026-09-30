@@ -3008,11 +3008,13 @@ BOOST_AUTO_TEST_CASE(TestMessageQueueBasicOperations) {
 }
 
 // ============================================================================
-// DEFERRED MESSAGE PIPELINE INTEGRATION TESTS
-// Test the command-bus communication: behavior → deferBehaviorMessage → AI commit
+// MESSAGE PIPELINE INTEGRATION TESTS
+// Main-thread queueBehaviorMessage → AI commit → behavior handler.
+// Worker deferBehaviorMessage → batch collect → AI commit is covered by
+// TestGuardCallsForHelp_NearbyGuardGoesHostile.
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(TestDeferredPipelineEndToEnd) {
+BOOST_AUTO_TEST_CASE(TestQueuedMessagePipelineEndToEnd) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
 
@@ -3027,18 +3029,18 @@ BOOST_AUTO_TEST_CASE(TestDeferredPipelineEndToEnd) {
     // Guard starts CALM
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guardIdx).index).currentAlertLevel == 0);
 
-    // Simulate what a behavior does during batch: defer a message
-    Behaviors::deferBehaviorMessage(guardIdx, BehaviorMessage::RAISE_ALERT);
+    // Main-thread callers queue on the command bus (never the worker defer path)
+    Behaviors::queueBehaviorMessage(guardIdx, BehaviorMessage::RAISE_ALERT);
 
-    // AI update commits deferred message and processes it
+    // AI update commits the queued message and processes it
     updateAI(0.016f);
 
     // Verify guard is now HOSTILE and queue is drained by behavior handler
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guardIdx).index).currentAlertLevel == 3);
     BOOST_CHECK(edm.getBehaviorData(guardIdx).pendingMessageCount == 0);
 
-    BOOST_TEST_MESSAGE("Deferred command-bus pipeline verified: "
-                       "defer → AI commit → process");
+    BOOST_TEST_MESSAGE("Queued command-bus pipeline verified: "
+                       "queue → AI commit → process");
     aiMgr.unassignBehavior(guardHandle);
 }
 
@@ -3106,12 +3108,13 @@ BOOST_AUTO_TEST_CASE(TestGuardCallsForHelp_NearbyGuardGoesHostile) {
     Behaviors::queueBehaviorMessage(guard1Idx, BehaviorMessage::RAISE_ALERT);
 
     // Frame 1: Guard1 processes RAISE_ALERT → HOSTILE (3) → helpCalled →
-    // defers RAISE_ALERT to nearby same-faction allies (guard2)
+    // worker defers RAISE_ALERT to nearby same-faction allies (guard2); the
+    // batch collects the defer buffer into AICommandBus
     updateAI(0.016f);
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guard1Idx).index).currentAlertLevel == 3);
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guard1Idx).index).helpCalled == true);
 
-    // EventManager delivers deferred RAISE_ALERT to guard2's queue
+    // Drain events between frames as in production (messages travel via AICommandBus)
     eventMgr.update();
 
     // Frame 2: Guard2 processes RAISE_ALERT → HOSTILE (3)

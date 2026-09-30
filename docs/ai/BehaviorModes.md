@@ -106,7 +106,7 @@ Important message IDs:
 Use:
 
 - `Behaviors::queueBehaviorMessage(...)` from the main thread
-- `Behaviors::deferBehaviorMessage(...)` from worker-thread code
+- `Behaviors::deferBehaviorMessage(...)` only from executor code inside an `AIManager` batch; it writes a thread-local buffer that `AIManager` collects at the end of each batch. There is no main-thread drain, so main-thread callers (controllers, handlers, tests) must use `queueBehaviorMessage`
 
 ## Notes
 

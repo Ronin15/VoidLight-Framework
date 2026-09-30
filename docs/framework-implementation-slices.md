@@ -477,7 +477,7 @@ Checklist:
 - [x] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
 - [x] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
 - [x] WP5 weather contract (type defaults on pooled events; no visibility multiply)
-- [ ] WP6 defer-message contract (delete main-thread defer drain pre-pass)
+- [x] WP6 defer-message contract (delete main-thread defer drain pre-pass)
 - [ ] WP7 one harvestable container in `WorldResourceManager`
 - [ ] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
 - [ ] WP9 docs (return-state wording, stale comments, HUD getters, Slice 7 scaffolding fields, factory auto-registration wording, review non-issues)
@@ -496,7 +496,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP5 done; WP6–WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP6 done; WP7–WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 
