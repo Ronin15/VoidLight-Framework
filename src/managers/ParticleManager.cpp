@@ -820,19 +820,24 @@ void ParticleManager::update(float deltaTime) {
         // Advance and snapshot wind phase once per frame (thread-safe snapshot)
         m_windPhase += deltaTime * 0.5f;
 
-        // Phase 4: Update particle physics with optimal threading strategy
-        // WorkerBudget is the AUTHORITATIVE source - no manager overrides
+        // Phase 4: Update particle physics with optimal threading strategy.
+        // WorkerBudget is the authoritative source; the only override is the
+        // debug-only enableThreading(false) benchmarking toggle.
         auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
         auto decision = budgetMgr.shouldUseThreading(
             VoidLight::SystemType::Particle, activeCount);
         bool useThreading = decision.shouldThread;
+        VOIDLIGHT_DEBUG_ONLY(
+            if (!m_useThreading.load(std::memory_order_acquire)) {
+                useThreading = false;
+            })
 
         // Track threading decision for interval logging (local vars, zero overhead
         // in release)
         ParticleThreadingInfo threadingInfo;
 
         if (useThreading) {
-            updateWithWorkerBudget(deltaTime, traversedCount, activeCount,
+            updateParticlesThreaded(deltaTime, traversedCount, activeCount,
                 threadingInfo);
         } else {
             // Single-threaded — timing feeds threshold learning
@@ -2799,29 +2804,6 @@ void ParticleManager::setGlobalVisibility(bool visible) {
 
 void ParticleManager::setMaxParticles(size_t maxParticles) {
     m_storage.capacity.store(maxParticles, std::memory_order_release);
-}
-
-void ParticleManager::updateWithWorkerBudget(
-    float deltaTime, size_t traversedParticleCount, size_t activeParticleCount,
-    ParticleThreadingInfo& outThreadingInfo) {
-    /**
-   * WorkerBudget-optimized particle update path.
-   *
-   * This method serves as the entry point for WorkerBudget-aware particle
-   * updates. It performs validation and fallback logic before delegating to the
-   * threaded update implementation.
-   *
-   * @param deltaTime Time elapsed since last update
-   * @param traversedParticleCount Current traversed particle span
-   * @param activeParticleCount Current active particle count for WorkerBudget
-   * scheduling
-   * @param outThreadingInfo Output struct for threading info (zero overhead in
-   * release)
-   */
-    // Trust the caller's threading decision (already made in update())
-    // — do NOT re-query shouldUseThreading() as hysteresis state may have changed
-    updateParticlesThreaded(deltaTime, traversedParticleCount,
-        activeParticleCount, outThreadingInfo);
 }
 
 VOIDLIGHT_DEBUG_ONLY(

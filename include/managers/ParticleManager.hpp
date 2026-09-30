@@ -928,9 +928,6 @@ private:
     // precondition: caller holds m_effectsMutex (unique_lock)
     void compactInactiveEffectInstances();
     void updateEffectInstances(float deltaTime);
-    void updateWithWorkerBudget(float deltaTime, size_t traversedParticleCount,
-        size_t activeParticleCount,
-        ParticleThreadingInfo& outThreadingInfo);
     void updateParticlesThreaded(float deltaTime, size_t traversedParticleCount,
         size_t activeParticleCount,
         ParticleThreadingInfo& outThreadingInfo);

@@ -402,12 +402,9 @@ void setCameraViewport(float x, float y, float width, float height);
 ### Performance and Threading
 
 ```cpp
-// Threading configuration
-void enableThreading(bool enable);
-void setThreadingThreshold(size_t threshold);
-
-// WorkerBudget-optimized update with queue pressure management
-void updateWithWorkerBudget(float deltaTime, size_t particleCount);
+// Debug-only benchmarking toggle (compiles out in release). When disabled,
+// update() forces the single-threaded path even if WorkerBudget would thread.
+VOIDLIGHT_DEBUG_ONLY(void enableThreading(bool enable);)
 
 // Performance monitoring
 ParticlePerformanceStats getPerformanceStats() const;
@@ -415,6 +412,8 @@ void resetPerformanceStats();
 size_t getActiveParticleCount() const;
 size_t getMaxParticleCapacity() const;
 ```
+
+`update()` asks `WorkerBudgetManager::shouldUseThreading(SystemType::Particle, activeCount)` once per frame and either calls the threaded batch path (`getOptimalWorkers` / `getBatchStrategy`, `ThreadSystem` batches) or the single-threaded path. Batch futures are joined before the buffer swap and deactivation scan, and `reportExecution()` runs after that join. There is no public threading threshold; WorkerBudget owns the decision.
 
 ### Memory Management
 
@@ -435,14 +434,9 @@ void cleanupInactiveParticles();
 class GameEngine {
 private:
     void update(float deltaTime) {
-        // Option 1: Standard update
+        // WorkerBudget threading decision happens inside update()
         ParticleManager::Instance().update(deltaTime);
-        
-        // Option 2: WorkerBudget-optimized update
-        auto& pm = ParticleManager::Instance();
-        size_t particleCount = pm.getActiveParticleCount();
-        pm.updateWithWorkerBudget(deltaTime, particleCount);
-        
+
         // Other system updates...
     }
     
@@ -507,9 +501,7 @@ The ParticleManager integrates with the engine's WorkerBudget system for optimal
 
 ```cpp
 void optimizeParticleProcessing() {
-    auto& pm = ParticleManager::Instance();
-    pm.setThreadingThreshold(1000);
-    
+    // No manager-side threshold: update() asks WorkerBudget each frame.
     // The system automatically:
     // - Monitors queue pressure (90% capacity threshold)
     // - Uses optimal worker count based on WorkerBudget
@@ -724,7 +716,6 @@ if (testId == 0) {
 // Mobile optimization
 #ifdef MOBILE_PLATFORM
     pm.setMaxParticles(3000);  // Lower capacity
-    pm.setThreadingThreshold(1500);  // Higher threshold
 #endif
 
 // High-end PC optimization

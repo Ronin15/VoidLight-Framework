@@ -479,7 +479,7 @@ Checklist:
 - [x] WP5 weather contract (type defaults on pooled events; no visibility multiply)
 - [x] WP6 defer-message contract (delete main-thread defer drain pre-pass)
 - [x] WP7 one harvestable container in `WorldResourceManager`
-- [ ] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
+- [x] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
 - [ ] WP9 docs (return-state wording, stale comments, HUD getters, Slice 7 scaffolding fields, factory auto-registration wording, review non-issues)
 - [ ] Owning docs updated
 - [ ] Tests updated in the same change
@@ -496,7 +496,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP7 done; WP8–WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP8 done; WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 
