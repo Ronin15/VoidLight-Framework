@@ -9,7 +9,8 @@
 It tracks:
 
 - which inventories belong to which world
-- which harvestables belong to which world
+- which harvestables belong to which world (the harvestable spatial index is
+  the single world-membership + spatial index, EDM indices only)
 - spatial indices for dropped items, harvestables, and containers
 - the currently active world for proximity queries
 
@@ -57,7 +58,7 @@ unregisterInventory(inventoryIndex);
 
 registerHarvestable(edmIndex, position, worldId);
 unregisterHarvestable(edmIndex);
-copyHarvestableIndices(worldId, out);  // snapshot static EDM indices; does not destroy
+copyHarvestableIndices(worldId, out);  // snapshot static EDM indices; unordered; does not destroy
 
 registerDroppedItem(edmIndex, position, worldId);
 unregisterDroppedItem(edmIndex);
@@ -65,6 +66,19 @@ unregisterDroppedItem(edmIndex);
 registerContainerSpatial(edmIndex, position, worldId);
 unregisterContainerSpatial(edmIndex);
 ```
+
+Harvestables have one container per world: the harvestable `SpatialIndex`
+(world-membership + spatial index, EDM indices only) plus the
+`m_harvestableToWorld` reverse lookup. `getHarvestableCount`,
+`copyHarvestableIndices`, `queryHarvestableTotal`, `getWorldResources`, and the
+radius queries all read it, so `clearSpatialDataForWorld` and `removeWorld`
+empty the count and copy as well as the radius queries. The
+`harvestablesRegistered` stat tracks the same container (register, unregister,
+`clearSpatialDataForWorld`, `removeWorld`).
+
+`copyHarvestableIndices` order is unspecified. Callers needing a deterministic
+order sort the result (`AIManager::refreshHarvestableSnapshot` sorts by static
+index before building the worker snapshot).
 
 ### Spatial Queries
 

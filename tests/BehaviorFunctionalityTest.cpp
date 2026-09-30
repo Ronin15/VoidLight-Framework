@@ -508,6 +508,8 @@ BOOST_AUTO_TEST_CASE(ForageReachesObstacleTileHarvestable) {
     std::vector<size_t> indices;
     wrm.copyHarvestableIndices(wrm.getActiveWorld(), indices);
     BOOST_REQUIRE(!indices.empty());
+    // copyHarvestableIndices order is unspecified; the first-match pick below needs a fixed order.
+    std::sort(indices.begin(), indices.end());
 
     std::vector<std::pair<EntityHandle, Vector2D>> nodes;
     for (size_t staticIndex : indices) {

@@ -255,18 +255,19 @@ public:
     void unregisterInventory(uint32_t inventoryIndex);
 
     /**
-     * @brief Register a harvestable with quantity and spatial tracking
+     * @brief Register a harvestable with world-membership + spatial index (EDM indices only)
      * @param edmIndex EDM entity index for the harvestable
      * @param position World position
      * @param worldId World to register with
      *
-     * Updates both the world quantity registry and the spatial index.
+     * Updates the world-membership + spatial index (EDM indices only);
+     * quantities stay in EDM.
      * Called by EDM::createHarvestable().
      */
     void registerHarvestable(size_t edmIndex, const Vector2D& position, const WorldId& worldId);
 
     /**
-     * @brief Unregister a harvestable from quantity and spatial tracking
+     * @brief Unregister a harvestable from the world-membership + spatial index (EDM indices only)
      * @param edmIndex EDM entity index
      */
     void unregisterHarvestable(size_t edmIndex);
@@ -386,10 +387,15 @@ public:
     [[nodiscard]] const WorldId& getActiveWorld() const { return m_activeWorld; }
 
     /**
-     * @brief Clear all spatial data for a world (items + harvestables)
+     * @brief Clear all spatial data for a world (items, harvestables, containers)
      * @param worldId World to clear
      *
-     * Called directly during world teardown when needed.
+     * Also removes harvestable world membership: getHarvestableCount,
+     * copyHarvestableIndices, queryHarvestableTotal and getWorldResources all
+     * read 0 for this world afterwards. WRM does not destroy entities; callers
+     * destroying the world's EDM harvestables (e.g.
+     * WorldManager::destroyHarvestablesForWorld) must do so first, while
+     * copyHarvestableIndices still returns them.
      */
     void clearSpatialDataForWorld(const WorldId& worldId);
 
@@ -458,7 +464,8 @@ public:
     /**
      * @brief Copy static EDM harvestable indices for a world into out.
      *
-     * Clears out then copies. Callers destroy via EDM; WRM does not destroy.
+     * Clears out then copies. Order is unspecified; callers that need a
+     * deterministic order sort. Callers destroy via EDM; WRM does not destroy.
      */
     void copyHarvestableIndices(const WorldId& worldId, std::vector<size_t>& out) const;
 
@@ -501,14 +508,8 @@ private:
     // WorldId -> set of inventory indices
     std::unordered_map<WorldId, std::unordered_set<uint32_t>> m_inventoryRegistry;
 
-    // WorldId -> set of EDM harvestable indices
-    std::unordered_map<WorldId, std::unordered_set<size_t>> m_harvestableRegistry;
-
     // Reverse lookup: inventory index -> WorldId
     std::unordered_map<uint32_t, WorldId> m_inventoryToWorld;
-
-    // Reverse lookup: harvestable EDM index -> WorldId
-    std::unordered_map<size_t, WorldId> m_harvestableToWorld;
 
     // ========================================================================
     // SPATIAL INDEX STORAGE (per-world, for O(k) proximity queries)
@@ -517,14 +518,15 @@ private:
     // Per-world spatial indices for dropped items
     std::unordered_map<WorldId, SpatialIndex> m_itemSpatialIndices;
 
-    // Per-world spatial indices for harvestables
+    // Per-world harvestable world-membership + spatial index (EDM indices only).
+    // Single harvestable container: counts, copies, and totals read entityToCell.
     std::unordered_map<WorldId, SpatialIndex> m_harvestableSpatialIndices;
 
     // Reverse lookup: item EDM index -> WorldId (for O(1) unregistration)
     std::unordered_map<size_t, WorldId> m_itemToWorld;
 
-    // Reverse lookup: harvestable EDM index -> WorldId (for spatial unregistration)
-    std::unordered_map<size_t, WorldId> m_harvestableSpatialToWorld;
+    // Reverse lookup: harvestable EDM index -> WorldId (for O(1) unregistration)
+    std::unordered_map<size_t, WorldId> m_harvestableToWorld;
 
     // Per-world spatial indices for containers
     std::unordered_map<WorldId, SpatialIndex> m_containerSpatialIndices;

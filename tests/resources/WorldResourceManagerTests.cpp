@@ -783,6 +783,121 @@ BOOST_AUTO_TEST_CASE(VersionBumpsOnRegisterUnregisterClearAndNotify) {
     BOOST_REQUIRE(worldManager->init());
 }
 
+BOOST_AUTO_TEST_CASE(ClearSpatialDataForWorldClearsHarvestableCountAndCopy) {
+    const std::string worldId = "clear_spatial_harvestable_world";
+    const std::string otherWorldId = "clear_spatial_other_world";
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    BOOST_REQUIRE(worldManager->createWorld(otherWorldId));
+    worldManager->setActiveWorld(worldId);
+    BOOST_REQUIRE(oreHandle.isValid());
+
+    const Vector2D posA(200.0f, 200.0f);
+    const EntityHandle a = entityDataManager->createHarvestable(posA, oreHandle, 1, 2, 30.0f, worldId);
+    const EntityHandle b =
+        entityDataManager->createHarvestable(Vector2D(400.0f, 200.0f), oreHandle, 1, 2, 30.0f, worldId);
+    const EntityHandle other =
+        entityDataManager->createHarvestable(Vector2D(200.0f, 200.0f), oreHandle, 1, 2, 30.0f, otherWorldId);
+    BOOST_REQUIRE(a.isValid());
+    BOOST_REQUIRE(b.isValid());
+    BOOST_REQUIRE(other.isValid());
+
+    std::vector<size_t> indices;
+    worldManager->copyHarvestableIndices(worldId, indices);
+    BOOST_REQUIRE_EQUAL(worldManager->getHarvestableCount(worldId), 2u);
+    BOOST_REQUIRE_EQUAL(indices.size(), 2u);
+    const uint64_t registeredBefore = worldManager->getStats().harvestablesRegistered.load();
+
+    worldManager->clearSpatialDataForWorld(worldId);
+
+    // Count, copy, radius query and totals all read the same container.
+    BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(worldId), 0u);
+    worldManager->copyHarvestableIndices(worldId, indices);
+    BOOST_CHECK(indices.empty());
+    BOOST_CHECK_EQUAL(worldManager->queryHarvestablesInRadius(posA, 500.0f, indices), 0u);
+    BOOST_CHECK_EQUAL(worldManager->queryHarvestableTotal(worldId, oreHandle), 0);
+    BOOST_CHECK_EQUAL(worldManager->getStats().harvestablesRegistered.load(), registeredBefore - 2u);
+
+    // Other worlds are untouched.
+    BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(otherWorldId), 1u);
+
+    // Reverse lookup was cleared: re-registering restores membership.
+    const size_t aIndex = entityDataManager->getIndex(a);
+    BOOST_REQUIRE(aIndex != SIZE_MAX);
+    worldManager->registerHarvestable(aIndex, posA, worldId);
+    BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(worldId), 1u);
+    worldManager->copyHarvestableIndices(worldId, indices);
+    BOOST_REQUIRE_EQUAL(indices.size(), 1u);
+    BOOST_CHECK_EQUAL(indices.front(), aIndex);
+}
+
+BOOST_AUTO_TEST_CASE(RemoveWorldLowersHarvestablesRegistered) {
+    const std::string worldId = "remove_world_stat_world";
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    BOOST_REQUIRE(oreHandle.isValid());
+
+    BOOST_REQUIRE(
+        entityDataManager->createHarvestable(Vector2D(100.0f, 100.0f), oreHandle, 1, 2, 30.0f, worldId).isValid());
+    BOOST_REQUIRE(
+        entityDataManager->createHarvestable(Vector2D(300.0f, 100.0f), oreHandle, 1, 2, 30.0f, worldId).isValid());
+    BOOST_REQUIRE_EQUAL(worldManager->getHarvestableCount(worldId), 2u);
+    const uint64_t registeredBefore = worldManager->getStats().harvestablesRegistered.load();
+
+    BOOST_REQUIRE(worldManager->removeWorld(worldId));
+
+    BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(worldId), 0u);
+    BOOST_CHECK_EQUAL(worldManager->getStats().harvestablesRegistered.load(), registeredBefore - 2u);
+}
+
+BOOST_AUTO_TEST_CASE(ReRegisterHarvestableMovesWorldMembership) {
+    const std::string fromWorld = "reregister_from_world";
+    const std::string toWorld = "reregister_to_world";
+    BOOST_REQUIRE(worldManager->createWorld(fromWorld));
+    BOOST_REQUIRE(worldManager->createWorld(toWorld));
+    BOOST_REQUIRE(oreHandle.isValid());
+
+    const Vector2D pos(150.0f, 150.0f);
+    const EntityHandle handle = entityDataManager->createHarvestable(pos, oreHandle, 1, 2, 30.0f, fromWorld);
+    BOOST_REQUIRE(handle.isValid());
+    const size_t edmIndex = entityDataManager->getIndex(handle);
+    BOOST_REQUIRE(edmIndex != SIZE_MAX);
+    BOOST_REQUIRE_EQUAL(worldManager->getHarvestableCount(fromWorld), 1u);
+    BOOST_REQUIRE_EQUAL(worldManager->getHarvestableCount(toWorld), 0u);
+    const uint64_t registeredBefore = worldManager->getStats().harvestablesRegistered.load();
+
+    worldManager->registerHarvestable(edmIndex, pos, toWorld);
+
+    BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(fromWorld), 0u);
+    BOOST_CHECK_EQUAL(worldManager->getHarvestableCount(toWorld), 1u);
+    BOOST_CHECK_EQUAL(worldManager->getStats().harvestablesRegistered.load(), registeredBefore);
+    std::vector<size_t> indices;
+    worldManager->copyHarvestableIndices(fromWorld, indices);
+    BOOST_CHECK(indices.empty());
+    worldManager->copyHarvestableIndices(toWorld, indices);
+    BOOST_REQUIRE_EQUAL(indices.size(), 1u);
+    BOOST_CHECK_EQUAL(indices.front(), edmIndex);
+}
+
+BOOST_AUTO_TEST_CASE(CleanThenInitDropsContainerSpatialData) {
+    const std::string worldId = "container_lifecycle_world";
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    worldManager->setActiveWorld(worldId);
+
+    // WRM stores EDM indices only; a container index needs no live EDM entity here.
+    constexpr size_t CONTAINER_INDEX = 4242;
+    const Vector2D pos(500.0f, 500.0f);
+    worldManager->registerContainerSpatial(CONTAINER_INDEX, pos, worldId);
+    std::vector<size_t> indices;
+    BOOST_REQUIRE_EQUAL(worldManager->queryContainersInRadius(pos, 64.0f, indices), 1u);
+
+    worldManager->clean();
+    BOOST_REQUIRE(worldManager->init());
+    BOOST_REQUIRE(worldManager->createWorld(worldId));
+    worldManager->setActiveWorld(worldId);
+
+    BOOST_CHECK_EQUAL(worldManager->queryContainersInRadius(pos, 64.0f, indices), 0u);
+    BOOST_CHECK(indices.empty());
+}
+
 BOOST_AUTO_TEST_CASE(CountAvailableExcludesDepleted) {
     const std::string worldId = "count_available_world";
     BOOST_REQUIRE(worldManager->createWorld(worldId));

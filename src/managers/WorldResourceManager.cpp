@@ -35,20 +35,19 @@ bool WorldResourceManager::init() {
 
     // Clear any existing registry data
     m_inventoryRegistry.clear();
-    m_harvestableRegistry.clear();
     m_inventoryToWorld.clear();
-    m_harvestableToWorld.clear();
 
     // Clear spatial data
     m_itemSpatialIndices.clear();
     m_harvestableSpatialIndices.clear();
+    m_containerSpatialIndices.clear();
     m_itemToWorld.clear();
-    m_harvestableSpatialToWorld.clear();
+    m_harvestableToWorld.clear();
+    m_containerToWorld.clear();
     m_activeWorld.clear();
 
     // Create default world for single-world scenarios
     m_inventoryRegistry["default"] = {};
-    m_harvestableRegistry["default"] = {};
     m_itemSpatialIndices["default"] = SpatialIndex();
     m_harvestableSpatialIndices["default"] = SpatialIndex();
 
@@ -69,15 +68,15 @@ void WorldResourceManager::clean() {
     std::unique_lock lock(m_registryMutex);
 
     m_inventoryRegistry.clear();
-    m_harvestableRegistry.clear();
     m_inventoryToWorld.clear();
-    m_harvestableToWorld.clear();
 
     // Clear spatial data
     m_itemSpatialIndices.clear();
     m_harvestableSpatialIndices.clear();
+    m_containerSpatialIndices.clear();
     m_itemToWorld.clear();
-    m_harvestableSpatialToWorld.clear();
+    m_harvestableToWorld.clear();
+    m_containerToWorld.clear();
     m_activeWorld.clear();
 
     m_stats.reset();
@@ -97,16 +96,14 @@ void WorldResourceManager::prepareForStateTransition() {
 
     // Clear all registries (stale EDM indices from previous state)
     m_inventoryRegistry.clear();
-    m_harvestableRegistry.clear();
     m_inventoryToWorld.clear();
-    m_harvestableToWorld.clear();
 
     // Clear all spatial indices and reverse lookups
     m_itemSpatialIndices.clear();
     m_harvestableSpatialIndices.clear();
     m_containerSpatialIndices.clear();
     m_itemToWorld.clear();
-    m_harvestableSpatialToWorld.clear();
+    m_harvestableToWorld.clear();
     m_containerToWorld.clear();
 
     // Clear active world so createWorld() succeeds on re-entry
@@ -114,7 +111,6 @@ void WorldResourceManager::prepareForStateTransition() {
 
     // Re-create default world entries (matches init() pattern)
     m_inventoryRegistry["default"] = {};
-    m_harvestableRegistry["default"] = {};
     m_itemSpatialIndices["default"] = SpatialIndex();
     m_harvestableSpatialIndices["default"] = SpatialIndex();
 
@@ -143,7 +139,6 @@ bool WorldResourceManager::createWorld(const WorldId& worldId) {
     }
 
     m_inventoryRegistry[worldId] = {};
-    m_harvestableRegistry[worldId] = {};
     m_stats.worldsTracked.fetch_add(1, std::memory_order_relaxed);
 
     WORLD_RESOURCE_INFO(std::format("Created world: {}", worldId));
@@ -164,7 +159,6 @@ bool WorldResourceManager::removeWorld(const WorldId& worldId) {
     std::unique_lock lock(m_registryMutex);
 
     auto invIt = m_inventoryRegistry.find(worldId);
-    auto harvIt = m_harvestableRegistry.find(worldId);
 
     if (invIt == m_inventoryRegistry.end()) {
         WORLD_RESOURCE_WARN(std::format("removeWorld: World not found: {}", worldId));
@@ -182,14 +176,6 @@ bool WorldResourceManager::removeWorld(const WorldId& worldId) {
         m_inventoryToWorld.erase(invIdx);
     }
 
-    // Remove reverse lookups for this world's harvestables
-    if (harvIt != m_harvestableRegistry.end()) {
-        for (size_t harvIdx : harvIt->second) {
-            m_harvestableToWorld.erase(harvIdx);
-        }
-        m_harvestableRegistry.erase(harvIt);
-    }
-
     auto itemIt = m_itemSpatialIndices.find(worldId);
     if (itemIt != m_itemSpatialIndices.end()) {
         for (const auto& entry : itemIt->second.entityToCell) {
@@ -201,8 +187,9 @@ bool WorldResourceManager::removeWorld(const WorldId& worldId) {
     auto harvSpatialIt = m_harvestableSpatialIndices.find(worldId);
     if (harvSpatialIt != m_harvestableSpatialIndices.end()) {
         for (const auto& entry : harvSpatialIt->second.entityToCell) {
-            m_harvestableSpatialToWorld.erase(entry.first);
+            m_harvestableToWorld.erase(entry.first);
         }
+        m_stats.harvestablesRegistered.fetch_sub(harvSpatialIt->second.size(), std::memory_order_relaxed);
         m_harvestableSpatialIndices.erase(harvSpatialIt);
     }
 
@@ -269,7 +256,6 @@ void WorldResourceManager::registerInventory(uint32_t inventoryIndex, const Worl
     if (worldIt == m_inventoryRegistry.end()) {
         WORLD_RESOURCE_WARN(std::format("registerInventory: World not found: {}, creating", worldId));
         m_inventoryRegistry[worldId] = {};
-        m_harvestableRegistry[worldId] = {};
         m_stats.worldsTracked.fetch_add(1, std::memory_order_relaxed);
         worldIt = m_inventoryRegistry.find(worldId);
     }
@@ -304,40 +290,26 @@ void WorldResourceManager::unregisterInventory(uint32_t inventoryIndex) {
 void WorldResourceManager::registerHarvestable(size_t edmIndex, const Vector2D& position, const WorldId& worldId) {
     std::unique_lock lock(m_registryMutex);
 
-    auto qtyIt = m_harvestableToWorld.find(edmIndex);
-    if (qtyIt != m_harvestableToWorld.end() && qtyIt->second != worldId) {
-        m_harvestableRegistry[qtyIt->second].erase(edmIndex);
-        m_stats.harvestablesRegistered.fetch_sub(1, std::memory_order_relaxed);
-        m_harvestableToWorld.erase(qtyIt);
-    }
-
-    auto spatialIt = m_harvestableSpatialToWorld.find(edmIndex);
-    if (spatialIt != m_harvestableSpatialToWorld.end() && spatialIt->second != worldId) {
-        m_harvestableSpatialIndices[spatialIt->second].remove(edmIndex);
-        if (spatialIt->second == m_activeWorld) {
+    auto existingIt = m_harvestableToWorld.find(edmIndex);
+    if (existingIt != m_harvestableToWorld.end() && existingIt->second != worldId) {
+        m_harvestableSpatialIndices[existingIt->second].remove(edmIndex);
+        if (existingIt->second == m_activeWorld) {
             m_activeWorldHarvestableCount.fetch_sub(1, std::memory_order_relaxed);
         }
-        m_harvestableSpatialToWorld.erase(spatialIt);
+        m_harvestableToWorld.erase(existingIt);
+        m_stats.harvestablesRegistered.fetch_sub(1, std::memory_order_relaxed);
     }
 
     if (m_harvestableToWorld.find(edmIndex) == m_harvestableToWorld.end()) {
-        auto worldIt = m_harvestableRegistry.find(worldId);
-        if (worldIt == m_harvestableRegistry.end()) {
+        if (m_inventoryRegistry.find(worldId) == m_inventoryRegistry.end()) {
             WORLD_RESOURCE_WARN(std::format("registerHarvestable: World not found: {}, creating", worldId));
             m_inventoryRegistry[worldId] = {};
-            m_harvestableRegistry[worldId] = {};
             m_stats.worldsTracked.fetch_add(1, std::memory_order_relaxed);
-            worldIt = m_harvestableRegistry.find(worldId);
         }
 
-        worldIt->second.insert(edmIndex);
+        m_harvestableSpatialIndices[worldId].insert(edmIndex, position);
         m_harvestableToWorld[edmIndex] = worldId;
         m_stats.harvestablesRegistered.fetch_add(1, std::memory_order_relaxed);
-    }
-
-    if (m_harvestableSpatialToWorld.find(edmIndex) == m_harvestableSpatialToWorld.end()) {
-        m_harvestableSpatialIndices[worldId].insert(edmIndex, position);
-        m_harvestableSpatialToWorld[edmIndex] = worldId;
         if (worldId == m_activeWorld) {
             m_activeWorldHarvestableCount.fetch_add(1, std::memory_order_relaxed);
         }
@@ -349,23 +321,14 @@ void WorldResourceManager::registerHarvestable(size_t edmIndex, const Vector2D& 
 void WorldResourceManager::unregisterHarvestable(size_t edmIndex) {
     std::unique_lock lock(m_registryMutex);
 
-    auto qtyIt = m_harvestableToWorld.find(edmIndex);
-    if (qtyIt != m_harvestableToWorld.end()) {
-        auto worldIt = m_harvestableRegistry.find(qtyIt->second);
-        if (worldIt != m_harvestableRegistry.end()) {
-            worldIt->second.erase(edmIndex);
-        }
-        m_harvestableToWorld.erase(qtyIt);
-        m_stats.harvestablesRegistered.fetch_sub(1, std::memory_order_relaxed);
-    }
-
-    auto spatialIt = m_harvestableSpatialToWorld.find(edmIndex);
-    if (spatialIt != m_harvestableSpatialToWorld.end()) {
-        if (spatialIt->second == m_activeWorld) {
+    auto it = m_harvestableToWorld.find(edmIndex);
+    if (it != m_harvestableToWorld.end()) {
+        if (it->second == m_activeWorld) {
             m_activeWorldHarvestableCount.fetch_sub(1, std::memory_order_relaxed);
         }
-        m_harvestableSpatialIndices[spatialIt->second].remove(edmIndex);
-        m_harvestableSpatialToWorld.erase(spatialIt);
+        m_harvestableSpatialIndices[it->second].remove(edmIndex);
+        m_harvestableToWorld.erase(it);
+        m_stats.harvestablesRegistered.fetch_sub(1, std::memory_order_relaxed);
     }
 
     m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
@@ -410,15 +373,16 @@ WorldResourceManager::Quantity WorldResourceManager::queryHarvestableTotal(
 
     std::shared_lock lock(m_registryMutex);
 
-    auto worldIt = m_harvestableRegistry.find(worldId);
-    if (worldIt == m_harvestableRegistry.end()) {
+    auto worldIt = m_harvestableSpatialIndices.find(worldId);
+    if (worldIt == m_harvestableSpatialIndices.end()) {
         return 0;
     }
 
     auto& edm = EntityDataManager::Instance();
     Quantity total = 0;
 
-    for (size_t edmIdx : worldIt->second) {
+    for (const auto& entry : worldIt->second.entityToCell) {
+        const size_t edmIdx = entry.first;
         // Get hot data and verify it's still a harvestable
         // Note: Registry should be kept clean via unregisterHarvestable on entity destruction
         const auto& hot = edm.getStaticHotDataByIndex(edmIdx);
@@ -474,9 +438,10 @@ WorldResourceManager::getWorldResources(const WorldId& worldId) const {
     }
 
     // Sum from harvestables
-    auto harvIt = m_harvestableRegistry.find(worldId);
-    if (harvIt != m_harvestableRegistry.end()) {
-        for (size_t edmIdx : harvIt->second) {
+    auto harvIt = m_harvestableSpatialIndices.find(worldId);
+    if (harvIt != m_harvestableSpatialIndices.end()) {
+        for (const auto& entry : harvIt->second.entityToCell) {
+            const size_t edmIdx = entry.first;
             // Registry is kept clean via unregisterHarvestable on entity destruction
             const auto& hot = edm.getStaticHotDataByIndex(edmIdx);
             if (hot.kind != EntityKind::Harvestable) {
@@ -511,8 +476,8 @@ size_t WorldResourceManager::getInventoryCount(const WorldId& worldId) const {
 size_t WorldResourceManager::getHarvestableCount(const WorldId& worldId) const {
     std::shared_lock lock(m_registryMutex);
 
-    auto it = m_harvestableRegistry.find(worldId);
-    return (it != m_harvestableRegistry.end()) ? it->second.size() : 0;
+    auto it = m_harvestableSpatialIndices.find(worldId);
+    return (it != m_harvestableSpatialIndices.end()) ? it->second.size() : 0;
 }
 
 void WorldResourceManager::copyHarvestableIndices(const WorldId& worldId,
@@ -521,13 +486,15 @@ void WorldResourceManager::copyHarvestableIndices(const WorldId& worldId,
     out.clear();
     std::shared_lock lock(m_registryMutex);
 
-    auto it = m_harvestableRegistry.find(worldId);
-    if (it == m_harvestableRegistry.end()) {
+    auto it = m_harvestableSpatialIndices.find(worldId);
+    if (it == m_harvestableSpatialIndices.end()) {
         return;
     }
 
     out.reserve(it->second.size());
-    out.insert(out.end(), it->second.begin(), it->second.end());
+    for (const auto& entry : it->second.entityToCell) {
+        out.push_back(entry.first);
+    }
 }
 
 // ============================================================================
@@ -902,8 +869,9 @@ void WorldResourceManager::clearSpatialDataForWorld(const WorldId& worldId) {
     if (harvIt != m_harvestableSpatialIndices.end()) {
         // Remove reverse lookups
         for (const auto& entry : harvIt->second.entityToCell) {
-            m_harvestableSpatialToWorld.erase(entry.first);
+            m_harvestableToWorld.erase(entry.first);
         }
+        m_stats.harvestablesRegistered.fetch_sub(harvIt->second.size(), std::memory_order_relaxed);
         harvIt->second.clear();
     }
 

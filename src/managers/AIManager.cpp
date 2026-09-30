@@ -1841,8 +1841,8 @@ void AIManager::refreshHarvestableSnapshot() {
     }
 
     wrm.copyHarvestableIndices(wrm.getActiveWorld(), m_harvestableIndexScratch);
-    // Registry order is unordered_set order; sort for deterministic scans and so
-    // Forage can validate its target by staticIndex binary search.
+    // copyHarvestableIndices order is unspecified; sort for deterministic scans and so
+    // Forage can validate by staticIndex binary search.
     std::sort(m_harvestableIndexScratch.begin(), m_harvestableIndexScratch.end());
 
     auto& edm = EntityDataManager::Instance();
