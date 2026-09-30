@@ -48,7 +48,7 @@ Route through the Claude subagents (see "Specialist Routing" in `CLAUDE.md`).
 1. **Open or add** `## Slice N: …`. Read Goal, Current foundation, and
    Architecture notes. Cross-read [ARCHITECTURE.md](ARCHITECTURE.md) and any
    doc linked in the slice.
-2. **Design first** (`systems-integrator`) if ownership, lifecycle, or
+2. **Design first** (`cpp-design-specialist`) if ownership, lifecycle, or
    multi-manager flow is unclear. Do not mark the slice complete in the design.
 3. **Implement only that slice's scope** (`game-engine-specialist`) in the owning
    `include/` + `src/` modules. Check off Checklist items as each integration
@@ -153,7 +153,7 @@ Architecture notes:
 
 Checklist:
 
-- [x] `systems-integrator` locks ownership (HudController vs UIManager vs GamePlayState vs demos)
+- [x] `cpp-design-specialist` locks ownership (HudController vs UIManager vs GamePlayState vs demos)
 - [x] `HudController` creates and updates action HUD widgets (vitals, target, hotbar, harvest progress)
 - [x] `GamePlayState` pause/resume uses `HudController::setVisible()` and only toggles state-owned chrome (`event_log`, `time_label`, `fps`)
 - [x] `UIManager::createCombatHUD` / `updateCombatHUD` / `destroyCombatHUD` are removed from the production state path
@@ -199,7 +199,7 @@ Architecture notes:
 - Add `SettlementRecord` to `WorldData.hpp`: `uint32_t id`, `int centerTileX`, `int centerTileY`, `int radiusTiles`, `Biome biome`, `uint8_t faction`, `uint8_t buildingCount`. `WorldData` holds `std::vector<SettlementRecord> settlements`.
 - `WorldGenerator` writes each accepted village center into `settlements` (do not discard `villageCenters`). `radiusTiles = VILLAGE_RADIUS` (12). `biome` from the center tile. `faction = 0` for overworld villages. `buildingCount` = buildings actually placed. `id` is 1-based index in the vector.
 - Populate runs from `WorldManager::loadNewWorld` immediately after `initializeWorldResources()`, same `worldId` as WRM. Clear the worldId registry and destroy NPCs spawned for that `worldId` from `unloadWorldLocked()`. Do not populate from `GamePlayState::enter()`. Do not implement the `loadWorld` stub in this slice; when saved-world load lands later, it must call the same populate after `WorldData` is restored if NPCs are not in the save.
-- `systems-integrator` names the populate type and its `worldId` register/query/clear API. Placement: world-load helper next to `initializeWorldResources`, called from `loadNewWorld` / `unloadWorldLocked`. Query API on `WorldManager` (or the named type) for later slices: settlements for the current/given `worldId`, and point-in-radius lookup (`center + radiusTiles * TILE_SIZE`).
+- `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API. Placement: world-load helper next to `initializeWorldResources`, called from `loadNewWorld` / `unloadWorldLocked`. Query API on `WorldManager` (or the named type) for later slices: settlements for the current/given `worldId`, and point-in-radius lookup (`center + radiusTiles * TILE_SIZE`).
 - Spawn in pixel space like harvestables: `tile * TILE_SIZE (32) + TILE_SIZE * 0.5f`. Skip water, `obstacleType != NONE`, and `buildingId != 0` (except guards, which spawn on `isTopLeftOfBuilding` tiles).
 - Per settlement, locked counts and `classes.json` behaviors:
   - 1× `Human` / `GeneralMerchant`, `assignBehavior(..., "Idle")`, at or adjacent to the village center.
@@ -216,7 +216,7 @@ Architecture notes:
 
 Checklist:
 
-- [x] `systems-integrator` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
+- [x] `cpp-design-specialist` names the populate type and its `worldId` register/query/clear API (called from `WorldManager::loadNewWorld` / `unloadWorldLocked`)
 - [x] `SettlementRecord` + `WorldData::settlements`; generator persists village centers (id, biome, faction 0, buildingCount, radius 12)
 - [x] Populate after `initializeWorldResources()`; destroy+clear on `unloadWorldLocked`; skip if already populated
 - [x] Per-settlement 1 merchant Idle + 2 Guard + 4 Villager Wander; sparse forest/haunted Warriors (faction 1, Chase home role); walkable spawn; cap 256
@@ -536,14 +536,14 @@ Architecture notes:
 
 - Discovery: bit grid on `WorldData` keyed with the world (chunk size 8 tiles → 25×25 bits for 200×200, packed bytes, no per-frame allocation). Update from player tile position on the main thread (mark the player’s chunk and 8-neighbors explored). Clear with the world on `unloadWorldLocked`. Do **not** dump minimap policy or discovery mutation loops into `WorldManager`; it only owns world lifetime/clear.
 - Persist discovery in this slice: extend `SaveGameManager` with `worldId` + packed discovery bytes (and restore them on load into the matching `WorldData`). If the loaded worldId does not match, start unexplored.
-- Widgets via `UIManager` primitives (panel + GPU vertices through the existing UI path). Ids under a `hud_minimap_*` prefix. `systems-integrator` picks `HudController` vs a sibling UI controller; pause/resume must hide the minimap with one visibility call, not a new id list on `GamePlayState`.
+- Widgets via `UIManager` primitives (panel + GPU vertices through the existing UI path). Ids under a `hud_minimap_*` prefix. `cpp-design-specialist` picks `HudController` vs a sibling UI controller; pause/resume must hide the minimap with one visibility call, not a new id list on `GamePlayState`.
 - Markers: player from the controller’s player handle; settlements from Slice 2 records (downsampled, not all EDM NPCs). Faction-colored dots only if Slice 5 stance/faction is present; otherwise a single settlement color.
 - Files: `include/world/WorldData.hpp` (discovery), `include/managers/SaveGameManager.hpp/.cpp`, `include/controllers/ui/HudController.hpp/.cpp` (or new `include/controllers/ui/` controller), `src/gameStates/GamePlayState.cpp` only for layout/init of the chosen controller, `docs/controllers/HudController.md` or the new controller doc, `docs/ui/`, `tests/controllers/HudControllerTests.cpp` (or the new controller tests), save tests.
 - Out of scope: implementing `Minimap_Implementation.md`’s `MinimapWidget` class inside `UIManager`.
 
 Checklist:
 
-- [ ] `systems-integrator` picks HudController vs sibling controller
+- [ ] `cpp-design-specialist` picks HudController vs sibling controller
 - [ ] Discovery bit grid on `WorldData`; update from player tile; clear on unload
 - [ ] Save/load discovery with `SaveGameManager` keyed by `worldId`
 - [ ] Minimap widgets + player marker + settlement dots; pause/resume via one `setVisible`

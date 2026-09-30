@@ -48,7 +48,8 @@ Subagents live in `.claude/agents/`. Pipeline: design → implement → review.
 
 | Phase | Agent | Role |
 | --- | --- | --- |
-| Design | **systems-integrator** | Ownership, data flow, threading, lifecycle, test plan. No edits. |
+| Design | **cpp-design-specialist** | Ownership, data flow, threading, lifecycle, test plan. No edits. |
+| Integration | **systems-integrator** | Optional input to design or review: maps existing cross-system data flow, redundancy, and contract mismatches. Not the design phase. No edits. |
 | Implement | **game-engine-specialist** | Code + tests in the owning module; per-change gate. |
 | Review | **game-systems-architect** | Severity-ordered findings with `file:line`. No edits. |
 | Verify | **quality-engineer** | Builds, tests, sanitizers, analyzers, benches; reports results. |

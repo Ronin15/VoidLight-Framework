@@ -91,4 +91,5 @@ Never relax test expectations to hide a production bug.
 
 - **game-systems-architect** — why code fails / review.
 - **game-engine-specialist** — implement fixes.
-- **systems-integrator** — cross-system performance or ownership redesign.
+- **cpp-design-specialist** — ownership or contract redesign.
+- **systems-integrator** — cross-system redundancy or data-flow analysis behind a performance problem.

@@ -108,5 +108,6 @@ clang-tidy, ASan, or TSan on a slice commit — those are Branch/PR gates.
 
 ## Handoff
 
-Stay review-only. Redesign → **systems-integrator**. Implementable fixes →
+Stay review-only. Redesign → **cpp-design-specialist**. Cross-system
+redundancy or data-flow mapping → **systems-integrator**. Implementable fixes →
 **game-engine-specialist**. Test/sanitizer runs → **quality-engineer**.
