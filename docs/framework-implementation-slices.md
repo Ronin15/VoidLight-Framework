@@ -56,10 +56,12 @@ Route through the Claude subagents (see "Specialist Routing" in `CLAUDE.md`).
 4. **Satisfy Acceptance checks.** Update durable docs when contracts change.
 5. **Slice-complete gate**, then **slice review**. Do not commit until review
    has run.
-6. When fully complete, move the entire section to
-   `docs/framework-implementation-slices-archive.md` (create that file when the
-   first slice is archived). Leave residual follow-ups only in a later slice —
-   do not delete acceptance history.
+6. When fully complete, set Status to complete and leave the section in this
+   file. Completed slices move to
+   `docs/framework-implementation-slices-archive.md` only when the user decides
+   this roadmap has become too large to use; do not create the archive or move
+   sections on slice completion. Leave residual follow-ups only in a later
+   slice — do not delete acceptance history.
 
 ### Section shape
 
@@ -70,7 +72,7 @@ Route through the Claude subagents (see "Specialist Routing" in `CLAUDE.md`).
 | **Architecture notes** / **Problem** | Constraints and ownership |
 | **Checklist** | `[ ]` / `[x]` implementation steps |
 | **Acceptance checks** | `[ ]` / `[x]` verification gates — all required |
-| **Status** | Open/partial note, or one-line completion record before archive |
+| **Status** | Open/partial note, or one-line completion record |
 
 ### Template
 
