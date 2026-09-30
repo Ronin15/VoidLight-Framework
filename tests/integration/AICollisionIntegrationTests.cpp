@@ -143,9 +143,13 @@ struct AICollisionTestFixture {
     AICollisionTestFixture() {
         std::cout << "\n--- Test Setup ---" << std::endl;
 
-        // Clear any previous state
+        // Clear any previous state in production transition order. EventManager
+        // drops deferred events a previous test left queued (e.g. an undrained
+        // WorldLoaded that would rebuild statics under this test's grid rebuild).
         AIManager::Instance().prepareForStateTransition();
+        EventManager::Instance().prepareForStateTransition();
         CollisionManager::Instance().prepareForStateTransition();
+        PathfinderManager::Instance().prepareForStateTransition();
         if (!WorldManager::Instance().getCurrentWorldId().empty()) {
             WorldManager::Instance().unloadWorld();
         }
@@ -170,9 +174,11 @@ struct AICollisionTestFixture {
         m_entityHandles.clear();
         edm.processDestructionQueue();
 
-        // Prepare for next test
+        // Prepare for next test (production transition order)
         AIManager::Instance().prepareForStateTransition();
+        EventManager::Instance().prepareForStateTransition();
         CollisionManager::Instance().prepareForStateTransition();
+        PathfinderManager::Instance().prepareForStateTransition();
 
         // Wait for cleanup
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
