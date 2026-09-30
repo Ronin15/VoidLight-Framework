@@ -1364,6 +1364,56 @@ BOOST_AUTO_TEST_CASE(NeedEntrySeedStaggersSameFrameCivilians) {
     BOOST_CHECK_LT(secondPressure, Behaviors::FORAGE_ENTER_THRESHOLD);
 }
 
+BOOST_AUTO_TEST_CASE(MerchantNeedEntryCarriesHomeLeash) {
+    auto& edm = EntityDataManager::Instance();
+    auto& ai = AIManager::Instance();
+    const auto samePosition = [](const Vector2D& a, const Vector2D& b) {
+        return a.getX() == b.getX() && a.getY() == b.getY();
+    };
+
+    // Role assignment (AIManager::syncNeedForRole) anchors at the creation position.
+    const Vector2D merchantPos(150.0f, 100.0f);
+    const Vector2D villagerPos(100.0f, 100.0f);
+    const EntityHandle merchant =
+        edm.createNPCWithRaceClass(merchantPos, "Human", "Blacksmith");
+    const EntityHandle villager = edm.createNPCWithRaceClass(villagerPos, "Human", "Villager");
+    BOOST_REQUIRE(merchant.isValid());
+    BOOST_REQUIRE(villager.isValid());
+    const size_t merchantIdx = edm.getIndex(merchant);
+    const size_t villagerIdx = edm.getIndex(villager);
+    BOOST_REQUIRE(edm.getCharacterDataByIndex(merchantIdx).isMerchant());
+    BOOST_REQUIRE(!edm.getCharacterDataByIndex(villagerIdx).isMerchant());
+
+    const NpcNeedData* merchantNeed = edm.npcNeedSidecar().get(static_cast<uint32_t>(merchantIdx));
+    const NpcNeedData* villagerNeed = edm.npcNeedSidecar().get(static_cast<uint32_t>(villagerIdx));
+    BOOST_REQUIRE(merchantNeed != nullptr);
+    BOOST_REQUIRE(villagerNeed != nullptr);
+    BOOST_CHECK_EQUAL(merchantNeed->leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+    BOOST_CHECK(samePosition(merchantNeed->home, merchantPos));
+    BOOST_CHECK_EQUAL(villagerNeed->leashRadius, 0.0f);
+    BOOST_CHECK(samePosition(villagerNeed->home, villagerPos));
+
+    // Reassigning the same role keeps the existing entry and its anchor.
+    edm.getTransformByIndex(merchantIdx).position = Vector2D(900.0f, 900.0f);
+    ai.assignBehavior(merchant, "Idle");
+    merchantNeed = edm.npcNeedSidecar().get(static_cast<uint32_t>(merchantIdx));
+    BOOST_REQUIRE(merchantNeed != nullptr);
+    BOOST_CHECK(samePosition(merchantNeed->home, merchantPos));
+
+    // initForage seeds a new entry the same way (merchant without a prior entry).
+    const Vector2D guardPos(300.0f, 200.0f);
+    const EntityHandle guard = edm.createNPCWithRaceClass(guardPos, "Human", "Guard");
+    BOOST_REQUIRE(guard.isValid());
+    const size_t guardIdx = edm.getIndex(guard);
+    BOOST_REQUIRE(!edm.hasNpcNeed(guardIdx));
+    BOOST_REQUIRE(edm.initNPCAsMerchant(guard));
+    ai.assignBehavior(guard, "Forage");
+    const NpcNeedData* guardNeed = edm.npcNeedSidecar().get(static_cast<uint32_t>(guardIdx));
+    BOOST_REQUIRE(guardNeed != nullptr);
+    BOOST_CHECK_EQUAL(guardNeed->leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+    BOOST_CHECK(samePosition(guardNeed->home, guardPos));
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================

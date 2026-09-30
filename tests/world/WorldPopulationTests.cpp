@@ -7,6 +7,7 @@
 #include <boost/test/unit_test.hpp>
 
 #include "ai/BehaviorConfig.hpp"
+#include "ai/BehaviorExecutors.hpp"
 #include "ai/FactionStance.hpp"
 #include "core/ThreadSystem.hpp"
 #include "events/EntityEvents.hpp"
@@ -345,6 +346,38 @@ BOOST_AUTO_TEST_CASE(TestPopulateFalseLoadsWorldWithoutNpcs) {
     BOOST_CHECK_GT(wrm.getHarvestableCount(worldId), 0u);
     BOOST_CHECK_GT(edm.getEntityCount(EntityKind::Harvestable), 0u);
     BOOST_CHECK(!worldMgr.getSettlements().empty());
+}
+
+BOOST_AUTO_TEST_CASE(TestPopulatedMerchantHasLeashedNeed) {
+    auto& worldMgr = WorldManager::Instance();
+    auto& edm = EntityDataManager::Instance();
+    BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
+
+    // No AI update has run: each need entry's home is the NPC's spawn position.
+    size_t leashedMerchants = 0;
+    size_t unleashedCivilians = 0;
+    for (const auto& npc : collectNpcs()) {
+        const size_t idx = edm.getIndex(npc.handle);
+        const NpcNeedData* need = edm.npcNeedSidecar().get(static_cast<uint32_t>(idx));
+        if (npc.merchant) {
+            BOOST_REQUIRE(need != nullptr);
+        }
+        if (need == nullptr) {
+            continue;
+        }
+        const Vector2D position = edm.getTransformByIndex(idx).position;
+        BOOST_CHECK_EQUAL(need->home.getX(), position.getX());
+        BOOST_CHECK_EQUAL(need->home.getY(), position.getY());
+        if (npc.merchant) {
+            BOOST_CHECK_EQUAL(need->leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+            ++leashedMerchants;
+        } else {
+            BOOST_CHECK_EQUAL(need->leashRadius, 0.0f);
+            ++unleashedCivilians;
+        }
+    }
+    BOOST_CHECK_GT(leashedMerchants, 0u);
+    BOOST_CHECK_GT(unleashedCivilians, 0u);
 }
 
 BOOST_AUTO_TEST_CASE(TestPopulateUsesSettlementFaction) {

@@ -81,13 +81,16 @@ bool keepsAreaReserve(const HarvestableSnapshotView& view, size_t candidate) {
     return false;
 }
 
-// Nearest snapshot entry within radius of position that is not `exclude` and
-// keeps the area reserve; SIZE_MAX when none qualifies.
+// Nearest snapshot entry within radius of position that is not `exclude`, lies
+// inside the need entry's leash (leashRadius > 0), and keeps the area reserve;
+// SIZE_MAX when none qualifies.
 size_t findForageTarget(const HarvestableSnapshotView& view, const Vector2D& position,
-    float radius, EntityHandle exclude) {
+    float radius, EntityHandle exclude, const NpcNeedData& need) {
     if (view.empty()) {
         return SIZE_MAX;
     }
+    const bool leashed = need.leashRadius > 0.0f;
+    const float leashSq = need.leashRadius * need.leashRadius;
     const CellRange cells = cellsAround(view, position, radius);
     float bestSq = radius * radius;
     size_t best = SIZE_MAX;
@@ -98,7 +101,9 @@ size_t findForageTarget(const HarvestableSnapshotView& view, const Vector2D& pos
                 const HarvestableSnapshotEntry& entry = view.entries[i];
                 const float distSq = (entry.position - position).lengthSquared();
                 if (distSq > bestSq || (best != SIZE_MAX && distSq == bestSq) ||
-                    entry.handle == exclude || !keepsAreaReserve(view, i)) {
+                    entry.handle == exclude ||
+                    (leashed && (entry.position - need.home).lengthSquared() > leashSq) ||
+                    !keepsAreaReserve(view, i)) {
                     continue;
                 }
                 bestSq = distSq;
@@ -236,7 +241,7 @@ bool shouldStartForage(BehaviorContext& ctx, BehaviorType currentType) {
     // breaking its area reserve; otherwise back off so an exhausted area causes
     // no Forage churn.
     if (findForageTarget(ctx.harvestables, ctx.transform.position,
-            VoidLight::HarvestCommit::SCARCITY_RADIUS, EntityHandle{}) != SIZE_MAX) {
+            VoidLight::HarvestCommit::SCARCITY_RADIUS, EntityHandle{}, *need) != SIZE_MAX) {
         need->returnBehavior = currentType;
         switchBehavior(ctx.edmIndex, BehaviorType::Forage);
         return true;
@@ -246,10 +251,22 @@ bool shouldStartForage(BehaviorContext& ctx, BehaviorType currentType) {
     return false;
 }
 
-void seedNeed(NpcNeedData& need, EntityHandle::IDType entityId) {
+void seedNeed(NpcNeedData& need, EntityHandle::IDType entityId, const Vector2D& home,
+    const CharacterData& charData) {
     const float fraction = static_cast<float>(entityId % NEED_STAGGER_BUCKETS) /
         static_cast<float>(NEED_STAGGER_BUCKETS);
     need.pressure = NEED_PRESSURE_PER_SECOND * NEED_ENTRY_STAGGER_SECONDS * fraction;
+    need.home = home;
+    need.leashRadius = charData.isMerchant() ? MERCHANT_FORAGE_LEASH_RADIUS : 0.0f;
+}
+
+void abandonForageInventoryFull(size_t edmIndex, NpcNeedData& need) {
+    need.retryCooldown =
+        FORAGE_RETRY_COOLDOWN * static_cast<float>(1u << FORAGE_MAX_BACKOFF_SHIFT);
+    if (need.failCount < UINT8_MAX) {
+        ++need.failCount;
+    }
+    switchBehavior(edmIndex, need.returnBehavior);
 }
 
 void initForage(size_t edmIndex, const VoidLight::ForageBehaviorConfig&,
@@ -261,8 +278,13 @@ void initForage(size_t edmIndex, const VoidLight::ForageBehaviorConfig&,
     // Cache moveSpeed from CharacterData (one-time cost)
     shared.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
 
-    // Forage reads its need entry through ctx.needs; guarantee it exists (main thread).
-    edm.ensureNpcNeed(edmIndex);
+    // Forage reads its need entry through ctx.needs; guarantee it exists (main
+    // thread). A new entry is seeded like AIManager role assignment, anchoring
+    // the leash at the current position.
+    if (!edm.hasNpcNeed(edmIndex)) {
+        seedNeed(edm.ensureNpcNeed(edmIndex), edm.getHandle(edmIndex).getId(),
+            edm.getTransformByIndex(edmIndex).position, edm.getCharacterDataByIndex(edmIndex));
+    }
 
     state = VoidLight::ForageStateData{};
     state.targetStaticIndex = UINT32_MAX;
@@ -337,7 +359,7 @@ void executeForage(BehaviorContext& ctx, const VoidLight::ForageBehaviorConfig& 
             }
 
             const size_t found = findForageTarget(ctx.harvestables, position,
-                config.searchRadius, state.lastFailedTarget);
+                config.searchRadius, state.lastFailedTarget, *need);
             if (found != SIZE_MAX) {
                 const HarvestableSnapshotEntry& entry = ctx.harvestables.entries[found];
                 state.targetHandle = entry.handle;
@@ -423,8 +445,9 @@ void executeForage(BehaviorContext& ctx, const VoidLight::ForageBehaviorConfig& 
         }
 
         case VoidLight::ForagePhase::AwaitingCommit:
-            // A successful commit switches the forager back to its origin role in
-            // the same frame, so reaching this phase means the commit was rejected.
+            // A successful commit, or an inventory-full abandon, switches the
+            // forager back to its origin role in the same frame, so reaching this
+            // phase means the commit was rejected.
             failAttempt(ctx, config, state, *need);
             return;
     }

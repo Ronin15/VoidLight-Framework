@@ -61,12 +61,13 @@ public:
     // Worker-safe: enqueued by Forage executors from AI batches. Committed on the
     // main thread by AIManager::commitQueuedHarvests() through HarvestCommit, which
     // re-validates both handles (generation checks) before any depletion.
+    // Deterministic arbitration per node: lowest harvesterEdmIndex wins
+    // (independent of worker enqueue order).
     struct HarvestCommand {
         EntityHandle harvesterHandle{};
         size_t harvesterEdmIndex{SIZE_MAX};
         EntityHandle harvestableHandle{};
         uint32_t harvestableStaticIndex{UINT32_MAX};
-        uint64_t sequence{0}; // Monotonic enqueue sequence for deterministic arbitration
     };
 
     static AICommandBus& Instance() {
@@ -112,7 +113,6 @@ private:
     std::atomic<uint64_t> m_nextTransitionSequence{1};
     std::atomic<uint64_t> m_nextEquipmentSequence{1};
     std::atomic<uint64_t> m_nextRangedAttackSequence{1};
-    std::atomic<uint64_t> m_nextHarvestSequence{1};
 };
 
 } // namespace VoidLight

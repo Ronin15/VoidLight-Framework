@@ -1064,6 +1064,347 @@ BOOST_AUTO_TEST_CASE(SnapshotRebuildsAfterDepletion) {
     BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds + 1);
 }
 
+// ----------------------------------------------------------------------------
+// Slice 6R WP4: full-inventory pre-check, arbitration, merchant leash, and the
+// Forage gaps (engage, damage, environment speed, detection scale).
+// ----------------------------------------------------------------------------
+
+namespace {
+
+bool samePosition(const Vector2D& a, const Vector2D& b) {
+    return a.getX() == b.getX() && a.getY() == b.getY();
+}
+
+// Fills the NPC's inventory with ore until not even one more unit fits.
+void fillInventoryWithOre(EntityHandle npc, VoidLight::ResourceHandle ore) {
+    auto& edm = EntityDataManager::Instance();
+    const uint32_t inventory =
+        edm.getCharacterDataByIndex(edm.getIndex(npc)).inventoryIndex;
+    BOOST_REQUIRE(inventory != INVALID_INVENTORY_INDEX);
+    for (int chunk = 4096; chunk > 0; chunk /= 2) {
+        while (edm.canAddToInventory(inventory, ore, chunk)) {
+            BOOST_REQUIRE(edm.addToInventory(inventory, ore, chunk));
+        }
+    }
+    BOOST_REQUIRE(!edm.canAddToInventory(inventory, ore, 1));
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(ForageFullInventoryDoesNotDepleteNode) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const EntityHandle target = createNode(start + Vector2D(96.0f, 0.0f));
+    const EntityHandle reserve = createNode(start + Vector2D(-300.0f, 0.0f));
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    fillInventoryWithOre(villager, oreHandle);
+    const int oreBefore = oreQuantity(villager);
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+
+    // The forager reaches the node and enqueues its harvest; the main-thread
+    // commit rejects it on capacity before HarvestCommit depletes anything.
+    bool sawHarvesting = false;
+    for (int i = 0; i < 300 && behaviorOf(villager) == BehaviorType::Forage; ++i) {
+        sawHarvesting = sawHarvesting ||
+            forageStateOf(villager).phase == VoidLight::ForagePhase::Harvesting;
+        step();
+    }
+
+    BOOST_REQUIRE(sawHarvesting);
+    BOOST_CHECK(behaviorOf(villager) == BehaviorType::Wander);
+    BOOST_CHECK(!isDepleted(target));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_EQUAL(oreQuantity(villager), oreBefore);
+    BOOST_CHECK(std::none_of(resourceEvents.begin(), resourceEvents.end(),
+        [&](const ResourceRecord& r) { return r.owner == villager; }));
+
+    // Abandon: backoff jumps to the cap, pressure is not reset.
+    const NpcNeedData& need = needOf(villager);
+    const float cappedCooldown = Behaviors::FORAGE_RETRY_COOLDOWN *
+        static_cast<float>(1u << Behaviors::FORAGE_MAX_BACKOFF_SHIFT);
+    BOOST_CHECK_GT(need.retryCooldown, cappedCooldown - 1.0f);
+    BOOST_CHECK_LE(need.retryCooldown, cappedCooldown);
+    BOOST_CHECK_GT(need.failCount, 0u);
+    BOOST_CHECK_GE(need.pressure, Behaviors::FORAGE_ENTER_THRESHOLD);
+}
+
+BOOST_AUTO_TEST_CASE(HarvestArbitrationPrefersLowestHarvesterIndex) {
+    clearGeneratedHarvestables();
+    const Vector2D nodePos(700.0f, 700.0f);
+    const EntityHandle node = createNode(nodePos);
+    const EntityHandle reserve = createNode(nodePos + Vector2D(0.0f, 400.0f));
+
+    const EntityHandle first = createCivilian(nodePos + Vector2D(-20.0f, 0.0f), "Villager");
+    const EntityHandle second = createCivilian(nodePos + Vector2D(20.0f, 0.0f), "Villager");
+    const bool firstIsLower = indexOf(first) < indexOf(second);
+    const EntityHandle low = firstIsLower ? first : second;
+    const EntityHandle high = firstIsLower ? second : first;
+    const int lowBefore = oreQuantity(low);
+    const int highBefore = oreQuantity(high);
+
+    // Enqueue order is the reverse of the expected winner.
+    auto& bus = VoidLight::AICommandBus::Instance();
+    const auto nodeIndex = static_cast<uint32_t>(indexOf(node));
+    bus.enqueueHarvest(high, indexOf(high), node, nodeIndex);
+    bus.enqueueHarvest(low, indexOf(low), node, nodeIndex);
+    step();
+
+    BOOST_CHECK(isDepleted(node));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_EQUAL(oreQuantity(low), lowBefore + 1);
+    BOOST_CHECK_EQUAL(oreQuantity(high), highBefore);
+}
+
+BOOST_AUTO_TEST_CASE(MerchantForageStaysWithinLeash) {
+    clearGeneratedHarvestables();
+    constexpr float LEASH = Behaviors::MERCHANT_FORAGE_LEASH_RADIUS;
+    const Vector2D home(300.0f, 600.0f);
+    const EntityHandle merchant = createCivilian(home, "Blacksmith");
+    BOOST_REQUIRE(EntityDataManager::Instance().getCharacterDataByIndex(indexOf(merchant)).isMerchant());
+    BOOST_REQUIRE(behaviorOf(merchant) == BehaviorType::Idle);
+    BOOST_REQUIRE_EQUAL(needOf(merchant).leashRadius, LEASH);
+    BOOST_REQUIRE(samePosition(needOf(merchant).home, home));
+
+    // The merchant stands near the leash edge; the nearest nodes lie outside it.
+    const Vector2D standPos = home + Vector2D(370.0f, 0.0f);
+    EntityDataManager::Instance().getTransformByIndex(indexOf(merchant)).position = standPos;
+    const EntityHandle outside = createNode(home + Vector2D(400.0f, 0.0f));
+    const EntityHandle outsideReserve = createNode(home + Vector2D(480.0f, 120.0f));
+    BOOST_REQUIRE_GT((home + Vector2D(480.0f, 120.0f) - home).length(), LEASH);
+
+    // Entry pre-check: nothing inside the leash, so the merchant backs off in Idle.
+    seedNeedBelowThreshold(merchant);
+    for (int i = 0; i < 10; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(merchant) != BehaviorType::Forage);
+    }
+    BOOST_CHECK_GT(needOf(merchant).failCount, 0u);
+    BOOST_CHECK_GT(needOf(merchant).retryCooldown, 0.0f);
+
+    // A node inside the leash, farther than the outside node: Searching must pick it.
+    const Vector2D insidePos = home + Vector2D(300.0f, 0.0f);
+    BOOST_REQUIRE_GT((insidePos - standPos).length(),
+        (home + Vector2D(400.0f, 0.0f) - standPos).length());
+    const EntityHandle inside = createNode(insidePos);
+    needOf(merchant).retryCooldown = 0.0f;
+    step();
+    BOOST_REQUIRE(behaviorOf(merchant) == BehaviorType::Forage);
+
+    for (int i = 0; i < 300 && behaviorOf(merchant) == BehaviorType::Forage; ++i) {
+        const auto& state = forageStateOf(merchant);
+        if (state.phase != VoidLight::ForagePhase::Searching) {
+            BOOST_REQUIRE(state.targetHandle == inside);
+        }
+        step();
+    }
+
+    BOOST_CHECK(behaviorOf(merchant) == BehaviorType::Idle);
+    BOOST_CHECK(isDepleted(inside));
+    BOOST_CHECK(!isDepleted(outside));
+    BOOST_CHECK(!isDepleted(outsideReserve));
+    BOOST_CHECK(samePosition(needOf(merchant).home, home));
+}
+
+namespace {
+
+// Brings a Villager (faction 1) into the given Forage phase with a hostile
+// faction-2 NPC placed later by the caller. Noon: detection scale 1.
+struct EngageSetup {
+    EntityHandle forager;
+    EntityHandle target;
+    EntityHandle reserve;
+};
+
+EngageSetup startForagerInPhase(ForageTestFixture& fixture, VoidLight::ForagePhase phase) {
+    GameTimeManager::Instance().setGameHour(12.0f);
+    fixture.clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    EngageSetup setup;
+    setup.target = fixture.createNode(start + Vector2D(150.0f, 0.0f));
+    setup.reserve = fixture.createNode(start + Vector2D(-300.0f, 0.0f));
+    setup.forager = ForageTestFixture::createCivilian(start, "Villager");
+    EntityDataManager::Instance().setFaction(setup.forager, 1);
+    AIManager::Instance().setStance(1, 2, FactionStance::Hostile);
+    ForageTestFixture::seedNeedBelowThreshold(setup.forager);
+
+    fixture.step();
+    BOOST_REQUIRE(ForageTestFixture::behaviorOf(setup.forager) == BehaviorType::Forage);
+    for (int i = 0; i < 200 && ForageTestFixture::forageStateOf(setup.forager).phase != phase;
+        ++i) {
+        fixture.step();
+    }
+    BOOST_REQUIRE(ForageTestFixture::forageStateOf(setup.forager).phase == phase);
+    return setup;
+}
+
+std::shared_ptr<TestNPC> spawnHostileNear(EntityHandle forager, const Vector2D& offset) {
+    auto& edm = EntityDataManager::Instance();
+    const Vector2D pos = edm.getTransformByIndex(edm.getIndex(forager)).position + offset;
+    auto hostile = TestNPC::create(pos.getX(), pos.getY());
+    edm.setFaction(hostile->getHandle(), 2);
+    return hostile;
+}
+
+void checkEngagedWithoutHarvest(ForageTestFixture& fixture, const EngageSetup& setup,
+    EntityHandle hostile, int oreBefore) {
+    auto& edm = EntityDataManager::Instance();
+    const size_t foragerIdx = ForageTestFixture::indexOf(setup.forager);
+    for (int i = 0; i < 3 && ForageTestFixture::behaviorOf(setup.forager) == BehaviorType::Forage;
+        ++i) {
+        fixture.step();
+    }
+    BOOST_REQUIRE(ForageTestFixture::behaviorOf(setup.forager) == BehaviorType::Attack);
+    BOOST_CHECK(edm.getMemoryData(foragerIdx).lastTarget == hostile);
+
+    // Longer than harvestDuration: an unbroken episode would have committed.
+    for (int i = 0; i < 30; ++i) {
+        fixture.step();
+    }
+    BOOST_CHECK(!ForageTestFixture::isDepleted(setup.target));
+    BOOST_CHECK(!ForageTestFixture::isDepleted(setup.reserve));
+    BOOST_CHECK_EQUAL(fixture.oreQuantity(setup.forager), oreBefore);
+    BOOST_CHECK(ForageTestFixture::needOf(setup.forager).pressure >=
+        Behaviors::FORAGE_ENTER_THRESHOLD);
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(ForageEngagesHostileWhileMovingWithoutCommitting) {
+    const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Moving);
+    const int oreBefore = oreQuantity(setup.forager);
+    const auto hostile = spawnHostileNear(setup.forager, Vector2D(0.0f, 100.0f));
+    checkEngagedWithoutHarvest(*this, setup, hostile->getHandle(), oreBefore);
+}
+
+BOOST_AUTO_TEST_CASE(ForageEngagesHostileWhileHarvestingWithoutCommitting) {
+    const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Harvesting);
+    BOOST_REQUIRE_LT(forageStateOf(setup.forager).harvestTimer,
+        VoidLight::ForageBehaviorConfig{}.harvestDuration - 3.0f * DT);
+    const int oreBefore = oreQuantity(setup.forager);
+    const auto hostile = spawnHostileNear(setup.forager, Vector2D(0.0f, 100.0f));
+    checkEngagedWithoutHarvest(*this, setup, hostile->getHandle(), oreBefore);
+}
+
+BOOST_AUTO_TEST_CASE(ForageDamageMidEpisodeKeepsNeedEntry) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const EntityHandle target = createNode(start + Vector2D(150.0f, 0.0f));
+    createNode(start + Vector2D(-300.0f, 0.0f));
+
+    // Farmer: merchant Wander civilian, so the need entry carries a leash anchor.
+    const EntityHandle farmer = createCivilian(start, "Farmer");
+    BOOST_REQUIRE_EQUAL(needOf(farmer).leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+    seedNeedBelowThreshold(farmer);
+    step();
+    BOOST_REQUIRE(behaviorOf(farmer) == BehaviorType::Forage);
+    for (int i = 0; i < 50 && forageStateOf(farmer).phase != VoidLight::ForagePhase::Moving; ++i) {
+        step();
+    }
+    BOOST_REQUIRE(forageStateOf(farmer).phase == VoidLight::ForagePhase::Moving);
+    const float pressureBefore = needOf(farmer).pressure;
+
+    auto attacker = TestNPC::create(start.getX(), start.getY() + 60.0f);
+    auto& memory = EntityDataManager::Instance().getMemoryData(indexOf(farmer));
+    memory.lastAttacker = attacker->getHandle();
+    memory.lastCombatTime = 0.0f;
+    step();
+
+    const BehaviorType response = behaviorOf(farmer);
+    BOOST_REQUIRE(response == BehaviorType::Chase || response == BehaviorType::Flee);
+    BOOST_REQUIRE(EntityDataManager::Instance().hasNpcNeed(indexOf(farmer)));
+    const NpcNeedData& need = needOf(farmer);
+    BOOST_CHECK(samePosition(need.home, start));
+    BOOST_CHECK_EQUAL(need.leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+    BOOST_CHECK(need.returnBehavior == BehaviorType::Wander);
+    BOOST_CHECK_GE(need.pressure, pressureBefore);
+    BOOST_CHECK(!isDepleted(target));
+}
+
+BOOST_AUTO_TEST_CASE(ForageMoveSpeedScalesWithEnvironment) {
+    auto& edm = EntityDataManager::Instance();
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const Vector2D targetPos = start + Vector2D(200.0f, 0.0f);
+    const EntityHandle target = createNode(targetPos);
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    AIManager::Instance().assignBehavior(villager, "Forage");
+    const size_t idx = indexOf(villager);
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Forage);
+    const VoidLight::ForageBehaviorConfig config = edm.getForageConfig(ref.index);
+    auto& state = edm.getForageState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    BOOST_REQUIRE(edm.getBehaviorData(idx).moveSpeed > 0.0f);
+
+    const std::array<HarvestableSnapshotEntry, 1> entries = {
+        HarvestableSnapshotEntry{targetPos, target, static_cast<uint32_t>(indexOf(target))}};
+    const std::array<uint32_t, 2> cellStarts = {0, 1};
+    HarvestableSnapshotView view;
+    view.entries = entries;
+    view.cellStarts = cellStarts;
+    view.origin = targetPos;
+    view.cols = 1;
+    view.rows = 1;
+
+    auto runMoving = [&](const EnvironmentSnapshot& env) {
+        state.phase = VoidLight::ForagePhase::Moving;
+        state.targetHandle = target;
+        state.targetStaticIndex = entries[0].staticIndex;
+        state.targetPos = targetPos;
+        state.lastTargetDistance = 1.0e6f;
+        hotData.transform.position = start;
+        hotData.transform.velocity = Vector2D(0, 0);
+        BehaviorContext ctx(hotData.transform, hotData, villager.getId(), idx, DT,
+            EntityHandle{}, Vector2D(0, 0), Vector2D(0, 0), false, edm.getBehaviorData(idx),
+            nullptr, memoryData, edm.getCharacterDataByIndex(idx), 0.0f, 0.0f, 1280.0f,
+            1280.0f, true, 0.0f, kNeutralFactionStanceRow, false, false,
+            edm.knockbackSidecar(), edm.npcNeedSidecar(), env, view);
+        Behaviors::executeForage(ctx, config, state);
+        BOOST_REQUIRE(state.phase == VoidLight::ForagePhase::Moving);
+        return hotData.transform.velocity.length();
+    };
+
+    const float clearSpeed = runMoving(EnvironmentSnapshot{});
+    EnvironmentSnapshot storm{};
+    storm.moveSpeedScale = 0.75f;
+    const float stormSpeed = runMoving(storm);
+
+    BOOST_CHECK_GT(clearSpeed, 0.0f);
+    BOOST_CHECK_CLOSE(stormSpeed, clearSpeed * 0.75f, 1.0);
+}
+
+BOOST_AUTO_TEST_CASE(ForageReengageRespectsDetectionScale) {
+    auto& edm = EntityDataManager::Instance();
+    const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Moving);
+    const size_t foragerIdx = indexOf(setup.forager);
+    // 200 px: inside HOSTILE_ENGAGE_RANGE (noon), outside the night-scaled range.
+    constexpr float GAP = 200.0f;
+    static_assert(GAP < Behaviors::HOSTILE_ENGAGE_RANGE);
+
+    GameTimeManager::Instance().setGameHour(22.0f);
+    // Behind the forager (it moves +x toward its node), so the gap only grows.
+    const auto hostile = spawnHostileNear(setup.forager, Vector2D(-GAP, 0.0f));
+    for (int i = 0; i < 3; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(setup.forager) == BehaviorType::Forage);
+    }
+    BOOST_CHECK(edm.getMemoryData(foragerIdx).lastTarget != hostile->getHandle());
+
+    GameTimeManager::Instance().setGameHour(12.0f);
+    hostile->setPosition(edm.getTransformByIndex(foragerIdx).position + Vector2D(-GAP, 0.0f));
+    for (int i = 0; i < 3 && behaviorOf(setup.forager) == BehaviorType::Forage; ++i) {
+        step();
+    }
+    BOOST_CHECK(behaviorOf(setup.forager) == BehaviorType::Attack);
+    BOOST_CHECK(edm.getMemoryData(foragerIdx).lastTarget == hostile->getHandle());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // Test Suite 2: Idle Behavior Testing

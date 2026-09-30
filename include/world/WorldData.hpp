@@ -30,6 +30,9 @@ struct WorldGenerationConfig {
 
 // World rendering and spatial constants
 constexpr float TILE_SIZE = 32.0f; // Tile size in pixels
+// Settlement radius in tiles: max building placement distance from a village
+// center (WorldGenerator) and SettlementRecord::radiusTiles.
+constexpr int VILLAGE_RADIUS = 12;
 
 enum class Biome {
     DESERT,

@@ -116,7 +116,6 @@ constexpr int MAX_CONNECTED_SIZE = 4; // Max connected building size (hut->house
 // Village clustering parameters
 constexpr int VILLAGE_DENSITY_DIVISOR = 8000; // Villages = area / this (e.g., 200x200 = ~5 villages)
 constexpr int VILLAGE_MIN_DISTANCE = 40; // Minimum tiles between village centers
-constexpr int VILLAGE_RADIUS = 12; // Max radius for building placement from center
 constexpr int VILLAGE_MIN_BUILDINGS = 3; // Minimum buildings per village
 constexpr int VILLAGE_MAX_BUILDINGS = 8; // Maximum buildings per village
 
@@ -794,12 +793,12 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
     if (width <= BldgCfg::BUILDING_SIZE || height <= BldgCfg::BUILDING_SIZE) return;
 
     // World must be large enough for village placement (VILLAGE_RADIUS on each side)
-    int minWorldSize = 2 * BldgCfg::VILLAGE_RADIUS + 2;
+    int minWorldSize = 2 * VILLAGE_RADIUS + 2;
     if (width < minWorldSize || height < minWorldSize) return;
 
     std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-    std::uniform_int_distribution<int> xDist(BldgCfg::VILLAGE_RADIUS, width - BldgCfg::VILLAGE_RADIUS - 1);
-    std::uniform_int_distribution<int> yDist(BldgCfg::VILLAGE_RADIUS, height - BldgCfg::VILLAGE_RADIUS - 1);
+    std::uniform_int_distribution<int> xDist(VILLAGE_RADIUS, width - VILLAGE_RADIUS - 1);
+    std::uniform_int_distribution<int> yDist(VILLAGE_RADIUS, height - VILLAGE_RADIUS - 1);
     uint32_t nextBuildingId = 1;
 
     // Calculate number of villages based on world size
@@ -822,8 +821,8 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
 
     // Helper to check if position is valid for village center
     auto isValidVillageCenter = [&](int cx, int cy) -> bool {
-        if (cx < BldgCfg::VILLAGE_RADIUS || cx >= width - BldgCfg::VILLAGE_RADIUS ||
-            cy < BldgCfg::VILLAGE_RADIUS || cy >= height - BldgCfg::VILLAGE_RADIUS) {
+        if (cx < VILLAGE_RADIUS || cx >= width - VILLAGE_RADIUS ||
+            cy < VILLAGE_RADIUS || cy >= height - VILLAGE_RADIUS) {
             return false;
         }
         const Tile& tile = world.grid[cy][cx];
@@ -875,7 +874,7 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
             // Generate offset from center with bias toward center (gaussian-like distribution)
             float angle = dist(rng) * 2.0f * 3.14159f;
             float radiusFactor = dist(rng) * dist(rng); // Square for center bias
-            float radius = radiusFactor * static_cast<float>(BldgCfg::VILLAGE_RADIUS);
+            float radius = radiusFactor * static_cast<float>(VILLAGE_RADIUS);
 
             int bx = villageX + static_cast<int>(radius * std::cos(angle));
             int by = villageY + static_cast<int>(radius * std::sin(angle));
@@ -897,7 +896,7 @@ void WorldGenerator::generateBuildings(WorldData& world, std::default_random_eng
         record.id = static_cast<uint32_t>(world.settlements.size() + 1);
         record.centerTileX = villageX;
         record.centerTileY = villageY;
-        record.radiusTiles = BldgCfg::VILLAGE_RADIUS;
+        record.radiusTiles = VILLAGE_RADIUS;
         record.biome = world.grid[villageY][villageX].biome;
         record.faction = 0;
         record.buildingCount = static_cast<uint8_t>(buildingsPlaced);

@@ -444,7 +444,7 @@ Acceptance checks:
 
 Status: Implemented and reviewed (two rounds). Round 1 Mediums (rejection/stall loop, same-frame need hitch + whole-world scans, preset loss on Forage return) fixed; round 2 found no production defects — follow-up tests pin the 512 px grid against the commit reserve rule across cell boundaries and the need-seed stagger. Slice-complete gate green. Need is an EDM `SparseSidecar<NpcNeedData>` for civilian (`CreatureCategory::NPC`) Idle/Wander roles assigned by base name with the default config (presets and explicit configs carry no need, so Forage's default-config return never discards them); new entries get a deterministic per-entity pressure stagger (up to 30 s) so co-spawned NPCs do not cross the threshold on one frame. Forage entry is decided inside `executeIdle`/`executeWander` with a candidate pre-check and exponential backoff (15 s doubling, 240 s cap); candidates must keep `NPC_HARVEST_RESERVE` other nodes within 512 px of themselves (the commit's own rule), and a Forage episode gives up after 3 rejected commits or far stalls, so neither empty areas nor rejection/stall loops cause Forage churn. The snapshot is grid-bucketed (512 px cells), so scans touch at most 3×3 cells; exit returns to the recorded Idle/Wander origin, not `homeRole` (Slice 7). Workers read an AIManager harvestable snapshot rebuilt only on WRM version change; harvests commit on the main thread through the world-layer `HarvestCommit::commit`, shared with `HarvestController`. `EventTypeId::Scarcity` fires on any depletion leaving fewer than 2 available nodes (any kind) within 512 px; GamePlayState logs player-relevant ones. **Decision (economy protection):** NPC commits enforce an area reserve `NPC_HARVEST_RESERVE = 1` per 512 px, so NPCs never take the last local node; the player may. There is no respawn until Slice 6.1. `BehaviorType::Forage = 8` shifts `Custom`/`COUNT` (raw `uint8_t` saves need remapping). Background-tier NPCs do not tick need (Slice 9).
 
-**Decision (Slice 6R, WP4 — pending until WP4 lands):** merchant need entries carry a home anchor and a 384 px forage leash (other roles 0 = unleashed). NPC harvest commits pre-check inventory capacity and abandon without depleting the node when the yield would not fit; arbitration picks the lowest harvester EDM index.
+**Decision (Slice 6R, WP4):** merchant need entries carry a home anchor and a 384 px forage leash (other roles 0 = unleashed). NPC harvest commits pre-check inventory capacity and abandon without depleting the node when the yield would not fit; arbitration picks the lowest harvester EDM index.
 
 ## Slice 6R: emergent_play cohesion corrections
 
@@ -475,7 +475,7 @@ Checklist:
 - [x] WP1 populate opt-out (`WorldGenerationConfig::populate`; demos and NPC-free fixtures; `TestPopulateFalseLoadsWorldWithoutNpcs`; `docs/managers/WorldManager.md`, `docs/world/WorldPopulation.md`, `.claude/rules/tests.md`)
 - [x] WP2 player relations model (B1): no player faction, standing as source of truth, `recordPlayerIncident`, `hostileTowardPlayer`, collision from player relation, `StanceChangedEvent::towardPlayer`
 - [x] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
-- [ ] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
+- [x] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
 - [ ] WP5 weather contract (type defaults on pooled events; no visibility multiply)
 - [ ] WP6 defer-message contract (delete main-thread defer drain pre-pass)
 - [ ] WP7 one harvestable container in `WorldResourceManager`
@@ -489,14 +489,14 @@ Acceptance checks:
 - [x] A player hit on a Warrior leaves the stance table and a nearby Idle merchant unchanged
 - [x] Gifts de-escalate attackers
 - [x] `populate = false` spawns no NPCs
-- [ ] Merchant forage stays within 384 px of home
-- [ ] A full inventory never depletes a node
+- [x] Merchant forage stays within 384 px of home
+- [x] A full inventory never depletes a node
 - [ ] Weather is identical whether the pooled event is fresh or reused
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP3 done; WP4–WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP4 done; WP5–WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 

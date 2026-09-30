@@ -113,17 +113,20 @@ static_assert(sizeof(PlayerFactionStanding) == 16);
  * assignment (AIManager::syncNeedForRole), outside AI batches. Forage roles
  * always keep their entry: syncNeedForRole skips Forage, and reassignment away
  * from Forage changes the behavior first. The owning entity's worker may
- * mutate its own entry via SparseSidecar::get().
+ * mutate its own entry via SparseSidecar::get(). home/leashRadius are seeded
+ * once when the entry is created (Behaviors::seedNeed) and are read-only after.
  */
 struct NpcNeedData {
     float pressure{0.0f}; // 4 bytes: need pressure in [0, 1]
     float retryCooldown{0.0f}; // 4 bytes: seconds before the next forage attempt
+    Vector2D home{}; // 8 bytes: forage leash anchor (position when the entry was seeded)
+    float leashRadius{0.0f}; // 4 bytes: max forage target distance from home (px); 0 = unleashed
     uint8_t failCount{0}; // 1 byte:  consecutive failed forage attempts (backoff)
     BehaviorType returnBehavior{BehaviorType::Idle}; // 1 byte: behavior to resume after Forage
     uint8_t padding0{0};
     uint8_t padding1{0};
 };
-static_assert(sizeof(NpcNeedData) == 12);
+static_assert(sizeof(NpcNeedData) == 24);
 
 /**
  * @brief Hot data accessed every frame (64 bytes, one cache line)

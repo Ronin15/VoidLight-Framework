@@ -47,3 +47,10 @@ assigned.
 
 `EventManager::spawnMerchant` stays event sugar; populate does not go through
 deferred MerchantSpawn.
+
+Settlement merchants (Idle, `FLAG_MERCHANT`) get a survival-need entry at
+registration whose forage leash is anchored at their spawn position with
+`Behaviors::MERCHANT_FORAGE_LEASH_RADIUS` (384 px), which is defined as
+`VILLAGE_RADIUS * TILE_SIZE` (`VILLAGE_RADIUS` is shared from
+`include/world/WorldData.hpp` with `WorldGenerator`), so merchants forage
+within one settlement radius of home.

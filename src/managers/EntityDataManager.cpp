@@ -2694,6 +2694,57 @@ void EntityDataManager::recalculateCharacterEquipmentStats(uint32_t characterInd
         : 0.0f;
 }
 
+namespace {
+
+// Max stack size from ResourceTemplateManager (resolved outside the inventory
+// lock); 99 when the manager is down or the template reports a bad size.
+int inventoryMaxStackFor(VoidLight::ResourceHandle handle) {
+    auto& rtm = ResourceTemplateManager::Instance();
+    const int maxStack = rtm.isInitialized() ? rtm.getMaxStackSize(handle) : 99;
+    return maxStack > 0 ? maxStack : 99;
+}
+
+} // namespace
+
+int EntityDataManager::inventoryAddCapacityLocked(uint32_t inventoryIndex,
+    VoidLight::ResourceHandle handle,
+    int maxStack) const {
+    const auto slotCapacity = [handle, maxStack](const InventorySlotData& slot) {
+        if (slot.isEmpty()) {
+            return maxStack;
+        }
+        return slot.resourceHandle == handle
+            ? std::max(0, maxStack - static_cast<int>(slot.quantity))
+            : 0;
+    };
+
+    const auto& inv = m_inventoryData[inventoryIndex];
+    int capacity = 0;
+    // Inline slots are a fixed-size fast path and ignore maxSlots (non-issues C.87).
+    for (size_t i = 0; i < InventoryData::INLINE_SLOT_COUNT; ++i) {
+        capacity += slotCapacity(inv.slots[i]);
+    }
+    if (inv.overflowId > 0) {
+        if (auto it = m_inventoryOverflow.find(inv.overflowId); it != m_inventoryOverflow.end()) {
+            for (const auto& slot : it->second.extraSlots) {
+                capacity += slotCapacity(slot);
+            }
+        }
+    }
+    return capacity;
+}
+
+bool EntityDataManager::canAddToInventory(uint32_t inventoryIndex,
+    VoidLight::ResourceHandle handle,
+    int quantity) const {
+    if (!isValidInventoryIndex(inventoryIndex) || !handle.isValid() || quantity <= 0) {
+        return false;
+    }
+    const int maxStack = inventoryMaxStackFor(handle);
+    std::lock_guard<std::mutex> lock(m_inventoryMutex);
+    return inventoryAddCapacityLocked(inventoryIndex, handle, maxStack) >= quantity;
+}
+
 bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
     VoidLight::ResourceHandle handle,
     int quantity) {
@@ -2715,12 +2766,7 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
         return false;
     }
 
-    // Get max stack size from ResourceTemplateManager (outside lock)
-    auto& rtm = ResourceTemplateManager::Instance();
-    int maxStack = rtm.isInitialized() ? rtm.getMaxStackSize(handle) : 99;
-    if (maxStack <= 0) {
-        maxStack = 99; // Fallback for invalid stack size
-    }
+    const int maxStack = inventoryMaxStackFor(handle);
 
     // Lock for thread-safe inventory modification
     std::lock_guard<std::mutex> lock(m_inventoryMutex);
@@ -2728,29 +2774,12 @@ bool EntityDataManager::addToInventory(uint32_t inventoryIndex,
     auto& inv = m_inventoryData[inventoryIndex];
     std::optional<std::reference_wrapper<InventoryOverflow>> overflow;
     if (inv.overflowId > 0) {
-        overflow = std::ref(m_inventoryOverflow[inv.overflowId]);
-    }
-
-    int availableCapacity = 0;
-    for (size_t i = 0; i < InventoryData::INLINE_SLOT_COUNT; ++i) {
-        const auto& slot = inv.slots[i];
-        if (!slot.isEmpty() && slot.resourceHandle == handle) {
-            availableCapacity += std::max(0, maxStack - static_cast<int>(slot.quantity));
-        } else if (slot.isEmpty()) {
-            availableCapacity += maxStack;
+        if (auto it = m_inventoryOverflow.find(inv.overflowId); it != m_inventoryOverflow.end()) {
+            overflow = std::ref(it->second);
         }
     }
 
-    if (overflow.has_value()) {
-        for (const auto& slot : overflow->get().extraSlots) {
-            if (!slot.isEmpty() && slot.resourceHandle == handle) {
-                availableCapacity += std::max(0, maxStack - static_cast<int>(slot.quantity));
-            } else if (slot.isEmpty()) {
-                availableCapacity += maxStack;
-            }
-        }
-    }
-
+    const int availableCapacity = inventoryAddCapacityLocked(inventoryIndex, handle, maxStack);
     if (availableCapacity < quantity) {
         ENTITY_WARN(std::format("addToInventory: Could not add {} items (inventory full)",
             quantity - availableCapacity));

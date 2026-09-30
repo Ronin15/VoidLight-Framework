@@ -321,9 +321,11 @@ void setNpcNeedPressure(size_t edmIndex, float pressure);  // clamps to [0, 1]
 SparseSidecar<NpcNeedData>& npcNeedSidecar() noexcept;
 ```
 
-`NpcNeedData` (12 bytes: `pressure`, `retryCooldown`, `failCount`,
-`returnBehavior`) is survival-need storage for civilian NPCs. Storage only:
-growth rate, forage threshold, and backoff are `Behaviors::` policy. Entries are
+`NpcNeedData` (24 bytes: `pressure`, `retryCooldown`, `home`, `leashRadius`,
+`failCount`, `returnBehavior`) is survival-need storage for civilian NPCs.
+Storage only: growth rate, forage threshold, backoff, and the merchant leash
+value are `Behaviors::` policy (`seedNeed` writes `home`/`leashRadius` once when
+the entry is created). Entries are
 created on the main thread by `AIManager` (civilian Idle/Wander default-config
 role assignment) and `initForage`, and removed on the main thread only when
 `AIManager` reassigns the entity to a role that has no need (preset, explicit
@@ -358,6 +360,7 @@ uint32_t createInventory(uint16_t maxSlots, bool worldTracked = false);
 bool initNPCAsMerchant(EntityHandle handle, uint16_t maxSlots = 20);
 uint32_t getNPCInventoryIndex(EntityHandle handle) const;
 bool addToInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity);
+bool canAddToInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity) const;
 bool removeFromInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity);
 int getInventoryQuantity(uint32_t inventoryIndex, ResourceHandle handle) const;
 std::unordered_map<ResourceHandle, int> getInventoryResources(uint32_t inventoryIndex) const;
@@ -372,6 +375,7 @@ Inventory APIs are split by use case:
 
 - `getInventoryResources(...)` returns aggregate quantities by `ResourceHandle` for world/resource/social systems that do not care about layout.
 - `getInventorySlot(...)` and `getInventorySlots(...)` expose ordered physical slot contents. Prefer the span-based bulk read for UI refreshes so callers take one inventory lock and reuse caller-owned storage.
+- `canAddToInventory(...)` is a non-mutating query that returns exactly what `addToInventory(...)` would return now. Both share the private `inventoryAddCapacityLocked` capacity rule: all inline slots count regardless of `maxSlots` (see `docs/review-non-issues.md`), overflow slots are read with `find()`. AI harvest commits use it to reject a yield before depleting the node.
 - `swapInventorySlots(...)` is a storage primitive only. It validates the inventory and slot indices, works across inline and overflow slots, preserves `usedSlots`, and marks the inventory dirty only when slot contents actually change.
 
 Drag/drop, player policy, hotbar assignment, and UI feedback belong in `InventoryController`, not EDM.

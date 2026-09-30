@@ -54,10 +54,9 @@ void AICommandBus::enqueueHarvest(EntityHandle harvesterHandle,
     size_t harvesterEdmIndex,
     EntityHandle harvestableHandle,
     uint32_t harvestableStaticIndex) {
-    const uint64_t sequence = m_nextHarvestSequence.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pendingHarvests.push_back({harvesterHandle, harvesterEdmIndex,
-        harvestableHandle, harvestableStaticIndex, sequence});
+        harvestableHandle, harvestableStaticIndex});
 }
 
 void AICommandBus::clearBehaviorMessages(EntityHandle targetHandle, size_t targetEdmIndex) {

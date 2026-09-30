@@ -1770,14 +1770,15 @@ void AIManager::commitQueuedHarvests() {
     }
 
     auto& edm = EntityDataManager::Instance();
-    // Per-node arbitration: earliest enqueue wins; later commands on the same
-    // node see it depleted inside HarvestCommit and are rejected.
+    // Per-node arbitration: lowest harvester EDM index wins, independent of
+    // worker enqueue order; later commands on the same node see it depleted
+    // inside HarvestCommit and are rejected.
     std::sort(m_pendingHarvests.begin(), m_pendingHarvests.end(),
         [](const auto& lhs, const auto& rhs) {
             if (lhs.harvestableStaticIndex != rhs.harvestableStaticIndex) {
                 return lhs.harvestableStaticIndex < rhs.harvestableStaticIndex;
             }
-            return lhs.sequence < rhs.sequence;
+            return lhs.harvesterEdmIndex < rhs.harvesterEdmIndex;
         });
 
     auto& needSidecar = edm.npcNeedSidecar();
@@ -1808,6 +1809,18 @@ void AIManager::commitQueuedHarvests() {
             continue;
         }
 
+        // Capacity pre-check for the largest possible yield, before depletion:
+        // a forager that cannot hold it abandons the episode and the node stays.
+        const HarvestableData& node =
+            edm.getHarvestableData(edm.getStaticHotDataByIndex(nodeIdx).typeLocalIndex);
+        if (!edm.canAddToInventory(inventoryIndex, node.yieldResource,
+                std::max(node.yieldMin, node.yieldMax))) {
+            if (auto* need = needSidecar.get(static_cast<uint32_t>(harvesterIdx))) {
+                Behaviors::abandonForageInventoryFull(harvesterIdx, *need);
+            }
+            continue;
+        }
+
         const auto yield = VoidLight::HarvestCommit::commit(cmd.harvestableHandle,
             cmd.harvesterHandle, VoidLight::HarvestCommit::NPC_HARVEST_RESERVE);
         if (!yield) {
@@ -1818,9 +1831,6 @@ void AIManager::commitQueuedHarvests() {
         if (edm.addToInventory(inventoryIndex, yield->resource, yield->quantity)) {
             dispatchResourceChange(cmd.harvesterHandle,
                 {yield->resource, oldQuantity, oldQuantity + yield->quantity}, "harvested");
-        } else {
-            AI_DEBUG(std::format("Forager inventory full; discarded {} x{}",
-                yield->resource.toString(), yield->quantity));
         }
 
         if (auto* need = needSidecar.get(static_cast<uint32_t>(harvesterIdx))) {
@@ -1958,8 +1968,11 @@ void AIManager::syncNeedForRole(size_t edmIndex, BehaviorType behaviorType, bool
         edm.removeNpcNeed(edmIndex);
         return;
     }
+    // The leash anchor is the position at assignment time; switchBehavior never
+    // reaches this path, so the anchor survives Forage/Flee round trips.
     if (!edm.hasNpcNeed(edmIndex)) {
-        Behaviors::seedNeed(edm.ensureNpcNeed(edmIndex), edm.getHandle(edmIndex).getId());
+        Behaviors::seedNeed(edm.ensureNpcNeed(edmIndex), edm.getHandle(edmIndex).getId(),
+            edm.getTransformByIndex(edmIndex).position, edm.getCharacterDataByIndex(edmIndex));
     }
 }
 

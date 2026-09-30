@@ -1562,6 +1562,55 @@ BOOST_AUTO_TEST_CASE(TestInventoryTransferRejectsFullTargetWithoutMutation) {
     BOOST_CHECK_EQUAL(edm->getInventoryQuantity(targetInventory, ironArmor), 1);
 }
 
+BOOST_AUTO_TEST_CASE(CanAddToInventoryMatchesAddToInventory) {
+    auto& rtm = ResourceTemplateManager::Instance();
+    const auto ore = rtm.getHandleById("iron_ore");
+    const auto sword = rtm.getHandleById("iron_sword");
+    BOOST_REQUIRE(ore.isValid());
+    BOOST_REQUIRE(sword.isValid());
+    const int oreStack = rtm.getMaxStackSize(ore);
+    BOOST_REQUIRE_GT(oreStack, 1);
+    const int inlineCapacity = static_cast<int>(InventoryData::INLINE_SLOT_COUNT) * oreStack;
+
+    // Each query must predict the paired add exactly.
+    const auto agree = [this, ore](uint32_t inventory, int quantity) {
+        const bool predicted = edm->canAddToInventory(inventory, ore, quantity);
+        const bool added = edm->addToInventory(inventory, ore, quantity);
+        BOOST_CHECK_EQUAL(predicted, added);
+        return added;
+    };
+
+    // maxSlots 1: the inline slots still form the capacity (review non-issues C.87).
+    const uint32_t inlineOnly = edm->createInventory(1, false);
+    BOOST_REQUIRE_NE(inlineOnly, INVALID_INVENTORY_INDEX);
+    BOOST_CHECK(!edm->canAddToInventory(INVALID_INVENTORY_INDEX, ore, 1));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, VoidLight::ResourceHandle{}, 1));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, ore, 0));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, ore, -1));
+    BOOST_CHECK(edm->canAddToInventory(inlineOnly, ore, inlineCapacity));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, ore, inlineCapacity + 1));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inlineOnly, ore), 0);
+
+    // A different resource occupies one slot; partial stacks count their room.
+    BOOST_REQUIRE(edm->addToInventory(inlineOnly, sword, 1));
+    const int freeRoom = inlineCapacity - oreStack;
+    BOOST_CHECK(agree(inlineOnly, oreStack - 1));
+    BOOST_CHECK(!agree(inlineOnly, freeRoom - (oreStack - 1) + 1));
+    BOOST_CHECK(agree(inlineOnly, freeRoom - (oreStack - 1)));
+    BOOST_CHECK(!agree(inlineOnly, 1));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inlineOnly, ore), freeRoom);
+
+    // Overflow slots count once maxSlots exceeds the inline slots.
+    const uint32_t withOverflow =
+        edm->createInventory(static_cast<uint16_t>(InventoryData::INLINE_SLOT_COUNT + 2), false);
+    BOOST_REQUIRE_NE(withOverflow, INVALID_INVENTORY_INDEX);
+    const int totalCapacity = inlineCapacity + 2 * oreStack;
+    BOOST_CHECK(!agree(withOverflow, totalCapacity + 1));
+    BOOST_CHECK(agree(withOverflow, totalCapacity));
+    BOOST_CHECK(!agree(withOverflow, 1));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(withOverflow, ore), totalCapacity);
+}
+
 BOOST_AUTO_TEST_CASE(TestInventoryTransferRejectsSourceShortageWithoutMutation) {
     const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
     BOOST_REQUIRE(ironSword.isValid());

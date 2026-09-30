@@ -543,6 +543,18 @@ public:
         int quantity);
 
     /**
+     * @brief Check whether addToInventory() would accept this add, without mutating
+     * @param inventoryIndex Target inventory
+     * @param handle Resource type handle
+     * @param quantity Amount to add
+     * @return true exactly when addToInventory(inventoryIndex, handle, quantity)
+     *         would succeed now (same validation and stacking capacity rule)
+     */
+    [[nodiscard]] bool canAddToInventory(uint32_t inventoryIndex,
+        VoidLight::ResourceHandle handle,
+        int quantity) const;
+
+    /**
      * @brief Remove resources from an inventory
      * @param inventoryIndex Target inventory
      * @param handle Resource type handle
@@ -1532,6 +1544,19 @@ private:
      */
     [[nodiscard]] int getInventoryQuantityLocked(uint32_t inventoryIndex,
         VoidLight::ResourceHandle handle) const;
+
+    /**
+     * @brief Internal: Units of `handle` an inventory can still accept
+     * @param inventoryIndex Valid inventory index
+     * @param handle Resource type handle
+     * @param maxStack Resolved max stack size for `handle`
+     * @return Free room in same-type stacks plus maxStack per empty slot; all
+     *         inline slots count regardless of maxSlots (non-issues C.87)
+     * @note MUST be called while holding m_inventoryMutex lock
+     */
+    [[nodiscard]] int inventoryAddCapacityLocked(uint32_t inventoryIndex,
+        VoidLight::ResourceHandle handle,
+        int maxStack) const;
 
     /**
      * @brief Internal: Destroy a static resource entity (DroppedItem, Container, Harvestable)

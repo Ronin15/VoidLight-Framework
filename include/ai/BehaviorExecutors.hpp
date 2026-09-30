@@ -33,6 +33,7 @@
 #include "managers/EventManager.hpp" // For EventManager::DeferredEvent
 #include "managers/SparseSidecar.hpp" // For SparseSidecar<KnockbackData>, SparseSidecar<NpcNeedData>
 #include "world/HarvestCommit.hpp" // For HARVEST_RANGE (shared forage reach)
+#include "world/WorldData.hpp" // For VILLAGE_RADIUS, TILE_SIZE (merchant forage leash)
 #include <array>
 #include <span>
 #include <vector>
@@ -243,15 +244,34 @@ inline constexpr uint8_t FORAGE_MAX_FAILED_ATTEMPTS = 3;
 // New need entries start with up to this many seconds of pressure (deterministic
 // per entity) so NPCs created together do not reach the threshold on one frame.
 inline constexpr float NEED_ENTRY_STAGGER_SECONDS = 30.0f;
+// Merchants forage only within this distance of their need-entry home anchor
+// (px): one settlement radius (VILLAGE_RADIUS 12 tiles * TILE_SIZE 32 = 384).
+// Other roles are unleashed (0).
+inline constexpr float MERCHANT_FORAGE_LEASH_RADIUS =
+    static_cast<float>(VoidLight::VILLAGE_RADIUS) * VoidLight::TILE_SIZE;
 
 /**
  * @brief Initialize a newly created need entry (main thread)
  *
  * Seeds pressure with a deterministic per-entity offset of up to
  * NEED_ENTRY_STAGGER_SECONDS of growth, so a batch of NPCs created on the same
- * frame crosses FORAGE_ENTER_THRESHOLD spread over that window.
+ * frame crosses FORAGE_ENTER_THRESHOLD spread over that window. Stores `home`
+ * as the forage leash anchor and sets leashRadius to
+ * MERCHANT_FORAGE_LEASH_RADIUS for merchants (CharacterData::isMerchant()),
+ * 0 (unleashed) otherwise.
  */
-void seedNeed(NpcNeedData& need, EntityHandle::IDType entityId);
+void seedNeed(NpcNeedData& need, EntityHandle::IDType entityId, const Vector2D& home,
+    const CharacterData& charData);
+
+/**
+ * @brief Abandon a Forage episode whose yield cannot fit the inventory (main thread)
+ *
+ * Called by AIManager::commitQueuedHarvests() when the pre-commit capacity
+ * check fails, before any depletion. Sets the retry cooldown to the backoff cap
+ * (FORAGE_RETRY_COOLDOWN << FORAGE_MAX_BACKOFF_SHIFT), counts a failure, and
+ * switches the forager back to need.returnBehavior. Pressure is not reset.
+ */
+void abandonForageInventoryFull(size_t edmIndex, NpcNeedData& need);
 
 /**
  * @brief Advance an NPC's survival need by one tick (worker-safe, own entry only)
@@ -268,7 +288,8 @@ void tickNeed(NpcNeedData& need, float deltaTime);
  * Requires a need entry with pressure >= FORAGE_ENTER_THRESHOLD and no active
  * retry cooldown. Looks for a candidate in ctx.harvestables within
  * HarvestCommit::SCARCITY_RADIUS that keeps at least NPC_HARVEST_RESERVE other
- * nodes within SCARCITY_RADIUS of itself (the same rule HarvestCommit enforces).
+ * nodes within SCARCITY_RADIUS of itself (the same rule HarvestCommit enforces)
+ * and, for a leashed need entry, lies within leashRadius of need.home.
  * With a candidate it records currentType as the need's returnBehavior and
  * enqueues a switch to Forage. Otherwise it applies the exponential retry
  * backoff so an exhausted area does not cause Forage churn.

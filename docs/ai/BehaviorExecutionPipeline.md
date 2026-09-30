@@ -59,10 +59,13 @@ thread. If the request cannot be committed, the attacker receives
 positioning on the next behavior pass.
 
 Harvest requests follow the same pattern. `commitQueuedHarvests()` sorts by
-(harvestable static index, sequence), rejects stale harvesters, harvesters
-without an inventory, and harvesters beyond `FORAGE_STALL_REACH`, then calls
-`HarvestCommit::commit` with `NPC_HARVEST_RESERVE`. Same-frame duplicates on
-one node are rejected by the depleted check; the losing forager retargets.
+(harvestable static index, harvester EDM index), rejects stale harvesters,
+harvesters without an inventory, and harvesters beyond `FORAGE_STALL_REACH`,
+abandons (without depleting) when `EDM::canAddToInventory` says the largest
+yield would not fit, then calls `HarvestCommit::commit` with
+`NPC_HARVEST_RESERVE`. Same-frame duplicates on one node are rejected by the
+depleted check, so the lowest harvester index wins; the losing forager
+retargets.
 
 ## Event Emission
 

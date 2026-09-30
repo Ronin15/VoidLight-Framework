@@ -178,18 +178,25 @@ main-thread snapshot of the active world's harvestables:
   role-assignment sites. It ensures an EDM `NpcNeedData` entry only for
   `EntityKind::NPC` with `CreatureCategory::NPC`, an Idle or Wander role, and
   the default config (the by-name, non-preset path); a new entry is seeded via
-  `Behaviors::seedNeed` with a per-entity pressure stagger. Any other
+  `Behaviors::seedNeed` with a per-entity pressure stagger and the forage
+  leash (home = current position; `MERCHANT_FORAGE_LEASH_RADIUS` for
+  merchants, 0 otherwise). Existing entries are never re-seeded, so the anchor
+  survives `switchBehavior()` round trips. Any other
   assignment (preset, explicit config, non-civilian role) removes the entry;
   Forage assignments leave it to `initForage`.
 - `commitQueuedHarvests()` drains `AICommandBus` harvest requests into the
-  reusable `m_pendingHarvests`, sorts by (harvestable static index, sequence),
-  and rejects stale harvester handles, harvesters without an inventory, stale
-  harvestable handles, and harvesters farther than
-  `Behaviors::FORAGE_STALL_REACH` from the node. It then calls
+  reusable `m_pendingHarvests`, sorts by (harvestable static index, harvester
+  EDM index) so the lowest harvester index wins a contested node, and rejects
+  stale harvester handles, harvesters without an inventory, stale harvestable
+  handles, and harvesters farther than `Behaviors::FORAGE_STALL_REACH` from the
+  node. It then pre-checks capacity with
+  `EDM::canAddToInventory(inventory, yieldResource, max(yieldMin, yieldMax))`;
+  on failure it calls `Behaviors::abandonForageInventoryFull` (cooldown to the
+  240 s cap, switch to `returnBehavior`, pressure kept) and the node is not
+  depleted. Otherwise it calls
   `HarvestCommit::commit(node, harvester, NPC_HARVEST_RESERVE)`. On a yield it
-  adds to the NPC inventory and dispatches `ResourceChangeEvent` ("harvested"),
-  or discards the yield with a debug log when the inventory is full. It then
-  resets the need and switches the NPC to its `returnBehavior`.
+  adds to the NPC inventory, dispatches `ResourceChangeEvent` ("harvested"),
+  resets the need, and switches the NPC to its `returnBehavior`.
 - `prepareForStateTransition()` and `clean()` clear the snapshot, scratch, and
   pending harvests and reset the cached version; `AICommandBus::clearAll()`
   clears queued harvests. Commit-time generation checks cover leftovers.
