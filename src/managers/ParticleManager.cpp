@@ -17,10 +17,12 @@
 #include "managers/SoundManager.hpp"
 #include "utils/SIMDMath.hpp"
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <format>
 #include <thread>
+#include <utility>
 
 // Use SIMD abstraction layer
 using namespace VoidLight::SIMD;
@@ -28,6 +30,20 @@ using namespace VoidLight::SIMD;
 // BatchRenderBuffers is now defined in ParticleManager.hpp as a member struct
 // to allow the buffer to persist across frames (eliminating per-frame std::fill
 // overhead)
+
+namespace {
+// Custom weather names that select the same-name weather particle variant.
+constexpr std::array<std::pair<std::string_view, ParticleEffectType>, 7>
+    kCustomWeatherEffects{{
+        {"Rain", ParticleEffectType::Rain},
+        {"HeavyRain", ParticleEffectType::HeavyRain},
+        {"Snow", ParticleEffectType::Snow},
+        {"HeavySnow", ParticleEffectType::HeavySnow},
+        {"Fog", ParticleEffectType::Fog},
+        {"WindyDust", ParticleEffectType::WindyDust},
+        {"WindyStorm", ParticleEffectType::WindyStorm},
+    }};
+} // namespace
 
 // A simple and fast pseudo-random number generator
 inline int fast_rand() {
@@ -764,12 +780,13 @@ void ParticleManager::handleWeatherEvent(const EventData& data) {
     }
 
     const auto& wp = we->getWeatherParams();
+    const std::string weatherName = we->getWeatherTypeString();
     PARTICLE_INFO(
         std::format("Weather handler: {}, intensity={:.2f}, transition={:.2f}s",
-            we->getWeatherTypeString(), wp.intensity, wp.transitionTime));
+            weatherName, wp.intensity, wp.transitionTime));
 
-    triggerWeatherEffect(we->getWeatherTypeString(), wp.intensity,
-        wp.transitionTime);
+    applyWeatherVariant(weatherEffectFor(we->getWeatherType(), weatherName),
+        wp.intensity, wp.transitionTime);
 }
 
 void ParticleManager::update(float deltaTime) {
@@ -1310,20 +1327,61 @@ void ParticleManager::clearWeatherGeneration(uint8_t generationId,
         fadeTime));
 }
 
-void ParticleManager::triggerWeatherEffect(const std::string& weatherType,
-    float intensity,
-    float transitionTime) {
-    // Convert string weather type to enum and delegate to enum-based method
-    ParticleEffectType effectType = weatherStringToEnum(weatherType, intensity);
+std::optional<ParticleEffectType>
+ParticleManager::weatherEffectFor(WeatherType type, std::string_view customName) {
+    switch (type) {
+        case WeatherType::Clear:
+            return std::nullopt;
+        case WeatherType::Cloudy:
+            return ParticleEffectType::Cloudy;
+        case WeatherType::Rainy:
+        case WeatherType::Stormy:
+            return ParticleEffectType::HeavyRain;
+        case WeatherType::Foggy:
+            return ParticleEffectType::Fog;
+        case WeatherType::Snowy:
+            return ParticleEffectType::HeavySnow;
+        case WeatherType::Windy:
+            return ParticleEffectType::WindyStorm;
+        case WeatherType::Custom:
+            for (const auto& [name, effect] : kCustomWeatherEffects) {
+                if (name == customName) {
+                    return effect;
+                }
+            }
+            PARTICLE_WARN(std::format(
+                "No weather particle variant for custom weather '{}'", customName));
+            return std::nullopt;
+    }
+    return std::nullopt;
+}
 
-    // Handle Clear weather - just stop effects and return
-    if (weatherType == "Clear") {
+std::optional<ParticleEffectType> ParticleManager::getActiveWeatherEffect() const {
+    std::lock_guard<std::mutex> lock(m_effectsMutex);
+    for (const auto& effect : m_effectInstances) {
+        if (effect.isWeatherEffect && effect.active) {
+            return effect.effectType;
+        }
+    }
+    return std::nullopt;
+}
+
+void ParticleManager::applyWeatherVariant(
+    std::optional<ParticleEffectType> effectType, float intensity,
+    float transitionTime) {
+    if (!effectType) {
         stopWeatherEffects(transitionTime);
         return;
     }
+    triggerWeatherEffect(*effectType, intensity, transitionTime);
+}
 
-    // Use enum-based method (this will handle the logging)
-    triggerWeatherEffect(effectType, intensity, transitionTime);
+void ParticleManager::triggerWeatherEffect(const std::string& weatherType,
+    float intensity,
+    float transitionTime) {
+    applyWeatherVariant(
+        weatherEffectFor(WeatherEvent::weatherTypeFromName(weatherType), weatherType),
+        intensity, transitionTime);
 }
 
 void ParticleManager::triggerWeatherEffect(ParticleEffectType effectType,
@@ -2811,46 +2869,6 @@ VOIDLIGHT_DEBUG_ONLY(
         m_useThreading.store(enable, std::memory_order_release);
   PARTICLE_INFO(std::format("Threading {}", enable ? "enabled" : "disabled"));
     })
-
-// Helper methods for enum-based classification system
-ParticleEffectType
-ParticleManager::weatherStringToEnum(const std::string& weatherType,
-    float intensity) const {
-    if (weatherType == "Rainy") {
-        ParticleEffectType const result = (intensity > 0.9f)
-            ? ParticleEffectType::HeavyRain
-            : ParticleEffectType::Rain;
-        PARTICLE_INFO(std::format(
-            "Weather mapping: \"{}\" intensity={} -> {}", weatherType, intensity,
-            result == ParticleEffectType::Rain ? "Rain" : "HeavyRain"));
-        return result;
-    } else if (weatherType == "Snowy") {
-        return (intensity > 0.7f) ? ParticleEffectType::HeavySnow
-                                  : ParticleEffectType::Snow;
-    } else if (weatherType == "Foggy") {
-        return ParticleEffectType::Fog;
-    } else if (weatherType == "Cloudy") {
-        return ParticleEffectType::Cloudy;
-    } else if (weatherType == "Stormy") {
-        return ParticleEffectType::HeavyRain; // Stormy always uses heavy rain
-    } else if (weatherType == "HeavyRain") {
-        return ParticleEffectType::HeavyRain;
-    } else if (weatherType == "HeavySnow") {
-        return ParticleEffectType::HeavySnow;
-    } else if (weatherType == "Windy") {
-        // Intensity-based wind variants: streaks < 0.5, dust 0.5-0.8, storm > 0.8
-        return (intensity > 0.8f) ? ParticleEffectType::WindyStorm
-            : (intensity > 0.5f)  ? ParticleEffectType::WindyDust
-                                  : ParticleEffectType::Windy;
-    } else if (weatherType == "WindyDust") {
-        return ParticleEffectType::WindyDust;
-    } else if (weatherType == "WindyStorm") {
-        return ParticleEffectType::WindyStorm;
-    }
-
-    // Default/unknown weather type
-    return ParticleEffectType::Custom;
-}
 
 std::string_view
 ParticleManager::effectTypeToString(ParticleEffectType type) const {

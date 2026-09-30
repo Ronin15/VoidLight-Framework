@@ -50,7 +50,6 @@ ParticleManager (Singleton)
 │   │   ├── Independent Effects
 │   │   └── Grouped Effects
 │   └── Emission Control
-│       ├── Intensity Scaling
 │       ├── Duration Management
 │       └── Transition System
 ├── Threading & Performance
@@ -91,7 +90,6 @@ ParticleManager (Singleton)
 ### 🔧 Advanced Management
 - **Independent Effects**: Effects that persist beyond weather changes
 - **Effect Grouping**: Bulk operations on related effects
-- **Intensity Control**: Real-time intensity adjustment and scaling
 - **Generation System**: Batch clearing of particle generations
 
 ### 📊 Performance Monitoring
@@ -263,12 +261,42 @@ struct ParticleEffectDefinition {
 
 | Effect Type | Description | Performance | Visual Characteristics |
 |-------------|-------------|-------------|----------------------|
-| **Rain** | Realistic rainfall with wind | 100-200 particles/sec | Blue droplets, downward motion with drift |
-| **Heavy Rain** | Intense rainfall | 200-400 particles/sec | Denser, faster droplets |
-| **Snow** | Gentle snowfall | 50-100 particles/sec | White flakes, slow descent with wind |
-| **Heavy Snow** | Blizzard conditions | 100-200 particles/sec | Dense, varied snowflake sizes |
-| **Fog** | Atmospheric fog effect | 200-300 particles/sec | Large, semi-transparent gray particles |
-| **Cloudy** | Moving cloud wisps | 20-50 particles/sec | Large, light particles with horizontal motion |
+| **Rain** | Realistic rainfall with wind | 300 particles/sec | Blue droplets, downward motion with drift |
+| **Heavy Rain** | Intense rainfall | 500 particles/sec | Denser, faster droplets |
+| **Snow** | Gentle snowfall | 180 particles/sec | White flakes, slow descent with wind |
+| **Heavy Snow** | Blizzard conditions | 350 particles/sec | Dense, varied snowflake sizes |
+| **Fog** | Atmospheric fog effect | 38 particles/sec | Large, semi-transparent gray particles |
+| **Cloudy** | Moving cloud wisps | 1.2 particles/sec | Large, light particles with horizontal motion |
+| **Windy** | Wind streaks | 80 particles/sec | Thin horizontal streaks (API/test only; no weather maps to it) |
+| **WindyDust** | Dust clouds | 150 particles/sec | Brown dust blown horizontally |
+| **WindyStorm** | Storm debris | 100 particles/sec | Leaves and debris in strong wind |
+
+### Weather Variant Selection
+
+`ParticleManager::weatherEffectFor(WeatherType, std::string_view customName)` is
+the only weather-to-variant mapping. The variant is keyed by `WeatherType`;
+intensity never selects it.
+
+| WeatherType | Variant |
+|-------------|---------|
+| Clear | none (`stopWeatherEffects`) |
+| Cloudy | Cloudy |
+| Rainy, Stormy | HeavyRain |
+| Foggy | Fog |
+| Snowy | HeavySnow |
+| Windy | WindyStorm |
+| Custom named `Rain` / `HeavyRain` / `Snow` / `HeavySnow` / `Fog` / `WindyDust` / `WindyStorm` | same-name variant |
+| Custom, any other name | none; logs a warning and current weather particles stop |
+
+- Weather intensity is stored on the effect instance but does not scale
+  emission yet, so Rainy and Stormy both render HeavyRain. Emission scaling
+  (or deleting the unused intensity plumbing) is a scheduled follow-up in
+  `docs/framework-implementation-slices.md`.
+- The light Rain, Snow, and WindyDust variants are reachable through Custom
+  weather names (EventDemo cycles them). The streak `Windy` variant is only
+  reachable through `triggerWeatherEffect(ParticleEffectType::Windy, ...)`.
+- `getActiveWeatherEffect()` returns the running weather variant, or
+  `std::nullopt` (diagnostics and tests).
 
 ### Built-in Visual Effects
 
@@ -306,7 +334,7 @@ public:
 ```cpp
 // Trigger rain effect
 auto& pm = ParticleManager::Instance();
-pm.triggerWeatherEffect("Rainy", 0.8f, 2.0f); // 80% intensity, 2s transition
+pm.triggerWeatherEffect("Rainy", 0.8f, 2.0f); // HeavyRain variant, 2s transition
 
 // Stop all weather
 pm.stopWeatherEffects(1.5f); // 1.5s fade out
@@ -319,7 +347,6 @@ uint32_t fireId = pm.playIndependentEffect("Fire", Vector2D(400, 300),
                                           1.0f, -1.0f, "campfire", "fire_crackle");
 
 // Control the effect
-pm.setEffectIntensity(fireId, 0.5f);  // Reduce intensity
 pm.pauseIndependentEffect(fireId, true);  // Pause
 pm.stopIndependentEffect(fireId);  // Stop
 ```
@@ -347,7 +374,6 @@ uint32_t playEffect(const std::string& effectName,
                    float intensity = 1.0f);
 
 void stopEffect(uint32_t effectId);
-void setEffectIntensity(uint32_t effectId, float intensity);
 bool isEffectPlaying(uint32_t effectId) const;
 
 // Independent effects (persist beyond weather changes)
@@ -366,9 +392,21 @@ void pauseIndependentEffect(uint32_t effectId, bool paused);
 ### Weather Integration
 
 ```cpp
-// Weather system integration (called by EventManager)
-void triggerWeatherEffect(const std::string& weatherType, 
-                         float intensity, 
+// Production path: a state's EventTypeId::Weather handler forwards here
+void handleWeatherEvent(const EventData& data);
+
+// Weather -> variant mapping (pure, any thread) and diagnostics
+static std::optional<ParticleEffectType>
+weatherEffectFor(WeatherType type, std::string_view customName = {});
+std::optional<ParticleEffectType> getActiveWeatherEffect() const;
+
+// Name overload: resolves via WeatherEvent::weatherTypeFromName + weatherEffectFor
+void triggerWeatherEffect(const std::string& weatherType,
+                         float intensity,
+                         float transitionTime = 2.0f);
+// Enum overload: runs exactly this variant
+void triggerWeatherEffect(ParticleEffectType effectType,
+                         float intensity,
                          float transitionTime = 2.0f);
 
 void stopWeatherEffects(float transitionTime = 2.0f);
@@ -451,32 +489,26 @@ private:
 
 ### EventManager Weather Integration
 
+EventManager only dispatches weather events. The state that owns the screen
+registers a transient `EventTypeId::Weather` handler in `enter()` that forwards
+to ParticleManager (see `GamePlayState::registerEventHandlers()`):
+
 ```cpp
-class EventManager {
-private:
-    void processWeatherEvent(const WeatherEvent& event) {
-        auto& pm = ParticleManager::Instance();
-        
-        switch (event.getWeatherType()) {
-            case WeatherType::Clear:
-                pm.stopWeatherEffects(2.0f);
-                break;
-                
-            case WeatherType::Rainy:
-                pm.triggerWeatherEffect("Rainy", event.getIntensity(), 3.0f);
-                break;
-                
-            case WeatherType::Snowy:
-                pm.triggerWeatherEffect("Snowy", event.getIntensity(), 4.0f);
-                break;
-                
-            case WeatherType::Foggy:
-                pm.triggerWeatherEffect("Foggy", event.getIntensity(), 5.0f);
-                break;
-        }
-    }
-};
+m_weatherEventToken = eventMgr.registerHandlerWithToken(
+    EventTypeId::Weather,
+    [this](const EventData& data) {
+        ParticleManager::Instance().handleWeatherEvent(data);
+        onWeatherChanged(data);
+    });
+
+// Anywhere: dispatch a weather change
+EventManager::Instance().changeWeather("Rainy", 3.0f);
 ```
+
+`handleWeatherEvent()` reads the event's `WeatherType` (and custom name) and
+applies `weatherEffectFor()`, passing the event's intensity and transition
+time. Events from `changeWeather()` and `EventFactory` carry the same type and
+per-type defaults, so they select the same variant.
 
 ### State Transition Handling
 
@@ -618,9 +650,9 @@ void monitorParticlePerformance() {
 ### ✅ Optimal Usage Patterns
 
 ```cpp
-// ✅ Use appropriate effect intensities
-pm.triggerWeatherEffect("Rainy", 0.3f);  // Light rain
-pm.triggerWeatherEffect("Rainy", 0.8f);  // Heavy rain
+// ✅ Pick the variant by weather type or custom name
+pm.triggerWeatherEffect("Rain", 1.0f);   // Light rain (Custom name)
+pm.triggerWeatherEffect("Rainy", 1.0f);  // Heavy rain (Rainy -> HeavyRain)
 
 // ✅ Group related effects
 pm.playIndependentEffect("Fire", pos, 1.0f, -1.0f, "torch_group");

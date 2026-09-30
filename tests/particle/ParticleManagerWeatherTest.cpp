@@ -6,11 +6,15 @@
 #define BOOST_TEST_MODULE ParticleManagerWeatherTest
 #include <boost/test/unit_test.hpp>
 
+#include "events/WeatherEvent.hpp"
 #include "managers/ParticleManager.hpp"
 #include "utils/Vector2D.hpp"
 #include <chrono>
 #include <memory>
+#include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 // Test fixture for ParticleManager weather integration
 struct ParticleManagerWeatherFixture {
@@ -216,30 +220,112 @@ BOOST_FIXTURE_TEST_CASE(TestImmediateWeatherStop,
     BOOST_CHECK_LE(finalCount, initialCount * 5); // Ensure no runaway growth
 }
 
-// Test weather intensity effects
-BOOST_FIXTURE_TEST_CASE(TestWeatherIntensityEffects,
+// The heavy rain variant emits faster than light rain. Intensity does not
+// scale emission; the variant does.
+BOOST_FIXTURE_TEST_CASE(TestHeavyRainVariantEmitsMoreThanRain,
     ParticleManagerWeatherFixture) {
-    // Test low intensity
-    manager->triggerWeatherEffect("Rainy", 0.1f);
+    manager->triggerWeatherEffect(ParticleEffectType::Rain, 1.0f);
     for (int i = 0; i < 10; ++i) {
         manager->update(0.016f);
     }
-    size_t lowIntensityCount = manager->getActiveParticleCount();
+    const size_t lightCount = manager->getActiveParticleCount();
 
-    // Clear and test high intensity
     manager->stopWeatherEffects(0.0f);
     for (int i = 0; i < 10; ++i) {
         manager->update(0.016f);
     }
 
-    manager->triggerWeatherEffect("Rainy", 1.0f);
+    manager->triggerWeatherEffect(ParticleEffectType::HeavyRain, 1.0f);
     for (int i = 0; i < 10; ++i) {
         manager->update(0.016f);
     }
-    size_t highIntensityCount = manager->getActiveParticleCount();
+    const size_t heavyCount = manager->getActiveParticleCount();
 
-    // High intensity should create more particles
-    BOOST_CHECK_GT(highIntensityCount, lowIntensityCount);
+    BOOST_CHECK_GT(lightCount, 0);
+    BOOST_CHECK_GT(heavyCount, lightCount);
+}
+
+// Variant selection is owned by ParticleManager::weatherEffectFor and keyed
+// by WeatherType; a custom name is only consulted for WeatherType::Custom.
+BOOST_AUTO_TEST_CASE(WeatherTypeSelectsParticleVariant) {
+    BOOST_CHECK(!ParticleManager::weatherEffectFor(WeatherType::Clear).has_value());
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Cloudy) ==
+        ParticleEffectType::Cloudy);
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Rainy) ==
+        ParticleEffectType::HeavyRain);
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Stormy) ==
+        ParticleEffectType::HeavyRain);
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Foggy) ==
+        ParticleEffectType::Fog);
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Snowy) ==
+        ParticleEffectType::HeavySnow);
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Windy) ==
+        ParticleEffectType::WindyStorm);
+
+    // Named types ignore the custom name.
+    BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Rainy, "Snow") ==
+        ParticleEffectType::HeavyRain);
+    BOOST_CHECK(!ParticleManager::weatherEffectFor(WeatherType::Clear, "Rain")
+            .has_value());
+
+    const std::vector<std::pair<std::string, ParticleEffectType>> customNames = {
+        {"Rain", ParticleEffectType::Rain},
+        {"HeavyRain", ParticleEffectType::HeavyRain},
+        {"Snow", ParticleEffectType::Snow},
+        {"HeavySnow", ParticleEffectType::HeavySnow},
+        {"Fog", ParticleEffectType::Fog},
+        {"WindyDust", ParticleEffectType::WindyDust},
+        {"WindyStorm", ParticleEffectType::WindyStorm},
+    };
+    for (const auto& [name, expected] : customNames) {
+        BOOST_TEST_CONTEXT("custom name " << name) {
+            BOOST_CHECK(ParticleManager::weatherEffectFor(WeatherType::Custom, name) ==
+                expected);
+        }
+    }
+
+    BOOST_CHECK(!ParticleManager::weatherEffectFor(WeatherType::Custom, "AcidRain")
+            .has_value());
+    BOOST_CHECK(
+        !ParticleManager::weatherEffectFor(WeatherType::Custom, "").has_value());
+}
+
+// Intensity never selects the variant: low and high intensity of the same
+// weather run the same variant.
+BOOST_FIXTURE_TEST_CASE(WeatherNameIgnoresIntensityForVariant,
+    ParticleManagerWeatherFixture) {
+    struct Case {
+        std::string name;
+        float intensity;
+        ParticleEffectType expected;
+    };
+    const std::vector<Case> cases = {
+        {"Rainy", 0.1f, ParticleEffectType::HeavyRain},
+        {"Rainy", 1.0f, ParticleEffectType::HeavyRain},
+        {"Snowy", 0.4f, ParticleEffectType::HeavySnow},
+        {"Windy", 0.3f, ParticleEffectType::WindyStorm},
+        {"Windy", 0.9f, ParticleEffectType::WindyStorm},
+        {"Rain", 1.0f, ParticleEffectType::Rain},
+        {"WindyDust", 1.0f, ParticleEffectType::WindyDust},
+    };
+    for (const auto& c : cases) {
+        BOOST_TEST_CONTEXT(c.name << " intensity " << c.intensity) {
+            manager->triggerWeatherEffect(c.name, c.intensity, 0.0f);
+            const auto active = manager->getActiveWeatherEffect();
+            BOOST_REQUIRE(active.has_value());
+            BOOST_CHECK(*active == c.expected);
+        }
+    }
+
+    manager->triggerWeatherEffect("Rainy", 0.5f, 0.0f);
+    BOOST_REQUIRE(manager->getActiveWeatherEffect().has_value());
+    manager->triggerWeatherEffect("Clear", 0.0f, 0.0f);
+    BOOST_CHECK(!manager->getActiveWeatherEffect().has_value());
+
+    manager->triggerWeatherEffect("Rainy", 0.5f, 0.0f);
+    BOOST_REQUIRE(manager->getActiveWeatherEffect().has_value());
+    manager->triggerWeatherEffect("AcidRain", 0.5f, 0.0f);
+    BOOST_CHECK(!manager->getActiveWeatherEffect().has_value());
 }
 
 // Test different weather types
@@ -306,47 +392,29 @@ BOOST_FIXTURE_TEST_CASE(TestDifferentWeatherTypes,
     }
 }
 
-// Test Windy weather intensity variants
-BOOST_FIXTURE_TEST_CASE(TestWindyIntensityVariants,
-    ParticleManagerWeatherFixture) {
-    // Test low intensity (wind streaks)
-    manager->triggerWeatherEffect("Windy", 0.3f);
-    for (int i = 0; i < 20; ++i) {
-        manager->update(0.016f);
-    }
-    size_t lowIntensityCount = manager->getActiveParticleCount();
-    BOOST_CHECK_GT(lowIntensityCount, 0);
+// Every wind variant emits when triggered directly by effect type.
+BOOST_FIXTURE_TEST_CASE(TestWindyVariantsEmit, ParticleManagerWeatherFixture) {
+    const std::vector<ParticleEffectType> variants = {ParticleEffectType::Windy,
+        ParticleEffectType::WindyDust, ParticleEffectType::WindyStorm};
 
-    // Clear and test medium intensity (dust)
-    manager->stopWeatherEffects(0.0f);
-    for (int i = 0; i < 30; ++i) {
-        manager->update(0.016f);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+    for (const auto variant : variants) {
+        BOOST_TEST_CONTEXT("variant " << static_cast<int>(variant)) {
+            manager->stopWeatherEffects(0.0f);
+            for (int i = 0; i < 30; ++i) {
+                manager->update(0.016f);
+            }
 
-    manager->triggerWeatherEffect("Windy", 0.6f); // Should trigger WindyDust
-    for (int i = 0; i < 20; ++i) {
-        manager->update(0.016f);
+            manager->triggerWeatherEffect(variant, 1.0f);
+            for (int i = 0; i < 20; ++i) {
+                manager->update(0.016f);
+            }
+            BOOST_CHECK_GT(manager->getActiveParticleCount(), 0);
+        }
     }
-    size_t mediumIntensityCount = manager->getActiveParticleCount();
-    BOOST_CHECK_GT(mediumIntensityCount, 0);
-
-    // Clear and test high intensity (storm leaves)
-    manager->stopWeatherEffects(0.0f);
-    for (int i = 0; i < 30; ++i) {
-        manager->update(0.016f);
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-
-    manager->triggerWeatherEffect("Windy", 0.9f); // Should trigger WindyStorm
-    for (int i = 0; i < 20; ++i) {
-        manager->update(0.016f);
-    }
-    size_t highIntensityCount = manager->getActiveParticleCount();
-    BOOST_CHECK_GT(highIntensityCount, 0);
 }
 
-// Test direct Windy variant string triggering
+// Test Windy weather names: "Windy" is WindyStorm; "WindyDust" and
+// "WindyStorm" are Custom names that select the same-name variant.
 BOOST_FIXTURE_TEST_CASE(TestWindyVariantStrings,
     ParticleManagerWeatherFixture) {
     std::vector<std::string> windyVariants = {"Windy", "WindyDust", "WindyStorm"};

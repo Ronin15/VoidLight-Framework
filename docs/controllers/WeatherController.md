@@ -93,13 +93,13 @@ Check if currently subscribed to weather events.
 
 ```cpp
 enum class WeatherType {
-    Clear,    // No weather effects
-    Cloudy,   // Overcast sky
-    Rainy,    // Rain particles
-    Stormy,   // Heavy rain + lightning
-    Foggy,    // Fog overlay
-    Snowy,    // Snow particles
-    Windy     // Wind effects on particles
+    Clear,    // No weather particles
+    Cloudy,   // Cloud particles
+    Rainy,    // Heavy rain particles
+    Stormy,   // Heavy rain particles
+    Foggy,    // Fog particles
+    Snowy,    // Heavy snow particles
+    Windy     // Wind storm particles
 };
 ```
 
@@ -149,8 +149,8 @@ void GamePlayState::exit() {
 
 When WeatherController calls `EventManager::changeWeather()`, ParticleManager automatically:
 
-1. Receives the `WeatherEvent`
-2. Creates appropriate weather particles (rain, snow, etc.)
+1. Receives the `WeatherEvent` (through the owning state's `EventTypeId::Weather` handler, which calls `ParticleManager::handleWeatherEvent()`)
+2. Starts the particle variant for the event's `WeatherType` (see "Weather Variant Selection" in `docs/managers/ParticleManager.md`); intensity does not pick the variant
 3. Manages particle lifecycle until weather changes
 
 You don't need to manually create weather particles - just use WeatherController.

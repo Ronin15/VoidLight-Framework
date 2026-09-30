@@ -10,10 +10,25 @@
 #include "world/WorldData.hpp"
 #include "utils/Vector2D.hpp"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <format>
 #include <ostream>
 #include <random>
+#include <utility>
+
+namespace {
+constexpr std::array<std::pair<std::string_view, WeatherType>, 7>
+    kCanonicalWeatherNames{{
+        {"Clear", WeatherType::Clear},
+        {"Cloudy", WeatherType::Cloudy},
+        {"Rainy", WeatherType::Rainy},
+        {"Stormy", WeatherType::Stormy},
+        {"Foggy", WeatherType::Foggy},
+        {"Snowy", WeatherType::Snowy},
+        {"Windy", WeatherType::Windy},
+    }};
+} // namespace
 
 // Stream operator for WeatherType (moved from header)
 std::ostream& operator<<(std::ostream& os, const WeatherType& type) {
@@ -70,8 +85,9 @@ WeatherEvent::WeatherEvent(const std::string& name, WeatherType type)
 }
 
 WeatherEvent::WeatherEvent(const std::string& name,
-    const std::string& customType)
-    : m_name(name), m_weatherType(WeatherType::Custom), m_customType(customType) {
+    const std::string& weatherTypeName)
+    : m_name(name) {
+    setWeatherType(weatherTypeName);
     applyDefaultParamsForType();
 }
 
@@ -88,33 +104,28 @@ void WeatherEvent::applyDefaultParamsForType() {
             m_params.intensity = 0.5f;
             m_params.visibility = 0.8f;
             m_params.windSpeed = 0.3f;
-            m_params.particleEffect = "Cloudy";
             break;
         case WeatherType::Rainy:
             m_params.intensity = 0.7f;
             m_params.visibility = 0.6f;
             m_params.windSpeed = 0.5f;
-            m_params.particleEffect = "Rain";
             m_params.soundEffect = "rain_ambient";
             break;
         case WeatherType::Stormy:
             m_params.intensity = 1.0f;
             m_params.visibility = 0.3f;
             m_params.windSpeed = 0.9f;
-            m_params.particleEffect = "HeavyRain";
             m_params.soundEffect = "thunder_storm";
             break;
         case WeatherType::Foggy:
             m_params.intensity = 0.6f;
             m_params.visibility = 0.2f;
             m_params.windSpeed = 0.1f;
-            m_params.particleEffect = "Fog";
             break;
         case WeatherType::Snowy:
             m_params.intensity = 0.7f;
             m_params.visibility = 0.5f;
             m_params.windSpeed = 0.4f;
-            m_params.particleEffect = "Snow";
             m_params.soundEffect = "snow_ambient";
             break;
         case WeatherType::Windy:
@@ -257,68 +268,22 @@ void WeatherEvent::setWeatherType(WeatherType type) {
     m_customType.clear(); // Clear custom type when setting a standard type
 }
 
-void WeatherEvent::setWeatherType(const std::string& weatherTypeStr) {
-    if (weatherTypeStr.empty()) {
-        m_weatherType = WeatherType::Custom;
-        m_customType = weatherTypeStr;
-        return;
+WeatherType WeatherEvent::weatherTypeFromName(std::string_view name) {
+    for (const auto& [canonicalName, type] : kCanonicalWeatherNames) {
+        if (canonicalName == name) {
+            return type;
+        }
     }
+    return WeatherType::Custom;
+}
 
-    switch (weatherTypeStr[0]) {
-        case 'C':
-            if (weatherTypeStr == "Clear") {
-                m_weatherType = WeatherType::Clear;
-                break;
-            }
-            if (weatherTypeStr == "Cloudy") {
-                m_weatherType = WeatherType::Cloudy;
-                break;
-            }
-            m_weatherType = WeatherType::Custom;
-            m_customType = weatherTypeStr;
-            return;
-        case 'R':
-            if (weatherTypeStr == "Rainy") {
-                m_weatherType = WeatherType::Rainy;
-                break;
-            }
-            m_weatherType = WeatherType::Custom;
-            m_customType = weatherTypeStr;
-            return;
-        case 'S':
-            if (weatherTypeStr == "Stormy") {
-                m_weatherType = WeatherType::Stormy;
-                break;
-            }
-            if (weatherTypeStr == "Snowy") {
-                m_weatherType = WeatherType::Snowy;
-                break;
-            }
-            m_weatherType = WeatherType::Custom;
-            m_customType = weatherTypeStr;
-            return;
-        case 'F':
-            if (weatherTypeStr == "Foggy") {
-                m_weatherType = WeatherType::Foggy;
-                break;
-            }
-            m_weatherType = WeatherType::Custom;
-            m_customType = weatherTypeStr;
-            return;
-        case 'W':
-            if (weatherTypeStr == "Windy") {
-                m_weatherType = WeatherType::Windy;
-                break;
-            }
-            m_weatherType = WeatherType::Custom;
-            m_customType = weatherTypeStr;
-            return;
-        default:
-            m_weatherType = WeatherType::Custom;
-            m_customType = weatherTypeStr;
-            return;
+void WeatherEvent::setWeatherType(const std::string& weatherTypeName) {
+    m_weatherType = weatherTypeFromName(weatherTypeName);
+    if (m_weatherType == WeatherType::Custom) {
+        m_customType = weatherTypeName;
+    } else {
+        m_customType.clear();
     }
-    m_customType.clear();
 }
 
 bool WeatherEvent::checkConditions() {

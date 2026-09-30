@@ -9,12 +9,14 @@
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <vector>
 
 #include "core/Logger.hpp"
 #include "core/ThreadSystem.hpp"
 #include "entities/Entity.hpp"
+#include "events/EventFactory.hpp"
 #include "events/ResourceChangeEvent.hpp"
 #include "events/SceneChangeEvent.hpp"
 #include "events/WeatherEvent.hpp"
@@ -291,6 +293,79 @@ BOOST_AUTO_TEST_CASE(TestWeatherEventCoordination) {
     EventManager::Instance().clearAllHandlers();
 
     TEST_LOG("TestWeatherEventCoordination completed successfully");
+}
+
+/**
+ * @brief changeWeather selects the particle variant from WeatherType,
+ *        independent of whether the pooled WeatherEvent is fresh or reused
+ *
+ * Production wiring: a state-owned transient Weather handler forwards to
+ * ParticleManager::handleWeatherEvent. EventFactory weather reaches the same
+ * variant as changeWeather for the same name.
+ */
+BOOST_AUTO_TEST_CASE(TestChangeWeatherVariantIndependentOfPoolState) {
+    auto& eventMgr = EventManager::Instance();
+    auto& particleMgr = ParticleManager::Instance();
+
+    // Clears transient handlers and event pools so the first changeWeather
+    // is a pool miss and the second reuses the released event.
+    eventMgr.prepareForStateTransition();
+
+    const Event* lastEvent = nullptr;
+    const auto token = eventMgr.registerHandlerWithToken(EventTypeId::Weather,
+        [&lastEvent](const EventData& data) {
+            lastEvent = data.event.get();
+            ParticleManager::Instance().handleWeatherEvent(data);
+        });
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Rainy", 1.0f,
+        EventManager::DispatchMode::Immediate));
+    const Event* firstEvent = lastEvent;
+    BOOST_REQUIRE(firstEvent != nullptr);
+    BOOST_CHECK(particleMgr.getActiveWeatherEffect() ==
+        std::optional<ParticleEffectType>(ParticleEffectType::HeavyRain));
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Rainy", 1.0f,
+        EventManager::DispatchMode::Immediate));
+    BOOST_CHECK(lastEvent == firstEvent); // pooled event reused
+    BOOST_CHECK(particleMgr.getActiveWeatherEffect() ==
+        std::optional<ParticleEffectType>(ParticleEffectType::HeavyRain));
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Snowy", 1.0f,
+        EventManager::DispatchMode::Immediate));
+    BOOST_CHECK(particleMgr.getActiveWeatherEffect() ==
+        std::optional<ParticleEffectType>(ParticleEffectType::HeavySnow));
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Windy", 1.0f,
+        EventManager::DispatchMode::Immediate));
+    BOOST_CHECK(particleMgr.getActiveWeatherEffect() ==
+        std::optional<ParticleEffectType>(ParticleEffectType::WindyStorm));
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Stormy", 1.0f,
+        EventManager::DispatchMode::Immediate));
+    BOOST_CHECK(particleMgr.getActiveWeatherEffect() ==
+        std::optional<ParticleEffectType>(ParticleEffectType::HeavyRain));
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Clear", 1.0f,
+        EventManager::DispatchMode::Immediate));
+    BOOST_CHECK(!particleMgr.getActiveWeatherEffect().has_value());
+
+    // EventFactory weather reaches the same variant as changeWeather("Snowy").
+    EventDefinition def;
+    def.type = "Weather";
+    def.name = "factorySnow";
+    def.params["weatherType"] = "Snowy";
+    EventData factoryData;
+    factoryData.typeId = EventTypeId::Weather;
+    factoryData.setActive(true);
+    factoryData.event = EventFactory::Instance().createEvent(def);
+    BOOST_REQUIRE(factoryData.event != nullptr);
+    particleMgr.handleWeatherEvent(factoryData);
+    BOOST_CHECK(particleMgr.getActiveWeatherEffect() ==
+        std::optional<ParticleEffectType>(ParticleEffectType::HeavySnow));
+
+    BOOST_CHECK(eventMgr.removeHandler(token));
+    particleMgr.stopWeatherEffects(0.0f);
 }
 
 /**

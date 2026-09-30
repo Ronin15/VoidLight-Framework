@@ -21,6 +21,8 @@
 #include <iostream>
 #include <map>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 // Simple test fixture for WeatherEvent
 struct WeatherEventFixture {
@@ -59,6 +61,51 @@ BOOST_FIXTURE_TEST_CASE(BasicProperties, WeatherEventFixture) {
     BOOST_CHECK_EQUAL(customWeather->getWeatherTypeString(), "AcidRain");
 }
 
+// The string constructor parses canonical names (the EventFactory path) and
+// carries the same type and per-type defaults as the enum constructor.
+BOOST_FIXTURE_TEST_CASE(StringConstructorParsesNamedTypes, WeatherEventFixture) {
+    const std::vector<std::pair<std::string, WeatherType>> names = {
+        {"Clear", WeatherType::Clear}, {"Cloudy", WeatherType::Cloudy},
+        {"Rainy", WeatherType::Rainy}, {"Stormy", WeatherType::Stormy},
+        {"Foggy", WeatherType::Foggy}, {"Snowy", WeatherType::Snowy},
+        {"Windy", WeatherType::Windy}};
+
+    for (const auto& [name, type] : names) {
+        BOOST_TEST_CONTEXT("weather " << name) {
+            const WeatherEvent fromName("byName", name);
+            const WeatherEvent fromEnum("byEnum", type);
+            BOOST_CHECK_EQUAL(fromName.getWeatherType(), type);
+            BOOST_CHECK_EQUAL(fromName.getWeatherTypeString(), name);
+            const auto& got = fromName.getWeatherParams();
+            const auto& want = fromEnum.getWeatherParams();
+            BOOST_CHECK_EQUAL(got.intensity, want.intensity);
+            BOOST_CHECK_EQUAL(got.visibility, want.visibility);
+            BOOST_CHECK_EQUAL(got.windSpeed, want.windSpeed);
+            BOOST_CHECK_EQUAL(got.windDirection, want.windDirection);
+            BOOST_CHECK_EQUAL(got.transitionTime, want.transitionTime);
+            BOOST_CHECK_EQUAL(got.soundEffect, want.soundEffect);
+
+            BOOST_CHECK_EQUAL(WeatherEvent::weatherTypeFromName(name), type);
+        }
+    }
+
+    const WeatherEvent acid("acid", "AcidRain");
+    BOOST_CHECK_EQUAL(acid.getWeatherType(), WeatherType::Custom);
+    BOOST_CHECK_EQUAL(acid.getWeatherTypeString(), "AcidRain");
+    const WeatherEvent customEnum("customEnum", WeatherType::Custom);
+    BOOST_CHECK_EQUAL(acid.getWeatherParams().intensity,
+        customEnum.getWeatherParams().intensity);
+    BOOST_CHECK_EQUAL(acid.getWeatherParams().visibility,
+        customEnum.getWeatherParams().visibility);
+
+    // Names are case-sensitive.
+    const WeatherEvent lower("lower", "rainy");
+    BOOST_CHECK_EQUAL(lower.getWeatherType(), WeatherType::Custom);
+    BOOST_CHECK_EQUAL(lower.getWeatherTypeString(), "rainy");
+
+    BOOST_CHECK_EQUAL(WeatherEvent::weatherTypeFromName(""), WeatherType::Custom);
+}
+
 // Test weather parameters
 BOOST_FIXTURE_TEST_CASE(WeatherParameters, WeatherEventFixture) {
     auto weatherEvent = std::make_shared<WeatherEvent>("Test", WeatherType::Cloudy);
@@ -68,7 +115,6 @@ BOOST_FIXTURE_TEST_CASE(WeatherParameters, WeatherEventFixture) {
     params.intensity = 0.8f;
     params.visibility = 0.5f;
     params.transitionTime = 3.0f;
-    params.particleEffect = "clouds";
     params.soundEffect = "wind_sound";
 
     weatherEvent->setWeatherParams(params);
@@ -77,7 +123,6 @@ BOOST_FIXTURE_TEST_CASE(WeatherParameters, WeatherEventFixture) {
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().intensity, 0.8f);
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().visibility, 0.5f);
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().transitionTime, 3.0f);
-    BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().particleEffect, "clouds");
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().soundEffect, "wind_sound");
 }
 
@@ -156,7 +201,6 @@ BOOST_FIXTURE_TEST_CASE(EventExecution, WeatherEventFixture) {
     // Set some parameters
     WeatherParams params;
     params.intensity = 1.0f;
-    params.particleEffect = "lightning";
     params.soundEffect = "thunder";
     event->setWeatherParams(params);
 

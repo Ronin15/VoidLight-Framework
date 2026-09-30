@@ -17,8 +17,10 @@
 #include "managers/EntityDataManager.hpp"
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 struct EventTypesFixture {
@@ -30,9 +32,8 @@ struct EventTypesFixture {
         EventFactory::Instance().clean();
         BOOST_CHECK(EventFactory::Instance().init());
 
-        // Always register standard event creators explicitly for each test
-        // Make sure to register Weather creator first as it's used in most tests
-        registerWeatherCreator();
+        // Always register standard event creators explicitly for each test.
+        // Weather uses the factory's built-in creator (production path).
         registerSceneChangeCreator();
         registerNPCSpawnCreator();
         registerMerchantSpawnCreator();
@@ -46,24 +47,6 @@ struct EventTypesFixture {
     }
 
     // Register each creator separately for better control
-    void registerWeatherCreator() {
-        EventFactory::Instance().registerCustomEventCreator(
-            "Weather", [](const EventDefinition& def) {
-                std::string weatherType = def.params.count("weatherType")
-                    ? def.params.at("weatherType")
-                    : "Clear";
-                float intensity = def.numParams.count("intensity")
-                    ? def.numParams.at("intensity")
-                    : 0.5f;
-                float transitionTime = def.numParams.count("transitionTime")
-                    ? def.numParams.at("transitionTime")
-                    : 5.0f;
-
-                return EventFactory::Instance().createWeatherEvent(
-                    def.name, weatherType, intensity, transitionTime);
-            });
-    }
-
     void registerSceneChangeCreator() {
         EventFactory::Instance().registerCustomEventCreator(
             "SceneChange", [](const EventDefinition& def) {
@@ -155,14 +138,12 @@ BOOST_FIXTURE_TEST_CASE(WeatherEventBasics, EventTypesFixture) {
     params.intensity = 0.8f;
     params.visibility = 0.5f;
     params.transitionTime = 3.0f;
-    params.particleEffect = "heavy_rain";
     params.soundEffect = "rain_sound";
 
     rainEvent->setWeatherParams(params);
     BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().intensity, 0.8f);
     BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().visibility, 0.5f);
     BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().transitionTime, 3.0f);
-    BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().particleEffect, "heavy_rain");
     BOOST_CHECK_EQUAL(rainEvent->getWeatherParams().soundEffect, "rain_sound");
 
     // Test custom weather type
@@ -350,11 +331,10 @@ BOOST_FIXTURE_TEST_CASE(MerchantSpawnEventBasics, EventTypesFixture) {
 
 // Test EventFactory creation methods
 BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
-    // Make sure EventFactory is properly initialized and Weather creator is
-    // registered
+    // Make sure EventFactory is properly initialized with its built-in
+    // Weather creator
     EventFactory::Instance().clean();
     BOOST_REQUIRE(EventFactory::Instance().init());
-    registerWeatherCreator();
 
     // Test weather event creation
     auto rainEvent =
@@ -362,9 +342,10 @@ BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
     BOOST_REQUIRE(rainEvent != nullptr);
     BOOST_CHECK_EQUAL(rainEvent->getName(), "Rain");
     BOOST_CHECK_EQUAL(rainEvent->getType(), "Weather");
-    BOOST_CHECK_EQUAL(
-        static_cast<WeatherEvent*>(rainEvent.get())->getWeatherTypeString(),
-        "Rainy");
+    auto* rainWeather = static_cast<WeatherEvent*>(rainEvent.get());
+    BOOST_CHECK_EQUAL(rainWeather->getWeatherTypeString(), "Rainy");
+    BOOST_CHECK_EQUAL(rainWeather->getWeatherType(), WeatherType::Rainy);
+    BOOST_CHECK_CLOSE(rainWeather->getWeatherParams().intensity, 0.7f, 0.001f);
 
     // Test scene change event creation
     auto sceneEvent = EventFactory::Instance().createSceneChangeEvent(
@@ -404,10 +385,129 @@ BOOST_FIXTURE_TEST_CASE(EventFactoryCreation, EventTypesFixture) {
     BOOST_REQUIRE(stormEvent != nullptr);
     BOOST_CHECK_EQUAL(stormEvent->getName(), "Storm");
     BOOST_CHECK_EQUAL(stormEvent->getType(), "Weather");
-    BOOST_CHECK_EQUAL(
-        static_cast<WeatherEvent*>(stormEvent.get())->getWeatherTypeString(),
-        "Stormy");
+    auto* stormWeather = static_cast<WeatherEvent*>(stormEvent.get());
+    BOOST_CHECK_EQUAL(stormWeather->getWeatherTypeString(), "Stormy");
+    BOOST_CHECK_EQUAL(stormWeather->getWeatherType(), WeatherType::Stormy);
+    BOOST_CHECK_CLOSE(stormWeather->getWeatherParams().intensity, 0.9f, 0.001f);
+    BOOST_CHECK_CLOSE(stormWeather->getWeatherParams().transitionTime, 4.0f, 0.001f);
     BOOST_CHECK(stormEvent->isOneTime());
+}
+
+namespace {
+// reference is built with the enum constructor for the expected type.
+void checkWeatherMatchesReference(const WeatherEvent& actual,
+    const WeatherEvent& reference, const std::string& weatherName) {
+    const auto& got = actual.getWeatherParams();
+    const auto& want = reference.getWeatherParams();
+    BOOST_CHECK_EQUAL(actual.getWeatherType(), reference.getWeatherType());
+    BOOST_CHECK_EQUAL(actual.getWeatherTypeString(), weatherName);
+    BOOST_CHECK_EQUAL(got.intensity, want.intensity);
+    BOOST_CHECK_EQUAL(got.visibility, want.visibility);
+    BOOST_CHECK_EQUAL(got.windSpeed, want.windSpeed);
+    BOOST_CHECK_EQUAL(got.windDirection, want.windDirection);
+    BOOST_CHECK_EQUAL(got.transitionTime, want.transitionTime);
+    BOOST_CHECK_EQUAL(got.soundEffect, want.soundEffect);
+}
+} // namespace
+
+// Factory weather carries the same WeatherType and per-type defaults as
+// EventManager::changeWeather(name); nothing is invented from intensity.
+BOOST_FIXTURE_TEST_CASE(EventFactoryWeatherMapsTypeAndDefaults, EventTypesFixture) {
+    auto& factory = EventFactory::Instance();
+    const std::vector<std::pair<std::string, WeatherType>> names = {
+        {"Clear", WeatherType::Clear}, {"Cloudy", WeatherType::Cloudy},
+        {"Rainy", WeatherType::Rainy}, {"Stormy", WeatherType::Stormy},
+        {"Foggy", WeatherType::Foggy}, {"Snowy", WeatherType::Snowy},
+        {"Windy", WeatherType::Windy}};
+
+    for (const auto& [name, type] : names) {
+        BOOST_TEST_CONTEXT("weather " << name) {
+            auto direct = factory.createWeatherEvent("direct", name);
+            BOOST_REQUIRE(direct != nullptr);
+            const auto& directWeather = static_cast<const WeatherEvent&>(*direct);
+            const WeatherEvent reference("ref", type);
+            checkWeatherMatchesReference(directWeather, reference, name);
+
+            EventDefinition def;
+            def.type = "Weather";
+            def.name = "fromDef";
+            def.params["weatherType"] = name;
+            auto fromDef = factory.createEvent(def);
+            BOOST_REQUIRE(fromDef != nullptr);
+            const auto& defWeather = static_cast<const WeatherEvent&>(*fromDef);
+            checkWeatherMatchesReference(defWeather, reference, name);
+        }
+    }
+
+    // Unknown names are Custom with Custom defaults.
+    auto acid = factory.createWeatherEvent("acid", "AcidRain");
+    BOOST_REQUIRE(acid != nullptr);
+    const auto& acidWeather = static_cast<const WeatherEvent&>(*acid);
+    checkWeatherMatchesReference(acidWeather,
+        WeatherEvent("ref", WeatherType::Custom), "AcidRain");
+
+    // A definition without weatherType is Clear.
+    EventDefinition noType;
+    noType.type = "Weather";
+    noType.name = "noType";
+    auto clear = factory.createEvent(noType);
+    BOOST_REQUIRE(clear != nullptr);
+    const auto& clearWeather = static_cast<const WeatherEvent&>(*clear);
+    checkWeatherMatchesReference(clearWeather,
+        WeatherEvent("ref", WeatherType::Clear), "Clear");
+}
+
+// Explicit intensity/transitionTime override the per-type defaults (clamped);
+// every other param keeps its default.
+BOOST_FIXTURE_TEST_CASE(EventFactoryWeatherOverridesOnTopOfDefaults, EventTypesFixture) {
+    auto& factory = EventFactory::Instance();
+
+    auto storm = factory.createWeatherEvent("storm", "Stormy", 0.4f, 8.0f);
+    BOOST_REQUIRE(storm != nullptr);
+    const auto& stormParams =
+        static_cast<const WeatherEvent&>(*storm).getWeatherParams();
+    BOOST_CHECK_EQUAL(static_cast<const WeatherEvent&>(*storm).getWeatherType(),
+        WeatherType::Stormy);
+    BOOST_CHECK_CLOSE(stormParams.intensity, 0.4f, 0.001f);
+    BOOST_CHECK_CLOSE(stormParams.transitionTime, 8.0f, 0.001f);
+    BOOST_CHECK_CLOSE(stormParams.visibility, 0.3f, 0.001f);
+    BOOST_CHECK_CLOSE(stormParams.windSpeed, 0.9f, 0.001f);
+    BOOST_CHECK_EQUAL(stormParams.soundEffect, "thunder_storm");
+
+    EventDefinition def;
+    def.type = "Weather";
+    def.name = "stormDef";
+    def.params["weatherType"] = "Stormy";
+    def.numParams["intensity"] = 0.4f;
+    def.numParams["transitionTime"] = 8.0f;
+    auto stormDef = factory.createEvent(def);
+    BOOST_REQUIRE(stormDef != nullptr);
+    const auto& stormDefParams =
+        static_cast<const WeatherEvent&>(*stormDef).getWeatherParams();
+    BOOST_CHECK_CLOSE(stormDefParams.intensity, 0.4f, 0.001f);
+    BOOST_CHECK_CLOSE(stormDefParams.transitionTime, 8.0f, 0.001f);
+    BOOST_CHECK_CLOSE(stormDefParams.visibility, 0.3f, 0.001f);
+    BOOST_CHECK_CLOSE(stormDefParams.windSpeed, 0.9f, 0.001f);
+    BOOST_CHECK_EQUAL(stormDefParams.soundEffect, "thunder_storm");
+
+    // Clamps: intensity to [0, 1], transitionTime to >= 0.
+    auto high = factory.createWeatherEvent("high", "Rainy", 1.7f);
+    BOOST_REQUIRE(high != nullptr);
+    BOOST_CHECK_EQUAL(
+        static_cast<const WeatherEvent&>(*high).getWeatherParams().intensity, 1.0f);
+
+    auto low = factory.createWeatherEvent("low", "Rainy", -0.2f);
+    BOOST_REQUIRE(low != nullptr);
+    BOOST_CHECK_EQUAL(
+        static_cast<const WeatherEvent&>(*low).getWeatherParams().intensity, 0.0f);
+
+    auto negative = factory.createWeatherEvent("negative", "Rainy", std::nullopt, -3.0f);
+    BOOST_REQUIRE(negative != nullptr);
+    const auto& negativeParams =
+        static_cast<const WeatherEvent&>(*negative).getWeatherParams();
+    BOOST_CHECK_EQUAL(negativeParams.transitionTime, 0.0f);
+    BOOST_CHECK_EQUAL(negativeParams.intensity,
+        WeatherEvent("ref", WeatherType::Rainy).getWeatherParams().intensity);
 }
 
 // Test event sequence creation

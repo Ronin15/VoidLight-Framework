@@ -17,6 +17,7 @@
 
 #include "Event.hpp"
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 
@@ -60,15 +61,19 @@ public:
     /**
    * @brief Create a weather event
    * @param name Unique name for the event
-   * @param weatherType Type of weather (Clear, Rainy, Stormy, etc.)
-   * @param intensity Intensity of the weather (0.0-1.0)
-   * @param transitionTime Time in seconds for weather transitions
-   * @return Shared pointer to the created weather event
+   * @param weatherType Weather name; canonical names ("Clear", "Rainy",
+   *        "Stormy", ...) select that WeatherType, anything else is Custom
+   * @param intensity Optional override of the per-type default, clamped to
+   *        [0, 1]; does not select the particle variant
+   * @param transitionTime Optional override of the per-type default, clamped
+   *        to >= 0 seconds
+   * @return Shared pointer to the created weather event, carrying the same
+   *         type and per-type default params as EventManager::changeWeather
    */
     EventPtr createWeatherEvent(const std::string& name,
         const std::string& weatherType,
-        float intensity = 0.5f,
-        float transitionTime = 5.0f);
+        std::optional<float> intensity = std::nullopt,
+        std::optional<float> transitionTime = std::nullopt);
 
     /**
    * @brief Create a scene change event

@@ -31,7 +31,9 @@
 #include <future>
 #include <mutex>
 #include <new>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -83,6 +85,7 @@ constexpr bool operator!=(const AlignedAllocator<T1, A1>&,
 // Forward declarations
 class TextureManager;
 struct EventData;
+enum class WeatherType;
 
 namespace VoidLight {
 struct WorkerBudget;
@@ -331,13 +334,6 @@ public:
     void stopEffect(uint32_t effectId);
 
     /**
-   * @brief Sets the intensity of a playing effect
-   * @param effectId Effect ID returned from playEffect
-   * @param intensity New intensity value (0.0 to 2.0)
-   */
-    void setEffectIntensity(uint32_t effectId, float intensity);
-
-    /**
    * @brief Checks if an effect is currently playing
    * @param effectId Effect ID to check
    * @return true if effect is playing, false otherwise
@@ -455,12 +451,36 @@ public:
    */
     void toggleSparksEffect();
 
-    // Weather Integration (EventManager callbacks)
+    // Weather Integration
     /**
-   * @brief Triggers weather particle effects (called by EventManager)
-   * @param weatherType Weather type string ("Rainy", "Snowy", etc.)
-   * @param intensity Weather intensity (0.0 to 1.0)
-   * @param transitionTime Time to transition to new intensity
+   * @brief Maps a weather type to its weather particle variant
+   * @param type Weather type
+   * @param customName Custom weather name; only consulted for
+   *        WeatherType::Custom (same-name variants such as "Rain", "Snow",
+   *        "WindyDust")
+   * @return Variant to run, or std::nullopt when weather particles stop
+   *         (Clear, unknown Custom name)
+   * @details The only weather -> variant mapping. Intensity never selects the
+   *          variant. Stateless (logs a warning on unknown Custom names); safe from any thread.
+   */
+    [[nodiscard]] static std::optional<ParticleEffectType>
+    weatherEffectFor(WeatherType type, std::string_view customName = {});
+
+    /**
+   * @brief Active weather particle variant, if any (diagnostics and tests)
+   * @return Effect type of the running weather effect, or std::nullopt
+   */
+    [[nodiscard]] std::optional<ParticleEffectType> getActiveWeatherEffect() const;
+
+    /**
+   * @brief Triggers weather particles for a weather name
+   * @param weatherType Weather name ("Rainy", "Snowy", or a Custom name such
+   *        as "Rain"); resolved via WeatherEvent::weatherTypeFromName and
+   *        weatherEffectFor
+   * @param intensity Weather intensity (0.0 to 1.0); stored on the effect,
+   *        does not select the variant
+   * @param transitionTime Time to transition to the new weather
+   * @details The production path is handleWeatherEvent().
    */
     void triggerWeatherEffect(const std::string& weatherType, float intensity,
         float transitionTime = 2.0f);
@@ -982,9 +1002,10 @@ private:
         return m_cosLUT[wrappedIndex];
     }
 
-    // Weather type conversion helpers
-    ParticleEffectType weatherStringToEnum(const std::string& weatherType,
-        float intensity) const;
+    // Starts the resolved weather variant, or stops weather particles when
+    // there is none.
+    void applyWeatherVariant(std::optional<ParticleEffectType> effectType,
+        float intensity, float transitionTime);
     std::string_view effectTypeToString(ParticleEffectType type) const;
 
     // Built-in effect creation helpers

@@ -108,7 +108,7 @@ Status: Not started
 Implement from these sections, not from chat notes. Implement only the open
 slice's scope. Slices 1–5 are implemented (Slice 1 visual confirm leftover).
 Slice 6 (survival/forage) is implemented and reviewed. Slice 6R (cohesion
-corrections to Slices 2–6) is complete. Slices 6S, 6.1, and 7–11 stay
+corrections to Slices 2–6) is complete. Slices 6S, 6.1, and 7–12 stay
 scheduled in the order below. Do not pull them forward. Do not rebuild the
 stance table, the need sidecar, the harvestable snapshot, or `HarvestCommit`.
 
@@ -131,6 +131,7 @@ order; do not pull a later slice forward unless this file is updated first.
 | 9 Background-tier simulation | 2, 6 | 8 |
 | 10 NPC inventory consumption | 6 | 9 |
 | 11 Monster and animal faction ids | 5 | 10; before any production `createMonster` / `createAnimal` caller |
+| 12 Weather particle intensity | — | 11 |
 
 ## Slice 1: Gameplay HUD ownership and vitals cohesion
 
@@ -463,7 +464,7 @@ Foundation before 6R (historical; the state this slice corrected):
 Architecture notes:
 
 - **Player relations (B1):** `CharacterData::NO_FACTION = 0xFF`; `EDM::registerPlayer` sets it and `EDM::setFaction` rejects `EntityKind::Player`. The stance table is NPC-faction ↔ NPC-faction only; player actions never write it. Player incidents (`Assault`, `Kill`, `Theft`, `Gift`) go through `AIManager::recordPlayerIncident` on the main thread and adjust standing (clamped; Hostile ≤ -50, Allied ≥ +50). A derived relation change emits `StanceChangedEvent` with `towardPlayer` and the incident's territory settlement id, and resyncs collision for that faction. Behaviors read a per-frame `hostileTowardPlayer` flag on `BehaviorContext`; `lastTarget` is kept only while still hostile or the last attacker. NPC `Layer_Enemy` ⇔ relation toward the player is Hostile.
-- **Weather (B2):** drop the visibility multiply (the table already encodes visibility). `WeatherEvent::applyDefaultParamsForType()` makes a pooled weather event carry type defaults whether fresh or reused.
+- **Weather (B2):** drop the visibility multiply (the table already encodes visibility). `WeatherEvent::applyDefaultParamsForType()` makes a pooled weather event carry type defaults whether fresh or reused. Post-6R: the particle variant is keyed by `WeatherType` in `ParticleManager::weatherEffectFor()` (Rainy/Stormy HeavyRain, Snowy HeavySnow, Windy WindyStorm), never by intensity, and `EventFactory` weather parses canonical names and carries the same defaults as `changeWeather`; intensity → emission scaling is Slice 12.
 - **Merchant leash (B3):** `NpcNeedData` stores `home` and `leashRadius`; merchants get `MERCHANT_FORAGE_LEASH_RADIUS` (384 px = `VILLAGE_RADIUS` 12 × 32), others 0. Forage target selection skips out-of-leash nodes.
 - **Factory auto-registration (B4):** keep the Slice 3 contract — `createNPCWithRaceClass`, `createMonster`, and `createAnimal` auto-register `suggestedBehavior` with fallback; docs name all three.
 - **Engage cost (B5):** faction-indexed `AIManager::scanHostileInRadius`; no per-frame stagger. Attack acquisition is range-bounded and scaled by detection. Accepted consequence: with the unlimited-range hostile-player fallback deleted, Attack acquisition is nearest-first across the player and hostile NPCs.
@@ -780,3 +781,36 @@ Acceptance checks:
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Not started. Depends on Slice 5; scheduled after Slice 10 and before any production `createMonster` / `createAnimal` caller. Deferred from Slice 6R (risk noted in the 6R plan).
+
+## Slice 12: Weather particle intensity
+
+Goal: Weather intensity either scales particle emission or the unused intensity plumbing is deleted. Until then intensity is stored but has no visual effect, so Rainy and Stormy both render HeavyRain at the same rate.
+
+Current foundation:
+
+- `ParticleManager::weatherEffectFor()` maps `WeatherType` (and Custom names) to the weather variant; intensity never selects the variant (post-6R weather variant fix). `handleWeatherEvent()` passes the event's intensity to `triggerWeatherEffect()`.
+- The emitter update emits at `emitterConfig.emissionRate` only. `EffectInstance::intensity`, `currentIntensity`, `targetIntensity`, `transitionSpeed`, and `ParticleEffectDefinition::intensityMultiplier` are written but never read.
+- AI weather reads only `WeatherType` (`AIManager` stores `getWeatherType()`; intensity and visibility are not read), so `ParticleManager` is intensity's only consumer.
+
+Architecture notes:
+
+- Decide in design: scale emission by intensity (and whether `intensityMultiplier` and the transition fields drive it, including fade between weathers), or delete the write-only fields. Either way `ParticleManager` owns it; the variant stays keyed by `WeatherType`.
+- Emission scaling stays allocation-free on the update path and keeps the WorkerBudget/threading contract of the particle update.
+- Out of scope: new weather types, JSON weather data, sound effects.
+
+Checklist:
+
+- [ ] Design: emission scaling vs deleting the intensity plumbing (`EffectInstance` intensity/currentIntensity/targetIntensity/transitionSpeed, `ParticleEffectDefinition::intensityMultiplier`)
+- [ ] Implement the chosen option in `ParticleManager`
+- [ ] Owning docs updated (`docs/managers/ParticleManager.md`, `docs/controllers/WeatherController.md`)
+- [ ] Update path stays allocation-free; particle WorkerBudget/threading contract unchanged (`particle_manager_threading_tests`)
+- [ ] Tests updated in the same change
+
+Acceptance checks:
+
+- [ ] Either a lower weather intensity emits fewer particles for the same variant, or the write-only intensity fields are gone and the docs say intensity does not affect particles
+- [ ] `ninja -C build` passes
+- [ ] Targeted Boost.Test: `particle_manager_weather_tests`, `particle_manager_core_tests`, `particle_manager_threading_tests`
+- [ ] Slice reviewed (`game-systems-architect`) before commit
+
+Status: Not started. Scheduled after Slice 11. Follow-up from the post-6R weather variant fix.

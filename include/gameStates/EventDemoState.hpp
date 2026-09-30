@@ -106,14 +106,15 @@ private:
     // Weather demo variables (for manual cycling through weather types)
     WeatherType m_currentWeather{WeatherType::Clear};
     float m_weatherTransitionTime{3.0f};
-    std::vector<WeatherType> m_weatherSequence{
-        WeatherType::Clear, WeatherType::Cloudy, WeatherType::Rainy,
-        WeatherType::Stormy, WeatherType::Foggy, WeatherType::Snowy,
-        WeatherType::Windy, WeatherType::Custom, WeatherType::Custom,
-        WeatherType::Custom, WeatherType::Custom}; // Custom for HeavyRain,
-    // HeavySnow, WindyDust, WindyStorm
+    // Named types already run the heavy variants (Rainy/Stormy HeavyRain,
+    // Snowy HeavySnow, Windy WindyStorm); the Custom entries reach the light
+    // Rain, Snow and WindyDust variants.
+    std::vector<WeatherType> m_weatherSequence{WeatherType::Clear,
+        WeatherType::Cloudy, WeatherType::Rainy, WeatherType::Stormy,
+        WeatherType::Foggy, WeatherType::Snowy, WeatherType::Windy,
+        WeatherType::Custom, WeatherType::Custom, WeatherType::Custom};
     std::vector<std::string> m_customWeatherTypes{
-        "", "", "", "", "", "", "", "HeavyRain", "HeavySnow", "WindyDust", "WindyStorm"};
+        "", "", "", "", "", "", "", "Rain", "Snow", "WindyDust"};
     size_t m_currentWeatherIndex{0};
 
     // NPC spawn demo variables

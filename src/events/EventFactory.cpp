@@ -25,9 +25,18 @@ EventFactory::EventFactory() {
 
 void EventFactory::registerBuiltInEventCreators() {
     registerCustomEventCreator("Weather", [this](const EventDefinition& def) {
-        std::string weatherType = def.params.count("weatherType") ? def.params.at("weatherType") : "Clear";
-        float intensity = def.numParams.count("intensity") ? def.numParams.at("intensity") : 0.5f;
-        float transitionTime = def.numParams.count("transitionTime") ? def.numParams.at("transitionTime") : 5.0f;
+        const auto typeIt = def.params.find("weatherType");
+        const std::string weatherType =
+            typeIt != def.params.end() ? typeIt->second : std::string{"Clear"};
+
+        std::optional<float> intensity;
+        if (const auto it = def.numParams.find("intensity"); it != def.numParams.end()) {
+            intensity = it->second;
+        }
+        std::optional<float> transitionTime;
+        if (const auto it = def.numParams.find("transitionTime"); it != def.numParams.end()) {
+            transitionTime = it->second;
+        }
 
         return createWeatherEvent(def.name, weatherType, intensity, transitionTime);
     });
@@ -183,33 +192,20 @@ EventPtr EventFactory::createEvent(const EventDefinition& def) {
 }
 
 EventPtr EventFactory::createWeatherEvent(const std::string& name, const std::string& weatherType,
-    float intensity, float transitionTime) {
-    // Create the weather event
+    std::optional<float> intensity, std::optional<float> transitionTime) {
+    // Same type and per-type defaults as EventManager::changeWeather(name).
     auto event = std::make_shared<WeatherEvent>(name, weatherType);
 
-    // Configure the weather parameters
-    WeatherParams params;
-    params.intensity = intensity;
-    params.transitionTime = transitionTime;
-
-    // Additional parameter adjustments based on weather type
-    if (weatherType == "Rainy" || weatherType == "Stormy") {
-        params.visibility = 0.7f - (intensity * 0.4f); // Reduce visibility more with higher intensity
-        params.particleEffect = (intensity > 0.7f) ? "heavy_rain" : "rain";
-        params.soundEffect = (intensity > 0.7f) ? "thunder_storm" : "rain_ambient";
-    } else if (weatherType == "Foggy") {
-        params.visibility = 0.8f - (intensity * 0.7f); // Fog drastically reduces visibility
-        params.particleEffect = "fog";
-    } else if (weatherType == "Snowy") {
-        params.visibility = 0.8f - (intensity * 0.3f);
-        params.particleEffect = (intensity > 0.7f) ? "heavy_snow" : "snow";
-        params.soundEffect = "snow_ambient";
-    } else if (weatherType == "Clear") {
-        params.visibility = 1.0f;
-        params.intensity = 0.0f; // Override intensity for clear weather
+    if (intensity || transitionTime) {
+        WeatherParams params = event->getWeatherParams();
+        if (intensity) {
+            params.intensity = std::clamp(*intensity, 0.0f, 1.0f);
+        }
+        if (transitionTime) {
+            params.transitionTime = std::max(*transitionTime, 0.0f);
+        }
+        event->setWeatherParams(params);
     }
-
-    event->setWeatherParams(params);
 
     return event;
 }
