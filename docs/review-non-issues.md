@@ -49,6 +49,10 @@ References are by symbol/function (not line numbers) so they survive edits.
 
 ## B. Thread/lifecycle items that are latent-only under current usage
 
+- **`loadNewWorld` replacing a live world fires `WorldUnloaded` Immediate on the load worker** —
+  that would touch main-thread-only Pathfinder/Collision state off the main thread. Unreachable:
+  every state unloads its world explicitly before `LoadingState` runs `loadNewWorld`. Precondition:
+  do not call `loadNewWorld` over a live world from a worker (found in the Slice 6S design pass).
 - **ThreadSystem `getTaskStats` unlocked read** — diagnostics-only, benign data race on
   size_t counters read off the hot path. Not worth synchronizing.
 - **ThreadSystem `isBusy`/accessors vs `clean()` TOCTOU** — `clean()` runs on the main

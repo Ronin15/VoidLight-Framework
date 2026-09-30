@@ -560,6 +560,8 @@ Architecture notes:
 - Respawn tick runs on the main thread and calls `notifyHarvestableStateChanged()` on every restore. Owner is to be decided between the `HarvestCommit`/world layer and WRM scheduling; WRM stays a registry either way.
 - Tile obstacle restore goes through a `WorldManager` coordinator API plus pathfinding grid invalidation; no respawn policy on `WorldManager`.
 - Tile restore symmetry (from Slice 6R): removal is `HarvestCommit::commit` depletion plus GamePlayState's transient `Harvest` handler calling `WorldManager::handleHarvestResource()`; restore must be its mirror in the same owners (collision statics, `TileChanged`, grid dirty region) so a respawned node blocks exactly what its depletion unblocked. Demo states do not remove tiles (`docs/review-non-issues.md`), so their restore path must not add obstacles that were never removed. Grid refresh relies on the Slice 6S dirty-region owner.
+- Grid contract (from Slice 6S): restore marks dirt through the existing `TileChanged` / `CollisionObstacleChanged` handlers and `PathfinderManager::update()` applies it (dirty rows rebuilt on a copy, then published); do not call `rebuildGrid()`. TREE/ROCK tiles only change a cell's path weight; only BUILDING tiles and MOUNTAIN block, so a restored tree/rock raises weight rather than blocking. Restore adds/removes collision statics (`addStaticBody` / `removeCollisionBody`), never moves them: `updateCollisionBodyPosition` on a STATIC body neither fires `CollisionObstacleChanged` nor dirties the grid.
+- Grid cleanup found in Slice 6S (same owner, fold in here): `PathfinderManager::setAllowDiagonal` / `setMaxIterations` still write config on the published grid in place, breaking "published grids are not mutated in place". Only tests call them; route through copy + publish or delete per the keep-or-delete rule.
 - Scarcity recovery uses an edge-triggered area cache with transition and unload cleanup.
 - Out of scope: economy HUD, crafting, Slice 7 selector.
 
@@ -570,6 +572,7 @@ Checklist:
 - [ ] Tile restore symmetric with harvest tile removal (same owners; no restore where no removal happened)
 - [ ] Scarcity recovery (edge-triggered area cache with transition/unload cleanup)
 - [ ] Revisit `NPC_HARVEST_RESERVE`
+- [ ] `setAllowDiagonal` / `setMaxIterations` no longer mutate the published grid in place (copy + publish, or deleted)
 - [ ] Owning docs updated
 - [ ] Tests updated in the same change
 
@@ -610,6 +613,7 @@ Architecture notes:
   - Retaliation time bound: nothing clears `memoryData.lastAttacker` (its only writer is `EDM::recordCombatEvent`), so an NPC the player hit keeps retaliating even at Allied standing. Bound retaliation in AI policy (e.g. by `lastCombatTime`), not by clearing EDM memory from controllers. `TestAttackKeepsRetaliatingAgainstLastAttackerAfterDeescalation` pins today's behavior; update it with the change.
   - Civilian flee-vs-attack: when player standing is Hostile, Forage/Idle/Wander civilians (merchants included) switch to Attack through `tryEngageHostileInRange`. The selector decides flee vs attack for civilians (category, bravery, aggression).
   - Merchant return-to-post: after Forage, merchants return to `returnBehavior` wherever they stopped; home-role restore walks them back to `NpcNeedData.home`.
+  - Crowd courage (found after Slice 6S): only Chase and Flee run Crowd queries and fill `cachedNearbyCount` / `cachedClusterCenter`; Idle, Wander, Patrol, Follow, Forage, and Attack read the cleared value (0), so the crowd term in `shouldFleeFromFear` / `shouldRetaliate` never applies for them. Decide in design whether the selector's bravery/flee score uses an NPC-only Crowd query (cached per frame, `Crowd.cpp`) or drops the term; keep Flee's per-NPC scan cost in mind (O(active entities) every 0.25 s per fleeing NPC).
   - AoE friendly fire: when Attack AoE is enabled (`aoeRadius` is always 0 today), skip the player under `avoidFriendlyFire` when `!ctx.hostileTowardPlayer` (the player has no faction, so `isAlliedTowardFaction` no longer excludes it).
 - Files: `include/ai/BehaviorExecutors.hpp`, `src/ai/BehaviorExecutors.cpp`, `src/managers/AIManager.cpp` fused loop, home-role field if assign path still needs it, `docs/ai/BehaviorExecutionPipeline.md`, `tests/BehaviorFunctionalityTest.cpp`, `tests/managers/AIManagerEDMIntegrationTests.cpp`.
 - Out of scope: GOAP, HTN, behavior trees, new planner types.
@@ -803,10 +807,12 @@ Architecture notes:
 
 - Decide in design: scale emission by intensity (and whether `intensityMultiplier` and the transition fields drive it, including fade between weathers), or delete the write-only fields. Either way `ParticleManager` owns it; the variant stays keyed by `WeatherType`.
 - Emission scaling stays allocation-free on the update path and keeps the WorkerBudget/threading contract of the particle update.
+- Weather leftovers from the post-6R design (fold in; keep-or-delete rule): `ParticleEffectEvent::stringToEffectType` has no Windy / WindyDust / WindyStorm cases and falls back to Fire; `WeatherEvent::forceWeatherChange` (both overloads) are stubs; `TestWeatherEventCoordination` dispatches lowercase `"rainy"` (now Custom, so it only warns and stops weather) — use the canonical name.
 - Out of scope: new weather types, JSON weather data, sound effects.
 
 Checklist:
 
+- [ ] Weather leftovers resolved (`stringToEffectType` windy variants, `forceWeatherChange` stubs, canonical names in `TestWeatherEventCoordination`)
 - [ ] Design: emission scaling vs deleting the intensity plumbing (`EffectInstance` intensity/currentIntensity/targetIntensity/transitionSpeed, `ParticleEffectDefinition::intensityMultiplier`)
 - [ ] Implement the chosen option in `ParticleManager`
 - [ ] Owning docs updated (`docs/managers/ParticleManager.md`, `docs/controllers/WeatherController.md`)
