@@ -81,7 +81,7 @@ Prefer EDM indices in behavior code to avoid repeated handle-to-index lookups.
 
 ## Faction Stance
 
-`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table. This table is the only engagement authority for Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, and it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player). `CharacterData.faction` is a faction id. NPC `Layer_Enemy` collision grouping follows directed Hostile toward the player faction (`syncNpcCollisionFromStance` / `syncFactionCollisionTowardPlayer`). EDM stores the layers via `setNpcCollisionAsEnemy`; it does not consult faction id and does not call AIManager.
+`AIManager` owns a directed 16×16 Allied / Neutral / Hostile table between **NPC factions only**. This table is the engagement authority for NPC-vs-NPC targeting in Attack, Guard, and help-call scans. It is **not** a player-hostility bitmask, it does **not** default faction 0 vs 1 to Hostile (that default made warriors agro the player), and player actions never write it. `CharacterData.faction` is an NPC faction id; the player has none (`CharacterData::NO_FACTION`, see [Player Relations](#player-relations)). NPC `Layer_Enemy` collision grouping follows the faction's relation toward the player (`syncNpcCollisionTowardPlayer` / `syncFactionCollisionTowardPlayer`), not the stance table. EDM stores the layers via `setNpcCollisionAsEnemy`; it does not consult faction id and does not call AIManager.
 
 Defaults after `resetFactionStances()`:
 
@@ -92,19 +92,22 @@ Public APIs (main-thread writes; workers bind a const-ref `BehaviorContext` row 
 
 - `getStance` / `setStance` / `isHostileTo` / `isAlliedTo`
 - `worsenStance` (Allied → Neutral → Hostile)
-- `improveStance` (Hostile → Neutral → Allied)
 - `resetFactionStances()`
 - `factionRowHasHostile()` — out-of-range returns false
 
-Out-of-range gets return Neutral / false. Out-of-range or diagonal sets/worsen/improve are no-ops so the diagonal stays Allied.
+Out-of-range gets return Neutral / false. Out-of-range or diagonal sets/worsen are no-ops so the diagonal stays Allied.
 
 `resetFactionStances()` runs from `init()`, `prepareForStateTransition()`, `clean()`, and `resetBehaviors()`.
 
-A persistent `EventTypeId::Combat` handler (registered in `init()` when `EventManager` is already initialized) writes mutual Hostile after a committed `DamageEvent` with `damage > 0` and different in-range factions. Same-faction hits do not write the table or standing. The first Hostile transition involving the player kind also applies `PLAYER_STANDING_COMBAT_DELTA` toward the other faction; repeat hits while already Hostile do not tick standing. The handler is not unregistered on state transition; `clean()` removes it.
+A persistent `EventTypeId::Combat` handler (registered in `init()` when `EventManager` is already initialized) runs after the committed `DamageEvent` (`damage > 0`):
 
-Real cell mutations in `setStance` / `worsenStance` / `improveStance` dispatch `EventTypeId::StanceChanged` immediately (`StanceChangedEvent`: from, toward, old, new, first current-world settlement whose faction equals from or toward, else 0). No-ops (already equal, out of range, diagonal) and `resetFactionStances()` emit nothing. `GamePlayState` owns the transient event-log handler; AIManager does not log.
+- Player attacker → `recordPlayerIncident(wasLethal() ? Kill : Assault, player, victim)`. No stance write.
+- Player victim → no stance or standing change (the NPC's retaliation comes from `memoryData.lastAttacker`).
+- NPC vs NPC with different in-range factions → both directions Hostile, with the territory settlement at the victim. Same-faction hits write nothing.
 
-When the **toward** cell vs the player faction actually changes, AIManager remaps that faction's NPC collision grouping from the new stance.
+The handler is not unregistered on state transition; `clean()` removes it.
+
+Real cell mutations dispatch `EventTypeId::StanceChanged` immediately (`StanceChangedEvent`: from, toward, old, new, settlementId, `isTowardPlayer() == false`). `setStance` / `worsenStance` report settlement 0; the combat handler reports the settlement containing the victim. No-ops (already equal, out of range, diagonal) and `resetFactionStances()` emit nothing. `GamePlayState` owns the transient event-log handler; AIManager does not log.
 
 ## Territory Query
 
@@ -119,16 +122,25 @@ std::optional<TerritoryQueryResult> queryTerritoryAtPixel(float worldX, float wo
 std::optional<TerritoryQueryResult> queryTerritoryAtTile(int tileX, int tileY) const;
 ```
 
-## Player Faction Standing
+## Player Relations
 
-Player-only scores live in an EDM `SparseSidecar<PlayerFactionStanding>` (NPCMemoryData stays 448 B). `Behaviors::getRelationshipLevel` remains emotions + interaction memories. Standing is not mixed into that API.
+The player is handled separately from NPC factions. `EDM::registerPlayer` sets `CharacterData::faction = CharacterData::NO_FACTION` (0xFF) and `EDM::setFaction` rejects `EntityKind::Player`. Per-faction player standing in the EDM `SparseSidecar<PlayerFactionStanding>` (keyed by the player slot; NPCMemoryData stays 448 B) is the single source of truth. `Behaviors::getRelationshipLevel` remains emotions + interaction memories; standing is not mixed into it.
 
 ```cpp
+enum class PlayerIncident : uint8_t { Assault, Kill, Theft, Gift };
+void recordPlayerIncident(PlayerIncident incident, EntityHandle player, EntityHandle npc);
 void adjustPlayerStanding(EntityHandle playerHandle, uint8_t towardFaction, int8_t delta);
 int8_t getPlayerStanding(EntityHandle playerHandle, uint8_t faction) const;
+FactionStance getPlayerRelation(uint8_t faction) const; // for the current player handle
 ```
 
-Clamped to `[-100, 100]`. Invalid handle / oob faction is a no-op. Combat ticks `-10` only when a stance cell actually changes. Theft ticks `-25` and gift ticks `+15` even when factions are equal (diagonal stance stays Allied). `resetFactionStances()` does not clear standing; the sidecar dies with the player slot.
+All writes are main-thread only. Deltas: Assault `-10` (only while the relation is not already Hostile), Kill `-30` (always), Theft `-25`, Gift `+15`. Standing is clamped to `[-100, 100]`; the relation is derived: `<= -50` Hostile, `>= +50` Allied, else Neutral. `recordPlayerIncident` is a no-op for an invalid or non-`EntityKind::Player` player, a non-`EntityKind::NPC` target, or a faction `>= MAX_FACTIONS`, and takes the settlement id from `queryTerritoryAtPixel` at the NPC. `adjustPlayerStanding` (tests, debug R) uses the same path with settlement 0.
+
+When a delta changes the derived relation, AIManager resyncs that faction's collision (current player handle only) and emits `StanceChangedEvent` with `isTowardPlayer() == true`, `fromFaction` = the NPC faction, `towardFaction = NO_FACTION`, old/new relation, and the incident settlement. `setPlayerHandle` resyncs all 16 factions after releasing its lock.
+
+Producers: the combat handler (Assault/Kill), `SocialController::reportTheft` (player thief → Theft), and `SocialController::recordGift` (Gift). None writes the stance table.
+
+Workers never read standing. `update()` rebuilds `m_playerHostileByFaction` from the sidecar at the cached player slot before batches; `processBatch` sets the by-value `BehaviorContext::hostileTowardPlayer` (player valid, faction in range, and Hostile). `prepareForStateTransition()` and `clean()` clear that array; `resetFactionStances()` does not touch standing; the sidecar dies with the player slot (destroy, reuse, `prepareForStateTransition`, `clean`). A new player starts at 0.
 
 ## Environment Snapshot
 

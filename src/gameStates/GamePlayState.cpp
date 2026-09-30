@@ -555,21 +555,8 @@ void GamePlayState::registerEventHandlers() {
 
             const auto* stanceEvent =
                 dynamic_cast<const StanceChangedEvent*>(data.event.get());
-            if (!stanceEvent) {
-                return;
-            }
-
-            auto& edm = EntityDataManager::Instance();
-            const EntityHandle playerHandle = mp_Player->getHandle();
-            const size_t playerIdx = edm.getIndex(playerHandle);
-            if (playerIdx == SIZE_MAX) {
-                return;
-            }
-
-            const uint8_t playerFaction =
-                edm.getCharacterDataByIndex(playerIdx).faction;
-            if (stanceEvent->getFromFaction() != playerFaction &&
-                stanceEvent->getTowardFaction() != playerFaction) {
+            // Only NPC-faction relation changes toward the player are shown.
+            if (!stanceEvent || !stanceEvent->isTowardPlayer()) {
                 return;
             }
 
@@ -589,16 +576,14 @@ void GamePlayState::registerEventHandlers() {
             if (stanceEvent->getSettlementId() != 0) {
                 UIManager::Instance().addEventLogEntry(
                     "event_log",
-                    std::format("Settlement {}: faction {} is now {} toward faction {}",
+                    std::format("Settlement {}: Faction {} is now {} toward you",
                         stanceEvent->getSettlementId(),
-                        stanceEvent->getFromFaction(), stanceName,
-                        stanceEvent->getTowardFaction()));
+                        stanceEvent->getFromFaction(), stanceName));
             } else {
                 UIManager::Instance().addEventLogEntry(
                     "event_log",
-                    std::format("Faction {} is now {} toward faction {}",
-                        stanceEvent->getFromFaction(), stanceName,
-                        stanceEvent->getTowardFaction()));
+                    std::format("Faction {} is now {} toward you",
+                        stanceEvent->getFromFaction(), stanceName));
             }
         });
     m_stanceChangedSubscribed = true;
@@ -791,8 +776,9 @@ void GamePlayState::handleInput() {
     }
 
     VOIDLIGHT_DEBUG_ONLY(
-        // Debug: R spawns a faction-1 Warrior and marks mutual Hostile stance
-        // so Attack/Chase may acquire the player. Not in the populate registry.
+        // Debug: R spawns a faction-1 Warrior and drops player standing with
+        // faction 1 to the minimum (Hostile) so Attack/Chase may acquire the
+        // player. The stance table is untouched. Not in the populate registry.
         if (inputMgr.wasKeyPressed(SDL_SCANCODE_R) && mp_Player) {
             Vector2D playerPos = mp_Player->getPosition();
             Vector2D spawnPos = playerPos + Vector2D(150.0f, 0.0f);
@@ -801,16 +787,8 @@ void GamePlayState::handleInput() {
             if (!npc.isValid()) {
                 GAMESTATE_WARN("Failed to spawn debug Warrior");
             } else {
-                auto& edm = EntityDataManager::Instance();
-                const EntityHandle playerHandle = mp_Player->getHandle();
-                const size_t playerIdx = edm.getIndex(playerHandle);
-                uint8_t playerFaction = 0;
-                if (playerIdx != SIZE_MAX) {
-                    playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
-                }
-                auto& aiMgr = AIManager::Instance();
-                aiMgr.setStance(1, playerFaction, FactionStance::Hostile);
-                aiMgr.setStance(playerFaction, 1, FactionStance::Hostile);
+                AIManager::Instance().adjustPlayerStanding(
+                    mp_Player->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
             }
         }
 

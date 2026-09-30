@@ -810,6 +810,7 @@ BOOST_FIXTURE_TEST_CASE(TimeEventBaseClass, EventTypesFixture) {
 #include "events/HarvestResourceEvent.hpp"
 #include "events/ResourceChangeEvent.hpp"
 #include "events/ScarcityEvent.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "events/WorldEvent.hpp"
 #include "events/WorldTriggerEvent.hpp"
 
@@ -866,6 +867,36 @@ BOOST_AUTO_TEST_CASE(ScarcityEventBasics) {
     BOOST_CHECK_EQUAL(event.getAvailableCount(), 0u);
     BOOST_CHECK(!event.getResource().isValid());
     BOOST_CHECK(!event.getHarvester().isValid());
+}
+
+// Test StanceChangedEvent faction and toward-player payloads, and reset
+BOOST_AUTO_TEST_CASE(StanceChangedEventBasics) {
+    StanceChangedEvent factionEvent(2, 3, FactionStance::Neutral, FactionStance::Hostile, 7);
+    BOOST_CHECK(factionEvent.getTypeId() == EventTypeId::StanceChanged);
+    BOOST_CHECK_EQUAL(factionEvent.getType(), StanceChangedEvent::EVENT_TYPE);
+    BOOST_CHECK_EQUAL(factionEvent.getName(), "StanceChanged");
+    BOOST_CHECK_EQUAL(factionEvent.getFromFaction(), 2);
+    BOOST_CHECK_EQUAL(factionEvent.getTowardFaction(), 3);
+    BOOST_CHECK(factionEvent.getOldStance() == FactionStance::Neutral);
+    BOOST_CHECK(factionEvent.getNewStance() == FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(factionEvent.getSettlementId(), 7u);
+    BOOST_CHECK(!factionEvent.isTowardPlayer());
+
+    StanceChangedEvent playerEvent(1, CharacterData::NO_FACTION, FactionStance::Neutral,
+        FactionStance::Hostile, 4, true);
+    BOOST_CHECK_EQUAL(playerEvent.getFromFaction(), 1);
+    BOOST_CHECK_EQUAL(playerEvent.getTowardFaction(), CharacterData::NO_FACTION);
+    BOOST_CHECK(playerEvent.getNewStance() == FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(playerEvent.getSettlementId(), 4u);
+    BOOST_CHECK(playerEvent.isTowardPlayer());
+
+    playerEvent.reset();
+    BOOST_CHECK_EQUAL(playerEvent.getFromFaction(), 0);
+    BOOST_CHECK_EQUAL(playerEvent.getTowardFaction(), 0);
+    BOOST_CHECK(playerEvent.getOldStance() == FactionStance::Neutral);
+    BOOST_CHECK(playerEvent.getNewStance() == FactionStance::Neutral);
+    BOOST_CHECK_EQUAL(playerEvent.getSettlementId(), 0u);
+    BOOST_CHECK(!playerEvent.isTowardPlayer());
 }
 
 // Test ResourceChangeEvent

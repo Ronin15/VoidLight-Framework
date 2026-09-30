@@ -339,7 +339,9 @@ int8_t getPlayerFactionStanding(size_t edmIndex, uint8_t faction) const; // 0 if
 void addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta); // clamp; lazy apply()
 ```
 
-Storage only. Clamp/policy constants live on `AIManager`. Types header does not include AIManager.
+Storage only; the single source of truth for NPC-faction relations toward the player. Incident deltas, clamp, and the derived Hostile/Neutral/Allied relation live on `AIManager` (main thread). Types header does not include AIManager. Cleared on slot destroy, reuse, `prepareForStateTransition()`, and `clean()`.
+
+The player has no faction: `registerPlayer` sets `CharacterData::faction = CharacterData::NO_FACTION` (0xFF), and `setFaction` rejects `EntityKind::Player` with a warning. (The factory `factionOverride = 0xFF` "no override" parameter is unrelated.)
 
 ### NPC Collision Grouping
 
@@ -347,7 +349,7 @@ Storage only. Clamp/policy constants live on `AIManager`. Types header does not 
 void setNpcCollisionAsEnemy(size_t index, bool asEnemy);
 ```
 
-Storage setter. Does not consult faction id. `asEnemy` uses the existing Enemy vs Default layer/mask branches. Out-of-range index is a no-op. Create NPC/monster/animal defaults to not-Enemy. `setFaction` writes the id only; `AIManager` syncs collision from directed Hostile toward the player faction.
+Storage setter. Does not consult faction id. `asEnemy` uses the existing Enemy vs Default layer/mask branches. Out-of-range index is a no-op. Create NPC/monster/animal defaults to not-Enemy. `setFaction` writes the id only; `AIManager` syncs collision from the faction's standing-derived relation toward the player (`Layer_Enemy` ⇔ Hostile).
 
 ### Inventory Data
 

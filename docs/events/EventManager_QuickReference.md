@@ -68,6 +68,6 @@ Scarcity
 - Use `CollisionObstacleChanged` for world obstacle changes and the projectile
   hit sink for projectile collisions.
 - Use `EventManager::spawnMerchant(...)` for merchant-focused NPC spawning; it dispatches `EventTypeId::MerchantSpawn`.
-- `EventTypeId::StanceChanged` / `StanceChangedEvent` is produced by `AIManager` after a real stance-cell mutation (Immediate). `GamePlayState` logs it when from or toward is the player faction.
+- `EventTypeId::StanceChanged` / `StanceChangedEvent` is produced by `AIManager` (Immediate) after a real NPC-faction stance-cell mutation, or with `isTowardPlayer()` when an NPC faction's standing-derived relation toward the player changes. `GamePlayState` logs only the toward-player form.
 - `EventTypeId::Scarcity` / `ScarcityEvent` is produced by `HarvestCommit::commit` (main thread, Deferred) when a player or NPC depletion leaves fewer than 2 available harvestables (any kind) within 512 px. `GamePlayState` logs it when the harvester is the player or the center is within `radius` of the player.
 - Use `drainAllDeferredEvents()` only in tests or controlled synchronization points.

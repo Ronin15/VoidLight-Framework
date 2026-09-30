@@ -99,15 +99,21 @@ behavior rules are in `.claude/rules/ai.md`.
 - **Territory:** `AIManager::queryTerritoryAtPixel` / `AtTile`,
   main-thread only, calling existing `WorldManager::findSettlementAt*`.
   Workers never call WorldManager. Territory is not on `BehaviorContext`.
-- **Faction standing:** EDM `SparseSidecar<PlayerFactionStanding>` is
-  storage; policy (`adjustPlayerStanding`, clamp, combat/theft/gift
-  deltas) is on `AIManager`. Not mixed into
+- **Faction standing:** the player has no faction
+  (`CharacterData::NO_FACTION`; `EDM::setFaction` rejects the player).
+  EDM `SparseSidecar<PlayerFactionStanding>` is storage and the single
+  source of NPC-faction relations toward the player; policy
+  (`recordPlayerIncident`, `adjustPlayerStanding`, clamp, derived
+  relation) is on `AIManager`, main thread only. Player actions never
+  write the NPC-faction stance table. Workers read only
+  `BehaviorContext::hostileTowardPlayer`. Not mixed into
   `Behaviors::getRelationshipLevel`; not cleared by
   `resetFactionStances()`.
-- **Collision grouping:** NPC `Layer_Enemy` is AIManager policy from
-  directed Hostile stance toward the player faction
-  (`syncNpcCollisionFromStance` / `syncFactionCollisionTowardPlayer`).
-  EDM `setNpcCollisionAsEnemy` is a storage setter only.
+- **Collision grouping:** NPC `Layer_Enemy` is AIManager policy:
+  `getPlayerRelation(npcFaction) == Hostile`
+  (`syncNpcCollisionTowardPlayer` / `syncFactionCollisionTowardPlayer`;
+  `setPlayerHandle` resyncs all factions). The stance table does not
+  drive it. EDM `setNpcCollisionAsEnemy` is a storage setter only.
 - **World populate:** settlement queries (`getSettlements`,
   `findSettlementAt*`) are current-world. The populate registry is
   `worldId`-keyed (`isWorldPopulated`, `getPopulatedNpcCount`,

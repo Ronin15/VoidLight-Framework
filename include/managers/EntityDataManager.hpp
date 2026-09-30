@@ -328,6 +328,7 @@ public:
      * @param halfWidth Collision half-width
      * @param halfHeight Collision half-height
      * @return Handle to the registered entity
+     * @details The player's CharacterData::faction is CharacterData::NO_FACTION.
      */
     EntityHandle registerPlayer(EntityHandle::IDType entityId,
         const Vector2D& position,
@@ -892,7 +893,8 @@ public:
 
     /**
      * @brief Set the faction id of a character. Collision grouping is AIManager policy.
-     * @param handle Entity handle
+     * @param handle Entity handle. EntityKind::Player is rejected with a warning:
+     *        the player stays CharacterData::NO_FACTION (set by registerPlayer).
      * @param newFaction Faction id (0-15). Does not consult faction id for Layer_Enemy.
      */
     void setFaction(EntityHandle handle, uint8_t newFaction);

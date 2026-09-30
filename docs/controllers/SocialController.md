@@ -63,8 +63,9 @@ void alertNearbyGuards(const Vector2D& location, EntityHandle criminal);
 - Trade UI is created through `UIManager`; price display and selection highlights are controller-managed.
 - Buying and selling update inventory, gold, and relationship/memory state.
 - Theft reporting records negative interaction state, fires event traffic, and alerts nearby guards.
-- After the existing memory write, `reportTheft` calls `AIManager::worsenStance(victimFaction, thiefFaction)` only (directed; does not write the reverse cell). If the thief is the player handle, it also applies `PLAYER_STANDING_THEFT_DELTA` toward the victim faction even when factions are equal (diagonal stance is a no-op; standing still drops). Differing-faction theft emits `StanceChanged` from the stance write.
-- `recordGift` calls `AIManager::improveStance(npcFaction, playerFaction)` and `adjustPlayerStanding(player, npcFaction, PLAYER_STANDING_GIFT_DELTA)` even when factions are equal. Both writes run on the main thread.
+- After the existing memory write, `reportTheft` routes by thief kind. A player thief calls `AIManager::recordPlayerIncident(Theft, thief, victim)` (standing with the victim's faction drops by `PLAYER_STANDING_THEFT_DELTA`; the stance table is untouched). A valid NPC thief of a different faction calls `AIManager::worsenStance(victimFaction, thiefFaction)` only (directed; does not write the reverse cell). A same-faction NPC thief or an invalid thief writes neither.
+- `recordGift` calls `AIManager::recordPlayerIncident(Gift, player, npc)` (standing `+PLAYER_STANDING_GIFT_DELTA`); it never writes the stance table.
+- `getPlayerFactionStanding(faction)` reads `AIManager::getPlayerStanding` for the controller's player. A standing change that crosses a relation threshold emits `StanceChanged` with `isTowardPlayer()`. All writes run on the main thread.
 
 ## GamePlayState Integration
 

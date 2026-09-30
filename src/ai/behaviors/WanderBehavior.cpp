@@ -327,7 +327,7 @@ void executeWander(BehaviorContext& ctx, const VoidLight::WanderBehaviorConfig& 
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
-    if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
+    if (tryEngageHostileInRange(ctx)) {
         return;
     }
     if (shouldStartForage(ctx, BehaviorType::Wander)) {

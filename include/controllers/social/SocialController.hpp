@@ -172,6 +172,10 @@ public:
 
     /**
      * @brief Report a theft — records memory, fires event, alerts guards
+     * @details A player thief lowers the player's standing with the victim's
+     *          faction (AIManager::recordPlayerIncident). A valid NPC thief of a
+     *          different faction worsens the victim faction's stance toward it.
+     *          An invalid thief changes neither.
      */
     void reportTheft(EntityHandle thief,
         EntityHandle victim,
@@ -190,7 +194,7 @@ public:
     /** @brief Relationship score: -1.0 (hostile) to +1.0 (best friend), 0.0 neutral */
     [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle) const;
 
-    /** @brief Player-only faction standing. 0 if missing. Not mixed into getRelationshipLevel. */
+    /** @brief Player standing with a faction (AIManager::getPlayerStanding). 0 if missing. Not mixed into getRelationshipLevel. */
     [[nodiscard]] int8_t getPlayerFactionStanding(uint8_t faction) const;
 
     /** @brief Price multiplier: 0.7 (trusted) to 1.3 (hostile) */

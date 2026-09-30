@@ -210,19 +210,54 @@ public:
     [[nodiscard]] bool isAlliedTo(uint8_t fromFaction, uint8_t towardFaction) const;
     /** Allied → Neutral → Hostile. Out-of-range or diagonal is a no-op. */
     void worsenStance(uint8_t fromFaction, uint8_t towardFaction);
-    /** Hostile → Neutral → Allied. Out-of-range or diagonal is a no-op. */
-    void improveStance(uint8_t fromFaction, uint8_t towardFaction);
     /** Fill Neutral, then set the diagonal to Allied. Main-thread lifecycle reset. */
     void resetFactionStances();
 
+    // Player relations. The player has no faction (CharacterData::NO_FACTION);
+    // per-faction standing (EDM PlayerFactionStanding sidecar) is the single
+    // source of truth. The stance table above stays NPC-faction only.
     static constexpr int8_t PLAYER_STANDING_MIN = -100;
     static constexpr int8_t PLAYER_STANDING_MAX = 100;
-    static constexpr int8_t PLAYER_STANDING_COMBAT_DELTA = -10;
+    static constexpr int8_t PLAYER_STANDING_ASSAULT_DELTA = -10;
+    static constexpr int8_t PLAYER_STANDING_KILL_DELTA = -30;
     static constexpr int8_t PLAYER_STANDING_THEFT_DELTA = -25;
     static constexpr int8_t PLAYER_STANDING_GIFT_DELTA = 15;
+    // Derived relation: standing <= HOSTILE_AT is Hostile, >= ALLIED_AT is Allied.
+    static constexpr int8_t PLAYER_STANDING_HOSTILE_AT = -50;
+    static constexpr int8_t PLAYER_STANDING_ALLIED_AT = 50;
 
+    enum class PlayerIncident : uint8_t {
+        Assault, // Non-lethal player hit; applies only while not already Hostile
+        Kill, // Lethal player hit; always applies
+        Theft,
+        Gift
+    };
+
+    /**
+   * @brief Apply a player incident against an NPC to the player's standing
+   *        with that NPC's faction. Main thread only.
+   * @details No-op for an invalid or non-EntityKind::Player player, a target
+   *          that is not EntityKind::NPC, or a faction >= MAX_FACTIONS.
+   *          Never writes the stance table. A derived relation change emits
+   *          StanceChangedEvent (towardPlayer, settlement at the NPC) and, for
+   *          the current player handle, resyncs that faction's collision.
+   */
+    void recordPlayerIncident(PlayerIncident incident, EntityHandle player, EntityHandle npc);
+    /**
+   * @brief Raw standing delta (clamped). Same relation/event/collision path as
+   *        recordPlayerIncident with settlement id 0. No-op unless playerHandle
+   *        is a live EntityKind::Player. Main thread only.
+   */
     void adjustPlayerStanding(EntityHandle playerHandle, uint8_t towardFaction, int8_t delta);
     [[nodiscard]] int8_t getPlayerStanding(EntityHandle playerHandle, uint8_t faction) const;
+    /**
+   * @brief Relation of an NPC faction toward the current player handle, derived
+   *        from standing. Neutral without a player or for an out-of-range
+   *        faction. Reads the player handle unlocked: call on the main thread,
+   *        or with m_entitiesMutex held (assignBehavior, including the
+   *        LoadingState worker populate path).
+   */
+    [[nodiscard]] FactionStance getPlayerRelation(uint8_t faction) const;
 
     /**
    * @brief True if fromFaction's row contains any Hostile cell.
@@ -381,7 +416,9 @@ private:
 
     // Cached player edmIndex (updated once per frame during update(), SIZE_MAX = no player)
     size_t m_cachedPlayerEdmIdx{SIZE_MAX};
-    uint8_t m_cachedPlayerFaction{0};
+    // Per-frame "faction is Hostile toward the player" from standing, rebuilt in
+    // update() before batches; workers read it by value via BehaviorContext.
+    std::array<bool, MAX_FACTIONS> m_playerHostileByFaction{};
 
     // Directed 16×16 Allied/Neutral/Hostile table. Main-thread writes only;
     // workers bind a const-ref to the matching row (or kNeutralFactionStanceRow)
@@ -427,11 +464,14 @@ private:
     void addToIndices(size_t edmIndex, BehaviorType behaviorType);
     void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
     void refreshFactionHasHostile(uint8_t faction);
-    void commitDirectedStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance newStance);
+    void commitDirectedStance(uint8_t fromFaction, uint8_t towardFaction,
+        FactionStance newStance, uint32_t settlementId);
     void emitStanceChanged(uint8_t fromFaction, uint8_t towardFaction,
-        FactionStance oldStance, FactionStance newStance);
-    [[nodiscard]] uint8_t collisionPlayerFaction() const;
-    void syncNpcCollisionFromStance(size_t edmIndex);
+        FactionStance oldStance, FactionStance newStance,
+        uint32_t settlementId, bool towardPlayer);
+    void applyPlayerStandingDelta(EntityHandle player, size_t playerIdx,
+        uint8_t faction, int8_t delta, uint32_t settlementId);
+    void syncNpcCollisionTowardPlayer(size_t edmIndex);
     void syncFactionCollisionTowardPlayer(uint8_t faction);
     void commitQueuedFactionChanges();
     void commitQueuedRangedAttacks();

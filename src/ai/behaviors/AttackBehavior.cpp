@@ -354,8 +354,7 @@ bool isAttackTargetCandidate(size_t selfIdx, size_t candidateIdx, const Behavior
     const auto& targetHot = edm.getHotDataByIndex(candidateIdx);
     if (!targetHot.isAlive()) return false;
 
-    const uint8_t targetFaction = edm.getCharacterDataByIndex(candidateIdx).faction;
-    return Behaviors::isHostileTowardFaction(ctx, targetFaction);
+    return Behaviors::isHostileTowardTarget(ctx, candidateIdx, edm.getHandle(candidateIdx));
 }
 
 bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
@@ -366,8 +365,7 @@ bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
     EntityHandle bestTarget{};
     float bestDistanceSq = std::numeric_limits<float>::max();
 
-    if (ctx.playerValid && ctx.playerHandle.isValid() &&
-        Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
+    if (ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
         const size_t playerIdx = edm.getIndex(ctx.playerHandle);
         if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx)) {
             targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
@@ -865,8 +863,13 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
     if (!hasTarget && ctx.memoryData.lastTarget.isValid()) {
         size_t targetIdx = edm.getIndex(ctx.memoryData.lastTarget);
         if (targetIdx != SIZE_MAX && edm.getHotDataByIndex(targetIdx).isAlive()) {
-            targetPos = edm.getHotDataByIndex(targetIdx).transform.position;
-            hasTarget = true;
+            if (Behaviors::shouldKeepCombatTarget(ctx, targetIdx, ctx.memoryData.lastTarget)) {
+                targetPos = edm.getHotDataByIndex(targetIdx).transform.position;
+                hasTarget = true;
+            } else {
+                // De-escalated (standing or stance no longer Hostile): drop it.
+                ctx.memoryData.lastTarget = EntityHandle{};
+            }
         }
     }
 
@@ -879,8 +882,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         }
     }
 
-    if (!hasTarget && ctx.playerValid && ctx.playerHandle.isValid() &&
-        Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
+    if (!hasTarget && ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
         size_t playerIdx = edm.getIndex(ctx.playerHandle);
         if (playerIdx != SIZE_MAX && edm.getHotDataByIndex(playerIdx).isAlive()) {
             targetPos = edm.getHotDataByIndex(playerIdx).transform.position;

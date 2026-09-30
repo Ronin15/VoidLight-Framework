@@ -400,7 +400,7 @@ Acceptance checks:
 
 Status: Remainder implemented and reviewed. Collision remap is in this slice (not optional). Review Mediums (same-faction gift standing test; standing sidecar destroy/reuse/`resetFactionStances` lifetime) and Lows (collision sync APIs private; GamePlayState token init) addressed. Do not rebuild the table.
 
-**Decision (Slice 6R, WP2 — pending until WP2 lands):** the player has no faction (`CharacterData::NO_FACTION`). The stance table is NPC-faction ↔ NPC-faction only; player standing (EDM sidecar) is the single source of truth for NPC-faction relations toward the player, and collision `Layer_Enemy` follows that relation instead of stance toward a player faction. The notes above that describe stance or collision "toward the player faction" are superseded by Slice 6R.
+**Decision (Slice 6R, WP2):** the player has no faction (`CharacterData::NO_FACTION`). The stance table is NPC-faction ↔ NPC-faction only; player standing (EDM sidecar) is the single source of truth for NPC-faction relations toward the player, and collision `Layer_Enemy` follows that relation instead of stance toward a player faction. The notes above that describe stance or collision "toward the player faction" are superseded by Slice 6R.
 
 ## Slice 6: Survival and resource AI
 
@@ -468,11 +468,12 @@ Architecture notes:
 - **Populate opt-out:** `WorldGenerationConfig::populate` (default `true`). AIDemo/EventDemo and NPC-free fixtures set `false`; `GamePlayState` keeps the default.
 - Threading: all standing, stance, incident, and harvest commits stay on the main thread; workers read by-value context only.
 - Out of scope: generic relations manager, save/load of standing, persistent Harvest handler for demos, engage-scan throttle, merchant return-to-post, civilian flee-vs-attack and retaliation time bounds (Slice 7), inventory consumption, tile restore symmetry (Slice 6.1).
+- Deferred: when Attack AoE is enabled (`aoeRadius` is currently always 0), skip the player under `avoidFriendlyFire` when `!ctx.hostileTowardPlayer` (the player has no faction, so `isAlliedTowardFaction` no longer excludes it).
 
 Checklist:
 
 - [x] WP1 populate opt-out (`WorldGenerationConfig::populate`; demos and NPC-free fixtures; `TestPopulateFalseLoadsWorldWithoutNpcs`; `docs/managers/WorldManager.md`, `docs/world/WorldPopulation.md`, `.claude/rules/tests.md`)
-- [ ] WP2 player relations model (B1): no player faction, standing as source of truth, `recordPlayerIncident`, `hostileTowardPlayer`, collision from player relation, `StanceChangedEvent::towardPlayer`
+- [x] WP2 player relations model (B1): no player faction, standing as source of truth, `recordPlayerIncident`, `hostileTowardPlayer`, collision from player relation, `StanceChangedEvent::towardPlayer`
 - [ ] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
 - [ ] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
 - [ ] WP5 weather contract (type defaults on pooled events; no visibility multiply)
@@ -485,8 +486,8 @@ Checklist:
 
 Acceptance checks:
 
-- [ ] A player hit on a Warrior leaves the stance table and a nearby Idle merchant unchanged
-- [ ] Gifts de-escalate attackers
+- [x] A player hit on a Warrior leaves the stance table and a nearby Idle merchant unchanged
+- [x] Gifts de-escalate attackers
 - [x] `populate = false` spawns no NPCs
 - [ ] Merchant forage stays within 384 px of home
 - [ ] A full inventory never depletes a node
@@ -495,7 +496,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1 landed (uncommitted); WP2–WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP2 done; WP3–WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 

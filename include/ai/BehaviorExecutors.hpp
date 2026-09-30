@@ -129,7 +129,10 @@ struct BehaviorContext {
     // kNeutralFactionStanceRow when the faction is out of range. FactionStance{}
     // is Allied — never default-construct a local row and never pass a temporary.
     const std::array<FactionStance, kFactionStanceRowSize>& factionStanceRow;
-    uint8_t playerFaction{0};
+    // True when this entity's faction is Hostile toward the player (standing-derived,
+    // filled by AIManager on the main thread before batches). The player has no
+    // faction; never look the player up in factionStanceRow.
+    bool hostileTowardPlayer{false};
     bool hasHostileInRow{false};
 
     // Pre-fetched knockback sidecar — worker threads call knockback.get(edmIndex) for O(1)
@@ -156,13 +159,13 @@ struct BehaviorContext {
         float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
         float gTime,
         const std::array<FactionStance, kFactionStanceRowSize>& stanceRow,
-        uint8_t pFaction,
+        bool hostileTowardPlayerFlag,
         bool hostileInRow,
         SparseSidecar<KnockbackData>& kbSidecar,
         SparseSidecar<NpcNeedData>& needSidecar,
         EnvironmentSnapshot env = {},
         HarvestableSnapshotView harvestableView = {})
-        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), playerFaction(pFaction), hasHostileInRow(hostileInRow), knockback(kbSidecar), needs(needSidecar), envSnapshot(env), harvestables(harvestableView) {
+        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), hostileTowardPlayer(hostileTowardPlayerFlag), hasHostileInRow(hostileInRow), knockback(kbSidecar), needs(needSidecar), envSnapshot(env), harvestables(harvestableView) {
     }
 };
 
@@ -516,14 +519,26 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx);
  */
 [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle, EntityHandle subjectHandle);
 
-/** Player-only faction standing. 0 if missing/invalid. Not mixed into getRelationshipLevel. */
-[[nodiscard]] int8_t getPlayerFactionStanding(EntityHandle playerHandle, uint8_t faction);
-
 [[nodiscard]] bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction);
 [[nodiscard]] bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction);
 /**
- * @brief Switch to Attack if a Hostile faction member is within
+ * @brief Hostility toward a specific target. The cached player handle reads
+ *        ctx.hostileTowardPlayer; any other target reads its faction's cell in
+ *        ctx.factionStanceRow. targetIdx must be the target's current EDM index.
+ */
+[[nodiscard]] bool isHostileTowardTarget(const BehaviorContext& ctx, size_t targetIdx,
+    EntityHandle target);
+/**
+ * @brief Keep a remembered combat target only while it is this entity's last
+ *        attacker (retaliation is exempt) or still hostile per isHostileTowardTarget.
+ */
+[[nodiscard]] bool shouldKeepCombatTarget(const BehaviorContext& ctx, size_t targetIdx,
+    EntityHandle target);
+/**
+ * @brief Switch to Attack if the player (when ctx.hostileTowardPlayer) or a
+ *        Hostile faction member is within
  *        HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale.
+ *        Returns false immediately when neither can be hostile.
  * @return true if a transition was queued
  */
 bool tryEngageHostileInRange(BehaviorContext& ctx);

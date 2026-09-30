@@ -169,15 +169,20 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         if (targetIdx != SIZE_MAX) {
             const auto& targetHot = edm.getHotDataByIndex(targetIdx);
             if (targetHot.isAlive()) {
-                targetPos = targetHot.transform.position;
-                targetHandle = ctx.memoryData.lastTarget;
-                targetValid = true;
+                if (shouldKeepCombatTarget(ctx, targetIdx, ctx.memoryData.lastTarget)) {
+                    targetPos = targetHot.transform.position;
+                    targetHandle = ctx.memoryData.lastTarget;
+                    targetValid = true;
+                } else {
+                    // De-escalated (standing or stance no longer Hostile): drop it.
+                    ctx.memoryData.lastTarget = EntityHandle{};
+                }
             }
         }
     }
 
     if (!targetValid) {
-        if (ctx.hasHostileInRow && tryEngageHostileInRange(ctx)) {
+        if (tryEngageHostileInRange(ctx)) {
             return;
         }
         if (chase.isChasing) {

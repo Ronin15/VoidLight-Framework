@@ -154,19 +154,6 @@ bool shouldRetaliate(const BehaviorContext& ctx) {
     return (bravery > 0.4f && aggression > 0.6f);
 }
 
-int8_t getPlayerFactionStanding(EntityHandle playerHandle, uint8_t faction) {
-    if (!playerHandle.isValid()) {
-        return 0;
-    }
-
-    auto& edm = EntityDataManager::Instance();
-    const size_t idx = edm.getIndex(playerHandle);
-    if (idx == SIZE_MAX) {
-        return 0;
-    }
-    return edm.getPlayerFactionStanding(idx, faction);
-}
-
 float getRelationshipLevel(EntityHandle npcHandle, EntityHandle subjectHandle) {
     if (!npcHandle.isValid()) {
         return 0.0f;
@@ -230,15 +217,27 @@ bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction) {
     return ctx.factionStanceRow[faction] == FactionStance::Allied;
 }
 
+bool isHostileTowardTarget(const BehaviorContext& ctx, size_t targetIdx, EntityHandle target) {
+    if (ctx.playerValid && target == ctx.playerHandle) {
+        return ctx.hostileTowardPlayer;
+    }
+    auto& edm = EntityDataManager::Instance();
+    return isHostileTowardFaction(ctx, edm.getCharacterDataByIndex(targetIdx).faction);
+}
+
+bool shouldKeepCombatTarget(const BehaviorContext& ctx, size_t targetIdx, EntityHandle target) {
+    return target == ctx.memoryData.lastAttacker ||
+        isHostileTowardTarget(ctx, targetIdx, target);
+}
+
 bool tryEngageHostileInRange(BehaviorContext& ctx) {
-    if (!ctx.hasHostileInRow) {
+    if (!ctx.hasHostileInRow && !ctx.hostileTowardPlayer) {
         return false;
     }
 
     const float engageRange = HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale;
     const float rangeSq = engageRange * engageRange;
-    if (ctx.playerValid && ctx.playerHandle.isValid() &&
-        isHostileTowardFaction(ctx, ctx.playerFaction)) {
+    if (ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
         const float distSq =
             Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
         if (distSq <= rangeSq) {
@@ -246,6 +245,9 @@ bool tryEngageHostileInRange(BehaviorContext& ctx) {
             switchBehavior(ctx.edmIndex, BehaviorType::Attack);
             return true;
         }
+    }
+    if (!ctx.hasHostileInRow) {
+        return false;
     }
 
     thread_local std::vector<size_t> s_hostileScanBuffer;

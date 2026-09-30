@@ -383,7 +383,7 @@ BOOST_AUTO_TEST_CASE(TestReportTheftWithInvalidVictim) {
     BOOST_CHECK_EQUAL(controller.getRelationshipLevel(victim), SocialController::RELATIONSHIP_NEUTRAL);
 }
 
-BOOST_AUTO_TEST_CASE(TestTheftWorsensFactionStance) {
+BOOST_AUTO_TEST_CASE(TestPlayerTheftLowersStandingNotStance) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
     SocialController controller(player);
@@ -400,40 +400,69 @@ BOOST_AUTO_TEST_CASE(TestTheftWorsensFactionStance) {
             }
         });
 
-    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
     const float relationshipBefore = controller.getRelationshipLevel(victim);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
 
     controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
 
-    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Hostile);
-    BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        BOOST_CHECK(!aiMgr.factionRowHasHostile(faction));
+    }
     BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
         AIManager::PLAYER_STANDING_THEFT_DELTA);
-    BOOST_CHECK_GT(stanceEvents, 0);
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(player->getHandle(), 1),
+        AIManager::PLAYER_STANDING_THEFT_DELTA);
+    // One theft does not cross the Hostile threshold: no relation event.
+    BOOST_CHECK_EQUAL(stanceEvents, 0);
 }
 
-BOOST_AUTO_TEST_CASE(TestSameFactionTheftDropsStandingWithoutStanceChange) {
-    auto& aiMgr = AIManager::Instance();
+BOOST_AUTO_TEST_CASE(TestRepeatedTheftCrossesHostileAndEmitsPlayerRelationEvent) {
+    auto& edm = EntityDataManager::Instance();
     SocialController controller(player);
 
-    EntityHandle victim = spawnNPC("Guard");
-    BOOST_REQUIRE(player->getHandle().isValid());
+    EntityHandle victim = spawnNPC("Warrior");
+    edm.setFaction(victim, 1);
 
-    const float relationshipBefore = controller.getRelationshipLevel(victim);
-    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
-    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0), 0);
+    int towardPlayerEvents = 0;
+    int factionEvents = 0;
+    uint8_t fromFaction = 255;
+    uint8_t towardFaction = 0;
+    FactionStance newStance = FactionStance::Neutral;
+    EventManager::Instance().registerHandler(
+        EventTypeId::StanceChanged, [&](const EventData& data) {
+            const auto* event = dynamic_cast<const StanceChangedEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            if (!event->isTowardPlayer()) {
+                ++factionEvents;
+                return;
+            }
+            ++towardPlayerEvents;
+            fromFaction = event->getFromFaction();
+            towardFaction = event->getTowardFaction();
+            newStance = event->getNewStance();
+        });
 
+    // -25, -50: the second theft reaches the Hostile threshold.
     controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 0);
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
+        2 * AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
+    BOOST_CHECK_EQUAL(fromFaction, 1);
+    BOOST_CHECK_EQUAL(towardFaction, CharacterData::NO_FACTION);
+    BOOST_CHECK(newStance == FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(factionEvents, 0);
 
-    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
-    BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
-    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0),
-        AIManager::PLAYER_STANDING_THEFT_DELTA);
+    // Further theft stays Hostile: no additional relation event.
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
 }
 
-BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
+BOOST_AUTO_TEST_CASE(TestGiftRaisesStandingNotStance) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
     SocialController controller(player);
@@ -442,32 +471,45 @@ BOOST_AUTO_TEST_CASE(TestGiftImprovesFactionStance) {
     edm.setFaction(npc, 1);
     BOOST_REQUIRE(player->addToInventory(breadHandle, 2));
 
-    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Neutral);
     const float relationshipBefore = controller.getRelationshipLevel(npc);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
     BOOST_REQUIRE(controller.tryGift(npc, breadHandle, 1));
-    BOOST_CHECK(aiMgr.getStance(1, 0) == FactionStance::Allied);
-    BOOST_CHECK(aiMgr.getStance(0, 1) == FactionStance::Neutral);
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        for (uint8_t toward = 0; toward < AIManager::MAX_FACTIONS; ++toward) {
+            const FactionStance expected =
+                faction == toward ? FactionStance::Allied : FactionStance::Neutral;
+            BOOST_CHECK(aiMgr.getStance(faction, toward) == expected);
+        }
+    }
     BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
     BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
         AIManager::PLAYER_STANDING_GIFT_DELTA);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0), 0);
 }
 
-BOOST_AUTO_TEST_CASE(TestSameFactionGiftRaisesStandingWithoutStanceChange) {
+BOOST_AUTO_TEST_CASE(TestNpcTheftWorsensNpcFactionStance) {
+    auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
     SocialController controller(player);
 
-    EntityHandle npc = spawnNPC("Guard");
-    BOOST_REQUIRE(player->addToInventory(breadHandle, 2));
+    EntityHandle victim = spawnNPC("Warrior");
+    EntityHandle thief = spawnNPC("Warrior", Vector2D(140.0f, 100.0f));
+    EntityHandle sameFactionThief = spawnNPC("Warrior", Vector2D(180.0f, 100.0f));
+    edm.setFaction(victim, 1);
+    edm.setFaction(thief, 2);
+    edm.setFaction(sameFactionThief, 1);
 
-    const float relationshipBefore = controller.getRelationshipLevel(npc);
-    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
-    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0), 0);
-    BOOST_REQUIRE(controller.tryGift(npc, breadHandle, 1));
-    BOOST_CHECK(aiMgr.getStance(0, 0) == FactionStance::Allied);
-    BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
-    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0),
-        AIManager::PLAYER_STANDING_GIFT_DELTA);
+    controller.reportTheft(thief, victim, breadHandle, 1);
+    BOOST_CHECK(aiMgr.getStance(1, 2) == FactionStance::Hostile);
+    BOOST_CHECK(aiMgr.getStance(2, 1) == FactionStance::Neutral);
+
+    // Same-faction or invalid thieves write no stance; no NPC theft touches standing.
+    controller.reportTheft(sameFactionThief, victim, breadHandle, 1);
+    BOOST_CHECK(aiMgr.getStance(1, 1) == FactionStance::Allied);
+    controller.reportTheft(EntityHandle{}, victim, breadHandle, 1);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

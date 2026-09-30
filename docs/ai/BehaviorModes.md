@@ -110,6 +110,8 @@ Use:
 - variant-specific state lives in the matching dense state pool, not in `BehaviorData`
 - per-frame locals must not be used for path/state that should survive updates
 - behavior switching is `Behaviors::switchBehavior()` (enqueue) then `AIManager::commitQueuedBehaviorTransitions()` (clears, then `Behaviors::init`). Do not call `reassignBehaviorConfig` from gameplay/controllers.
-- Attack, Guard, and help-call scans consult the `AIManager` directed stance table; Idle / Wander / Patrol / Chase (no current target) call `tryEngageHostileInRange` after recent-attack / fear checks
+- Attack, Guard, and help-call scans consult the `AIManager` directed NPC-faction stance table for NPC targets; the player target reads the by-value `ctx.hostileTowardPlayer` (standing-derived, filled on the main thread). `Behaviors::isHostileTowardTarget` routes between the two; never look the player up in the stance row (the player has no faction)
+- Attack and Chase keep a remembered `lastTarget` only while `Behaviors::shouldKeepCombatTarget` holds: it is the entity's `memoryData.lastAttacker` (retaliation is exempt) or still hostile. Otherwise the target is cleared, so gifts that lift standing out of Hostile de-escalate attackers
+- Idle / Wander / Patrol / Forage / Chase (no current target) call `tryEngageHostileInRange` after recent-attack / fear checks; it returns immediately unless the row has a Hostile cell or `ctx.hostileTowardPlayer`
 - `Behaviors::getRelationshipLevel` remains per-NPC memory (emotions + interaction memories) and is unchanged by faction stance or player standing scores
-- `Behaviors::getPlayerFactionStanding(playerHandle, faction)` reads the player-only EDM standing sidecar; do not mix those scores into `getRelationshipLevel`
+- Player standing is read on the main thread only (`AIManager::getPlayerStanding` / `getPlayerRelation`); workers see only `ctx.hostileTowardPlayer`

@@ -927,9 +927,9 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceSetGetAndBounds) {
     aiMgr.setStance(0, 1, FactionStance::Hostile);
     aiMgr.setStance(0, 2, FactionStance::Hostile);
     BOOST_CHECK(aiMgr.factionRowHasHostile(0));
-    aiMgr.improveStance(0, 1);
+    aiMgr.setStance(0, 1, FactionStance::Neutral);
     BOOST_CHECK(aiMgr.factionRowHasHostile(0));
-    aiMgr.improveStance(0, 2);
+    aiMgr.setStance(0, 2, FactionStance::Allied);
     BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
 
     aiMgr.setStance(0, 0, FactionStance::Hostile);
@@ -946,14 +946,17 @@ BOOST_AUTO_TEST_CASE(TestFactionStanceSetGetAndBounds) {
     BOOST_CHECK(aiMgr.getStance(AIManager::MAX_FACTIONS, 1) == FactionStance::Neutral);
     BOOST_CHECK(!aiMgr.factionRowHasHostile(AIManager::MAX_FACTIONS));
 
+    aiMgr.setStance(2, 3, FactionStance::Allied);
+    aiMgr.worsenStance(2, 3);
+    BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Neutral);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
     aiMgr.worsenStance(2, 3);
     BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Hostile);
     BOOST_CHECK(aiMgr.factionRowHasHostile(2));
-    aiMgr.improveStance(2, 3);
-    BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Neutral);
+    aiMgr.worsenStance(2, 3);
+    BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Hostile);
+    aiMgr.setStance(2, 3, FactionStance::Neutral);
     BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
-    aiMgr.improveStance(2, 3);
-    BOOST_CHECK(aiMgr.getStance(2, 3) == FactionStance::Allied);
     aiMgr.worsenStance(2, 2);
     BOOST_CHECK(aiMgr.getStance(2, 2) == FactionStance::Allied);
     BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
@@ -993,6 +996,7 @@ BOOST_AUTO_TEST_CASE(TestSetStanceNoOpDoesNotEmitAndRealChangeDoes) {
     FactionStance oldStance = FactionStance::Allied;
     FactionStance newStance = FactionStance::Allied;
     uint32_t settlementId = 99;
+    bool towardPlayer = true;
     eventMgr.registerHandler(EventTypeId::StanceChanged,
         [&](const EventData& data) {
             const auto* event =
@@ -1006,6 +1010,7 @@ BOOST_AUTO_TEST_CASE(TestSetStanceNoOpDoesNotEmitAndRealChangeDoes) {
             oldStance = event->getOldStance();
             newStance = event->getNewStance();
             settlementId = event->getSettlementId();
+            towardPlayer = event->isTowardPlayer();
         });
 
     aiMgr.setStance(0, 1, FactionStance::Neutral);
@@ -1018,6 +1023,7 @@ BOOST_AUTO_TEST_CASE(TestSetStanceNoOpDoesNotEmitAndRealChangeDoes) {
     BOOST_CHECK(oldStance == FactionStance::Neutral);
     BOOST_CHECK(newStance == FactionStance::Hostile);
     BOOST_CHECK_EQUAL(settlementId, 0u);
+    BOOST_CHECK(!towardPlayer);
 
     aiMgr.setStance(0, 1, FactionStance::Hostile);
     BOOST_CHECK_EQUAL(stanceEvents, 1);
@@ -1031,9 +1037,13 @@ BOOST_AUTO_TEST_CASE(TestSetStanceNoOpDoesNotEmitAndRealChangeDoes) {
     BOOST_CHECK_EQUAL(stanceEvents, 1);
 }
 
-BOOST_AUTO_TEST_CASE(TestCollisionRemapFromStanceTowardPlayer) {
+BOOST_AUTO_TEST_CASE(TestCollisionFollowsPlayerRelation) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
+
+    EntityHandle player = edm.registerPlayer(9101, Vector2D(0.0f, 0.0f));
+    BOOST_REQUIRE(player.isValid());
+    aiMgr.setPlayerHandle(player);
 
     EntityHandle warrior = edm.createNPCWithRaceClass(
         Vector2D(100.0f, 100.0f), "Human", "Warrior");
@@ -1045,11 +1055,30 @@ BOOST_AUTO_TEST_CASE(TestCollisionRemapFromStanceTowardPlayer) {
     const auto& hot = edm.getHotDataByIndex(warriorIdx);
     BOOST_CHECK_NE(hot.collisionLayers, CollisionLayer::Layer_Enemy);
 
+    // The stance table is NPC-faction only: it never drives player collision.
     aiMgr.setStance(1, 0, FactionStance::Hostile);
+    BOOST_CHECK_NE(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+    aiMgr.resetFactionStances();
+
+    // Standing crossing the Hostile threshold groups the faction as Enemy.
+    aiMgr.adjustPlayerStanding(player, 1, AIManager::PLAYER_STANDING_HOSTILE_AT);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
     BOOST_CHECK_EQUAL(hot.collisionLayers, CollisionLayer::Layer_Enemy);
 
-    aiMgr.improveStance(1, 0);
+    // A gift de-escalates below Hostile and clears it.
+    aiMgr.recordPlayerIncident(AIManager::PlayerIncident::Gift, player, warrior);
+    BOOST_CHECK(aiMgr.getPlayerRelation(1) == FactionStance::Neutral);
     BOOST_CHECK_NE(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+
+    // setPlayerHandle resyncs every faction toward the new player.
+    aiMgr.adjustPlayerStanding(player, 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE_EQUAL(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+    EntityHandle otherPlayer = edm.registerPlayer(9102, Vector2D(0.0f, 0.0f));
+    BOOST_REQUIRE(otherPlayer.isValid());
+    aiMgr.setPlayerHandle(otherPlayer);
+    BOOST_CHECK_NE(hot.collisionLayers, CollisionLayer::Layer_Enemy);
+    aiMgr.setPlayerHandle(player);
+    BOOST_CHECK_EQUAL(hot.collisionLayers, CollisionLayer::Layer_Enemy);
 }
 
 BOOST_AUTO_TEST_CASE(TestPlayerFactionStandingSidecarLifetime) {
@@ -1080,13 +1109,10 @@ BOOST_AUTO_TEST_CASE(TestPlayerFactionStandingSidecarLifetime) {
     BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(reused, 1),
         AIManager::PLAYER_STANDING_GIFT_DELTA);
 
-    edm.prepareForStateTransition();
     const size_t reusedIdx = edm.getIndex(reused);
-    if (reusedIdx != SIZE_MAX) {
-        BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(reusedIdx, 1), 0);
-    } else {
-        BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(playerIdx, 1), 0);
-    }
+    BOOST_REQUIRE(reusedIdx != SIZE_MAX);
+    edm.prepareForStateTransition();
+    BOOST_CHECK_EQUAL(edm.getPlayerFactionStanding(reusedIdx, 1), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

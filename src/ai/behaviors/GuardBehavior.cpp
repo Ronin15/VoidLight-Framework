@@ -234,8 +234,8 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
     if (ctx.memoryData.lastAttacker.isValid()) {
         size_t idx = edm.getIndex(ctx.memoryData.lastAttacker);
         if (idx != SIZE_MAX && edm.getHotDataByIndex(idx).isAlive()) {
-            isEnemyFaction = Behaviors::isHostileTowardFaction(
-                ctx, edm.getCharacterDataByIndex(idx).faction);
+            isEnemyFaction = Behaviors::isHostileTowardTarget(
+                ctx, idx, ctx.memoryData.lastAttacker);
             return ctx.memoryData.lastAttacker;
         }
     }
@@ -243,8 +243,8 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
     if (ctx.memoryData.lastTarget.isValid()) {
         size_t idx = edm.getIndex(ctx.memoryData.lastTarget);
         if (idx != SIZE_MAX && edm.getHotDataByIndex(idx).isAlive()) {
-            isEnemyFaction = Behaviors::isHostileTowardFaction(
-                ctx, edm.getCharacterDataByIndex(idx).faction);
+            isEnemyFaction = Behaviors::isHostileTowardTarget(
+                ctx, idx, ctx.memoryData.lastTarget);
             return ctx.memoryData.lastTarget;
         }
     }
@@ -282,13 +282,12 @@ EntityHandle detectThreat(BehaviorContext& ctx, EntityDataManager& edm, bool& is
 
         if (recentThreat.isValid()) {
             size_t idx = edm.getIndex(recentThreat);
-            isEnemyFaction = Behaviors::isHostileTowardFaction(
-                ctx, edm.getCharacterDataByIndex(idx).faction);
+            isEnemyFaction = Behaviors::isHostileTowardTarget(ctx, idx, recentThreat);
             return recentThreat;
         }
     }
 
-    if (ctx.playerValid && Behaviors::isHostileTowardFaction(ctx, ctx.playerFaction)) {
+    if (ctx.playerValid && ctx.hostileTowardPlayer) {
         float detectionRange = guard.cachedDetectionRange * ctx.envSnapshot.detectionScale;
         float distSq = Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
         if (distSq <= detectionRange * detectionRange) {

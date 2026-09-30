@@ -30,17 +30,18 @@
 /**
  * AICollisionIntegrationTests
  *
- * Production collision grouping is stance-owned: Neutral NPCs are
- * Layer_Default and do not pair with each other. Hostile-toward-player
- * NPCs are Layer_Default until setStance, then Layer_Enemy and pair with
- * other Enemy bodies. Default NPCs still collide with Layer_Environment.
+ * Production collision grouping follows the player relation: NPCs whose
+ * faction is not Hostile toward the player (standing) are Layer_Default and
+ * do not pair with each other. When player standing with their faction
+ * crosses the Hostile threshold they become Layer_Enemy and pair with other
+ * Enemy bodies. Default NPCs still collide with Layer_Environment.
  *
  * Wander crowd steering uses AIInternal nearby queries, not CollisionManager
  * pair generation. Do not force collisionMask = 0xFFFF to inflate lastPairs.
  *
  * These tests verify:
  * 1. AI wanderers vs Environment obstacles (production Default mask)
- * 2. Stance remap: Neutral Guards do not NPC-NPC pair; Hostile Warriors do
+ * 2. Relation remap: Neutral Guards do not NPC-NPC pair; Hostile Warriors do
  * 3. AI entities stay within world boundaries
  * 4. Performance remains acceptable under load (1000+ entities)
  */
@@ -410,7 +411,8 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
  * TEST 2: TestAIStanceCollisionGrouping
  *
  * Neutral Guards stay Layer_Default and do not generate NPC-NPC pairs.
- * Hostile-toward-player Warriors remap to Layer_Enemy and do pair.
+ * Warriors whose faction's player standing is Hostile remap to Layer_Enemy
+ * and do pair.
  * Wander crowd steering is not CollisionManager pair generation.
  */
 BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
@@ -466,8 +468,18 @@ BOOST_AUTO_TEST_CASE(TestAIStanceCollisionGrouping) {
             VoidLight::CollisionLayer::Layer_Enemy);
     }
 
-    aiMgr.setStance(1, 0, FactionStance::Hostile);
+    // Registered player far from the ring; its standing with faction 1 drives
+    // the Warriors' collision grouping (the stance table does not).
+    const EntityHandle player = edm.registerPlayer(900001, Vector2D(5000.0f, 5000.0f));
+    BOOST_REQUIRE(player.isValid());
+    m_entityHandles.push_back(player);
+    aiMgr.setPlayerHandle(player);
+    aiMgr.adjustPlayerStanding(player, 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
     for (const auto& handle : m_entityHandles) {
+        if (handle == player) {
+            continue;
+        }
         const size_t idx = edm.getIndex(handle);
         BOOST_REQUIRE_NE(idx, SIZE_MAX);
         BOOST_CHECK_EQUAL(edm.getHotDataByIndex(idx).collisionLayers,

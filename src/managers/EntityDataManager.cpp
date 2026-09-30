@@ -1063,6 +1063,11 @@ void EntityDataManager::setFaction(EntityHandle handle, uint8_t newFaction) {
     size_t index = getIndex(handle);
     if (index == SIZE_MAX) return;
 
+    if (m_hotData[index].kind == EntityKind::Player) {
+        ENTITY_WARN("setFaction: the player has no faction; use AIManager player standing");
+        return;
+    }
+
     auto& charData = getCharacterDataByIndex(index);
     if (charData.faction == newFaction) return; // No change
 
@@ -1864,6 +1869,7 @@ EntityHandle EntityDataManager::registerPlayer(EntityHandle::IDType entityId,
     auto& charData = m_characterData[charIndex];
     charData.category = CreatureCategory::NPC;
     charData.stateFlags = 0;
+    charData.faction = CharacterData::NO_FACTION;
     hot.typeLocalIndex = charIndex;
 
     // Store ID and mapping

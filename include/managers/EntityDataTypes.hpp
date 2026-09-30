@@ -90,9 +90,13 @@ struct KnockbackData {
 /**
  * @brief Player-only per-faction standing scores. Stored in SparseSidecar.
  *
- * NPCMemoryData is locked at 448 B. Standing is not mixed into
- * Behaviors::getRelationshipLevel (emotions + interaction memories).
- * 0 = neutral. FACTION_COUNT is asserted against kFactionStanceRowSize in .cpp.
+ * Single source of truth for NPC-faction relations toward the player (the
+ * player has no faction; the stance table is NPC-faction only). Storage only:
+ * incident deltas, clamp, and the derived Hostile/Neutral/Allied relation are
+ * AIManager policy (main thread). NPCMemoryData is locked at 448 B. Standing is
+ * not mixed into Behaviors::getRelationshipLevel (emotions + interaction
+ * memories). 0 = neutral. FACTION_COUNT is asserted against
+ * kFactionStanceRowSize in .cpp.
  */
 struct PlayerFactionStanding {
     static constexpr uint8_t FACTION_COUNT = 16;
@@ -264,7 +268,10 @@ struct CharacterData {
     uint8_t subtypeId{0}; // classId / variantId / roleId
 
     // Faction and AI
-    uint8_t faction{0}; // Faction id (0-15). Engagement is AIManager stance, not this id.
+    // NPC faction id (0-15). Engagement is AIManager stance, not this id.
+    // The player has no faction (NO_FACTION); its relations are per-faction
+    // standing on the EDM PlayerFactionStanding sidecar.
+    uint8_t faction{0};
     // AIManager-written mirror of the current BehaviorType (assign + transition
     // commit). Production AI reads BehaviorConfig.type; do not treat this as home.
     uint8_t behaviorType{0};
@@ -288,6 +295,7 @@ struct CharacterData {
     float emotionalResilience{0.5f};
 
     static constexpr uint8_t FLAG_MERCHANT = 0x08; // Can trade with player
+    static constexpr uint8_t NO_FACTION = 0xFF; // Player: member of no NPC faction
 
     [[nodiscard]] bool isMerchant() const noexcept {
         return (stateFlags & FLAG_MERCHANT) != 0;

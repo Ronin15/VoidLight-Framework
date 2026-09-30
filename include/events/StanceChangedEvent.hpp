@@ -12,10 +12,16 @@
 #include <string>
 
 /**
- * @brief Fired after a directed faction-stance cell actually mutates.
+ * @brief Fired after a directed NPC-faction stance cell, or an NPC faction's
+ *        derived relation toward the player, actually changes.
  *
- * Payload is the from/toward pair, the old and new cells, and the first
- * current-world settlement whose faction equals from or toward (0 if none).
+ * Faction ↔ faction (towardPlayer false): from/toward are NPC factions and the
+ * old/new cells come from the AIManager stance table.
+ * Toward player (towardPlayer true): fromFaction is the NPC faction whose
+ * standing-derived relation toward the player crossed a threshold;
+ * towardFaction is CharacterData::NO_FACTION (0xFF).
+ * settlementId is the current-world settlement containing the incident
+ * (0 = wilderness or none), supplied by the emitter.
  * `resetFactionStances()` does not emit this event.
  */
 class StanceChangedEvent : public Event {
@@ -24,12 +30,14 @@ public:
         uint8_t towardFaction,
         FactionStance oldStance,
         FactionStance newStance,
-        uint32_t settlementId = 0)
+        uint32_t settlementId = 0,
+        bool towardPlayer = false)
         : m_fromFaction(fromFaction)
         , m_towardFaction(towardFaction)
         , m_oldStance(oldStance)
         , m_newStance(newStance)
-        , m_settlementId(settlementId) {}
+        , m_settlementId(settlementId)
+        , m_towardPlayer(towardPlayer) {}
 
     ~StanceChangedEvent() override = default;
 
@@ -42,6 +50,7 @@ public:
         m_oldStance = FactionStance::Neutral;
         m_newStance = FactionStance::Neutral;
         m_settlementId = 0;
+        m_towardPlayer = false;
     }
     void clean() override {}
     std::string getName() const override { return "StanceChanged"; }
@@ -57,18 +66,7 @@ public:
     [[nodiscard]] FactionStance getOldStance() const { return m_oldStance; }
     [[nodiscard]] FactionStance getNewStance() const { return m_newStance; }
     [[nodiscard]] uint32_t getSettlementId() const { return m_settlementId; }
-
-    void set(uint8_t fromFaction,
-        uint8_t towardFaction,
-        FactionStance oldStance,
-        FactionStance newStance,
-        uint32_t settlementId) {
-        m_fromFaction = fromFaction;
-        m_towardFaction = towardFaction;
-        m_oldStance = oldStance;
-        m_newStance = newStance;
-        m_settlementId = settlementId;
-    }
+    [[nodiscard]] bool isTowardPlayer() const { return m_towardPlayer; }
 
 private:
     uint8_t m_fromFaction{0};
@@ -76,6 +74,7 @@ private:
     FactionStance m_oldStance{FactionStance::Neutral};
     FactionStance m_newStance{FactionStance::Neutral};
     uint32_t m_settlementId{0};
+    bool m_towardPlayer{false};
 };
 
 #endif // STANCE_CHANGED_EVENT_HPP

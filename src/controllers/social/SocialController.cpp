@@ -641,20 +641,21 @@ void SocialController::reportTheft(EntityHandle thief,
 
     recordInteraction(victim, InteractionType::Theft, THEFT_RELATIONSHIP_LOSS);
 
-    const uint8_t victimFaction = edm.getCharacterDataByIndex(victimIdx).faction;
-    uint8_t thiefFaction = 0;
-    if (thief.isValid()) {
-        const size_t thiefIdx = edm.getIndex(thief);
-        if (thiefIdx != SIZE_MAX) {
-            thiefFaction = edm.getCharacterDataByIndex(thiefIdx).faction;
+    // Player thieves lower standing; NPC thieves worsen NPC-faction stance.
+    // An invalid thief writes nothing.
+    const size_t thiefIdx = thief.isValid() ? edm.getIndex(thief) : SIZE_MAX;
+    if (thiefIdx != SIZE_MAX) {
+        const EntityKind thiefKind = edm.getHotDataByIndex(thiefIdx).kind;
+        if (thiefKind == EntityKind::Player) {
+            AIManager::Instance().recordPlayerIncident(
+                AIManager::PlayerIncident::Theft, thief, victim);
+        } else if (thiefKind == EntityKind::NPC) {
+            const uint8_t victimFaction = edm.getCharacterDataByIndex(victimIdx).faction;
+            const uint8_t thiefFaction = edm.getCharacterDataByIndex(thiefIdx).faction;
+            if (thiefFaction != victimFaction) {
+                AIManager::Instance().worsenStance(victimFaction, thiefFaction);
+            }
         }
-    }
-    AIManager::Instance().worsenStance(victimFaction, thiefFaction);
-
-    auto player = mp_player.lock();
-    if (player && thief == player->getHandle()) {
-        AIManager::Instance().adjustPlayerStanding(
-            thief, victimFaction, AIManager::PLAYER_STANDING_THEFT_DELTA);
     }
 
     Vector2D theftLocation = edm.getHotDataByIndex(victimIdx).transform.position;
@@ -715,7 +716,7 @@ float SocialController::getRelationshipLevel(EntityHandle npcHandle) const {
 int8_t SocialController::getPlayerFactionStanding(uint8_t faction) const {
     auto player = mp_player.lock();
     EntityHandle playerHandle = player ? player->getHandle() : EntityHandle{};
-    return Behaviors::getPlayerFactionStanding(playerHandle, faction);
+    return AIManager::Instance().getPlayerStanding(playerHandle, faction);
 }
 
 float SocialController::getPriceModifier(EntityHandle npcHandle) const {
@@ -771,29 +772,10 @@ void SocialController::recordGift(EntityHandle npcHandle, float giftValue) {
     float value = GIFT_RELATIONSHIP_BASE + (giftValue * GIFT_VALUE_SCALE);
     recordInteraction(npcHandle, InteractionType::Gift, value);
 
-    auto& edm = EntityDataManager::Instance();
-    const size_t npcIdx = edm.getIndex(npcHandle);
-    if (npcIdx == SIZE_MAX) {
-        return;
-    }
-
-    const uint8_t npcFaction = edm.getCharacterDataByIndex(npcIdx).faction;
-    uint8_t playerFaction = 0;
     auto player = mp_player.lock();
     if (player) {
-        const EntityHandle playerHandle = player->getHandle();
-        if (playerHandle.isValid()) {
-            const size_t playerIdx = edm.getIndex(playerHandle);
-            if (playerIdx != SIZE_MAX) {
-                playerFaction = edm.getCharacterDataByIndex(playerIdx).faction;
-            }
-        }
-    }
-    AIManager::Instance().improveStance(npcFaction, playerFaction);
-
-    if (player) {
-        AIManager::Instance().adjustPlayerStanding(
-            player->getHandle(), npcFaction, AIManager::PLAYER_STANDING_GIFT_DELTA);
+        AIManager::Instance().recordPlayerIncident(
+            AIManager::PlayerIncident::Gift, player->getHandle(), npcHandle);
     }
 }
 

@@ -9,6 +9,8 @@
 #include "ai/BehaviorConfig.hpp"
 #include "ai/FactionStance.hpp"
 #include "core/ThreadSystem.hpp"
+#include "events/EntityEvents.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
@@ -21,6 +23,8 @@
 #include "world/WorldData.hpp"
 #include "world/WorldPopulation.hpp"
 
+#include <memory>
+#include <optional>
 #include <vector>
 
 using namespace VoidLight;
@@ -398,6 +402,186 @@ BOOST_AUTO_TEST_CASE(TestQueryTerritoryAtVillageCenter) {
     BOOST_CHECK(!AIManager::Instance()
             .queryTerritoryAtPixel(outsidePixelX, centerPixelY)
             .has_value());
+}
+
+BOOST_AUTO_TEST_CASE(TestPlayerIncidentsOnPopulatedWorldIsolateFactions) {
+    auto& worldMgr = WorldManager::Instance();
+    auto& edm = EntityDataManager::Instance();
+    auto& ai = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
+    BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
+
+    // Populated settlement merchant (Idle, settlement faction).
+    EntityHandle merchant{};
+    for (const auto& npc : collectNpcs()) {
+        if (npc.merchant) {
+            merchant = npc.handle;
+            break;
+        }
+    }
+    BOOST_REQUIRE(merchant.isValid());
+    const size_t merchantIdx = edm.getIndex(merchant);
+    BOOST_REQUIRE_NE(merchantIdx, SIZE_MAX);
+    BOOST_REQUIRE(edm.getBehaviorConfigRef(merchantIdx).type == BehaviorType::Idle);
+    const uint8_t villageFaction = edm.getCharacterDataByIndex(merchantIdx).faction;
+    BOOST_REQUIRE_NE(villageFaction, 1);
+    const Vector2D merchantPos = edm.getHotDataByIndex(merchantIdx).transform.position;
+    const auto village = ai.queryTerritoryAtPixel(merchantPos.getX(), merchantPos.getY());
+    BOOST_REQUIRE(village.has_value());
+    BOOST_REQUIRE_NE(village->settlementId, 0u);
+
+    const EntityHandle player =
+        edm.registerPlayer(990001, merchantPos + Vector2D(80.0f, 0.0f));
+    BOOST_REQUIRE(player.isValid());
+    ai.setPlayerHandle(player);
+
+    // Faction-1 Warrior right next to the merchant.
+    const EntityHandle warrior = spawnNpc(merchantPos + Vector2D(40.0f, 0.0f),
+        "Human", "Warrior", Sex::Unknown, 1);
+    BOOST_REQUIRE(warrior.isValid());
+
+    int factionEvents = 0;
+    int towardPlayerEvents = 0;
+    uint8_t eventFaction = 255;
+    uint32_t eventSettlement = 0;
+    eventMgr.registerHandler(EventTypeId::StanceChanged, [&](const EventData& data) {
+        const auto* event = dynamic_cast<const StanceChangedEvent*>(data.event.get());
+        if (!event) {
+            return;
+        }
+        if (!event->isTowardPlayer()) {
+            ++factionEvents;
+            return;
+        }
+        ++towardPlayerEvents;
+        eventFaction = event->getFromFaction();
+        eventSettlement = event->getSettlementId();
+    });
+
+    // Player hits the Warrior: standing with faction 1 only; no stance write.
+    auto hit = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, player, warrior, 10.0f);
+    eventMgr.dispatchEvent(hit, EventManager::DispatchMode::Immediate);
+    BOOST_CHECK(ai.getStance(villageFaction, 1) == FactionStance::Neutral);
+    BOOST_CHECK(ai.getStance(1, villageFaction) == FactionStance::Neutral);
+    BOOST_CHECK_EQUAL(ai.getPlayerStanding(player, 1), AIManager::PLAYER_STANDING_ASSAULT_DELTA);
+    BOOST_CHECK_EQUAL(ai.getPlayerStanding(player, villageFaction), 0);
+    BOOST_CHECK_EQUAL(factionEvents, 0);
+
+    edm.updateSimulationTiers(merchantPos, 1500.0f, 3000.0f);
+    for (int i = 0; i < 10; ++i) {
+        ai.update(0.016f);
+    }
+    BOOST_CHECK(edm.getBehaviorConfigRef(merchantIdx).type == BehaviorType::Idle);
+    BOOST_CHECK(ai.getStance(villageFaction, 1) == FactionStance::Neutral);
+    BOOST_CHECK(ai.getStance(1, villageFaction) == FactionStance::Neutral);
+
+    // Theft and gift against the merchant touch only the village faction's standing.
+    ai.recordPlayerIncident(AIManager::PlayerIncident::Theft, player, merchant);
+    ai.recordPlayerIncident(AIManager::PlayerIncident::Gift, player, merchant);
+    BOOST_CHECK_EQUAL(ai.getPlayerStanding(player, villageFaction),
+        AIManager::PLAYER_STANDING_THEFT_DELTA + AIManager::PLAYER_STANDING_GIFT_DELTA);
+    BOOST_CHECK_EQUAL(ai.getPlayerStanding(player, 1), AIManager::PLAYER_STANDING_ASSAULT_DELTA);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 0);
+
+    // Crossing the Hostile threshold inside the village reports that settlement.
+    while (ai.getPlayerRelation(villageFaction) != FactionStance::Hostile) {
+        ai.recordPlayerIncident(AIManager::PlayerIncident::Theft, player, merchant);
+    }
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
+    BOOST_CHECK_EQUAL(eventFaction, villageFaction);
+    BOOST_CHECK_EQUAL(eventSettlement, village->settlementId);
+    BOOST_CHECK_EQUAL(factionEvents, 0);
+    BOOST_CHECK(ai.getPlayerRelation(1) == FactionStance::Neutral);
+}
+
+BOOST_AUTO_TEST_CASE(TestNpcCombatStanceEventCarriesTerritorySettlement) {
+    auto& worldMgr = WorldManager::Instance();
+    auto& edm = EntityDataManager::Instance();
+    auto& ai = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
+    BOOST_REQUIRE(worldMgr.loadNewWorld(makePopulatedWorldConfig(55555)));
+
+    EntityHandle merchant{};
+    for (const auto& npc : collectNpcs()) {
+        if (npc.merchant) {
+            merchant = npc.handle;
+            break;
+        }
+    }
+    BOOST_REQUIRE(merchant.isValid());
+    const size_t merchantIdx = edm.getIndex(merchant);
+    BOOST_REQUIRE_NE(merchantIdx, SIZE_MAX);
+    const uint8_t villageFaction = edm.getCharacterDataByIndex(merchantIdx).faction;
+    BOOST_REQUIRE_NE(villageFaction, 1);
+    const Vector2D merchantPos = edm.getHotDataByIndex(merchantIdx).transform.position;
+    const auto village = ai.queryTerritoryAtPixel(merchantPos.getX(), merchantPos.getY());
+    BOOST_REQUIRE(village.has_value());
+    BOOST_REQUIRE_NE(village->settlementId, 0u);
+
+    std::vector<uint32_t> factionEventSettlements;
+    int towardPlayerEvents = 0;
+    eventMgr.registerHandler(EventTypeId::StanceChanged, [&](const EventData& data) {
+        const auto* event = dynamic_cast<const StanceChangedEvent*>(data.event.get());
+        if (!event) {
+            return;
+        }
+        if (event->isTowardPlayer()) {
+            ++towardPlayerEvents;
+            return;
+        }
+        factionEventSettlements.push_back(event->getSettlementId());
+    });
+
+    // A faction-1 NPC hits the village merchant inside the village: both
+    // directed cells turn Hostile and both events carry the village id.
+    const EntityHandle raider = spawnNpc(merchantPos + Vector2D(20.0f, 0.0f),
+        "Human", "Warrior", Sex::Unknown, 1);
+    BOOST_REQUIRE(raider.isValid());
+    auto villageHit = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, raider, merchant, 10.0f);
+    eventMgr.dispatchEvent(villageHit, EventManager::DispatchMode::Immediate);
+    BOOST_CHECK(ai.isHostileTo(villageFaction, 1));
+    BOOST_CHECK(ai.isHostileTo(1, villageFaction));
+    BOOST_REQUIRE_EQUAL(factionEventSettlements.size(), 2u);
+    BOOST_CHECK_EQUAL(factionEventSettlements[0], village->settlementId);
+    BOOST_CHECK_EQUAL(factionEventSettlements[1], village->settlementId);
+
+    // A wilderness hit (victim outside every settlement) carries 0.
+    std::optional<Vector2D> wildernessPos;
+    for (int ty = 1; ty < 99 && !wildernessPos; ty += 7) {
+        for (int tx = 1; tx < 99; tx += 7) {
+            const Vector2D pos((static_cast<float>(tx) + 0.5f) * TILE_SIZE,
+                (static_cast<float>(ty) + 0.5f) * TILE_SIZE);
+            if (!ai.queryTerritoryAtPixel(pos.getX(), pos.getY()).has_value()) {
+                wildernessPos = pos;
+                break;
+            }
+        }
+    }
+    BOOST_REQUIRE(wildernessPos.has_value());
+    const EntityHandle wildAttacker = spawnNpc(*wildernessPos, "Human", "Warrior",
+        Sex::Unknown, 2);
+    const EntityHandle wildVictim = spawnNpc(*wildernessPos + Vector2D(20.0f, 0.0f),
+        "Human", "Warrior", Sex::Unknown, 3);
+    BOOST_REQUIRE(wildAttacker.isValid());
+    BOOST_REQUIRE(wildVictim.isValid());
+    const size_t wildVictimIdx = edm.getIndex(wildVictim);
+    BOOST_REQUIRE_NE(wildVictimIdx, SIZE_MAX);
+    const Vector2D wildVictimPos = edm.getHotDataByIndex(wildVictimIdx).transform.position;
+    BOOST_REQUIRE(!ai.queryTerritoryAtPixel(wildVictimPos.getX(), wildVictimPos.getY())
+            .has_value());
+
+    factionEventSettlements.clear();
+    auto wildHit = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, wildAttacker, wildVictim, 10.0f);
+    eventMgr.dispatchEvent(wildHit, EventManager::DispatchMode::Immediate);
+    BOOST_CHECK(ai.isHostileTo(3, 2));
+    BOOST_CHECK(ai.isHostileTo(2, 3));
+    BOOST_REQUIRE_EQUAL(factionEventSettlements.size(), 2u);
+    BOOST_CHECK_EQUAL(factionEventSettlements[0], 0u);
+    BOOST_CHECK_EQUAL(factionEventSettlements[1], 0u);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
