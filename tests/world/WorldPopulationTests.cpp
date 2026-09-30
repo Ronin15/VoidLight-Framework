@@ -323,6 +323,26 @@ BOOST_AUTO_TEST_CASE(TestClearPopulatedNpcsKeepsWorld) {
     BOOST_CHECK(collectNpcs().empty());
 }
 
+BOOST_AUTO_TEST_CASE(TestPopulateFalseLoadsWorldWithoutNpcs) {
+    auto& worldMgr = WorldManager::Instance();
+    auto& edm = EntityDataManager::Instance();
+    auto& wrm = WorldResourceManager::Instance();
+
+    WorldGenerationConfig config = makePopulatedWorldConfig(55555);
+    config.populate = false;
+    BOOST_REQUIRE(worldMgr.loadNewWorld(config));
+
+    const std::string worldId = worldMgr.getCurrentWorldId();
+    BOOST_REQUIRE(!worldId.empty());
+    BOOST_CHECK(!worldMgr.isWorldPopulated(worldId));
+    BOOST_CHECK_EQUAL(worldMgr.getPopulatedNpcCount(worldId), 0u);
+    BOOST_CHECK_EQUAL(edm.getEntityCount(EntityKind::NPC), 0u);
+    BOOST_CHECK(collectNpcs().empty());
+    BOOST_CHECK_GT(wrm.getHarvestableCount(worldId), 0u);
+    BOOST_CHECK_GT(edm.getEntityCount(EntityKind::Harvestable), 0u);
+    BOOST_CHECK(!worldMgr.getSettlements().empty());
+}
+
 BOOST_AUTO_TEST_CASE(TestPopulateUsesSettlementFaction) {
     WorldData world;
     world.worldId = "settlement-faction";

@@ -10,6 +10,11 @@ registry plus current-world settlement queries. Spawn algorithm lives in
 `WorldPopulation`. NPC factory+optional behavior override lives in
 `VoidLight::spawnNpc`.
 
+`loadNewWorld` populates only when `WorldGenerationConfig::populate` is
+`true` (the default). `false` loads the world (tiles, settlements,
+harvestables) with no populated NPCs and no registry entry; AIDemo, EventDemo,
+and NPC-free test fixtures use it.
+
 `WorldHarvestInit` is the sibling harvest spawn helper. Do not put
 environment, stance, forage, decision, discovery, or background-tick policy
 on WorldManager.

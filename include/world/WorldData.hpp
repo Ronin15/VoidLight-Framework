@@ -22,6 +22,10 @@ struct WorldGenerationConfig {
     float humidityFrequency;
     float waterLevel;
     float mountainLevel;
+    // false skips WorldManager settlement/wilderness NPC population on
+    // loadNewWorld (no populate registry entry). Harvestables and
+    // settlements are still generated.
+    bool populate{true};
 };
 
 // World rendering and spatial constants

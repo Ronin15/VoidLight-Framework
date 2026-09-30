@@ -535,6 +535,7 @@ void AIDemoState::update(float deltaTime) {
             config.humidityFrequency = 0.015f;
             config.waterLevel = 0.25f;
             config.mountainLevel = 0.75f;
+            config.populate = false; // Demo spawns its own NPCs
 
             // Configure LoadingState and transition to it
             auto* loadingState = dynamic_cast<LoadingState*>(

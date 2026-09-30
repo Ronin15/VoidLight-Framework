@@ -74,6 +74,12 @@ Some resources are still distributed by biome or elevation when no dedicated til
 load-time helper (`WorldPopulation` + `spawnNpc`), not a manager singleton and
 not a `GamePlayState` tile loop.
 
+- `WorldGenerationConfig::populate` (default `true`) gates the call. `false`
+  skips population entirely: no populate registry entry, no NPCs. Tiles,
+  settlement records, and harvestables are still generated. AIDemo and
+  EventDemo set it `false` (they spawn their own NPCs), as do test fixtures
+  that need an empty NPC set. `GamePlayState` keeps the default.
+
 - Per overworld settlement: 1 merchant, 2 guards, 4 villagers. Empty
   `behaviorOverride` keeps `classes.json` suggestedBehavior (Idle/Guard/Wander).
 - Sparse forest/haunted wilderness (Human/Warrior, faction 1) pass empty

@@ -165,7 +165,9 @@ bool WorldManager::loadNewWorld(
 
             // Initialize world resources based on world data
             initializeWorldResources();
-            populateWorldEntities();
+            if (config.populate) {
+                populateWorldEntities();
+            }
 
             // Season handler is persistent — survives state transitions.
             // Only wire up on first world load (handler not yet registered).

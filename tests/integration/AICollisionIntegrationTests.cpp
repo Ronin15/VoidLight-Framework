@@ -219,10 +219,8 @@ struct AICollisionTestFixture {
         worldConfig.humidityFrequency = 0.05f;
         worldConfig.waterLevel = 0.3f;
         worldConfig.mountainLevel = 0.7f;
+        worldConfig.populate = false; // Tests spawn their own NPCs
         BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
-        auto& worldMgr = WorldManager::Instance();
-        worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
-        EntityDataManager::Instance().processDestructionQueue();
         // Wait for the event-driven grid rebuild. The deferred WorldLoaded event
         // builds collision statics on the main thread, then StaticCollidersReady
         // rebuilds the grid; a manual rebuildGrid() here would read collision
@@ -337,15 +335,10 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     worldConfig.humidityFrequency = 0.05f;
     worldConfig.waterLevel = 0.3f;
     worldConfig.mountainLevel = 0.7f;
+    worldConfig.populate = false; // Test spawns its own NPCs
 
     std::cout << "Setting up world for pathfinding grid..." << std::endl;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
-
-    {
-        auto& worldMgr = WorldManager::Instance();
-        worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
-        EntityDataManager::Instance().processDestructionQueue();
-    }
 
     // Wait for world generation to complete
     std::this_thread::sleep_for(std::chrono::milliseconds(300));

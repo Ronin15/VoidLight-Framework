@@ -531,6 +531,7 @@ void EventDemoState::update(float deltaTime) {
         config.humidityFrequency = 0.012f;
         config.waterLevel = 0.28f;
         config.mountainLevel = 0.72f;
+        config.populate = false; // Demo spawns its own NPCs
 
         // Configure LoadingState and transition to it
         auto* loadingState = dynamic_cast<LoadingState*>(

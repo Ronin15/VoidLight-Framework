@@ -42,10 +42,12 @@ file (`ai.md`, `managers.md`, `ui-controllers.md`).
 - Prefer production wiring over fakes when behavior depends on event
   contracts, manager caches, EDM slot reuse, pathfinding, collision, AI
   command commits, or UI manager state.
-- World-populated NPCs are WorldManager-owned. After `loadNewWorld`, a
-  test needing an empty NPC set calls `WorldManager::clearPopulatedNpcs`
-  then `EntityDataManager::processDestructionQueue` on the test thread —
-  never hand-rolled `destroyEntity` that leaves the registry stale.
+- World-populated NPCs are WorldManager-owned. A fixture needing an
+  empty NPC set loads with `WorldGenerationConfig::populate = false`. A
+  test that must drop NPCs from an already-populated world calls
+  `WorldManager::clearPopulatedNpcs` then
+  `EntityDataManager::processDestructionQueue` on the test thread — never
+  hand-rolled `destroyEntity` that leaves the registry stale.
 - World unload (`unloadWorld`, or `loadNewWorld` replacement via
   `unloadWorldLocked`) destroys that `worldId`'s static harvestables
   before WRM `removeWorld`; tests unloading without

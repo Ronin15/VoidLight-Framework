@@ -142,15 +142,10 @@ struct BehaviorTestFixture {
         cfg.humidityFrequency = 0.05f;
         cfg.waterLevel = 0.3f;
         cfg.mountainLevel = 0.7f;
+        cfg.populate = false; // Tests spawn their own NPCs
 
         if (!WorldManager::Instance().loadNewWorld(cfg)) {
             throw std::runtime_error("Failed to load test world for behavior tests");
-        }
-
-        {
-            auto& worldMgr = WorldManager::Instance();
-            worldMgr.clearPopulatedNpcs(worldMgr.getCurrentWorldId());
-            EntityDataManager::Instance().processDestructionQueue();
         }
 
         // EVENT-DRIVEN: Process any deferred events from the world load

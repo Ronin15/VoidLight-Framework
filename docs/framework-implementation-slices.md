@@ -107,8 +107,9 @@ Status: Not started
 
 Implement from these sections, not from chat notes. Implement only the open
 slice's scope. Slices 1–5 are implemented (Slice 1 visual confirm leftover).
-Slice 6 (survival/forage) is implemented and in review. Slices 6.1–9 stay
-scheduled after 6. Do not pull them forward. Do not rebuild the stance table,
+Slice 6 (survival/forage) is implemented and in review. Slice 6R (cohesion
+corrections to Slices 2–6) is open. Slices 6.1–9 stay scheduled after 6R.
+Do not pull them forward. Do not rebuild the stance table,
 the need sidecar, the harvestable snapshot, or `HarvestCommit`.
 
 Scheduled order (do not skip ahead). Data deps may be narrower than schedule
@@ -122,7 +123,8 @@ order; do not pull a later slice forward unless this file is updated first.
 | 4 Environment-driven AI | 2 | 3 |
 | 5 Faction stance | 2 | 4 |
 | 6 Survival / forage | 2, 5 | 5 |
-| 6.1 Harvestable respawn | 6 | 6 |
+| 6R emergent_play cohesion corrections | 2–6 | 6 |
+| 6.1 Harvestable respawn | 6 | 6R |
 | 7 Autonomous decision | 2, 4, 5, 6 | 6.1 |
 | 8 Production minimap | 2 (5 for faction-colored dots) | 7 |
 | 9 Background-tier simulation | 2, 6 | 8 |
@@ -324,6 +326,8 @@ Architecture notes:
   | Windy | 0.90 | 0.95 | 1.05 |
 
   `Custom` weather uses Clear scales. If `visibility < 1`, detectionScale is also multiplied by `visibility`.
+
+  **Decision (Slice 6R, WP5 — pending until WP5 lands):** the visibility multiply is removed — the weather rows already encode visibility, and the multiply was applied after the clamp. Detection is `timeScale * weatherScale` only.
 - Apply `detectionScale` in Guard/Chase perception (`cachedDetectionRange` and equivalent). Apply `moveSpeedScale` to Wander/Patrol/Flee/Attack movement speeds. Apply `cautionScale` as extra dwell / slower direction change / earlier flee threshold where those behaviors already have a timer or radius. Keep existing behavior types.
 - Optional shelter: only if detection/speed alone is hollow — Wander/Idle prefer `ObstacleType::BUILDING` tiles in Stormy/Snowy using world tile queries already legal on the main-thread cache.
 - Files: `include/managers/AIManager.hpp`, `src/managers/AIManager.cpp`, `include/ai/BehaviorExecutors.hpp`, Guard/Chase/Wander/Patrol/Flee/Attack `.cpp`, `docs/ai/AIManager.md`, `docs/ai/BehaviorExecutionPipeline.md`, `tests/BehaviorFunctionalityTest.cpp` and/or `tests/managers/AIManagerEDMIntegrationTests.cpp`.
@@ -396,6 +400,8 @@ Acceptance checks:
 
 Status: Remainder implemented and reviewed. Collision remap is in this slice (not optional). Review Mediums (same-faction gift standing test; standing sidecar destroy/reuse/`resetFactionStances` lifetime) and Lows (collision sync APIs private; GamePlayState token init) addressed. Do not rebuild the table.
 
+**Decision (Slice 6R, WP2 — pending until WP2 lands):** the player has no faction (`CharacterData::NO_FACTION`). The stance table is NPC-faction ↔ NPC-faction only; player standing (EDM sidecar) is the single source of truth for NPC-faction relations toward the player, and collision `Layer_Enemy` follows that relation instead of stance toward a player faction. The notes above that describe stance or collision "toward the player faction" are superseded by Slice 6R.
+
 ## Slice 6: Survival and resource AI
 
 Goal: NPCs with resource need path to WRM harvestables, deplete them through the same EDM harvest path as the player, and react to scarcity. Player `HarvestResourceEvent` participates. Workers do not query WRM every entity every frame.
@@ -437,6 +443,59 @@ Acceptance checks:
 - [x] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Implemented and reviewed (two rounds). Round 1 Mediums (rejection/stall loop, same-frame need hitch + whole-world scans, preset loss on Forage return) fixed; round 2 found no production defects — follow-up tests pin the 512 px grid against the commit reserve rule across cell boundaries and the need-seed stagger. Slice-complete gate green. Need is an EDM `SparseSidecar<NpcNeedData>` for civilian (`CreatureCategory::NPC`) Idle/Wander roles assigned by base name with the default config (presets and explicit configs carry no need, so Forage's default-config return never discards them); new entries get a deterministic per-entity pressure stagger (up to 30 s) so co-spawned NPCs do not cross the threshold on one frame. Forage entry is decided inside `executeIdle`/`executeWander` with a candidate pre-check and exponential backoff (15 s doubling, 240 s cap); candidates must keep `NPC_HARVEST_RESERVE` other nodes within 512 px of themselves (the commit's own rule), and a Forage episode gives up after 3 rejected commits or far stalls, so neither empty areas nor rejection/stall loops cause Forage churn. The snapshot is grid-bucketed (512 px cells), so scans touch at most 3×3 cells; exit returns to the recorded Idle/Wander origin, not `homeRole` (Slice 7). Workers read an AIManager harvestable snapshot rebuilt only on WRM version change; harvests commit on the main thread through the world-layer `HarvestCommit::commit`, shared with `HarvestController`. `EventTypeId::Scarcity` fires on any depletion leaving fewer than 2 available nodes (any kind) within 512 px; GamePlayState logs player-relevant ones. **Decision (economy protection):** NPC commits enforce an area reserve `NPC_HARVEST_RESERVE = 1` per 512 px, so NPCs never take the last local node; the player may. There is no respawn until Slice 6.1. `BehaviorType::Forage = 8` shifts `Custom`/`COUNT` (raw `uint8_t` saves need remapping). Background-tier NPCs do not tick need (Slice 9).
+
+**Decision (Slice 6R, WP4 — pending until WP4 lands):** merchant need entries carry a home anchor and a 384 px forage leash (other roles 0 = unleashed). NPC harvest commits pre-check inventory capacity and abandon without depleting the node when the yield would not fit; arbitration picks the lowest harvester EDM index.
+
+## Slice 6R: emergent_play cohesion corrections
+
+Goal: Correct cross-slice contract gaps found reviewing Slices 2–6 on `emergent_play` before Slice 6.1 builds on them. The player has no NPC faction and per-faction standing is the single source of player relations; weather and environment scales follow one table; NPC forage never wastes a node and merchants stay near home; demos and NPC-free fixtures load worlds without population; dead code and stale docs are removed.
+
+Current foundation:
+
+- Slice 5 stance table (`AIManager` 16×16, NPC-faction ↔ NPC-faction), EDM `SparseSidecar<PlayerFactionStanding>` keyed by the player slot, `StanceChangedEvent`, `queryTerritoryAtPixel`. Today the combat handler writes both stance directions toward faction 0; the player's `CharacterData.faction` stays 0 (same as settlements), so hitting a Warrior turns faction 1 Hostile toward every villager.
+- Slice 4 environment snapshot and modifier table; persistent Weather handler on `AIManager`. The handler also multiplies detection by visibility after the clamp, and `EventManager::changeWeather` reuses pooled events whose params depend on pool state.
+- Slice 6 need sidecar, Forage behavior, main-thread `commitQueuedHarvests` + `HarvestCommit::commit`, harvestable snapshot. A full NPC inventory currently depletes a node and discards the yield; harvest arbitration uses an atomic sequence.
+- `WorldManager::loadNewWorld` always populates; demos and fixtures clear the population afterwards.
+
+Architecture notes:
+
+- **Player relations (B1):** `CharacterData::NO_FACTION = 0xFF`; `EDM::registerPlayer` sets it and `EDM::setFaction` rejects `EntityKind::Player`. The stance table is NPC-faction ↔ NPC-faction only; player actions never write it. Player incidents (`Assault`, `Kill`, `Theft`, `Gift`) go through `AIManager::recordPlayerIncident` on the main thread and adjust standing (clamped; Hostile ≤ -50, Allied ≥ +50). A derived relation change emits `StanceChangedEvent` with `towardPlayer` and the incident's territory settlement id, and resyncs collision for that faction. Behaviors read a per-frame `hostileTowardPlayer` flag on `BehaviorContext`; `lastTarget` is kept only while still hostile or the last attacker. NPC `Layer_Enemy` ⇔ relation toward the player is Hostile.
+- **Weather (B2):** drop the visibility multiply (the table already encodes visibility). `WeatherEvent::applyDefaultParamsForType()` makes a pooled weather event carry type defaults whether fresh or reused.
+- **Merchant leash (B3):** `NpcNeedData` stores `home` and `leashRadius`; merchants get `MERCHANT_FORAGE_LEASH_RADIUS` (384 px = `VILLAGE_RADIUS` 12 × 32), others 0. Forage target selection skips out-of-leash nodes.
+- **Factory auto-registration (B4):** keep the Slice 3 contract — `createNPCWithRaceClass`, `createMonster`, and `createAnimal` auto-register `suggestedBehavior` with fallback; docs name all three.
+- **Engage cost (B5):** faction-indexed `AIManager::scanHostileInRadius`; no per-frame stagger. Attack acquisition is range-bounded and scaled by detection.
+- **Harvest (B6):** lowest harvester EDM index wins; NPC commits pre-check inventory capacity (`EDM::canAddToInventory`) and abandon without depleting.
+- **Populate opt-out:** `WorldGenerationConfig::populate` (default `true`). AIDemo/EventDemo and NPC-free fixtures set `false`; `GamePlayState` keeps the default.
+- Threading: all standing, stance, incident, and harvest commits stay on the main thread; workers read by-value context only.
+- Out of scope: generic relations manager, save/load of standing, persistent Harvest handler for demos, engage-scan throttle, merchant return-to-post, civilian flee-vs-attack and retaliation time bounds (Slice 7), inventory consumption, tile restore symmetry (Slice 6.1).
+
+Checklist:
+
+- [x] WP1 populate opt-out (`WorldGenerationConfig::populate`; demos and NPC-free fixtures; `TestPopulateFalseLoadsWorldWithoutNpcs`; `docs/managers/WorldManager.md`, `docs/world/WorldPopulation.md`, `.claude/rules/tests.md`)
+- [ ] WP2 player relations model (B1): no player faction, standing as source of truth, `recordPlayerIncident`, `hostileTowardPlayer`, collision from player relation, `StanceChangedEvent::towardPlayer`
+- [ ] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
+- [ ] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
+- [ ] WP5 weather contract (type defaults on pooled events; no visibility multiply)
+- [ ] WP6 defer-message contract (delete main-thread defer drain pre-pass)
+- [ ] WP7 one harvestable container in `WorldResourceManager`
+- [ ] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
+- [ ] WP9 docs (return-state wording, stale comments, HUD getters, Slice 7 scaffolding fields, factory auto-registration wording, review non-issues)
+- [ ] Owning docs updated
+- [ ] Tests updated in the same change
+
+Acceptance checks:
+
+- [ ] A player hit on a Warrior leaves the stance table and a nearby Idle merchant unchanged
+- [ ] Gifts de-escalate attackers
+- [x] `populate = false` spawns no NPCs
+- [ ] Merchant forage stays within 384 px of home
+- [ ] A full inventory never depletes a node
+- [ ] Weather is identical whether the pooled event is fresh or reused
+- [ ] `ninja -C build` passes
+- [ ] Targeted Boost.Test executables for each work package pass
+- [ ] Slice reviewed (`game-systems-architect`) before commit
+
+Status: In progress. WP1 landed (uncommitted); WP2–WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 
