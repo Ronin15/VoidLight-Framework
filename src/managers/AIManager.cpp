@@ -1263,37 +1263,6 @@ void AIManager::scanGuardsInRadius(const Vector2D& center, float radius,
     }
 }
 
-void AIManager::scanFactionInRadius(uint8_t faction, const Vector2D& center,
-    float radius,
-    std::vector<size_t>& outEdmIndices,
-    bool excludePlayer) const {
-    outEdmIndices.clear();
-    if (faction >= MAX_FACTIONS) return;
-    const float radiusSq = radius * radius;
-    auto& edm = EntityDataManager::Instance();
-    for (size_t edmIdx : m_factionEdmIndices[faction]) {
-        if (edmIdx >= m_edmToStorageIndex.size()) {
-            continue;
-        }
-        const size_t storageIdx = m_edmToStorageIndex[edmIdx];
-        if (storageIdx == SIZE_MAX || storageIdx >= m_storage.size()) {
-            continue;
-        }
-        const auto& hotData = edm.getHotDataByIndex(edmIdx);
-        if (!hotData.isAlive()) {
-            continue;
-        }
-        float distSq = Vector2D::distanceSquared(
-            center, hotData.transform.position);
-        if (distSq <= radiusSq) {
-            outEdmIndices.push_back(edmIdx);
-        }
-    }
-    if (excludePlayer && m_cachedPlayerEdmIdx != SIZE_MAX) {
-        std::erase(outEdmIndices, m_cachedPlayerEdmIdx);
-    }
-}
-
 FactionStance AIManager::getStance(uint8_t fromFaction, uint8_t towardFaction) const {
     if (fromFaction >= MAX_FACTIONS || towardFaction >= MAX_FACTIONS) {
         return FactionStance::Neutral;
@@ -1551,6 +1520,46 @@ void AIManager::scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center,
     auto& edm = EntityDataManager::Instance();
     for (uint8_t faction = 0; faction < MAX_FACTIONS; ++faction) {
         if (m_factionStances[fromFaction][faction] != FactionStance::Allied) {
+            continue;
+        }
+        for (size_t edmIdx : m_factionEdmIndices[faction]) {
+            if (edmIdx >= m_edmToStorageIndex.size()) {
+                continue;
+            }
+            const size_t storageIdx = m_edmToStorageIndex[edmIdx];
+            if (storageIdx == SIZE_MAX || storageIdx >= m_storage.size()) {
+                continue;
+            }
+            const auto& hotData = edm.getHotDataByIndex(edmIdx);
+            if (!hotData.isAlive()) {
+                continue;
+            }
+            const float distSq =
+                Vector2D::distanceSquared(center, hotData.transform.position);
+            if (distSq <= radiusSq) {
+                outEdmIndices.push_back(edmIdx);
+            }
+        }
+    }
+
+    if (excludePlayer && m_cachedPlayerEdmIdx != SIZE_MAX) {
+        std::erase(outEdmIndices, m_cachedPlayerEdmIdx);
+    }
+}
+
+void AIManager::scanHostileInRadius(uint8_t fromFaction, const Vector2D& center,
+    float radius,
+    std::vector<size_t>& outEdmIndices,
+    bool excludePlayer) const {
+    outEdmIndices.clear();
+    if (fromFaction >= MAX_FACTIONS || !m_factionHasHostile[fromFaction]) {
+        return;
+    }
+
+    const float radiusSq = radius * radius;
+    auto& edm = EntityDataManager::Instance();
+    for (uint8_t faction = 0; faction < MAX_FACTIONS; ++faction) {
+        if (m_factionStances[fromFaction][faction] != FactionStance::Hostile) {
             continue;
         }
         for (size_t edmIdx : m_factionEdmIndices[faction]) {

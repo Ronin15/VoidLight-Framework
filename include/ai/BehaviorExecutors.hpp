@@ -220,7 +220,10 @@ namespace Behaviors {
 // (`lastCombatTime`), policy decisions live in the behavior layer.
 constexpr float COMBAT_TIMEOUT_SECONDS = 5.0f;
 
-// Radius used by Idle/Wander/Patrol re-engage and Attack's minimum target scan.
+// Re-engage radius for Idle/Wander/Patrol/Forage/Chase (tryEngageHostileInRange)
+// and the floor of Attack's acquisition range
+// (max(attackRange * TARGET_SCAN_RANGE_MULTIPLIER, this)). Both are multiplied
+// by ctx.envSnapshot.detectionScale; nothing acquires beyond that range.
 constexpr float HOSTILE_ENGAGE_RANGE = 250.0f;
 
 // Survival need policy (civilian Idle/Wander NPCs). EDM stores NpcNeedData only.
@@ -535,7 +538,7 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx);
 [[nodiscard]] bool shouldKeepCombatTarget(const BehaviorContext& ctx, size_t targetIdx,
     EntityHandle target);
 /**
- * @brief Switch to Attack if the player (when ctx.hostileTowardPlayer) or a
+ * @brief Switch to Attack if the live player (when ctx.hostileTowardPlayer) or a
  *        Hostile faction member is within
  *        HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale.
  *        Returns false immediately when neither can be hostile.

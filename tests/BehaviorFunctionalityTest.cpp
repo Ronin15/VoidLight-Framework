@@ -1548,6 +1548,86 @@ BOOST_AUTO_TEST_CASE(TestAttackDoesNotAcquireNeutralOtherFaction) {
     BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != other->getHandle());
 }
 
+// Attack acquisition range is max(attackRange * multiplier, HOSTILE_ENGAGE_RANGE)
+// scaled by detectionScale. A short authored attackRange keeps the range at the
+// HOSTILE_ENGAGE_RANGE floor so the gaps below are independent of the multiplier.
+constexpr float kShortAttackRange = 30.0f;
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquisitionRangeScalesWithDetection) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& gameTime = GameTimeManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    // Inside the noon acquire range (250 px); outside the detection-scaled
+    // night acquire range (250 * 0.55 px), so the night attacker never acquires.
+    constexpr float kGapPx = 200.0f;
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+
+    auto spawnAttacker = [&](const std::shared_ptr<TestNPC>& npc) {
+        const EntityHandle handle = npc->getHandle();
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE(idx != SIZE_MAX);
+        edm.setFaction(handle, 1);
+        edm.getCharacterDataByIndex(idx).attackRange = kShortAttackRange;
+        aiMgr.assignBehavior(handle, "Attack");
+        const auto ref = edm.getBehaviorConfigRef(idx);
+        BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+        BOOST_REQUIRE_LE(edm.getAttackConfig(ref.index).attackRange, 1.5f * kShortAttackRange);
+        return idx;
+    };
+
+    gameTime.setGameHour(12.0f);
+    auto noonNpc = TestNPC::create(playerPos.getX() + kGapPx, playerPos.getY());
+    const size_t noonIdx = spawnAttacker(noonNpc);
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, noonNpc->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(noonIdx).lastTarget == playerEntity->getHandle());
+
+    gameTime.setGameHour(22.0f);
+    auto nightNpc = TestNPC::create(playerPos.getX() - kGapPx, playerPos.getY());
+    const size_t nightIdx = spawnAttacker(nightNpc);
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, nightNpc->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(nightIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDoesNotAcquireDistantHostilePlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto attacker = TestNPC::create(playerPos.getX() + 400.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    // Beyond the noon acquisition range (<= 270 px for kShortAttackRange).
+    const float startDistance = (attacker->getPosition() - playerPos).length();
+    BOOST_REQUIRE_GT(startDistance, 350.0f);
+
+    edm.setFaction(attackerHandle, 1);
+    edm.getCharacterDataByIndex(attackerIdx).attackRange = kShortAttackRange;
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+    const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+    BOOST_REQUIRE_LE(edm.getAttackConfig(ref.index).attackRange, 1.5f * kShortAttackRange);
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    // A hostile player beyond the acquisition range is not a target (no
+    // unlimited-range fallback); the attacker does not close on the player.
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != playerEntity->getHandle());
+    BOOST_CHECK_GE((attacker->getPosition() - playerPos).length(), startDistance - 1.0f);
+}
+
 BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerWhenStandingHostile) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
@@ -1993,6 +2073,86 @@ BOOST_AUTO_TEST_CASE(TestIdleReengagesHostilePlayerInRange) {
     }
 
     BOOST_CHECK(edm.getBehaviorConfigRef(idleIdx).type == BehaviorType::Attack);
+}
+
+// NPC path of tryEngageHostileInRange: Hostile stance row, player not hostile.
+struct IdleVsHostileNpc {
+    std::shared_ptr<TestNPC> idleNpc;
+    std::shared_ptr<TestNPC> hostileNpc;
+    size_t idleIdx{SIZE_MAX};
+};
+
+IdleVsHostileNpc spawnIdleNearHostileFactionNpc(float gapPx) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    IdleVsHostileNpc setup;
+    setup.idleNpc = TestNPC::create(200.0f, 700.0f);
+    setup.hostileNpc = TestNPC::create(200.0f + gapPx, 700.0f);
+    setup.idleIdx = edm.getIndex(setup.idleNpc->getHandle());
+    BOOST_REQUIRE(setup.idleIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.getIndex(setup.hostileNpc->getHandle()) != SIZE_MAX);
+
+    edm.setFaction(setup.idleNpc->getHandle(), 1);
+    edm.setFaction(setup.hostileNpc->getHandle(), 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) != FactionStance::Hostile);
+    aiMgr.assignBehavior(setup.idleNpc->getHandle(), "Idle");
+    return setup;
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleEngagesHostileFactionNpcInRange) {
+    auto& edm = EntityDataManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    const auto setup = spawnIdleNearHostileFactionNpc(100.0f);
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, setup.idleNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(setup.idleIdx).type == BehaviorType::Attack);
+    BOOST_CHECK(edm.getMemoryData(setup.idleIdx).lastTarget == setup.hostileNpc->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleDoesNotEngageHostileFactionNpcBeyondScaledRange) {
+    auto& edm = EntityDataManager::Instance();
+    // Night detection 0.55: engage range 137.5 px. 200 px is inside the unscaled
+    // HOSTILE_ENGAGE_RANGE, so this fails if the NPC scan radius were unscaled.
+    GameTimeManager::Instance().setGameHour(22.0f);
+    constexpr float kGapPx = 200.0f;
+    static_assert(kGapPx < Behaviors::HOSTILE_ENGAGE_RANGE);
+
+    const auto setup = spawnIdleNearHostileFactionNpc(kGapPx);
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, setup.idleNpc->getPosition());
+        BOOST_CHECK(edm.getBehaviorConfigRef(setup.idleIdx).type == BehaviorType::Idle);
+    }
+    BOOST_CHECK(edm.getMemoryData(setup.idleIdx).lastTarget != setup.hostileNpc->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleDoesNotEngageDeadHostilePlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto idleNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle idleHandle = idleNpc->getHandle();
+    const size_t idleIdx = edm.getIndex(idleHandle);
+    BOOST_REQUIRE(idleIdx != SIZE_MAX);
+    const size_t playerIdx = edm.getIndex(playerEntity->getHandle());
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+
+    edm.setFaction(idleHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+    edm.getHotDataByIndex(playerIdx).setAlive(false);
+    aiMgr.assignBehavior(idleHandle, "Idle");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, idleNpc->getPosition());
+        BOOST_CHECK(edm.getBehaviorConfigRef(idleIdx).type == BehaviorType::Idle);
+    }
+    BOOST_CHECK(edm.getMemoryData(idleIdx).lastTarget != playerEntity->getHandle());
 }
 
 BOOST_AUTO_TEST_CASE(TestChaseReengagesHostilePlayerInRange) {

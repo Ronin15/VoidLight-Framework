@@ -347,47 +347,42 @@ void moveToPosition(BehaviorContext& ctx, const Vector2D& targetPos, float speed
     }
 }
 
-bool isAttackTargetCandidate(size_t selfIdx, size_t candidateIdx, const BehaviorContext& ctx) {
-    if (candidateIdx == SIZE_MAX || candidateIdx == selfIdx) return false;
-
-    auto& edm = EntityDataManager::Instance();
-    const auto& targetHot = edm.getHotDataByIndex(candidateIdx);
-    if (!targetHot.isAlive()) return false;
-
-    return Behaviors::isHostileTowardTarget(ctx, candidateIdx, edm.getHandle(candidateIdx));
-}
-
+// Nearest target within acquireRange: the player only while ctx.hostileTowardPlayer,
+// NPCs only from Hostile factions in this entity's stance row.
 bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
     const VoidLight::AttackBehaviorConfig& config,
     Vector2D& targetPos) {
     auto& edm = EntityDataManager::Instance();
 
+    const float acquireRange =
+        std::max(config.attackRange * TARGET_SCAN_RANGE_MULTIPLIER, Behaviors::HOSTILE_ENGAGE_RANGE) *
+        ctx.envSnapshot.detectionScale;
+
     EntityHandle bestTarget{};
-    float bestDistanceSq = std::numeric_limits<float>::max();
+    float bestDistanceSq = acquireRange * acquireRange;
 
     if (ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
         const size_t playerIdx = edm.getIndex(ctx.playerHandle);
-        if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx)) {
-            targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
-            bestTarget = ctx.playerHandle;
-            bestDistanceSq = Vector2D::distanceSquared(ctx.transform.position, targetPos);
+        if (playerIdx != SIZE_MAX) {
+            const auto& playerHot = edm.getHotDataByIndex(playerIdx);
+            const float distanceSq =
+                Vector2D::distanceSquared(ctx.transform.position, playerHot.transform.position);
+            if (playerHot.isAlive() && distanceSq <= bestDistanceSq) {
+                targetPos = playerHot.transform.position;
+                bestTarget = ctx.playerHandle;
+                bestDistanceSq = distanceSq;
+            }
         }
     }
 
-    const float scanRange =
-        std::max(config.attackRange * TARGET_SCAN_RANGE_MULTIPLIER, Behaviors::HOSTILE_ENGAGE_RANGE);
-    AIManager::Instance().scanActiveIndicesInRadius(
-        ctx.transform.position, scanRange, s_scanBuffer, false);
+    AIManager::Instance().scanHostileInRadius(
+        ctx.characterData.faction, ctx.transform.position, acquireRange, s_scanBuffer);
 
     for (size_t candidateIdx : s_scanBuffer) {
-        if (!isAttackTargetCandidate(ctx.edmIndex, candidateIdx, ctx)) {
-            continue;
-        }
-
         const Vector2D candidatePos = edm.getHotDataByIndex(candidateIdx).transform.position;
         const float distanceSq =
             Vector2D::distanceSquared(ctx.transform.position, candidatePos);
-        if (distanceSq >= bestDistanceSq) {
+        if (bestTarget.isValid() && distanceSq >= bestDistanceSq) {
             continue;
         }
 
@@ -879,15 +874,6 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
             targetPos = edm.getHotDataByIndex(attackerIdx).transform.position;
             hasTarget = true;
             ctx.memoryData.lastTarget = ctx.memoryData.lastAttacker;
-        }
-    }
-
-    if (!hasTarget && ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
-        size_t playerIdx = edm.getIndex(ctx.playerHandle);
-        if (playerIdx != SIZE_MAX && edm.getHotDataByIndex(playerIdx).isAlive()) {
-            targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
-            hasTarget = true;
-            ctx.memoryData.lastTarget = ctx.playerHandle;
         }
     }
 

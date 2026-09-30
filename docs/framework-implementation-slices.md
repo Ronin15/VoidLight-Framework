@@ -463,7 +463,7 @@ Architecture notes:
 - **Weather (B2):** drop the visibility multiply (the table already encodes visibility). `WeatherEvent::applyDefaultParamsForType()` makes a pooled weather event carry type defaults whether fresh or reused.
 - **Merchant leash (B3):** `NpcNeedData` stores `home` and `leashRadius`; merchants get `MERCHANT_FORAGE_LEASH_RADIUS` (384 px = `VILLAGE_RADIUS` 12 × 32), others 0. Forage target selection skips out-of-leash nodes.
 - **Factory auto-registration (B4):** keep the Slice 3 contract — `createNPCWithRaceClass`, `createMonster`, and `createAnimal` auto-register `suggestedBehavior` with fallback; docs name all three.
-- **Engage cost (B5):** faction-indexed `AIManager::scanHostileInRadius`; no per-frame stagger. Attack acquisition is range-bounded and scaled by detection.
+- **Engage cost (B5):** faction-indexed `AIManager::scanHostileInRadius`; no per-frame stagger. Attack acquisition is range-bounded and scaled by detection. Accepted consequence: with the unlimited-range hostile-player fallback deleted, Attack acquisition is nearest-first across the player and hostile NPCs.
 - **Harvest (B6):** lowest harvester EDM index wins; NPC commits pre-check inventory capacity (`EDM::canAddToInventory`) and abandon without depleting.
 - **Populate opt-out:** `WorldGenerationConfig::populate` (default `true`). AIDemo/EventDemo and NPC-free fixtures set `false`; `GamePlayState` keeps the default.
 - Threading: all standing, stance, incident, and harvest commits stay on the main thread; workers read by-value context only.
@@ -474,7 +474,7 @@ Checklist:
 
 - [x] WP1 populate opt-out (`WorldGenerationConfig::populate`; demos and NPC-free fixtures; `TestPopulateFalseLoadsWorldWithoutNpcs`; `docs/managers/WorldManager.md`, `docs/world/WorldPopulation.md`, `.claude/rules/tests.md`)
 - [x] WP2 player relations model (B1): no player faction, standing as source of truth, `recordPlayerIncident`, `hostileTowardPlayer`, collision from player relation, `StanceChangedEvent::towardPlayer`
-- [ ] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
+- [x] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
 - [ ] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
 - [ ] WP5 weather contract (type defaults on pooled events; no visibility multiply)
 - [ ] WP6 defer-message contract (delete main-thread defer drain pre-pass)
@@ -496,7 +496,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP2 done; WP3–WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP3 done; WP4–WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 

@@ -74,8 +74,10 @@ Branch-local helper APIs:
 - `scanActiveHandlesInRadius(...)`
 - `scanActiveIndicesInRadius(...)`
 - `scanGuardsInRadius(...)`
-- `scanFactionInRadius(...)`
 - `scanAlliedInRadius(...)` — factions whose directed stance from the caller is Allied (includes the diagonal)
+- `scanHostileInRadius(...)` — factions whose directed stance from the caller is Hostile; returns empty immediately when `factionRowHasHostile()` is false, so cost is proportional to Hostile-faction membership, not all active entities. Used by `tryEngageHostileInRange` and Attack `tryAcquireTarget`
+
+Both faction scans read the incrementally maintained faction index (AI-registered, alive entities; not tier-filtered) and are safe for worker reads during batches.
 
 Prefer EDM indices in behavior code to avoid repeated handle-to-index lookups.
 
@@ -88,7 +90,7 @@ Defaults after `resetFactionStances()`:
 - `stance[i][i] = Allied`
 - every other pair = Neutral
 
-Public APIs (main-thread writes; workers bind a const-ref `BehaviorContext` row plus a per-faction hostile flag, or `scanAlliedInRadius`):
+Public APIs (main-thread writes; workers bind a const-ref `BehaviorContext` row plus a per-faction hostile flag, or `scanAlliedInRadius` / `scanHostileInRadius`):
 
 - `getStance` / `setStance` / `isHostileTo` / `isAlliedTo`
 - `worsenStance` (Allied → Neutral → Hostile)

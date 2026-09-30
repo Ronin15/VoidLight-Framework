@@ -237,10 +237,13 @@ bool tryEngageHostileInRange(BehaviorContext& ctx) {
 
     const float engageRange = HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale;
     const float rangeSq = engageRange * engageRange;
+    auto& edm = EntityDataManager::Instance();
     if (ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
+        const size_t playerIdx = edm.getIndex(ctx.playerHandle);
         const float distSq =
             Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
-        if (distSq <= rangeSq) {
+        if (playerIdx != SIZE_MAX && edm.getHotDataByIndex(playerIdx).isAlive() &&
+            distSq <= rangeSq) {
             ctx.memoryData.lastTarget = ctx.playerHandle;
             switchBehavior(ctx.edmIndex, BehaviorType::Attack);
             return true;
@@ -250,28 +253,18 @@ bool tryEngageHostileInRange(BehaviorContext& ctx) {
         return false;
     }
 
+    // Hostile-faction members only (never self: the diagonal is Allied), alive,
+    // within range. Takes the first hit in index order, not the nearest.
     thread_local std::vector<size_t> s_hostileScanBuffer;
-    AIManager::Instance().scanActiveIndicesInRadius(
-        ctx.transform.position, engageRange, s_hostileScanBuffer, true);
-
-    auto& edm = EntityDataManager::Instance();
-    for (size_t idx : s_hostileScanBuffer) {
-        if (idx == ctx.edmIndex) {
-            continue;
-        }
-        const auto& hot = edm.getHotDataByIndex(idx);
-        if (!hot.isAlive()) {
-            continue;
-        }
-        const uint8_t faction = edm.getCharacterDataByIndex(idx).faction;
-        if (!isHostileTowardFaction(ctx, faction)) {
-            continue;
-        }
-        ctx.memoryData.lastTarget = edm.getHandle(idx);
-        switchBehavior(ctx.edmIndex, BehaviorType::Attack);
-        return true;
+    AIManager::Instance().scanHostileInRadius(
+        ctx.characterData.faction, ctx.transform.position, engageRange, s_hostileScanBuffer);
+    if (s_hostileScanBuffer.empty()) {
+        return false;
     }
-    return false;
+
+    ctx.memoryData.lastTarget = edm.getHandle(s_hostileScanBuffer.front());
+    switchBehavior(ctx.edmIndex, BehaviorType::Attack);
+    return true;
 }
 
 Vector2D normalizeDirection(const Vector2D& vector) {

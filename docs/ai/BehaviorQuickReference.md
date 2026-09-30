@@ -28,7 +28,8 @@ hasBehavior(handle);
 scanActiveHandlesInRadius(...)
 scanActiveIndicesInRadius(...)
 scanGuardsInRadius(...)
-scanFactionInRadius(...)
+scanAlliedInRadius(...)   // Allied cells of the caller's stance row
+scanHostileInRadius(...)  // Hostile cells; empty when the row has no Hostile cell
 ```
 
 ## Behavior Messages

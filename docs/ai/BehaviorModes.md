@@ -22,9 +22,11 @@ This page catalogs the behavior families and the configuration style. Modes are 
   - `cachedDetectionRange` is mode-only; player detection multiplies it by `envSnapshot.detectionScale` at the check. lastAttacker/lastTarget/memory are not scaled. Guard movement is not scaled.
 - `Attack`
   - melee/ranged aggression settings plus target engagement rules
-  - auto-acquire and player fallback require directed `Hostile` stance; lastTarget / lastAttacker / explicitTarget stay alive-only (unfiltered by stance)
+  - target order: explicitTarget (alive-only), then lastTarget (kept only while `shouldKeepCombatTarget`), then lastAttacker (alive-only retaliation), then `tryAcquireTarget`
+  - `tryAcquireTarget` is bounded: `acquireRange = max(attackRange * TARGET_SCAN_RANGE_MULTIPLIER, HOSTILE_ENGAGE_RANGE) * envSnapshot.detectionScale`. The player is a candidate only while `ctx.hostileTowardPlayer` and within range; NPC candidates come from `AIManager::scanHostileInRadius` (Hostile cells of the entity's stance row). There is no unlimited-range hostile-player fallback
+  - acquisition picks the nearest candidate, player or NPC (nearest-first priority; a hostile player no longer outranks a nearer hostile NPC). Pursuit of an out-of-range target continues only through lastTarget / lastAttacker
   - AOE friendly-fire skip is Allied, not raw faction id
-  - movement uses `moveSpeedScale`; `tryAcquireTarget` / help-call radius are not scaled
+  - movement uses `moveSpeedScale`; help-call radius is not scaled
 - `Flee`
   - panic/retreat behavior with recovery thresholds
   - distress broadcast filters allies by Allied stance rather than `faction != myFaction`
@@ -112,6 +114,6 @@ Use:
 - behavior switching is `Behaviors::switchBehavior()` (enqueue) then `AIManager::commitQueuedBehaviorTransitions()` (clears, then `Behaviors::init`). Do not call `reassignBehaviorConfig` from gameplay/controllers.
 - Attack, Guard, and help-call scans consult the `AIManager` directed NPC-faction stance table for NPC targets; the player target reads the by-value `ctx.hostileTowardPlayer` (standing-derived, filled on the main thread). `Behaviors::isHostileTowardTarget` routes between the two; never look the player up in the stance row (the player has no faction)
 - Attack and Chase keep a remembered `lastTarget` only while `Behaviors::shouldKeepCombatTarget` holds: it is the entity's `memoryData.lastAttacker` (retaliation is exempt) or still hostile. Otherwise the target is cleared, so gifts that lift standing out of Hostile de-escalate attackers
-- Idle / Wander / Patrol / Forage / Chase (no current target) call `tryEngageHostileInRange` after recent-attack / fear checks; it returns immediately unless the row has a Hostile cell or `ctx.hostileTowardPlayer`
+- Idle / Wander / Patrol / Forage / Chase (no current target) call `tryEngageHostileInRange` after recent-attack / fear checks; it returns immediately unless the row has a Hostile cell or `ctx.hostileTowardPlayer`. Its NPC scan is `AIManager::scanHostileInRadius` over the faction index (members of Hostile factions only), within `HOSTILE_ENGAGE_RANGE * envSnapshot.detectionScale`
 - `Behaviors::getRelationshipLevel` remains per-NPC memory (emotions + interaction memories) and is unchanged by faction stance or player standing scores
 - Player standing is read on the main thread only (`AIManager::getPlayerStanding` / `getPlayerRelation`); workers see only `ctx.hostileTowardPlayer`

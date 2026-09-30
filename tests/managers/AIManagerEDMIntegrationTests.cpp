@@ -653,13 +653,13 @@ BOOST_AUTO_TEST_CASE(FactionIndexPopulatedOnAssignment) {
 
     // Should be in faction index after auto-assignment
     std::vector<size_t> results;
-    aiMgr.scanFactionInRadius(faction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
+    aiMgr.scanAlliedInRadius(faction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
     BOOST_CHECK(std::find(results.begin(), results.end(), idx) != results.end());
 
-    // Should NOT be in a different faction
+    // Should NOT be in a different faction's Allied scan (default Neutral off-diagonal)
     uint8_t otherFaction = (faction == 0) ? 1 : 0;
     results.clear();
-    aiMgr.scanFactionInRadius(otherFaction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
+    aiMgr.scanAlliedInRadius(otherFaction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
     BOOST_CHECK(std::find(results.begin(), results.end(), idx) == results.end());
 }
 
@@ -676,13 +676,13 @@ BOOST_AUTO_TEST_CASE(FactionIndexRemovedOnUnassign) {
 
     // Verify present
     std::vector<size_t> results;
-    aiMgr.scanFactionInRadius(faction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
+    aiMgr.scanAlliedInRadius(faction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
     BOOST_REQUIRE(std::find(results.begin(), results.end(), idx) != results.end());
 
     // Unassign — should be removed from faction index
     aiMgr.unassignBehavior(handle);
     results.clear();
-    aiMgr.scanFactionInRadius(faction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
+    aiMgr.scanAlliedInRadius(faction, Vector2D(300.0f, 300.0f), 1000.0f, results, false);
     BOOST_CHECK(std::find(results.begin(), results.end(), idx) == results.end());
 }
 
@@ -703,10 +703,65 @@ BOOST_AUTO_TEST_CASE(FactionRadiusFilterExcludesDistantEntities) {
     BOOST_REQUIRE(edm.getCharacterDataByIndex(farIdx).faction == faction);
 
     std::vector<size_t> results;
-    aiMgr.scanFactionInRadius(faction, Vector2D(300.0f, 300.0f), 500.0f, results, false);
+    aiMgr.scanAlliedInRadius(faction, Vector2D(300.0f, 300.0f), 500.0f, results, false);
 
     BOOST_CHECK(std::find(results.begin(), results.end(), nearIdx) != results.end());
     BOOST_CHECK(std::find(results.begin(), results.end(), farIdx) == results.end());
+}
+
+BOOST_AUTO_TEST_CASE(ScanHostileInRadiusReturnsOnlyHostileFactionMembers) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto self = AITestNPC::create(Vector2D(300.0f, 300.0f));
+    auto hostile = AITestNPC::create(Vector2D(340.0f, 300.0f));
+    auto farHostile = AITestNPC::create(Vector2D(2000.0f, 2000.0f));
+    auto neutral = AITestNPC::create(Vector2D(360.0f, 300.0f));
+    auto allied = AITestNPC::create(Vector2D(380.0f, 300.0f));
+    const size_t selfIdx = edm.getIndex(self->getHandle());
+    const size_t hostileIdx = edm.getIndex(hostile->getHandle());
+    const size_t farHostileIdx = edm.getIndex(farHostile->getHandle());
+    const size_t neutralIdx = edm.getIndex(neutral->getHandle());
+    const size_t alliedIdx = edm.getIndex(allied->getHandle());
+    BOOST_REQUIRE(selfIdx != SIZE_MAX);
+    BOOST_REQUIRE(hostileIdx != SIZE_MAX);
+    BOOST_REQUIRE(farHostileIdx != SIZE_MAX);
+    BOOST_REQUIRE(neutralIdx != SIZE_MAX);
+    BOOST_REQUIRE(alliedIdx != SIZE_MAX);
+
+    edm.setFaction(self->getHandle(), 3);
+    edm.setFaction(hostile->getHandle(), 4);
+    edm.setFaction(farHostile->getHandle(), 4);
+    edm.setFaction(neutral->getHandle(), 5);
+    edm.setFaction(allied->getHandle(), 6);
+    aiMgr.update(0.016f); // Commit queued faction changes into the faction index
+
+    const Vector2D center(300.0f, 300.0f);
+    std::vector<size_t> results;
+
+    // No Hostile cell in the row: early return, empty result.
+    BOOST_REQUIRE(!aiMgr.factionRowHasHostile(3));
+    results.push_back(selfIdx); // Stale content must be cleared
+    aiMgr.scanHostileInRadius(3, center, 1000.0f, results);
+    BOOST_CHECK(results.empty());
+
+    aiMgr.setStance(3, 4, FactionStance::Hostile);
+    aiMgr.setStance(3, 6, FactionStance::Allied);
+    aiMgr.scanHostileInRadius(3, center, 500.0f, results);
+    BOOST_CHECK_EQUAL(results.size(), 1u);
+    BOOST_CHECK(std::find(results.begin(), results.end(), hostileIdx) != results.end());
+    BOOST_CHECK(std::find(results.begin(), results.end(), farHostileIdx) == results.end());
+    BOOST_CHECK(std::find(results.begin(), results.end(), neutralIdx) == results.end());
+    BOOST_CHECK(std::find(results.begin(), results.end(), alliedIdx) == results.end());
+    BOOST_CHECK(std::find(results.begin(), results.end(), selfIdx) == results.end());
+
+    // Directed: faction 4's row is still Neutral toward 3.
+    aiMgr.scanHostileInRadius(4, center, 1000.0f, results);
+    BOOST_CHECK(results.empty());
+
+    // Out-of-range faction is a no-op.
+    aiMgr.scanHostileInRadius(AIManager::MAX_FACTIONS, center, 1000.0f, results);
+    BOOST_CHECK(results.empty());
 }
 
 BOOST_AUTO_TEST_CASE(IndicesClearedOnStateTransition) {

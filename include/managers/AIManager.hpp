@@ -187,14 +187,6 @@ public:
         std::vector<size_t>& outEdmIndices,
         bool excludePlayer = true) const;
 
-    /**
-   * @brief Scan only same-faction entities within radius (O(F) where F = faction size)
-   * Uses incrementally maintained faction index — no per-frame rebuild.
-   */
-    void scanFactionInRadius(uint8_t faction, const Vector2D& center, float radius,
-        std::vector<size_t>& outEdmIndices,
-        bool excludePlayer = true) const;
-
     static constexpr uint8_t MAX_FACTIONS = kFactionStanceRowSize;
 
     /**
@@ -269,6 +261,15 @@ public:
    * Uses incrementally maintained faction indices. Safe for worker reads.
    */
     void scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center, float radius,
+        std::vector<size_t>& outEdmIndices,
+        bool excludePlayer = true) const;
+    /**
+   * @brief Scan entities whose faction is Hostile from fromFaction's row.
+   * Returns immediately (empty) when the row has no Hostile cell, so the cost
+   * is O(members of Hostile factions) only when hostility exists. Uses the
+   * incrementally maintained faction indices. Safe for worker reads.
+   */
+    void scanHostileInRadius(uint8_t fromFaction, const Vector2D& center, float radius,
         std::vector<size_t>& outEdmIndices,
         bool excludePlayer = true) const;
 
