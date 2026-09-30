@@ -15,14 +15,13 @@ inline constexpr float kEnvironmentScaleMin = 0.25f;
 inline constexpr float kEnvironmentScaleMax = 1.5f;
 
 struct EnvironmentSnapshot {
-    float visibility{1.0f};
     float detectionScale{1.0f};
     float moveSpeedScale{1.0f};
     float cautionScale{1.0f};
 };
 
 [[nodiscard]] EnvironmentSnapshot combineEnvironmentScales(
-    TimePeriod period, WeatherType weather, float visibility);
+    TimePeriod period, WeatherType weather);
 
 [[nodiscard]] inline float applyCautionScale(float value, float cautionScale) {
     return value * cautionScale;

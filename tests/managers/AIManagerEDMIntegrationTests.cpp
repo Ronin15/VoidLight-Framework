@@ -27,7 +27,6 @@
 #include "collisions/CollisionBody.hpp"
 #include "events/EntityEvents.hpp"
 #include "events/StanceChangedEvent.hpp"
-#include "events/WeatherEvent.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/CollisionManager.hpp"
@@ -1536,35 +1535,29 @@ BOOST_AUTO_TEST_CASE(HarvestableSnapshotClearedOnStateTransition) {
 
 BOOST_AUTO_TEST_SUITE_END()
 
-namespace {
-
-void dispatchStormyVisibilityOne() {
-    auto weather = std::make_shared<WeatherEvent>("test_storm", WeatherType::Clear);
-    weather->setWeatherType(WeatherType::Stormy);
-    WeatherParams params = weather->getWeatherParams();
-    params.visibility = 1.0f;
-    params.intensity = 1.0f;
-    weather->setWeatherParams(params);
-    EventManager::Instance().dispatchEvent(weather, EventManager::DispatchMode::Immediate);
-}
-
-} // namespace
-
 BOOST_FIXTURE_TEST_SUITE(EnvironmentSnapshotTests, AIManagerEDMFixture)
 
-BOOST_AUTO_TEST_CASE(TestWeatherHandlerFillsSnapshotBeforeBatch) {
+BOOST_AUTO_TEST_CASE(TestDeferredWeatherFillsSnapshotBeforeBatch) {
     auto& aiMgr = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
     GameTimeManager::Instance().setGameHour(12.0f);
 
     auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
     aiMgr.assignBehavior(entity->getHandle(), "Wander");
-    dispatchStormyVisibilityOne();
+
+    // Production WeatherController path: Deferred dispatch, drained by
+    // EventManager::update() before AIManager::update() builds the snapshot.
+    BOOST_REQUIRE(eventMgr.changeWeather("Stormy", 1.0f, EventManager::DispatchMode::Deferred));
+    BOOST_CHECK_EQUAL(eventMgr.getPendingEventCount(), 1u);
+    eventMgr.update();
+    BOOST_CHECK_EQUAL(eventMgr.getPendingEventCount(), 0u);
 
     aiMgr.update(0.016f);
 
     const auto& snap = aiMgr.getEnvironmentSnapshot();
-    BOOST_CHECK_CLOSE(snap.moveSpeedScale, 0.75f, 0.01);
     BOOST_CHECK_CLOSE(snap.detectionScale, 0.55f, 0.01);
+    BOOST_CHECK_CLOSE(snap.moveSpeedScale, 0.75f, 0.01);
+    BOOST_CHECK_CLOSE(snap.cautionScale, 1.40f, 0.01);
 }
 
 BOOST_AUTO_TEST_CASE(TestNightSnapshotFromGameHour) {
@@ -1587,7 +1580,8 @@ BOOST_AUTO_TEST_CASE(TestPrepareForStateTransitionResetsWeatherKeepsHandler) {
 
     auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
     aiMgr.assignBehavior(entity->getHandle(), "Wander");
-    dispatchStormyVisibilityOne();
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Stormy", 1.0f, EventManager::DispatchMode::Immediate));
     aiMgr.update(0.016f);
     BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().moveSpeedScale, 0.75f, 0.01);
 
@@ -1596,9 +1590,9 @@ BOOST_AUTO_TEST_CASE(TestPrepareForStateTransitionResetsWeatherKeepsHandler) {
     BOOST_CHECK_CLOSE(resetSnap.detectionScale, 1.0f, 0.01);
     BOOST_CHECK_CLOSE(resetSnap.moveSpeedScale, 1.0f, 0.01);
     BOOST_CHECK_CLOSE(resetSnap.cautionScale, 1.0f, 0.01);
-    BOOST_CHECK_CLOSE(resetSnap.visibility, 1.0f, 0.01);
 
-    dispatchStormyVisibilityOne();
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Stormy", 1.0f, EventManager::DispatchMode::Immediate));
     auto entityAfter = AITestNPC::create(Vector2D(200.0f, 200.0f));
     aiMgr.assignBehavior(entityAfter->getHandle(), "Wander");
     aiMgr.update(0.016f);
@@ -1621,6 +1615,31 @@ BOOST_AUTO_TEST_CASE(TestChangeWeatherStormyIsNotCustom) {
     BOOST_CHECK_CLOSE(snap.moveSpeedScale, 0.75f, 0.01);
     BOOST_CHECK_CLOSE(snap.detectionScale, 0.55f, 0.01);
     BOOST_CHECK_CLOSE(snap.cautionScale, 1.40f, 0.01);
+}
+
+BOOST_AUTO_TEST_CASE(TestFoggySnapshotIgnoresWeatherParams) {
+    auto& aiMgr = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    auto entity = AITestNPC::create(Vector2D(100.0f, 100.0f));
+    aiMgr.assignBehavior(entity->getHandle(), "Wander");
+
+    // Foggy carries visibility 0.2, but the Foggy row already encodes
+    // visibility: detection must be the table value (0.45 at noon), not
+    // multiplied again by the event's visibility.
+    BOOST_REQUIRE(eventMgr.changeWeather("Foggy", 1.0f, EventManager::DispatchMode::Immediate));
+    aiMgr.update(0.016f);
+    BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().detectionScale, 0.45f, 0.01);
+
+    // Switching away and back must restore the same table value.
+    BOOST_REQUIRE(eventMgr.changeWeather("Clear", 1.0f, EventManager::DispatchMode::Immediate));
+    aiMgr.update(0.016f);
+    BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().detectionScale, 1.0f, 0.01);
+
+    BOOST_REQUIRE(eventMgr.changeWeather("Foggy", 1.0f, EventManager::DispatchMode::Immediate));
+    aiMgr.update(0.016f);
+    BOOST_CHECK_CLOSE(aiMgr.getEnvironmentSnapshot().detectionScale, 0.45f, 0.01);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

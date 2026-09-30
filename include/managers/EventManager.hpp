@@ -343,7 +343,9 @@ public:
     /**
    * @brief Triggers a weather change event
    * @details Pool-miss constructs Clear, then always setWeatherType(weatherType)
-   *          so named types such as Stormy hit the Stormy row, not Custom.
+   *          so named types such as Stormy hit the Stormy row, not Custom, then
+   *          applyDefaultParamsForType() so a fresh or reused pooled event
+   *          carries the same per-type params (transitionTime overrides).
    */
     bool changeWeather(const std::string& weatherType,
         float transitionTime = 5.0f,

@@ -271,8 +271,6 @@ bool AIManager::init() {
                     const auto* weatherEvent =
                         static_cast<const WeatherEvent*>(data.event.get());
                     m_lastWeatherType = static_cast<uint8_t>(weatherEvent->getWeatherType());
-                    m_lastWeatherIntensity = weatherEvent->getWeatherParams().intensity;
-                    m_lastWeatherVisibility = weatherEvent->getWeatherParams().visibility;
                 });
             m_weatherHandlerRegistered = true;
         } else if (!eventMgr.isInitialized()) {
@@ -329,8 +327,6 @@ void AIManager::clean() {
     m_weatherHandlerRegistered = false;
     m_weatherHandlerToken = {};
     m_lastWeatherType = 0;
-    m_lastWeatherIntensity = 1.0f;
-    m_lastWeatherVisibility = 1.0f;
     m_environmentSnapshot = {};
     resetFactionStances();
     m_playerHostileByFaction.fill(false);
@@ -400,8 +396,6 @@ void AIManager::prepareForStateTransition() {
     resetFactionStances();
     m_playerHostileByFaction.fill(false);
     m_lastWeatherType = 0;
-    m_lastWeatherIntensity = 1.0f;
-    m_lastWeatherVisibility = 1.0f;
     m_environmentSnapshot = {};
 
     // Reset all counters and stats
@@ -536,8 +530,7 @@ void AIManager::update(float deltaTime) {
         float cachedGameTime = GameTimeManager::Instance().getTotalGameTimeSeconds();
         m_environmentSnapshot = combineEnvironmentScales(
             hourToTimePeriod(GameTimeManager::Instance().getGameHour()),
-            static_cast<WeatherType>(m_lastWeatherType),
-            m_lastWeatherVisibility);
+            static_cast<WeatherType>(m_lastWeatherType));
         const EnvironmentSnapshot cachedEnvSnapshot = m_environmentSnapshot;
 
         // Harvestable snapshot for Forage workers: rebuilt only when the WRM

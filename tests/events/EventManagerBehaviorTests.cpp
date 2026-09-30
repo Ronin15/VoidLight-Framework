@@ -116,6 +116,39 @@ BOOST_AUTO_TEST_CASE(ChangeWeather_DispatchesToHandlers) {
     EventManager::Instance().removeHandler(tok);
 }
 
+BOOST_AUTO_TEST_CASE(ChangeWeather_ReusedPoolEventCarriesTypeDefaults) {
+    std::vector<WeatherType> types;
+    std::vector<float> intensities;
+    std::vector<float> visibilities;
+    std::vector<const Event*> events;
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Weather, [&](const EventData& data) {
+            const auto* weather = static_cast<const WeatherEvent*>(data.event.get());
+            events.push_back(data.event.get());
+            types.push_back(weather->getWeatherType());
+            intensities.push_back(weather->getWeatherParams().intensity);
+            visibilities.push_back(weather->getWeatherParams().visibility);
+        });
+
+    // Fixture reset cleared the weather pool: the first dispatch creates a
+    // fresh event, which Immediate dispatch releases for the second to reuse.
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Foggy", 1.0f, EventManager::DispatchMode::Immediate));
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Foggy", 1.0f, EventManager::DispatchMode::Immediate));
+
+    BOOST_REQUIRE_EQUAL(types.size(), 2u);
+    BOOST_REQUIRE_EQUAL(events.size(), 2u);
+    BOOST_CHECK_EQUAL(events[0], events[1]); // second dispatch reused the pooled event
+    for (size_t i = 0; i < types.size(); ++i) {
+        BOOST_CHECK(types[i] == WeatherType::Foggy);
+        BOOST_CHECK_CLOSE(intensities[i], 0.6f, 0.01);
+        BOOST_CHECK_CLOSE(visibilities[i], 0.2f, 0.01);
+    }
+
+    EventManager::Instance().removeHandler(tok);
+}
+
 BOOST_AUTO_TEST_CASE(SpawnNPC_DispatchesToHandlers) {
     std::atomic<bool> npcHandlerCalled{false};
     auto& edm = EntityDataManager::Instance();

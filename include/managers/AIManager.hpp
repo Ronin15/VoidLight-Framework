@@ -431,8 +431,6 @@ private:
     EventManager::HandlerToken m_weatherHandlerToken{};
     bool m_weatherHandlerRegistered{false};
     uint8_t m_lastWeatherType{0};
-    float m_lastWeatherIntensity{1.0f};
-    float m_lastWeatherVisibility{1.0f};
     EnvironmentSnapshot m_environmentSnapshot{};
 
     // Incrementally maintained behavior/faction indices for O(G)/O(F) radius scans.

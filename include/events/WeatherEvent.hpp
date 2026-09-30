@@ -84,6 +84,10 @@ public:
     std::string getWeatherTypeString() const;
     void setWeatherType(WeatherType type);
     void setWeatherType(const std::string& customType);
+    // Replaces all params with the defaults for the current weather type.
+    // Pooled events call this after setWeatherType() so fresh and reused
+    // events carry identical params.
+    void applyDefaultParamsForType();
 
     // Weather parameters
     const WeatherParams& getWeatherParams() const { return m_params; }

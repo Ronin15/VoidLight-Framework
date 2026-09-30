@@ -7,6 +7,7 @@
 #include "events/TimeEvent.hpp"
 #include "events/WeatherEvent.hpp"
 #include <algorithm>
+#include <array>
 #include <cstdint>
 
 static_assert(static_cast<uint8_t>(TimePeriod::Night) == 3,
@@ -22,14 +23,14 @@ struct EnvironmentScaleRow {
     float caution;
 };
 
-constexpr EnvironmentScaleRow kTimeScales[] = {
+constexpr std::array<EnvironmentScaleRow, 4> kTimeScales = {{
     {0.90f, 1.00f, 1.00f}, // Morning
     {1.00f, 1.00f, 1.00f}, // Day
     {0.85f, 1.00f, 1.10f}, // Evening
     {0.55f, 0.90f, 1.30f}, // Night
-};
+}};
 
-constexpr EnvironmentScaleRow kWeatherScales[] = {
+constexpr std::array<EnvironmentScaleRow, 8> kWeatherScales = {{
     {1.00f, 1.00f, 1.00f}, // Clear
     {0.95f, 1.00f, 1.00f}, // Cloudy
     {0.80f, 0.90f, 1.15f}, // Rainy
@@ -38,10 +39,10 @@ constexpr EnvironmentScaleRow kWeatherScales[] = {
     {0.70f, 0.70f, 1.20f}, // Snowy
     {0.90f, 0.95f, 1.05f}, // Windy
     {1.00f, 1.00f, 1.00f}, // Custom = Clear
-};
+}};
 
-static_assert(sizeof(kTimeScales) / sizeof(kTimeScales[0]) == 4);
-static_assert(sizeof(kWeatherScales) / sizeof(kWeatherScales[0]) == 8);
+static_assert(kTimeScales.size() == static_cast<size_t>(TimePeriod::Night) + 1);
+static_assert(kWeatherScales.size() == static_cast<size_t>(WeatherType::Custom) + 1);
 
 [[nodiscard]] float clampEnvironmentScale(float value) {
     return std::clamp(value, kEnvironmentScaleMin, kEnvironmentScaleMax);
@@ -49,8 +50,7 @@ static_assert(sizeof(kWeatherScales) / sizeof(kWeatherScales[0]) == 8);
 
 } // namespace
 
-EnvironmentSnapshot combineEnvironmentScales(TimePeriod period, WeatherType weather,
-    float visibility) {
+EnvironmentSnapshot combineEnvironmentScales(TimePeriod period, WeatherType weather) {
     const auto timeIndex = static_cast<uint8_t>(period);
     const auto weatherIndex = static_cast<uint8_t>(weather);
     const EnvironmentScaleRow& timeScales =
@@ -63,10 +63,8 @@ EnvironmentSnapshot combineEnvironmentScales(TimePeriod period, WeatherType weat
         : kWeatherScales[static_cast<uint8_t>(WeatherType::Clear)];
 
     EnvironmentSnapshot out;
-    out.visibility = std::clamp(visibility, 0.0f, 1.0f);
     out.detectionScale = clampEnvironmentScale(timeScales.detection * weatherScales.detection);
     out.moveSpeedScale = clampEnvironmentScale(timeScales.moveSpeed * weatherScales.moveSpeed);
     out.cautionScale = clampEnvironmentScale(timeScales.caution * weatherScales.caution);
-    out.detectionScale *= out.visibility;
     return out;
 }

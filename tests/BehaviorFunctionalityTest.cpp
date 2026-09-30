@@ -4541,36 +4541,27 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(EnvironmentModifierTests, BehaviorTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestEnvironmentModifierTableCombinesAndClamps) {
-    const auto identity = combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear, 1.0f);
+    const auto identity = combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear);
     BOOST_CHECK_CLOSE(identity.detectionScale, 1.0f, 0.01);
     BOOST_CHECK_CLOSE(identity.moveSpeedScale, 1.0f, 0.01);
     BOOST_CHECK_CLOSE(identity.cautionScale, 1.0f, 0.01);
-    BOOST_CHECK_CLOSE(identity.visibility, 1.0f, 0.01);
 
-    const auto nightClear = combineEnvironmentScales(TimePeriod::Night, WeatherType::Clear, 1.0f);
+    const auto nightClear = combineEnvironmentScales(TimePeriod::Night, WeatherType::Clear);
     BOOST_CHECK_CLOSE(nightClear.detectionScale, 0.55f, 0.01);
 
-    const auto nightStormy = combineEnvironmentScales(TimePeriod::Night, WeatherType::Stormy, 1.0f);
+    const auto nightStormy = combineEnvironmentScales(TimePeriod::Night, WeatherType::Stormy);
     BOOST_CHECK_CLOSE(nightStormy.detectionScale, 0.3025f, 0.01);
 
-    const auto foggyNight = combineEnvironmentScales(TimePeriod::Night, WeatherType::Foggy, 1.0f);
+    const auto foggyNight = combineEnvironmentScales(TimePeriod::Night, WeatherType::Foggy);
     BOOST_CHECK_CLOSE(foggyNight.detectionScale, 0.25f, 0.01);
 
-    const auto customDay = combineEnvironmentScales(TimePeriod::Day, WeatherType::Custom, 1.0f);
+    const auto customDay = combineEnvironmentScales(TimePeriod::Day, WeatherType::Custom);
     BOOST_CHECK_CLOSE(customDay.detectionScale, 1.0f, 0.01);
     BOOST_CHECK_CLOSE(customDay.moveSpeedScale, 1.0f, 0.01);
     BOOST_CHECK_CLOSE(customDay.cautionScale, 1.0f, 0.01);
 
-    const auto lowVis = combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear, 0.2f);
-    BOOST_CHECK_CLOSE(lowVis.detectionScale, 0.2f, 0.01);
-
-    WeatherEvent clearEvent("clear", WeatherType::Clear);
-    BOOST_CHECK_EQUAL(clearEvent.getWeatherParams().intensity, 0.0f);
-    const auto intensityIgnored =
-        combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear, 1.0f);
-    BOOST_CHECK_CLOSE(intensityIgnored.detectionScale, 1.0f, 0.01);
-    BOOST_CHECK_CLOSE(intensityIgnored.moveSpeedScale, 1.0f, 0.01);
-    BOOST_CHECK_CLOSE(intensityIgnored.cautionScale, 1.0f, 0.01);
+    const auto foggyDay = combineEnvironmentScales(TimePeriod::Day, WeatherType::Foggy);
+    BOOST_CHECK_CLOSE(foggyDay.detectionScale, 0.45f, 0.01);
 }
 
 BOOST_AUTO_TEST_CASE(TestGuardDetectsAtIdentityNotAtNightScale) {

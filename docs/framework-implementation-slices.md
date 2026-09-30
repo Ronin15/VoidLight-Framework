@@ -307,8 +307,8 @@ Current foundation:
 
 Architecture notes:
 
-- Add a compact snapshot on `AIManager` (visibility, detectionScale, moveSpeedScale, cautionScale), filled once per `update()` on the main thread. Copy it onto `BehaviorContext` for workers. Do not add `GameTimeManager` / `WeatherController` calls inside `execute*`.
-- Time: derive `TimePeriod` from `GameTimeManager::getGameHour()` with the `TimePeriod` bounds above (same as `DayNightController`). Weather: `AIManager::init()` registers a persistent `EventTypeId::Weather` handler that stores last `WeatherType` + intensity/visibility. Default weather is Clear / intensity 1 / visibility 1 until the first event. Do not register this from `GamePlayState`.
+- Add a compact snapshot on `AIManager` (detectionScale, moveSpeedScale, cautionScale), filled once per `update()` on the main thread. Copy it onto `BehaviorContext` for workers. Do not add `GameTimeManager` / `WeatherController` calls inside `execute*`.
+- Time: derive `TimePeriod` from `GameTimeManager::getGameHour()` with the `TimePeriod` bounds above (same as `DayNightController`). Weather: `AIManager::init()` registers a persistent `EventTypeId::Weather` handler that stores the last `WeatherType` only (Slice 6R WP5). Default weather is Clear until the first event. Do not register this from `GamePlayState`.
 - Modifier table in `src/ai/` or `BehaviorConfig.hpp` constants — not magic numbers at each call site. Combine as `timeScale * weatherScale` (clamp each output to `[0.25, 1.5]`):
 
   | | detection | moveSpeed | caution |
@@ -325,9 +325,9 @@ Architecture notes:
   | Snowy | 0.70 | 0.70 | 1.20 |
   | Windy | 0.90 | 0.95 | 1.05 |
 
-  `Custom` weather uses Clear scales. If `visibility < 1`, detectionScale is also multiplied by `visibility`.
+  `Custom` weather uses Clear scales. Weather params (intensity, visibility) are not read; the rows already encode visibility.
 
-  **Decision (Slice 6R, WP5 — pending until WP5 lands):** the visibility multiply is removed — the weather rows already encode visibility, and the multiply was applied after the clamp. Detection is `timeScale * weatherScale` only.
+  **Decision (Slice 6R, WP5):** the visibility multiply is removed — the weather rows already encode visibility, and the multiply was applied after the clamp. Detection is `timeScale * weatherScale` only.
 - Apply `detectionScale` in Guard/Chase perception (`cachedDetectionRange` and equivalent). Apply `moveSpeedScale` to Wander/Patrol/Flee/Attack movement speeds. Apply `cautionScale` as extra dwell / slower direction change / earlier flee threshold where those behaviors already have a timer or radius. Keep existing behavior types.
 - Optional shelter: only if detection/speed alone is hollow — Wander/Idle prefer `ObstacleType::BUILDING` tiles in Stormy/Snowy using world tile queries already legal on the main-thread cache.
 - Files: `include/managers/AIManager.hpp`, `src/managers/AIManager.cpp`, `include/ai/BehaviorExecutors.hpp`, Guard/Chase/Wander/Patrol/Flee/Attack `.cpp`, `docs/ai/AIManager.md`, `docs/ai/BehaviorExecutionPipeline.md`, `tests/BehaviorFunctionalityTest.cpp` and/or `tests/managers/AIManagerEDMIntegrationTests.cpp`.
@@ -476,7 +476,7 @@ Checklist:
 - [x] WP2 player relations model (B1): no player faction, standing as source of truth, `recordPlayerIncident`, `hostileTowardPlayer`, collision from player relation, `StanceChangedEvent::towardPlayer`
 - [x] WP3 hostile scan cost + Attack detection range (`scanHostileInRadius`; bounded, detection-scaled acquisition; delete unlimited-range player fallback and `scanFactionInRadius`)
 - [x] WP4 forage correctness (merchant leash, full-inventory pre-check, lowest-index arbitration, forage test gaps)
-- [ ] WP5 weather contract (type defaults on pooled events; no visibility multiply)
+- [x] WP5 weather contract (type defaults on pooled events; no visibility multiply)
 - [ ] WP6 defer-message contract (delete main-thread defer drain pre-pass)
 - [ ] WP7 one harvestable container in `WorldResourceManager`
 - [ ] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
@@ -491,12 +491,12 @@ Acceptance checks:
 - [x] `populate = false` spawns no NPCs
 - [x] Merchant forage stays within 384 px of home
 - [x] A full inventory never depletes a node
-- [ ] Weather is identical whether the pooled event is fresh or reused
+- [x] Weather is identical whether the pooled event is fresh or reused
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP4 done; WP5–WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP5 done; WP6–WP9 not started. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 

@@ -66,9 +66,19 @@ getCurrentSeason() { // Use the GameTime system for simulated game seasons
 
 WeatherEvent::WeatherEvent(const std::string& name, WeatherType type)
     : m_name(name), m_weatherType(type) {
+    applyDefaultParamsForType();
+}
 
-    // Set default parameters based on weather type
-    switch (type) {
+WeatherEvent::WeatherEvent(const std::string& name,
+    const std::string& customType)
+    : m_name(name), m_weatherType(WeatherType::Custom), m_customType(customType) {
+    applyDefaultParamsForType();
+}
+
+void WeatherEvent::applyDefaultParamsForType() {
+    m_params = WeatherParams{};
+
+    switch (m_weatherType) {
         case WeatherType::Clear:
             m_params.intensity = 0.0f;
             m_params.visibility = 1.0f;
@@ -78,37 +88,33 @@ WeatherEvent::WeatherEvent(const std::string& name, WeatherType type)
             m_params.intensity = 0.5f;
             m_params.visibility = 0.8f;
             m_params.windSpeed = 0.3f;
-            m_params.particleEffect =
-                "Cloudy"; // Fixed: Match ParticleManager effect name
+            m_params.particleEffect = "Cloudy";
             break;
         case WeatherType::Rainy:
             m_params.intensity = 0.7f;
             m_params.visibility = 0.6f;
             m_params.windSpeed = 0.5f;
-            m_params.particleEffect =
-                "Rain"; // Fixed: Match ParticleManager effect name
+            m_params.particleEffect = "Rain";
             m_params.soundEffect = "rain_ambient";
             break;
         case WeatherType::Stormy:
             m_params.intensity = 1.0f;
             m_params.visibility = 0.3f;
             m_params.windSpeed = 0.9f;
-            m_params.particleEffect =
-                "HeavyRain"; // Fixed: Match ParticleManager effect name
+            m_params.particleEffect = "HeavyRain";
             m_params.soundEffect = "thunder_storm";
             break;
         case WeatherType::Foggy:
             m_params.intensity = 0.6f;
             m_params.visibility = 0.2f;
             m_params.windSpeed = 0.1f;
-            m_params.particleEffect = "Fog"; // Fixed: Match ParticleManager effect name
+            m_params.particleEffect = "Fog";
             break;
         case WeatherType::Snowy:
             m_params.intensity = 0.7f;
             m_params.visibility = 0.5f;
             m_params.windSpeed = 0.4f;
-            m_params.particleEffect =
-                "Snow"; // Fixed: Match ParticleManager effect name
+            m_params.particleEffect = "Snow";
             m_params.soundEffect = "snow_ambient";
             break;
         case WeatherType::Windy:
@@ -117,19 +123,12 @@ WeatherEvent::WeatherEvent(const std::string& name, WeatherType type)
             m_params.windSpeed = 1.0f;
             m_params.soundEffect = "wind_ambient";
             break;
-        default:
+        case WeatherType::Custom:
+            m_params.intensity = 0.5f;
+            m_params.visibility = 0.8f;
+            m_params.windSpeed = 0.3f;
             break;
     }
-}
-
-WeatherEvent::WeatherEvent(const std::string& name,
-    const std::string& customType)
-    : m_name(name), m_weatherType(WeatherType::Custom), m_customType(customType) {
-
-    // Default parameters for custom weather
-    m_params.intensity = 0.5f;
-    m_params.visibility = 0.8f;
-    m_params.windSpeed = 0.3f;
 }
 
 void WeatherEvent::update() {

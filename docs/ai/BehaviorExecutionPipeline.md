@@ -22,7 +22,7 @@ The behavior system uses a data-oriented pipeline:
 - pre-fetched `BehaviorData`, `PathData`, `NPCMemoryData`, and `CharacterData`
 - cached world bounds
 - cached game time
-- cached `envSnapshot` (visibility, detectionScale, moveSpeedScale, cautionScale)
+- cached `envSnapshot` (detectionScale, moveSpeedScale, cautionScale; from time period and weather type only)
 - `knockback` and `needs`: required references to EDM's `SparseSidecar<KnockbackData>` and `SparseSidecar<NpcNeedData>`. Workers only mutate their own entity's entry via `get()`; entries are created on the main thread only
 - `harvestables`: `HarvestableSnapshotView` over the active world's non-depleted harvestables (entries of position, handle, static index, grouped by 512 px grid cell with per-cell offsets), defaulting to empty
 

@@ -146,11 +146,11 @@ Workers never read standing. `update()` rebuilds `m_playerHostileByFaction` from
 
 ## Environment Snapshot
 
-`AIManager` owns `m_environmentSnapshot` (`visibility`, `detectionScale`, `moveSpeedScale`, `cautionScale`). `update()` fills it on the main thread from `hourToTimePeriod(GameTimeManager::getGameHour())` and the last `EventTypeId::Weather` payload, then copies it by value into `processBatch` (same as `gameTime`). Public `getEnvironmentSnapshot()` is main-thread only; there is no setter.
+`AIManager` owns `m_environmentSnapshot` (`detectionScale`, `moveSpeedScale`, `cautionScale`). `update()` fills it on the main thread from `hourToTimePeriod(GameTimeManager::getGameHour())` and the last `EventTypeId::Weather` type, then copies it by value into `processBatch` (same as `gameTime`). Public `getEnvironmentSnapshot()` is main-thread only; there is no setter.
 
-A persistent `EventTypeId::Weather` handler (also registered in `init()`, not from `GamePlayState`) stores last weather type, intensity, and visibility. Intensity is stored and ignored by combine. Default until the first event is Clear / intensity 1 / visibility 1. `prepareForStateTransition()` and `clean()` reset cached weather and the snapshot to identity. The handler stays registered across transitions and is removed only in `clean()`.
+A persistent `EventTypeId::Weather` handler (also registered in `init()`, not from `GamePlayState`) stores only the last weather type; weather params (intensity, visibility) are not read, because the weather rows already encode visibility. Default until the first event is Clear. `prepareForStateTransition()` and `clean()` reset cached weather and the snapshot to identity. The handler stays registered across transitions and is removed only in `clean()`.
 
-Combine is `timeScale * weatherScale`, each output clamped to `[0.25, 1.5]`, then `detectionScale *= clamp(visibility, 0, 1)` with no second clamp. `Custom` weather uses Clear scales. Tables live in `src/ai/EnvironmentModifiers.cpp`.
+Combine is `combineEnvironmentScales(TimePeriod, WeatherType)`: `timeScale * weatherScale`, each output clamped to `[0.25, 1.5]`. There is no visibility multiply (Slice 6R WP5). `Custom` weather uses Clear scales. Tables live in `src/ai/EnvironmentModifiers.cpp`.
 
 ## Harvestable Snapshot and Survival Need
 

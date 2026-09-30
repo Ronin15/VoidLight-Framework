@@ -142,7 +142,7 @@ Key event types:
 - theft/social flows emit normal event traffic instead of bespoke controller-only state
 - `ResourceChangeEvent` is reused heavily by inventory, harvesting, and UI sync paths
 
-`changeWeather(name)` always constructs or acquires a `WeatherEvent` then calls `setWeatherType(name)`. Pool-miss no longer uses the custom-string constructor, so `"Stormy"` hits `WeatherType::Stormy` rather than `Custom`.
+`changeWeather(name)` always constructs or acquires a `WeatherEvent` then calls `setWeatherType(name)`. Pool-miss no longer uses the custom-string constructor, so `"Stormy"` hits `WeatherType::Stormy` rather than `Custom`. It then calls `applyDefaultParamsForType()`, which replaces the params with that type's defaults (the same values the constructors use; unknown names get the `Custom` defaults 0.5 intensity / 0.8 visibility), and finally overrides `transitionTime`. A fresh pooled event and a reused one (reset to `WeatherParams{}`) therefore dispatch identical params. `setWeatherType()` itself only sets the type.
 
 Merchant spawning should use the event helper:
 

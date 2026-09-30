@@ -329,6 +329,7 @@ bool EventManager::changeWeather(const std::string& weatherType,
     if (!weatherEvent)
         weatherEvent = std::make_shared<WeatherEvent>("trigger_weather", WeatherType::Clear);
     weatherEvent->setWeatherType(weatherType);
+    weatherEvent->applyDefaultParamsForType();
 
     WeatherParams params = weatherEvent->getWeatherParams();
     params.transitionTime = transitionTime;
