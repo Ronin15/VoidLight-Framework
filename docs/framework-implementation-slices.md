@@ -107,10 +107,10 @@ Status: Not started
 
 Implement from these sections, not from chat notes. Implement only the open
 slice's scope. Slices 1–5 are implemented (Slice 1 visual confirm leftover).
-Slice 6 (survival/forage) is implemented and in review. Slice 6R (cohesion
-corrections to Slices 2–6) is open. Slices 6.1–9 stay scheduled after 6R.
-Do not pull them forward. Do not rebuild the stance table,
-the need sidecar, the harvestable snapshot, or `HarvestCommit`.
+Slice 6 (survival/forage) is implemented and reviewed. Slice 6R (cohesion
+corrections to Slices 2–6) is complete. Slices 6S, 6.1, and 7–11 stay
+scheduled in the order below. Do not pull them forward. Do not rebuild the
+stance table, the need sidecar, the harvestable snapshot, or `HarvestCommit`.
 
 Scheduled order (do not skip ahead). Data deps may be narrower than schedule
 order; do not pull a later slice forward unless this file is updated first.
@@ -124,10 +124,13 @@ order; do not pull a later slice forward unless this file is updated first.
 | 5 Faction stance | 2 | 4 |
 | 6 Survival / forage | 2, 5 | 5 |
 | 6R emergent_play cohesion corrections | 2–6 | 6 |
-| 6.1 Harvestable respawn | 6 | 6R |
+| 6S Static collision reads during grid rebuilds | — | 6R |
+| 6.1 Harvestable respawn | 6, 6S | 6S |
 | 7 Autonomous decision | 2, 4, 5, 6 | 6.1 |
 | 8 Production minimap | 2 (5 for faction-colored dots) | 7 |
 | 9 Background-tier simulation | 2, 6 | 8 |
+| 10 NPC inventory consumption | 6 | 9 |
+| 11 Monster and animal faction ids | 5 | 10; before any production `createMonster` / `createAnimal` caller |
 
 ## Slice 1: Gameplay HUD ownership and vitals cohesion
 
@@ -467,8 +470,8 @@ Architecture notes:
 - **Harvest (B6):** lowest harvester EDM index wins; NPC commits pre-check inventory capacity (`EDM::canAddToInventory`) and abandon without depleting.
 - **Populate opt-out:** `WorldGenerationConfig::populate` (default `true`). AIDemo/EventDemo and NPC-free fixtures set `false`; `GamePlayState` keeps the default.
 - Threading: all standing, stance, incident, and harvest commits stay on the main thread; workers read by-value context only.
-- Out of scope: generic relations manager, save/load of standing, persistent Harvest handler for demos, engage-scan throttle, merchant return-to-post, civilian flee-vs-attack and retaliation time bounds (Slice 7), inventory consumption, tile restore symmetry (Slice 6.1).
-- Deferred: when Attack AoE is enabled (`aoeRadius` is currently always 0), skip the player under `avoidFriendlyFire` when `!ctx.hostileTowardPlayer` (the player has no faction, so `isAlliedTowardFaction` no longer excludes it).
+- Out of scope (non-goals): generic relations manager, save/load of standing, persistent Harvest handler for demos, engage-scan throttle.
+- Follow-ups moved out of 6R (recorded in their owning slices): retaliation time bound, civilian flee-vs-attack under Hostile standing, the AoE `avoidFriendlyFire` player skip, and merchant return-to-post → Slice 7; tile restore symmetry → Slice 6.1; HUD `const char*` ids and target-getter trim → Slice 8; inventory consumption → Slice 10; faction id sharing → Slice 11; static-collision reads during grid rebuilds (found in the WP1 fixture-crash investigation) → Slice 6S.
 
 Checklist:
 
@@ -482,7 +485,7 @@ Checklist:
 - [x] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
 - [x] WP9 docs (return-state wording, stale comments, HUD getters, Slice 7 scaffolding fields, factory auto-registration wording, review non-issues)
 - [x] Owning docs updated
-- [ ] Tests updated in the same change
+- [x] Tests updated in the same change
 
 Acceptance checks:
 
@@ -492,11 +495,46 @@ Acceptance checks:
 - [x] Merchant forage stays within 384 px of home
 - [x] A full inventory never depletes a node
 - [x] Weather is identical whether the pooled event is fresh or reused
+- [x] `ninja -C build` passes (full incremental build: 0 errors, 0 warnings)
+- [x] Targeted Boost.Test executables for each work package pass (45 test executables pass; `ai_collision_integration_tests` had an intermittent fixture crash, pre-existing and made more likely by WP1, fixed in c3fb5047 by running the fixture transition in production order — AIManager → EventManager → CollisionManager → PathfinderManager — then 40/40 clean runs)
+- [x] Slice reviewed (`game-systems-architect`) before commit (whole-slice review; close-out items applied)
+
+Status: Complete. WP1–WP9, the slice-complete gate, and the whole-slice review are done (commits e78445d8..9e22e7b8, fixture fix c3fb5047). Close-out fixed doc drift (`docs/review-non-issues.md`, `docs/ai/BehaviorModes.md`, `docs/gameStates/GamePlayState.md`, `.claude/rules/managers.md`) and two tests (`ForageDamageMidEpisodeKeepsNeedEntry` uses a real `DamageEvent`; `TestAINavigatesObstacleField` keeps its obstacles live and checks real penetration). Follow-ups live in Slices 6S, 6.1, 7, 8, 10, and 11 (see Architecture notes).
+
+## Slice 6S: Static collision reads during pathfinding grid rebuilds
+
+Goal: Pathfinding grid rebuild workers never read CollisionManager static storage while the main thread mutates it, and dirty regions marked by obstacle/tile changes are rebuilt by a production owner. Found in the Slice 6R WP1 `ai_collision_integration_tests` fixture-crash investigation (c3fb5047). Scheduled before 6.1 because 6.1's tile restore adds main-thread static-body mutations during gameplay.
+
+Current foundation:
+
+- `PathfindingGrid::rebuildFromWorld` (`src/ai/pathfinding/PathfindingGrid.cpp`) runs on `ThreadSystem` workers and calls `CollisionManager::queryAreaHasStaticOverlap` (`src/managers/CollisionManager.cpp`) per cell. That query reads `m_storage.hotData` and the plain `bool m_staticHashDirty` (linear-scan fallback) or the static spatial hash, with no synchronization.
+- Main-thread static mutation paths: `addStaticBody` / `removeCollisionBody` (push/erase `m_storage`, set `m_staticHashDirty`), `onTileChanged` (from `TileChangedEvent`), `rebuildStaticFromWorld` (on `WorldLoaded`), and `CollisionManager::update` rebuilding the static hash when dirty.
+- Today full rebuilds are clear of mutation only by ordering: `WorldLoaded` builds statics, then `StaticCollidersReady` starts the rebuild, and `LoadingState` waits on `PathfinderManager::isGridReady()` before gameplay updates resume.
+- `onCollisionObstacleChanged` / `onTileChanged` only mark dirty regions and invalidate cached paths. `rebuildGrid(true)` (the incremental `rebuildDirtyRegions` path) has no production caller; only tests and benches call `rebuildGrid()`. After a harvest removes a tile obstacle, the grid stays stale.
+
+Architecture notes:
+
+- Needs a `cpp-design-specialist` design first: ownership of the static-collision read contract for worker rebuilds (e.g. a main-thread snapshot of static AABBs handed to the rebuild, or a documented exclusion window), and which owner schedules dirty-region rebuilds and when (main thread, after collision updates, joined before the next static mutation).
+- Keep `WorkerBudget` sizing and `ThreadSystem` execution for rebuilds; no raw threads or private pools. No locks on the per-frame collision hot path unless the design proves they are uncontended.
+- Out of scope: pathfinding algorithm changes, spatial-hash redesign.
+
+Checklist:
+
+- [ ] Design (`cpp-design-specialist`): static-collision read contract for grid rebuild workers and the dirty-region rebuild owner
+- [ ] Rebuild workers read static collision data without racing main-thread mutation
+- [ ] Dirty regions from `CollisionObstacleChanged` / `TileChanged` are rebuilt by the chosen production owner
+- [ ] Owning docs updated (`docs/managers/CollisionManager.md`, `docs/managers/PathfinderManager.md`, `docs/ai/PathfindingSystem.md`)
+- [ ] Tests updated in the same change (static mutation during an in-flight rebuild; tile change reflected in the grid)
+
+Acceptance checks:
+
+- [ ] A static-body add/remove or tile change during a grid rebuild is race-free (TSan clean at the Branch/PR gate)
+- [ ] A harvest tile removal unblocks the matching grid cells without a manual `rebuildGrid()`
 - [ ] `ninja -C build` passes
-- [ ] Targeted Boost.Test executables for each work package pass
+- [ ] Targeted Boost.Test: `ai_collision_integration_tests`, `collision_pathfinding_integration_tests`, `pathfinder_manager_tests`, `collision_system_tests`
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP9 done; slice-complete gate and review pending. Scheduled after Slice 6 and before 6.1.
+Status: Not started. Scheduled after 6R and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 
@@ -513,6 +551,7 @@ Architecture notes:
 
 - Respawn tick runs on the main thread and calls `notifyHarvestableStateChanged()` on every restore. Owner is to be decided between the `HarvestCommit`/world layer and WRM scheduling; WRM stays a registry either way.
 - Tile obstacle restore goes through a `WorldManager` coordinator API plus pathfinding grid invalidation; no respawn policy on `WorldManager`.
+- Tile restore symmetry (from Slice 6R): removal is `HarvestCommit::commit` depletion plus GamePlayState's transient `Harvest` handler calling `WorldManager::handleHarvestResource()`; restore must be its mirror in the same owners (collision statics, `TileChanged`, grid dirty region) so a respawned node blocks exactly what its depletion unblocked. Demo states do not remove tiles (`docs/review-non-issues.md`), so their restore path must not add obstacles that were never removed. Grid refresh relies on the Slice 6S dirty-region owner.
 - Scarcity recovery uses an edge-triggered area cache with transition and unload cleanup.
 - Out of scope: economy HUD, crafting, Slice 7 selector.
 
@@ -520,6 +559,7 @@ Checklist:
 
 - [ ] Main-thread respawn tick that restores depleted nodes and calls `notifyHarvestableStateChanged()` (owner decided and documented)
 - [ ] Tile obstacle restore via a `WorldManager` coordinator API plus pathfinding grid invalidation
+- [ ] Tile restore symmetric with harvest tile removal (same owners; no restore where no removal happened)
 - [ ] Scarcity recovery (edge-triggered area cache with transition/unload cleanup)
 - [ ] Revisit `NPC_HARVEST_RESERVE`
 - [ ] Owning docs updated
@@ -529,11 +569,12 @@ Acceptance checks:
 
 - [ ] Nodes return after `respawnTime`
 - [ ] Foragers retarget restored nodes
+- [ ] A deplete → respawn cycle leaves tile, collision, and grid state identical to before depletion
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test: `world_resource_manager_tests`, `harvest_controller_tests`, `behavior_functionality_tests`
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: Not started. Depends on Slice 6.
+Status: Not started. Depends on Slice 6; scheduled after Slice 6S.
 
 ## Slice 7: Autonomous decision layer
 
@@ -544,18 +585,24 @@ Current foundation:
 - `Behaviors::switchBehavior` + `AICommandBus`. Idle/Patrol/Guard already contain hardcoded switches (`src/ai/behaviors/*`). `AIManager::commitQueuedBehaviorTransitions()` clears behavior data before `init()`; new state is set after that commit (`CLAUDE.md`).
 - Slice 2 writes home role at populate/assign. Slices 4–6 supply environment, stance, need.
 - `PersonalityTraits` on `NPCMemoryData` (bravery, aggression, composure, loyalty) — written at spawn, read every frame.
-- Slice 6 need: EDM `SparseSidecar<NpcNeedData>` (`pressure`, `retryCooldown`, `failCount`, `returnBehavior`) exists only for civilian Idle/Wander roles assigned by base name with the default config (`AIManager::syncNeedForRole`). `Behaviors::tickNeed` grows pressure in the fused loop; `Behaviors::shouldStartForage(ctx, currentType)` is the hardcoded Forage entry inside `executeIdle`/`executeWander` (threshold `FORAGE_ENTER_THRESHOLD`, candidate pre-check, exponential backoff). Forage exits to `NpcNeedData.returnBehavior` with the default config, not to `homeRole`.
+- Slice 6 need: EDM `SparseSidecar<NpcNeedData>` (`pressure`, `retryCooldown`, `failCount`, `returnBehavior`, plus Slice 6R `home` anchor and `leashRadius` — merchants 384 px, others 0 = unleashed) exists only for civilian Idle/Wander roles assigned by base name with the default config (`AIManager::syncNeedForRole`), or is seeded by `initForage` when missing. `Behaviors::tickNeed` grows pressure in the fused loop; `Behaviors::shouldStartForage(ctx, currentType)` is the hardcoded Forage entry inside `executeIdle`/`executeWander` (threshold `FORAGE_ENTER_THRESHOLD`, candidate pre-check, exponential backoff). Forage exits to `NpcNeedData.returnBehavior` with the default config, not to `homeRole`.
 - Workers read Forage candidates from `BehaviorContext::harvestables` (`HarvestableSnapshotView`, 512 px grid). Forage never touches WRM from workers.
 
 Architecture notes:
 
 - Read home role from the field Slice 2 stored. Populate/debug `R` / tests that `assignBehavior` without going through populate must set home role too (assign path, not only the village helper).
 - Add `Behaviors::selectBehaviorIfNeeded(ctx)` called from the fused loop on stagger `edmIndex % 8 == frameCounter % 8`. Hysteresis: require override score ≥ home score + 0.15 to leave, and home ≥ override + 0.15 to return. Cooldown 2.0 s in shared or per-variant state after a switch.
-- Scores (0–1, then scaled by personality): flee from fear/health; attack from Hostile stance + aggression; forage from need sidecar `pressure` ≥ `FORAGE_ENTER_THRESHOLD` **and** a candidate from the snapshot view (reuse the Slice 6 candidate/reserve filter and respect `retryCooldown`, so the selector cannot re-enter Forage in empty areas); else home role. Entities without a need entry score forage 0. Bravery lowers flee weight; aggression raises attack; loyalty raises home.
+- Slice 6R player relations: the player has no faction. NPC-faction relations toward the player come from EDM player standing (`AIManager::getPlayerRelation`, main thread) and reach workers only as the by-value `ctx.hostileTowardPlayer`; the stance table is NPC-faction ↔ NPC-faction only. Retaliation keeps `memoryData.lastAttacker` as a target via `Behaviors::shouldKeepCombatTarget`.
+- Scores (0–1, then scaled by personality): flee from fear/health; attack from Hostile stance toward NPC targets (stance row) or `ctx.hostileTowardPlayer` for the player (standing, never the stance row) + aggression; forage from need sidecar `pressure` ≥ `FORAGE_ENTER_THRESHOLD` **and** a candidate from the snapshot view (reuse the Slice 6 candidate/reserve filter and respect `retryCooldown`, so the selector cannot re-enter Forage in empty areas); else home role. Entities without a need entry score forage 0. Bravery lowers flee weight; aggression raises attack; loyalty raises home.
 - Restore home role through `switchBehavior`. Set restored config/state after the transition commit.
 - Do not remove existing in-behavior switches this slice; the selector is the cross-behavior preemption. Follow stays a scripted/assign-only role (not a selector target).
 - Reconcile the two Forage exits: Slice 6 returns to `returnBehavior` with the default config; the selector restores `homeRole`. Decide in design whether the selector owns the Forage exit (and `returnBehavior` becomes a fallback) — do not let both fire in one frame (latest-sequence transition wins).
 - Home-role restore must restore the assigned config (presets/explicit configs), not `getDefaultConfig`, or preset NPCs lose their tuning; `syncNeedForRole` must stay consistent with whatever the restore path assigns.
+- Follow-ups from Slice 6R (decision-layer policy, owned here):
+  - Retaliation time bound: nothing clears `memoryData.lastAttacker` (its only writer is `EDM::recordCombatEvent`), so an NPC the player hit keeps retaliating even at Allied standing. Bound retaliation in AI policy (e.g. by `lastCombatTime`), not by clearing EDM memory from controllers. `TestAttackKeepsRetaliatingAgainstLastAttackerAfterDeescalation` pins today's behavior; update it with the change.
+  - Civilian flee-vs-attack: when player standing is Hostile, Forage/Idle/Wander civilians (merchants included) switch to Attack through `tryEngageHostileInRange`. The selector decides flee vs attack for civilians (category, bravery, aggression).
+  - Merchant return-to-post: after Forage, merchants return to `returnBehavior` wherever they stopped; home-role restore walks them back to `NpcNeedData.home`.
+  - AoE friendly fire: when Attack AoE is enabled (`aoeRadius` is always 0 today), skip the player under `avoidFriendlyFire` when `!ctx.hostileTowardPlayer` (the player has no faction, so `isAlliedTowardFaction` no longer excludes it).
 - Files: `include/ai/BehaviorExecutors.hpp`, `src/ai/BehaviorExecutors.cpp`, `src/managers/AIManager.cpp` fused loop, home-role field if assign path still needs it, `docs/ai/BehaviorExecutionPipeline.md`, `tests/BehaviorFunctionalityTest.cpp`, `tests/managers/AIManagerEDMIntegrationTests.cpp`.
 - Out of scope: GOAP, HTN, behavior trees, new planner types.
 
@@ -566,6 +613,10 @@ Checklist:
 - [ ] Preemption flee/attack/forage (forage via Slice 6 need + snapshot candidate filter); restore home role post-commit with its assigned config
 - [ ] Single owner for the Forage exit (selector vs `returnBehavior`), documented
 - [ ] PersonalityTraits scale weights
+- [ ] Retaliation time bound (update `TestAttackKeepsRetaliatingAgainstLastAttackerAfterDeescalation`)
+- [ ] Civilian flee-vs-attack under Hostile player standing (merchants included)
+- [ ] Merchant return-to-post after Forage (walk back to `NpcNeedData.home`)
+- [ ] AoE `avoidFriendlyFire` skips the player when `!ctx.hostileTowardPlayer`, or document that AoE stays disabled
 - [ ] Owning docs updated
 - [ ] Tests updated in the same change (no flicker, preemption, return-to-role, personality difference)
 
@@ -574,6 +625,8 @@ Acceptance checks:
 - [ ] NPCs leave home role under threat/need and return when the override ends
 - [ ] No A↔B flicker on consecutive frames under stable inputs
 - [ ] Personality differences are observable in identical setups
+- [ ] An NPC the player hit stops retaliating after the bound once standing is no longer Hostile
+- [ ] Civilians under Hostile player standing flee or fight by selector policy, not unconditionally Attack
 - [ ] `ninja -C build` passes
 - [ ] Targeted Boost.Test: `behavior_functionality_tests`, `ai_manager_edm_integration_tests`
 - [ ] Slice reviewed (`game-systems-architect`) before commit
@@ -599,6 +652,7 @@ Architecture notes:
 - Widgets via `UIManager` primitives (panel + GPU vertices through the existing UI path). Ids under a `hud_minimap_*` prefix. `cpp-design-specialist` picks `HudController` vs a sibling UI controller; pause/resume must hide the minimap with one visibility call, not a new id list on `GamePlayState`.
 - Markers: player from the controller’s player handle; settlements from Slice 2 records (downsampled, not all EDM NPCs). Faction-colored dots only if Slice 5 stance/faction is present; otherwise a single settlement color.
 - Files: `include/world/WorldData.hpp` (discovery), `include/managers/SaveGameManager.hpp/.cpp`, `include/controllers/ui/HudController.hpp/.cpp` (or new `include/controllers/ui/` controller), `src/gameStates/GamePlayState.cpp` only for layout/init of the chosen controller, `docs/controllers/HudController.md` or the new controller doc, `docs/ui/`, `tests/controllers/HudControllerTests.cpp` (or the new controller tests), save tests.
+- HUD follow-up from Slice 6R (same controller and tests this slice touches): `HudController` widget ids are `static constexpr const char*`; make them `std::string_view` (and give new `hud_minimap_*` ids the same type). Trim the test-only target getters (`hasActiveTarget`, `getTargetHealth`, `getTargetLabel`); tests then assert target widgets through `UIManager`, which needs a public component-visibility query (add it to `UIManager`, not a HUD-side mirror).
 - Out of scope: implementing `Minimap_Implementation.md`’s `MinimapWidget` class inside `UIManager`.
 
 Checklist:
@@ -607,6 +661,7 @@ Checklist:
 - [ ] Discovery bit grid on `WorldData`; update from player tile; clear on unload
 - [ ] Save/load discovery with `SaveGameManager` keyed by `worldId`
 - [ ] Minimap widgets + player marker + settlement dots; pause/resume via one `setVisible`
+- [ ] HUD ids `const char*` → `std::string_view`; target-getter trim backed by a `UIManager` visibility query (Slice 6R follow-up)
 - [ ] Owning docs updated
 - [ ] Tests updated in the same change (discovery mark, visibility, save/load restore)
 
@@ -659,3 +714,69 @@ Acceptance checks:
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
 Status: Not started. Depends on Slices 2 and 6. Scheduled after Slice 8.
+
+## Slice 10: NPC inventory consumption
+
+Goal: Foraging NPCs consume or shed harvested items so a full inventory does not park the survival loop. Today a forager whose inventory cannot hold the yield abandons the episode without depleting the node (Slice 6R WP4) and backs off exponentially to the 240 s cap, so full-inventory NPCs retry every 240 s indefinitely.
+
+Current foundation:
+
+- `AIManager::commitQueuedHarvests` pre-checks `EDM::canAddToInventory` for the largest yield and calls `Behaviors::abandonForageInventoryFull` (backoff 15 s doubling, 240 s cap) without depleting the node.
+- NPC inventories are EDM storage (`CharacterData.inventoryIndex`); need is `NpcNeedData.pressure`, reset to 0 on a successful commit.
+- Slice 7 selector scores forage from need pressure plus a snapshot candidate; it does not look at inventory capacity.
+
+Architecture notes:
+
+- Consumption policy (what an NPC consumes, when, and how it lowers need) is `Behaviors::` / AI policy; EDM stays storage (inventory mutation through existing EDM inventory APIs on the main thread, emitting `ResourceChangeEvent` like the harvest commit).
+- Decide in design whether consumption runs on need crossing, on forage abandon for a full inventory, or as a selector option (Slice 7), and whether merchants sell/stock instead of consume.
+- Out of scope: crafting, shop simulation, player economy HUD.
+
+Checklist:
+
+- [ ] Design: consumption trigger, owner, and interaction with the Slice 7 forage score
+- [ ] Main-thread consumption that frees inventory and lowers need; `ResourceChangeEvent` emitted
+- [ ] Full-inventory foragers resume foraging after consumption instead of retrying every 240 s
+- [ ] Owning docs updated (`docs/ai/BehaviorModes.md`, `docs/ai/AIManager.md`, `docs/managers/EntityDataManager.md`)
+- [ ] Tests updated in the same change
+
+Acceptance checks:
+
+- [ ] A forager with a full inventory consumes, frees space, and completes a later forage
+- [ ] `ninja -C build` passes
+- [ ] Targeted Boost.Test: `behavior_functionality_tests`, `ai_manager_edm_integration_tests`
+- [ ] Slice reviewed (`game-systems-architect`) before commit
+
+Status: Not started. Depends on Slice 6; scheduled after Slice 9. Deferred from Slice 6R.
+
+## Slice 11: Monster and animal faction ids
+
+Goal: Monsters and animals have faction ids distinct from humanoid classes, so player standing and NPC-faction stance for one group never move with another. Must land before any production caller of `EDM::createMonster` or `EDM::createAnimal`.
+
+Current foundation:
+
+- Faction ids are shared: `monster_types.json` uses `defaultFaction` 1, the same as the Warrior class (and wilderness Warriors' override 1); `animal_roles.json` uses 2, the same as the Mage class.
+- Player standing is per NPC faction (EDM `SparseSidecar<PlayerFactionStanding>`, `AIManager::recordPlayerIncident`). Killing a monster applies the Kill delta to faction 1, so once monsters spawn in production, killing them would lower standing with Warriors (and animal kills with faction 2).
+- `createMonster` / `createAnimal` have no production callers today (tests and demos only).
+
+Architecture notes:
+
+- Assign dedicated faction ids (within `AIManager::MAX_FACTIONS`) for monster and animal groups in the JSON data; set their stance rows (e.g. monsters Hostile toward NPC factions) through the existing stance table API, not faction-id special cases in behaviors.
+- Decide whether incidents against monsters/animals adjust player standing at all (e.g. no Assault/Kill delta for hostile wildlife) — policy on `AIManager`, main thread.
+- Out of scope: new faction manager, save/load of standing.
+
+Checklist:
+
+- [ ] Distinct faction ids for monsters and animals (data + any factory override)
+- [ ] Stance rows for the new factions via the stance table
+- [ ] Player-incident policy for monster/animal victims
+- [ ] Owning docs updated (`docs/ai/AIManager.md`, `docs/managers/EntityDataManager.md`, `docs/world/WorldPopulation.md`)
+- [ ] Tests updated in the same change
+
+Acceptance checks:
+
+- [ ] Killing a monster or animal leaves player standing with Warriors (faction 1) and faction 2 unchanged
+- [ ] `ninja -C build` passes
+- [ ] Targeted Boost.Test: `behavior_functionality_tests`, `ai_manager_edm_integration_tests`, `world_population_tests`
+- [ ] Slice reviewed (`game-systems-architect`) before commit
+
+Status: Not started. Depends on Slice 5; scheduled after Slice 10 and before any production `createMonster` / `createAnimal` caller. Deferred from Slice 6R (risk noted in the 6R plan).

@@ -32,12 +32,14 @@ References are by symbol/function (not line numbers) so they survive edits.
   parameterless `updateAll()`. No double-update path. Documented inline.
 
 - **Harvest tile removal is only wired in `GamePlayState`**
-  By design. `GamePlayState::enter()` registers the transient `EventTypeId::Harvest` handler
-  that calls `WorldManager::handleHarvestResource()` to clear the tile obstacle; depletion
-  itself goes through `HarvestCommit::commit` for player and AI in every state. AIDemo and
-  EventDemo opt out of world population (`WorldGenerationConfig::populate = false`) and are
-  not gameplay targets, so they do not register the handler. A persistent Harvest handler for
-  demos is a Slice 6R non-goal; tile restore symmetry is Slice 6.1.
+  By design (user decision: demo states are not gameplay targets; `GamePlayState` is the
+  go-forward state). `GamePlayState::enter()` registers the transient `EventTypeId::Harvest`
+  handler that calls `WorldManager::handleHarvestResource()` to clear the tile obstacle;
+  depletion itself goes through `HarvestCommit::commit` for player and AI in every state.
+  AIDemo (load test) and EventDemo (power bench) do not register the handler, so in AIDemo,
+  where Wander NPCs forage (next entry), forage-depleted nodes keep their obstacle tiles. That
+  is intended, not a missing wire. A persistent Harvest handler for demos is a Slice 6R
+  non-goal; tile restore symmetry with this removal path is Slice 6.1.
 
 - **AIDemo Wander NPCs forage**
   Expected. `AIManager::syncNeedForRole` seeds a survival need for humanoid NPCs assigned the

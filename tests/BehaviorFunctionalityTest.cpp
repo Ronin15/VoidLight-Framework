@@ -1309,10 +1309,13 @@ BOOST_AUTO_TEST_CASE(ForageDamageMidEpisodeKeepsNeedEntry) {
     BOOST_REQUIRE(forageStateOf(farmer).phase == VoidLight::ForagePhase::Moving);
     const float pressureBefore = needOf(farmer).pressure;
 
+    // A real hit through the combat event path records lastAttacker/lastCombatTime.
     auto attacker = TestNPC::create(start.getX(), start.getY() + 60.0f);
-    auto& memory = EntityDataManager::Instance().getMemoryData(indexOf(farmer));
-    memory.lastAttacker = attacker->getHandle();
-    memory.lastCombatTime = 0.0f;
+    auto damage = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, attacker->getHandle(), farmer, 1.0f);
+    EventManager::Instance().dispatchEvent(damage, EventManager::DispatchMode::Immediate);
+    BOOST_REQUIRE(EntityDataManager::Instance().getMemoryData(indexOf(farmer)).lastAttacker ==
+        attacker->getHandle());
     step();
 
     const BehaviorType response = behaviorOf(farmer);

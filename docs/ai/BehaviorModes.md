@@ -17,7 +17,8 @@ This page catalogs the behavior families and the configuration style. Modes are 
   - movement speed uses `moveSpeedScale`; waypoint dwell uses `cautionScale`
 - `Guard`
   - alert, suspicious, and defensive area control
-  - player auto-detect and lastAttacker/lastTarget/memory threat classification consult `AIManager` faction stance (`Hostile`), not `faction == 1`
+  - player auto-detect reads the by-value `ctx.hostileTowardPlayer` (standing-derived; the player has no faction and is never looked up in the stance row)
+  - lastAttacker/lastTarget/memory threat classification goes through `Behaviors::isHostileTowardTarget`: the `AIManager` NPC-faction stance table (`Hostile`) for NPC targets, `ctx.hostileTowardPlayer` for the player; never `faction == 1`
   - help / alarm / all-clear scans use `scanAlliedInRadius` (Allied row, including same faction)
   - `cachedDetectionRange` is mode-only; player detection multiplies it by `envSnapshot.detectionScale` at the check. lastAttacker/lastTarget/memory are not scaled. Guard movement is not scaled.
 - `Attack`

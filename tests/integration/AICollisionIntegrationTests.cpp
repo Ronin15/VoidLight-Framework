@@ -6,6 +6,7 @@
 #define BOOST_TEST_MODULE AICollisionIntegrationTests
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -140,6 +141,11 @@ BOOST_GLOBAL_FIXTURE(AICollisionGlobalFixture);
 
 // Individual test fixture
 struct AICollisionTestFixture {
+    struct Obstacle {
+        EntityID id;
+        VoidLight::AABB box;
+    };
+
     AICollisionTestFixture() {
         std::cout << "\n--- Test Setup ---" << std::endl;
 
@@ -198,9 +204,10 @@ struct AICollisionTestFixture {
     }
 
     // Helper: Create static obstacle with proper EDM routing
-    void createObstacle([[maybe_unused]] EntityID id, const Vector2D& pos, float halfW, float halfH) {
+    void createObstacle(const Vector2D& pos, float halfW, float halfH) {
         auto& edm = EntityDataManager::Instance();
         EntityHandle handle = edm.createStaticBody(pos, halfW, halfH);
+        BOOST_REQUIRE(handle.isValid());
         size_t edmIndex = edm.getStaticIndex(handle);
         EntityID edmId = handle.getId();
 
@@ -214,7 +221,7 @@ struct AICollisionTestFixture {
             0,
             1,
             edmIndex);
-        m_obstacleIds.push_back(edmId);
+        m_obstacles.push_back({edmId, VoidLight::AABB(pos.getX(), pos.getY(), halfW, halfH)});
     }
 
     void loadBareWorld(int widthTiles, int heightTiles, int seed) {
@@ -232,6 +239,12 @@ struct AICollisionTestFixture {
         // builds collision statics on the main thread, then StaticCollidersReady
         // rebuilds the grid; a manual rebuildGrid() here would read collision
         // storage while the statics are still being built.
+        waitForGridReady();
+    }
+
+    // Drains deferred events and polls until every grid rebuild future is done.
+    // Collision storage is not mutated while waiting (no CollisionManager::update).
+    void waitForGridReady() {
         EventManager::Instance().update();
         const auto deadline =
             std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
@@ -272,19 +285,31 @@ struct AICollisionTestFixture {
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 
-    // Helper: Check if entity is overlapping any obstacle
-    bool isEntityOverlappingObstacles(EntityID entityId) {
-        for (EntityID obstacleId : m_obstacleIds) {
-            if (CollisionManager::Instance().overlaps(entityId, obstacleId)) {
-                return true;
-            }
-        }
-        return false;
+    // Helper: Check if an NPC's EDM collision box penetrates any obstacle.
+    // NPCs are EDM-managed movables with no CollisionManager storage entry, so
+    // CollisionManager::overlaps() cannot see them. Penetration means positive
+    // interior overlap on both axes; a body resolved flush against an obstacle
+    // edge is contact, which AABB::intersects() (edge-inclusive) would count.
+    bool isEntityOverlappingObstacles(EntityHandle handle) const {
+        const auto& edm = EntityDataManager::Instance();
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE(idx != SIZE_MAX);
+        const auto& hot = edm.getHotDataByIndex(idx);
+        const VoidLight::AABB entityBox(hot.transform.position.getX(),
+            hot.transform.position.getY(), hot.halfWidth, hot.halfHeight);
+        return std::any_of(m_obstacles.begin(), m_obstacles.end(),
+            [&entityBox](const Obstacle& obstacle) {
+                const float penX = std::min(entityBox.right(), obstacle.box.right()) -
+                    std::max(entityBox.left(), obstacle.box.left());
+                const float penY = std::min(entityBox.bottom(), obstacle.box.bottom()) -
+                    std::max(entityBox.top(), obstacle.box.top());
+                return penX > 0.0f && penY > 0.0f;
+            });
     }
 
     std::mt19937 m_rng;
     std::vector<EntityHandle> m_entityHandles;
-    std::vector<EntityID> m_obstacleIds;
+    std::vector<Obstacle> m_obstacles;
 };
 
 BOOST_FIXTURE_TEST_SUITE(AICollisionIntegrationTestSuite, AICollisionTestFixture)
@@ -292,19 +317,22 @@ BOOST_FIXTURE_TEST_SUITE(AICollisionIntegrationTestSuite, AICollisionTestFixture
 /**
  * TEST 1: TestAINavigatesObstacleField
  *
- * Verifies AI entities navigate around obstacles during pathfinding.
- * CRITICAL: This test ensures AI actually uses CollisionManager for obstacle avoidance.
+ * Wanderers spawned in a gap of a static obstacle field stay out of the
+ * obstacles. The world loads first (its WorldLoaded rebuild replaces every
+ * STATIC body), then the obstacles are added; their CollisionObstacleChanged
+ * events mark pathfinding dirty regions, which rebuildGrid() applies. The test
+ * asserts the obstacles exist in CollisionManager and block the pathfinding
+ * grid for the whole run, so the overlap check is against live obstacles.
  */
 BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     std::cout << "\n=== TEST 1: AI Navigates Obstacle Field ===" << std::endl;
+
+    loadBareWorld(50, 50, 12345);
 
     // Create a grid of static obstacles (5x5 grid with gaps)
     const float OBSTACLE_SIZE = 64.0f;
     const float GRID_SPACING = 200.0f;
     const Vector2D GRID_ORIGIN(500.0f, 500.0f);
-
-    EntityID obstacleIdCounter = 10000;
-    int obstaclesCreated = 0;
 
     for (int row = 0; row < 5; ++row) {
         for (int col = 0; col < 5; ++col) {
@@ -317,46 +345,35 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
                 GRID_ORIGIN.getX() + col * GRID_SPACING,
                 GRID_ORIGIN.getY() + row * GRID_SPACING);
 
-            createObstacle(
-                obstacleIdCounter++,
-                obstaclePos,
-                OBSTACLE_SIZE / 2.0f,
-                OBSTACLE_SIZE / 2.0f);
-            obstaclesCreated++;
+            createObstacle(obstaclePos, OBSTACLE_SIZE / 2.0f, OBSTACLE_SIZE / 2.0f);
         }
     }
+    BOOST_REQUIRE_EQUAL(m_obstacles.size(), 22u);
 
-    std::cout << "Created " << obstaclesCreated << " obstacles in grid pattern" << std::endl;
+    auto& collisionMgr = CollisionManager::Instance();
+    auto requireObstaclesPresent = [&]() {
+        for (const auto& obstacle : m_obstacles) {
+            BOOST_REQUIRE(collisionMgr.isStatic(obstacle.id));
+            BOOST_REQUIRE(collisionMgr.queryAreaHasStaticOverlap(obstacle.box));
+        }
+    };
+    requireObstaclesPresent();
 
-    // Process collision commands
-
-    // Rebuild static spatial hash for pathfinding
-    CollisionManager::Instance().rebuildStaticFromWorld();
-
-    // Set up a minimal world for pathfinding grid
-    VoidLight::WorldGenerationConfig worldConfig{};
-    worldConfig.width = 50;
-    worldConfig.height = 50;
-    worldConfig.seed = 12345;
-    worldConfig.elevationFrequency = 0.05f;
-    worldConfig.humidityFrequency = 0.05f;
-    worldConfig.waterLevel = 0.3f;
-    worldConfig.mountainLevel = 0.7f;
-    worldConfig.populate = false; // Test spawns its own NPCs
-
-    std::cout << "Setting up world for pathfinding grid..." << std::endl;
-    BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(worldConfig));
-
-    // Wait for world generation to complete
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-
-    std::cout << "Rebuilding pathfinding grid with active world..." << std::endl;
+    // Deferred CollisionObstacleChanged events mark dirty regions; rebuildGrid()
+    // applies them (incremental, or full when the dirty area exceeds its
+    // threshold). No production path calls it for dirty regions today.
+    EventManager::Instance().update();
     PathfinderManager::Instance().rebuildGrid();
+    waitForGridReady();
 
-    // Wait for grid rebuild to complete (async operation)
-    // We can use a simple sleep here as rebuild is async on ThreadSystem
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    std::cout << "Pathfinding grid rebuild complete" << std::endl;
+    // The grid blocks every obstacle cell: snapping an obstacle center to an
+    // open cell moves it off the obstacle (an open cell would snap in place).
+    auto& pathfinder = PathfinderManager::Instance();
+    for (const auto& obstacle : m_obstacles) {
+        const Vector2D& center = obstacle.box.center;
+        const Vector2D open = pathfinder.adjustSpawnToNavigable(center, 16.0f, 16.0f, 0.0f);
+        BOOST_CHECK_GT((open - center).length(), OBSTACLE_SIZE);
+    }
 
     // Create AI entities with wander behavior (will navigate around obstacles)
     const int NUM_ENTITIES = 10;
@@ -375,8 +392,9 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
         auto entity = createEntity(startPos);
         AIManager::Instance().assignBehavior(entity, "Wander");
     }
-
-    // Process collision commands for entities
+    for (const auto& handle : m_entityHandles) {
+        BOOST_REQUIRE(!isEntityOverlappingObstacles(handle));
+    }
 
     std::cout << "Created " << NUM_ENTITIES << " AI entities with wander behavior" << std::endl;
 
@@ -387,13 +405,15 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     std::cout << "Running simulation for 200 frames..." << std::endl;
     updateSimulation(200, 0.016f);
 
+    // The obstacles are still live for the overlap check.
+    requireObstaclesPresent();
+
     // VERIFICATION: Check that entities are NOT overlapping obstacles
     int entitiesOverlappingObstacles = 0;
     for (const auto& handle : m_entityHandles) {
-        EntityID entityId = handle.getId();
-        if (isEntityOverlappingObstacles(entityId)) {
+        if (isEntityOverlappingObstacles(handle)) {
             entitiesOverlappingObstacles++;
-            std::cout << "FAILURE: Entity " << entityId << " is overlapping an obstacle!" << std::endl;
+            std::cout << "FAILURE: Entity " << handle.getId() << " is overlapping an obstacle!" << std::endl;
         }
     }
 
