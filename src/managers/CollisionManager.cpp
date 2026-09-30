@@ -487,11 +487,8 @@ void CollisionManager::queryArea(const AABB& area,
     out.clear();
 
     // If static hash is dirty (not yet rebuilt after add/remove), fall back to
-    // linear scan This ensures correctness in tests and edge cases while
-    // providing O(log n) in production (production always runs update() before AI
-    // queries, which rebuilds the hash)
+    // a linear scan; update() rebuilds the hash.
     if (m_staticHashDirty) {
-        // Linear scan fallback - always correct
         for (size_t i = 0; i < m_storage.hotData.size(); ++i) {
             const auto& hot = m_storage.hotData[i];
             if (!hot.active)
@@ -517,16 +514,26 @@ void CollisionManager::queryArea(const AABB& area,
     float maxX = area.right();
     float maxY = area.bottom();
 
+    // Hash cells return candidates; keep only bodies that intersect the area,
+    // as the linear fallback does.
+    const auto appendOverlapping = [this, &area, &out]() {
+        for (size_t idx : staticIndices) {
+            if (idx < m_storage.hotData.size() && m_storage.hotData[idx].active &&
+                m_storage.computeAABB(idx).intersects(area)) {
+                out.push_back(m_storage.entityIds[idx]);
+            }
+        }
+    };
+
     m_staticSpatialHash.queryRegionBoundsThreadSafe(minX, minY, maxX, maxY,
         staticIndices, queryBuffers);
+    appendOverlapping();
 
-    out.reserve(staticIndices.size());
-
-    for (size_t idx : staticIndices) {
-        if (idx < m_storage.hotData.size() && m_storage.hotData[idx].active) {
-            out.push_back(m_storage.entityIds[idx]);
-        }
-    }
+    // EventOnly triggers (water edges) live in their own hash; the linear
+    // fallback above returns them, so the hash path must too.
+    m_eventOnlySpatialHash.queryRegionBoundsThreadSafe(minX, minY, maxX, maxY,
+        staticIndices, queryBuffers);
+    appendOverlapping();
 }
 
 bool CollisionManager::queryAreaHasStaticOverlap(const AABB& area) const {
@@ -2352,6 +2359,7 @@ void CollisionManager::rebuildStaticSpatialHash() {
 
 void CollisionManager::rebuildStaticSpatialHashUnlocked() {
     // Only called when static objects are added/removed
+    ++m_perf.staticHashRebuilds;
     m_staticSpatialHash.clear();
     m_eventOnlySpatialHash.clear();
 
@@ -2977,7 +2985,18 @@ void CollisionManager::updatePerformanceMetrics(
 void CollisionManager::setBodyEnabled(EntityID id, bool enabled) {
     size_t index;
     if (getCollisionBody(id, index)) {
-        m_storage.hotData[index].active = enabled ? 1 : 0;
+        auto& hot = m_storage.hotData[index];
+        const uint8_t active = enabled ? 1 : 0;
+        if (hot.active == active) {
+            return;
+        }
+        hot.active = active;
+        // The static hashes index only bodies active at rebuild time.
+        if (static_cast<BodyType>(hot.bodyType) == BodyType::STATIC) {
+            m_staticHashDirty = true;
+            m_staticQueryCacheDirty = true;
+            m_statisticsDirty = true;
+        }
     }
 }
 

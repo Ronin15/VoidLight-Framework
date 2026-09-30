@@ -85,7 +85,9 @@ Resolution: `update()` runs broadphase → narrowphase → `resolve()`. `resolve
 
 `overlaps`, `queryArea`, `queryAreaHasStaticOverlap`, `getBodyCenter`, `isDynamic` / `isKinematic` / `isStatic` / `isTrigger`. World helpers: `rebuildStaticFromWorld`, `createStaticObstacleBodies`, `createTriggersForWaterTiles`, `createTriggersForObstacles`.
 
-`onTileChanged` marks the static hash dirty only through those add/remove calls; a `TREE` / `ROCK` tile change touches no body and leaves the hash clean.
+The static hashes index only bodies active at rebuild time. `addStaticBody`, `removeCollisionBody`, `updateCollisionBodyPosition`, and `setBodyEnabled` (when it toggles a STATIC body) mark them dirty; `update()` rebuilds them and counts each rebuild in `PerfStats::staticHashRebuilds` (reset with the other `PerfStats` fields). `onTileChanged` marks the static hash dirty only through those body calls; a `TREE` / `ROCK` tile change touches no body and leaves the hash clean.
+
+`queryArea` returns every active body in storage (statics and triggers, EventOnly included) whose AABB intersects the area. The hash path queries both `m_staticSpatialHash` and `m_eventOnlySpatialHash` and keeps only intersecting candidates, so it returns the same set as the linear fallback used while the static hash is dirty. Storage holds no NPC or player bodies, so `queryArea` is not a nearby-entity query; AI crowd queries use `AIManager::scanActiveIndicesInRadius` (see `docs/ai/AIManager.md`). It has no production caller at present.
 
 `queryAreaHasStaticOverlap` counts every active STATIC body, EventOnly triggers (water edges) included: the hash path queries both `m_staticSpatialHash` and `m_eventOnlySpatialHash`, matching the linear fallback used while the static hash is dirty. Pathfinding grid rebuild workers call it: the load-time rebuild inside LoadingState's pause window, and `PathfinderManager::update()` dirty-row batches while the main thread waits on them. No static mutation overlaps either.
 

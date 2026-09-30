@@ -121,7 +121,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         auto& nearbyPositions = AIInternal::GetNearbyPositionBuffer();
         nearbyPositions.clear();
         shared.cachedNearbyCount = AIInternal::GetNearbyEntitiesWithPositions(
-            ctx.entityId, ctx.transform.position, kCrowdQueryRadius, nearbyPositions);
+            ctx.edmIndex, ctx.transform.position, kCrowdQueryRadius, nearbyPositions);
 
         if (!nearbyPositions.empty()) {
             Vector2D sum = std::accumulate(nearbyPositions.begin(), nearbyPositions.end(), Vector2D{0, 0});

@@ -118,6 +118,8 @@ public:
 
     // Queries
     bool overlaps(EntityID a, EntityID b) const;
+    // Every active body (statics and triggers, EventOnly included) whose AABB
+    // intersects area. Hash path and dirty linear fallback agree.
     void queryArea(const AABB& area, std::vector<EntityID>& out) const;
     // Any active STATIC body intersecting area, EventOnly triggers included
     // (hash path and dirty linear fallback agree). Read by pathfinding grid
@@ -610,6 +612,7 @@ private:
         double lastTotalMs{0.0};
         double avgTotalMs{0.0};
         uint64_t frames{0};
+        uint64_t staticHashRebuilds{0}; // Static + EventOnly hash rebuilds
         size_t lastPairs{0};
         size_t lastCollisions{0};
         size_t bodyCount{0};

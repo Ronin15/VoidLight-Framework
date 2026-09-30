@@ -8,8 +8,8 @@
 #define AI_INTERNAL_CROWD_HPP
 
 #include "core/Logger.hpp"
-#include "entities/EntityHandle.hpp" // EntityID
 #include "utils/Vector2D.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -23,27 +23,23 @@ VOIDLIGHT_STATS_ONLY(
         uint64_t resultsCount{0};
     };)
 
-// Counts nearby entities within a given area, filtering for actual entities only
-// (excludes static objects, triggers, and self)
-// - excludeId: entity ID to exclude from count (typically the querying entity)
-// - center: center of query area
-// - radius: query radius
-// Returns: count of nearby dynamic/kinematic entities
-int CountNearbyEntities(EntityID excludeId, const Vector2D& center, float radius);
+// Crowd queries read AIManager::scanActiveIndicesInRadius filtered to
+// EntityKind::NPC (results cached per frame per worker thread).
+// Valid inside AIManager's update slot, where the active index buffer is built.
 
-// Gets nearby entities with their positions for crowd analysis
-// - excludeId: entity ID to exclude from results (typically the querying entity)
-// - center: center of query area
-// - radius: query radius
-// - outPositions: vector to fill with nearby entity positions
-// Returns: count of nearby entities (same as outPositions.size())
-int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center, float radius,
-    std::vector<Vector2D>& outPositions);
+// Counts nearby active NPCs within radius of center, excluding
+// excludeEdmIndex (typically the querying entity's EDM index).
+int CountNearbyEntities(size_t excludeEdmIndex, const Vector2D& center, float radius);
 
-// Invalidates spatial query cache for new frame
-// Call this at the start of each AI update cycle to ensure cache freshness
-// - frameNumber: current frame number for cache invalidation
-void InvalidateSpatialCache(uint64_t frameNumber);
+// Same query as CountNearbyEntities; fills outPositions with the EDM positions
+// of the nearby entities. Returns outPositions.size().
+int GetNearbyEntitiesWithPositions(size_t excludeEdmIndex, const Vector2D& center,
+    float radius, std::vector<Vector2D>& outPositions);
+
+// Starts a new crowd-cache frame: advances a monotonic stamp (never reset) so
+// every worker's thread_local cache drops earlier entries. AIManager::update()
+// calls it on the main thread before dispatching batches.
+void InvalidateSpatialCache();
 
 VOIDLIGHT_STATS_ONLY(
     // Crowd query stats (aggregated across worker threads)

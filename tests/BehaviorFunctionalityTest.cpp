@@ -2924,6 +2924,83 @@ BOOST_AUTO_TEST_CASE(TestRangedAttackWithoutAmmoResetsForRepositioning) {
     BOOST_CHECK_EQUAL(fallbackCommands.front().targetEdmIndex, attackerIdx);
 }
 
+BOOST_AUTO_TEST_CASE(TestSpecialAttackAoeSkipsNonCharacterEntities) {
+    // A melee special attack with aoeRadius damages characters around the
+    // target. Projectiles and area effects share the active-entity scan but are
+    // not characters: no damage and no character-data read for them.
+    auto& edm = EntityDataManager::Instance();
+
+    auto attacker = TestNPC::create(600.0f, 200.0f);
+    auto target = TestNPC::create(640.0f, 200.0f);
+    auto bystander = TestNPC::create(660.0f, 210.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const EntityHandle targetHandle = target->getHandle();
+    const EntityHandle bystanderHandle = bystander->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    const EntityHandle projectile = edm.createProjectile(
+        Vector2D(650.0f, 190.0f), Vector2D(0.0f, 0.0f), attackerHandle, 1.0f);
+    BOOST_REQUIRE(projectile.isValid());
+
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(targetHandle, 2);
+    edm.setFaction(bystanderHandle, 2);
+    edm.getCharacterDataByIndex(attackerIdx).attackRange = 60.0f;
+    AIManager::Instance().assignBehavior(attackerHandle, "Attack");
+    const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+
+    // One AI frame builds the active-entity scan buffer the AoE reads.
+    updateAI(0.0f, Vector2D(600.0f, 200.0f));
+    const auto active = edm.getActiveIndices();
+    BOOST_REQUIRE(std::find(active.begin(), active.end(), edm.getIndex(projectile)) !=
+        active.end());
+    std::vector<EventManager::DeferredEvent> damageEvents;
+    Behaviors::collectDeferredDamageEvents(damageEvents);
+    damageEvents.clear();
+
+    auto attackConfig = VoidLight::AttackBehaviorConfig::createMeleeConfig(60.0f);
+    attackConfig.specialAttackChance = 1.0f;
+    attackConfig.aoeRadius = 60.0f;
+    attackConfig.avoidFriendlyFire = false;
+
+    auto& attackState = edm.getAttackState(ref.index);
+    attackState.currentState = 3; // ATTACKING
+    attackState.stateChangeTimer = 0.0f;
+    attackState.specialAttackReady = true;
+    attackState.hasExplicitTarget = true;
+    attackState.explicitTarget = targetHandle;
+
+    auto& hotData = edm.getHotDataByIndex(attackerIdx);
+    auto& memoryData = edm.getMemoryData(attackerIdx);
+    memoryData.setValid(true);
+    memoryData.lastTarget = targetHandle;
+
+    BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
+
+    Behaviors::executeAttack(ctx, attackConfig, attackState);
+    Behaviors::collectDeferredDamageEvents(damageEvents);
+
+    const auto damaged = [&damageEvents](EntityHandle handle) {
+        return std::any_of(damageEvents.begin(), damageEvents.end(),
+            [handle](const EventManager::DeferredEvent& deferred) {
+                auto damage = std::dynamic_pointer_cast<DamageEvent>(deferred.data.event);
+                return damage && damage->getTarget() == handle;
+            });
+    };
+    BOOST_REQUIRE(damaged(targetHandle));
+    BOOST_CHECK(damaged(bystanderHandle)); // AoE ran
+    BOOST_CHECK(!damaged(projectile));
+    AIManager::Instance().unassignBehavior(attackerHandle);
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // Test Suite 5: Message System Testing

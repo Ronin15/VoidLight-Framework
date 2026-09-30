@@ -965,6 +965,9 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
                             if (aoeIdx == ctx.edmIndex) continue;
                             const auto& aoeHot = edm.getHotDataByIndex(aoeIdx);
                             if (!aoeHot.isAlive()) continue;
+                            // Only characters take AoE damage (and have character data).
+                            if (aoeHot.kind != EntityKind::NPC &&
+                                aoeHot.kind != EntityKind::Player) continue;
                             EntityHandle aoeTarget = edm.getHandle(aoeIdx);
                             if (aoeTarget == targetHandle) continue;
                             if (config.avoidFriendlyFire &&

@@ -4,31 +4,33 @@
  */
 
 #include "ai/internal/Crowd.hpp"
-#include "managers/CollisionManager.hpp"
+#include "managers/AIManager.hpp"
+#include "managers/EntityDataManager.hpp"
 #include <algorithm>
 #include <array>
 #include <atomic>
 
 namespace AIInternal {
 
-// AUTHORITATIVE FRAME COUNTER (shared, lock-free)
+// AUTHORITATIVE FRAME STAMP (shared, lock-free)
 // The spatial query cache below is `thread_local` — one instance per worker
 // thread in the persistent ThreadSystem pool. The per-frame freshness stamp must
-// therefore be visible to every worker, not just the main thread. We keep a
-// single file-scope atomic that the main thread writes once per frame (via
-// InvalidateSpatialCache) and every worker reads at lookup/store time. Each
-// worker's thread_local cache stamps and validates its entries against this
-// value, so entries from a previous frame auto-invalidate the moment the frame
-// advances — without any per-thread invalidation call that would never reach
-// the workers. relaxed ordering is sufficient: the frame is published before the
-// task queue dispatches batches (which establishes happens-before) and stays
-// constant while workers run.
-static std::atomic<uint64_t> g_authoritativeFrame{0};
+// therefore be visible to every worker, not just the main thread. The main
+// thread advances this stamp once per AI frame (InvalidateSpatialCache) and
+// every worker reads it at lookup/store time, so entries from a previous frame
+// auto-invalidate without a per-thread call. The stamp is owned here and never
+// resets: AIManager's frame counter restarts at 0 on init() and state
+// transitions while the thread_local caches survive, so reusing it would let a
+// new state hit cached EDM indices from the old one. relaxed ordering is
+// sufficient: the stamp is published before the task queue dispatches batches
+// (which establishes happens-before) and stays constant while workers run.
+// Starts at 1 so never-stored cache entries (stamp 0) never match.
+static std::atomic<uint64_t> g_authoritativeFrame{1};
 
-// PERFORMANCE OPTIMIZATION: Spatial query cache to reduce CollisionManager load
-// Caches queryArea results within the same frame to eliminate redundant spatial
-// queries Key insight: Many nearby entities query the same spatial regions each
-// frame
+// PERFORMANCE OPTIMIZATION: Spatial query cache to reduce AIManager scan load
+// Caches scanActiveIndicesInRadius results (EDM indices) within the same frame
+// to eliminate redundant scans. Key insight: many nearby entities query the
+// same spatial regions each frame
 //
 // MEMORY MANAGEMENT: Uses buffer reuse pattern to avoid per-frame allocations
 // - Pre-allocated fixed-size array (no dynamic allocation per frame)
@@ -38,7 +40,7 @@ struct SpatialQueryCache {
     struct CacheEntry {
         uint64_t frameNumber{0};
         uint64_t queryKey{0}; // Store hash for fast validation (cheap integer compare)
-        std::vector<EntityID> results{};
+        std::vector<size_t> results{};
     };
 
     static constexpr size_t CACHE_SIZE = 64;
@@ -67,7 +69,7 @@ struct SpatialQueryCache {
     }
 
     bool lookup(const Vector2D& center, float radius, uint64_t currentFrame,
-        std::vector<EntityID>& outResults) {
+        std::vector<size_t>& outResults) {
         uint64_t key = hashQuery(center, radius);
         size_t index = key % CACHE_SIZE;
 
@@ -82,7 +84,7 @@ struct SpatialQueryCache {
     }
 
     void store(const Vector2D& center, float radius, uint64_t currentFrame,
-        const std::vector<EntityID>& results) {
+        const std::vector<size_t>& results) {
         uint64_t key = hashQuery(center, radius);
         size_t index = key % CACHE_SIZE;
 
@@ -123,82 +125,54 @@ VOIDLIGHT_STATS_ONLY(
             std::memory_order_relaxed);
     })
 
-int CountNearbyEntities(EntityID excludeId, const Vector2D& center,
+// Nearby active-tier NPC EDM indices from
+// AIManager::scanActiveIndicesInRadius, through the per-frame thread-local cache.
+// Called from AI batch workers: the scan reads AIManager's frame-built active
+// index buffer and EDM transforms, the same read set as the other AIManager
+// scan*InRadius helpers behaviors use.
+static const std::vector<size_t>& queryNearbyIndices(const Vector2D& center,
     float radius) {
-    const auto& cm = CollisionManager::Instance();
-
     VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
 
-    // Use thread-local vector to avoid repeated allocations
-    static thread_local std::vector<EntityID> queryResults;
-    queryResults.clear();
+    static thread_local std::vector<size_t> queryResults;
 
     // Read the authoritative frame once; the thread-local cache self-invalidates
     // against it so stale cross-frame data is never returned on worker threads.
     uint64_t currentFrame = g_authoritativeFrame.load(std::memory_order_relaxed);
 
-    // PERFORMANCE: Check spatial cache before expensive queryArea call
     bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
     VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
     if (!cacheHit) {
-        // Cache miss - perform actual collision query
-        VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
-            radius * 2.0f, radius * 2.0f);
-        cm.queryArea(area, queryResults);
-
-        // Store result in cache for subsequent queries in same frame
+        AIManager::Instance().scanActiveIndicesInRadius(center, radius, queryResults);
+        // Crowds are NPCs; projectiles, area effects, and items are not.
+        const auto& edm = EntityDataManager::Instance();
+        std::erase_if(queryResults, [&edm](size_t idx) {
+            return edm.getHotDataByIndex(idx).kind != EntityKind::NPC;
+        });
         g_spatialCache.store(center, radius, currentFrame, queryResults);
     }
+    return queryResults;
+}
 
-    // Count only actual entities (dynamic/kinematic, non-trigger, excluding self)
-    int count = static_cast<int>(std::count_if(
-        queryResults.begin(), queryResults.end(), [excludeId, &cm](auto id) {
-            return id != excludeId && (cm.isDynamic(id) || cm.isKinematic(id)) &&
-                !cm.isTrigger(id);
-        }));
+int CountNearbyEntities(size_t excludeEdmIndex, const Vector2D& center,
+    float radius) {
+    const auto& nearby = queryNearbyIndices(center, radius);
+    int count = static_cast<int>(nearby.size()) -
+        static_cast<int>(std::count(nearby.begin(), nearby.end(), excludeEdmIndex));
     VOIDLIGHT_STATS_ONLY(recordCrowdResults(count);)
     return count;
 }
 
-int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center,
+int GetNearbyEntitiesWithPositions(size_t excludeEdmIndex, const Vector2D& center,
     float radius,
     std::vector<Vector2D>& outPositions) {
     outPositions.clear();
 
-    const auto& cm = CollisionManager::Instance();
-
-    VOIDLIGHT_STATS_ONLY(recordCrowdQuery();)
-
-    // Use thread-local vector to avoid repeated allocations
-    static thread_local std::vector<EntityID> queryResults;
-    queryResults.clear();
-
-    // Read the authoritative frame once; the thread-local cache self-invalidates
-    // against it so stale cross-frame data is never returned on worker threads.
-    uint64_t currentFrame = g_authoritativeFrame.load(std::memory_order_relaxed);
-
-    // PERFORMANCE: Check spatial cache before expensive queryArea call
-    bool cacheHit = g_spatialCache.lookup(center, radius, currentFrame, queryResults);
-    VOIDLIGHT_STATS_ONLY(recordCrowdCache(cacheHit);)
-    if (!cacheHit) {
-        // Cache miss - perform actual collision query
-        VoidLight::AABB area(center.getX() - radius, center.getY() - radius,
-            radius * 2.0f, radius * 2.0f);
-        cm.queryArea(area, queryResults);
-
-        // Store result in cache for subsequent queries in same frame
-        g_spatialCache.store(center, radius, currentFrame, queryResults);
-    }
-
-    // Collect positions of actual entities (dynamic/kinematic, non-trigger,
-    // excluding self)
-    for (auto id : queryResults) {
-        if (id != excludeId && (cm.isDynamic(id) || cm.isKinematic(id)) &&
-            !cm.isTrigger(id)) {
-            Vector2D entityPos;
-            if (cm.getBodyCenter(id, entityPos)) {
-                outPositions.push_back(entityPos);
-            }
+    const auto& nearby = queryNearbyIndices(center, radius);
+    const auto& edm = EntityDataManager::Instance();
+    for (size_t idx : nearby) {
+        if (idx != excludeEdmIndex) {
+            outPositions.push_back(edm.getHotDataByIndex(idx).transform.position);
         }
     }
 
@@ -207,12 +181,8 @@ int GetNearbyEntitiesWithPositions(EntityID excludeId, const Vector2D& center,
     return count;
 }
 
-void InvalidateSpatialCache(uint64_t frameNumber) {
-    // Publish the new authoritative frame for all worker threads. Each worker's
-    // thread_local cache validates entries against this value, so prior-frame
-    // stamps auto-invalidate without any per-thread call. Released before the AI
-    // batch dispatch, which establishes happens-before for the workers' reads.
-    g_authoritativeFrame.store(frameNumber, std::memory_order_relaxed);
+void InvalidateSpatialCache() {
+    g_authoritativeFrame.fetch_add(1, std::memory_order_relaxed);
 }
 
 VOIDLIGHT_STATS_ONLY(

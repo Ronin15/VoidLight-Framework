@@ -325,28 +325,27 @@ BOOST_FIXTURE_TEST_CASE(TestStaticBodyChangeAppliedOnPathfinderUpdate, Collision
 }
 
 BOOST_FIXTURE_TEST_CASE(TestTreeTileChangeKeepsStaticHashClean, CollisionPathfindingFixture) {
-    // A TREE/ROCK tile change changes no collision body, so it must not dirty
-    // the static hash: the in-slot dirty-row rebuild then queries the hash
-    // instead of scanning every static. queryArea() exposes which path runs:
-    // the dirty linear fallback returns EventOnly triggers, the hash path
-    // (m_staticSpatialHash only) does not.
+    // A TREE/ROCK tile change only re-weights its pathfinding cell. It adds,
+    // removes, or moves no collision body, so it must not dirty the static hash:
+    // no CollisionObstacleChanged, an unchanged body count, and no static hash
+    // rebuild on the next CollisionManager::update(). The in-slot dirty-row
+    // rebuild then stays on the hash path.
     auto& cm = CollisionManager::Instance();
-    const AABB triggerArea(1400.0f, 1400.0f, 16.0f, 16.0f);
-    const EntityID triggerId = cm.createTriggerArea(triggerArea, TriggerTag::Water,
-        TriggerType::EventOnly, CollisionLayer::Layer_Environment, 0xFFFFFFFFu);
-    BOOST_REQUIRE_NE(triggerId, 0);
-    const auto linearPathRuns = [&cm, &triggerArea, triggerId]() {
-        std::vector<EntityID> found;
-        cm.queryArea(triggerArea, found);
-        return std::find(found.begin(), found.end(), triggerId) != found.end();
-    };
-    BOOST_REQUIRE(linearPathRuns()); // hash dirty after the add
 
-    // CollisionManager::update() rebuilds the static hash when a movable is active.
+    // An active movable makes update() rebuild a dirty static hash; settle the
+    // fixture's adds first.
     createPathNpc(Vector2D(100.0f, 100.0f));
     BOOST_REQUIRE(!EntityDataManager::Instance().getActiveIndices().empty());
+    drainAndUpdatePathfinder();
     cm.update(0.016f);
-    BOOST_REQUIRE(!linearPathRuns());
+    const uint64_t rebuildsBefore = cm.getPerfStats().staticHashRebuilds;
+    BOOST_REQUIRE_GT(rebuildsBefore, 0U);
+
+    int obstacleEvents = 0;
+    auto obstacleToken = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::CollisionObstacleChanged,
+        [&obstacleEvents](const EventData&) { ++obstacleEvents; });
+    const size_t bodyCountBefore = cm.getBodyCount();
 
     const Vector2D center = findOpenCellCenter();
     const int tileX = static_cast<int>(center.getX() / TILE_SIZE);
@@ -361,11 +360,14 @@ BOOST_FIXTURE_TEST_CASE(TestTreeTileChangeKeepsStaticHashClean, CollisionPathfin
         tileX, tileY, [newType](Tile& t) { t.obstacleType = newType; }));
 
     drainAndUpdatePathfinder();
-    BOOST_CHECK(!linearPathRuns());
+    cm.update(0.016f);
+    BOOST_CHECK_EQUAL(cm.getPerfStats().staticHashRebuilds, rebuildsBefore);
+    BOOST_CHECK_EQUAL(obstacleEvents, 0);
+    BOOST_CHECK_EQUAL(cm.getBodyCount(), bodyCountBefore);
     // TREE/ROCK only weight the cell; it stays open after the dirty-row rebuild.
     BOOST_CHECK(isCellOpen(center));
 
-    cm.removeCollisionBody(triggerId);
+    EventManager::Instance().removeHandler(obstacleToken);
 }
 
 BOOST_FIXTURE_TEST_CASE(TestInFlightPathRequestSurvivesGridPublish, CollisionPathfindingFixture) {

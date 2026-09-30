@@ -21,6 +21,7 @@
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
 #include "utils/Vector2D.hpp"
+#include <algorithm>
 #include <vector>
 #include <chrono>
 #include <random>
@@ -790,6 +791,133 @@ BOOST_AUTO_TEST_CASE(TestStaticOverlapQueryCountsEventOnlyTriggers) {
 
     CollisionManager::Instance().removeCollisionBody(triggerId);
     CollisionManager::Instance().clean();
+    bgm.clean();
+    edm.clean();
+}
+
+BOOST_AUTO_TEST_CASE(TestQueryAreaSameResultOnHashAndLinearPaths) {
+    // queryArea() returns every active body intersecting the area, EventOnly
+    // triggers included, whether the static hash is dirty (linear fallback) or
+    // rebuilt (hash path). Hash cells only yield candidates: a body sharing the
+    // query's 128px coarse cell without overlapping it is not a result.
+    auto& edm = EntityDataManager::Instance();
+    auto& cm = CollisionManager::Instance();
+    BOOST_REQUIRE(edm.init());
+    BOOST_REQUIRE(cm.init());
+    auto& bgm = BackgroundSimulationManager::Instance();
+    BOOST_REQUIRE(bgm.init());
+    bgm.setActiveRadius(2000.0f);
+
+    const auto addSolid = [&edm, &cm](const AABB& aabb) {
+        EntityHandle handle = edm.createStaticBody(aabb.center, aabb.halfSize.getX(),
+            aabb.halfSize.getY());
+        cm.addStaticBody(handle.getId(), aabb.center, aabb.halfSize,
+            CollisionLayer::Layer_Environment, 0xFFFFFFFFu, false, 0,
+            static_cast<uint8_t>(VoidLight::TriggerType::Physical),
+            edm.getStaticIndex(handle));
+        return handle.getId();
+    };
+
+    const EntityID triggerId = cm.createTriggerArea(AABB(400.0f, 400.0f, 16.0f, 16.0f),
+        VoidLight::TriggerTag::Water, VoidLight::TriggerType::EventOnly,
+        CollisionLayer::Layer_Environment, 0xFFFFFFFFu);
+    BOOST_REQUIRE_NE(triggerId, 0);
+    const EntityID solidId = addSolid(AABB(420.0f, 410.0f, 6.0f, 6.0f));
+    const EntityID sameCellId = addSolid(AABB(470.0f, 470.0f, 8.0f, 8.0f));
+
+    const AABB query(410.0f, 410.0f, 8.0f, 8.0f);
+    std::vector<EntityID> expected{triggerId, solidId};
+    std::sort(expected.begin(), expected.end());
+    const auto sortedQuery = [&cm, &query]() {
+        std::vector<EntityID> found;
+        cm.queryArea(query, found);
+        std::sort(found.begin(), found.end());
+        return found;
+    };
+
+    // Static hash dirty after the adds: linear fallback.
+    const auto linearResult = sortedQuery();
+    BOOST_CHECK_EQUAL_COLLECTIONS(linearResult.begin(), linearResult.end(),
+        expected.begin(), expected.end());
+
+    // CollisionManager::update() rebuilds the static hashes when a movable is
+    // active; the query then takes the hash path.
+    const Vector2D npcPos(100.0f, 100.0f);
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
+    BOOST_REQUIRE(npcHandle.isValid());
+    bgm.update(npcPos, 0.016f);
+    BOOST_REQUIRE_GE(edm.getActiveIndices().size(), 1u);
+    const uint64_t rebuildsBefore = cm.getPerfStats().staticHashRebuilds;
+    cm.update(0.016f);
+    BOOST_REQUIRE_GT(cm.getPerfStats().staticHashRebuilds, rebuildsBefore);
+
+    const auto hashResult = sortedQuery();
+    BOOST_CHECK_EQUAL_COLLECTIONS(hashResult.begin(), hashResult.end(), expected.begin(),
+        expected.end());
+
+    cm.removeCollisionBody(sameCellId);
+    cm.removeCollisionBody(solidId);
+    cm.removeCollisionBody(triggerId);
+    cm.clean();
+    bgm.clean();
+    edm.clean();
+}
+
+BOOST_AUTO_TEST_CASE(TestReenabledStaticBodyFoundOnBothQueryPaths) {
+    // The static hashes index only bodies active at rebuild time, so toggling a
+    // STATIC body's enabled state must dirty them like add/remove do.
+    auto& edm = EntityDataManager::Instance();
+    auto& cm = CollisionManager::Instance();
+    BOOST_REQUIRE(edm.init());
+    BOOST_REQUIRE(cm.init());
+    auto& bgm = BackgroundSimulationManager::Instance();
+    BOOST_REQUIRE(bgm.init());
+    bgm.setActiveRadius(2000.0f);
+
+    const AABB bodyAABB(600.0f, 600.0f, 16.0f, 16.0f);
+    EntityHandle bodyHandle = edm.createStaticBody(bodyAABB.center,
+        bodyAABB.halfSize.getX(), bodyAABB.halfSize.getY());
+    const EntityID bodyId = bodyHandle.getId();
+    cm.addStaticBody(bodyId, bodyAABB.center, bodyAABB.halfSize,
+        CollisionLayer::Layer_Environment, 0xFFFFFFFFu, false, 0,
+        static_cast<uint8_t>(VoidLight::TriggerType::Physical),
+        edm.getStaticIndex(bodyHandle));
+    cm.setBodyEnabled(bodyId, false);
+
+    // Rebuild the static hashes while the body is disabled (an active movable
+    // makes update() rebuild them).
+    const Vector2D npcPos(100.0f, 100.0f);
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
+    BOOST_REQUIRE(npcHandle.isValid());
+    bgm.update(npcPos, 0.016f);
+    BOOST_REQUIRE_GE(edm.getActiveIndices().size(), 1u);
+    uint64_t rebuilds = cm.getPerfStats().staticHashRebuilds;
+    cm.update(0.016f);
+    BOOST_REQUIRE_GT(cm.getPerfStats().staticHashRebuilds, rebuilds);
+    rebuilds = cm.getPerfStats().staticHashRebuilds;
+
+    const AABB query(605.0f, 605.0f, 4.0f, 4.0f);
+    const auto found = [&cm, &query, bodyId]() {
+        std::vector<EntityID> results;
+        cm.queryArea(query, results);
+        return std::find(results.begin(), results.end(), bodyId) != results.end();
+    };
+    BOOST_REQUIRE(!found());
+    BOOST_REQUIRE(!cm.queryAreaHasStaticOverlap(query));
+
+    // Re-enabled: found before the next rebuild (dirty linear fallback) ...
+    cm.setBodyEnabled(bodyId, true);
+    BOOST_CHECK(found());
+    BOOST_CHECK(cm.queryAreaHasStaticOverlap(query));
+
+    // ... and after it (hash path).
+    cm.update(0.016f);
+    BOOST_REQUIRE_GT(cm.getPerfStats().staticHashRebuilds, rebuilds);
+    BOOST_CHECK(found());
+    BOOST_CHECK(cm.queryAreaHasStaticOverlap(query));
+
+    cm.removeCollisionBody(bodyId);
+    cm.clean();
     bgm.clean();
     edm.clean();
 }

@@ -450,7 +450,7 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
         // Refresh cached nearby count using countdown timer pattern
         if (shared.lastCrowdAnalysis <= 0.0f) {
             shared.cachedNearbyCount = AIInternal::CountNearbyEntities(
-                ctx.entityId, ctx.transform.position, 100.0f);
+                ctx.edmIndex, ctx.transform.position, 100.0f);
             shared.lastCrowdAnalysis = CROWD_ANALYSIS_INTERVAL;
         }
 

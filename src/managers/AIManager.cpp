@@ -457,11 +457,9 @@ void AIManager::update(float deltaTime) {
 
         const size_t entityCount = m_activeIndicesBuffer.size();
 
-        uint64_t currentFrame = m_frameCounter.load(std::memory_order_relaxed);
-
-        // Invalidate spatial query cache for new frame
-        // This ensures thread-local caches are fresh and don't use stale collision data
-        AIInternal::InvalidateSpatialCache(currentFrame);
+        // Start a new crowd-cache frame so worker thread_local caches drop
+        // entries from earlier frames (and earlier states).
+        AIInternal::InvalidateSpatialCache();
         VOIDLIGHT_DEBUG_ONLY(AIInternal::ResetCrowdStats();)
 
         // Query world bounds ONCE per frame (not per batch)
