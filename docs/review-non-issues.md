@@ -31,6 +31,20 @@ References are by symbol/function (not line numbers) so they survive edits.
   Intentional: `ResourceRenderController::update` takes a `Camera&` so it can't ride the
   parameterless `updateAll()`. No double-update path. Documented inline.
 
+- **Harvest tile removal is only wired in `GamePlayState`**
+  By design. `GamePlayState::enter()` registers the transient `EventTypeId::Harvest` handler
+  that calls `WorldManager::handleHarvestResource()` to clear the tile obstacle; depletion
+  itself goes through `HarvestCommit::commit` for player and AI in every state. AIDemo and
+  EventDemo opt out of world population (`WorldGenerationConfig::populate = false`) and are
+  not gameplay targets, so they do not register the handler. A persistent Harvest handler for
+  demos is a Slice 6R non-goal; tile restore symmetry is Slice 6.1.
+
+- **AIDemo Wander NPCs forage**
+  Expected. `AIManager::syncNeedForRole` seeds a survival need for humanoid NPCs assigned the
+  default-config `Idle` or `Wander` role, so AIDemo NPCs switched to `Wander` accumulate need
+  and forage. That is part of the AI load the demo measures, not demo-specific leakage.
+  Preset configs (`SmallWander`, `LargeWander`, …) do not get need entries.
+
 ## B. Thread/lifecycle items that are latent-only under current usage
 
 - **ThreadSystem `getTaskStats` unlocked read** — diagnostics-only, benign data race on

@@ -293,8 +293,8 @@ void GamePlayState::update(float deltaTime) {
             }
             if (auto* gameOverState = dynamic_cast<GameOverState*>(
                     mp_stateManager->getState(GameStateId::GAME_OVER).get())) {
-                // Sticky return target: always re-pin before transition so a prior
-                // death in another state cannot leave Retry pointed at the wrong id.
+                // GameOverState keeps its return state across visits; set it
+                // on every transition rather than relying on the default.
                 gameOverState->setReturnState(GameStateId::GAME_PLAY);
             }
 

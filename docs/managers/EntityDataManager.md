@@ -345,6 +345,10 @@ Storage only; the single source of truth for NPC-faction relations toward the pl
 
 The player has no faction: `registerPlayer` sets `CharacterData::faction = CharacterData::NO_FACTION` (0xFF), and `setFaction` rejects `EntityKind::Player` with a warning. (The factory `factionOverride = 0xFF` "no override" parameter is unrelated.)
 
+### Behavior Role Fields (Slice 7 scaffolding)
+
+`CharacterData::behaviorType` and `CharacterData::homeRole` are written by `AIManager` only: both on behavior assignment, and `behaviorType` again on each transition commit. No production code reads either field yet; production AI reads `BehaviorConfig.type`. They are scaffolding for the Slice 7 selector (`homeRole` is the role to restore to, not the current type) and are checked only by tests today.
+
 ### NPC Collision Grouping
 
 ```cpp

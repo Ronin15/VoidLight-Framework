@@ -163,8 +163,9 @@ If you want to override automatic weather:
 // Disable auto weather
 GameTimeManager::Instance().enableAutoWeather(false);
 
-// Manually trigger weather change
-EventManager::Instance().changeWeather(WeatherType::Stormy);
+// Manually trigger weather change (type name, transition seconds, dispatch mode)
+EventManager::Instance().changeWeather("Stormy", 2.0f,
+    EventManager::DispatchMode::Deferred);
 ```
 
 ## Performance Characteristics

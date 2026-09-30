@@ -16,12 +16,10 @@ public:
     bool exit() override;
     GameStateId getStateId() const override { return GameStateId::GAME_OVER; }
 
-    // Sets which state Retry returns to (e.g. GAME_PLAY, AI_DEMO, or EVENT_DEMO
-    // if those callers set a return state). Callers must set this before
-    // transitioning into GameOverState — it is not reset automatically, since
-    // enter() runs before any of this state's own code could otherwise re-derive
-    // the caller's identity. Main Menu always goes to MAIN_MENU regardless of
-    // this value.
+    // Sets which state Retry returns to. Only GamePlayState routes here today
+    // and sets GAME_PLAY. The value is not reset on exit, so a caller must set
+    // it before every transition into GameOverState. Main Menu always goes to
+    // MAIN_MENU regardless of this value.
     void setReturnState(GameStateId state) { m_returnState = state; }
 
     void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
@@ -29,8 +27,8 @@ public:
         SDL_GPURenderPass* swapchainPass) override;
 
 private:
-    // Retry destination — set via setReturnState() by the state that routed
-    // here (GamePlayState, AIDemoState, EventDemoState). Defaults to GAME_PLAY.
+    // Retry destination, set via setReturnState() by GamePlayState (the only
+    // caller). Defaults to GAME_PLAY.
     GameStateId m_returnState = GameStateId::GAME_PLAY;
 };
 

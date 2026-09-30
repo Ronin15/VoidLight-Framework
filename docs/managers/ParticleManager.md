@@ -38,8 +38,8 @@ ParticleManager (Singleton)
 │   │   ├── Separate arrays for SIMD processing
 │   │   └── Cache-aligned memory layout
 │   └── Automatic Memory Management
-│       ├── Cleanup every 100 particles
-│       └── Compaction every 300 frames
+│       ├── Free-index slot reuse
+│       └── Freed indices recycled after 2 frames
 ├── Effect Management System
 │   ├── Effect Definitions
 │   │   ├── Built-in Weather Effects
@@ -73,7 +73,7 @@ ParticleManager (Singleton)
 - **Vector Processing**: Position, velocity, and acceleration updates leverage SIMD instructions (SSE/AVX)
 - **Lock-Free Worker Threads**: Shared_mutex with try-lock mechanisms prevent deadlocks
 - **WorkerBudget Threading**: Queue pressure management with graceful degradation
-- **Automatic Memory Management**: Intelligent cleanup and compaction prevent memory leaks
+- **Automatic Memory Management**: Inactive slots are recycled through a free-index pool (no compaction pass)
 - **Performance Statistics**: Instantaneous rate calculation prevents metric overflow issues
 
 ### 🌦️ Weather System Integration
@@ -420,11 +420,12 @@ size_t getMaxParticleCapacity() const;
 ```cpp
 // Capacity management
 void setMaxParticles(size_t maxParticles);
-void compactParticleStorage();
-
-// Cleanup
-void cleanupInactiveParticles();
+size_t getMaxParticleCapacity() const;
+size_t getActiveParticleCount() const;
+size_t countActiveParticles() const; // scans storage
 ```
+
+There is no public compaction or cleanup call. `update()` deactivates expired particles and returns their indices to a free-index pool; indices become reusable after two frames, once worker batches that could still read them have completed.
 
 ## Integration Examples
 
@@ -529,13 +530,8 @@ void optimizeParticleProcessing() {
 ### Memory Optimization Tips
 
 ```cpp
-// Pre-allocate for known particle loads
-pm.setMaxParticles(5000);  // Reserve capacity
-
-// Periodic cleanup for long-running games
-if (gameTime % 300 == 0) {  // Every 5 seconds
-    pm.compactParticleStorage();
-}
+// Cap particle storage for known particle loads
+pm.setMaxParticles(5000);
 
 // Monitor performance
 auto stats = pm.getPerformanceStats();
@@ -673,7 +669,7 @@ config.emissionRate = 10000.0f;  // Will overwhelm system
 | Issue | Symptoms | Solution |
 |-------|----------|----------|
 | **Low Performance** | Frame drops, high CPU | Reduce emission rates, enable threading |
-| **Memory Growth** | Increasing RAM usage | Call compactParticleStorage() periodically |
+| **Memory Growth** | Increasing RAM usage | Lower `setMaxParticles()` or emission rates; slots are reused, not compacted |
 | **Visual Artifacts** | Particles not rendering | Check global visibility and camera viewport |
 | **Effect Not Playing** | No particles visible | Verify effect registration and position |
 

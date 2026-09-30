@@ -26,7 +26,7 @@ Stable `hud_*` IDs for tests and documentation. Production pause/resume must not
 - `TARGET_NAME_ID` / `TARGET_HP_LABEL_ID` / `TARGET_HEALTH_BAR_ID`
 - `HARVEST_LABEL_ID` / `HARVEST_BAR_ID`
 
-Target getters (`hasActiveTarget()`, `getTargetLabel()`, `getTargetHealth()`) remain for tests and sibling controllers. Production states do not push those values into UI.
+Target getters (`hasActiveTarget()`, `getTargetLabel()`, `getTargetHealth()`) are test-only: no production state or controller calls them. The controller applies target widgets itself; production states do not push those values into UI.
 
 ## Typical Usage (GamePlayState)
 

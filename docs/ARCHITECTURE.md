@@ -79,7 +79,7 @@ Important transitions:
 
 - `MainMenuState -> LoadingState -> GamePlayState`
 - `GamePlayState -> GameOverState`
-- AIDemo/EventDemo may also route to `GameOverState` if they set a return state
+- Only `GamePlayState` sets a `GameOverState` return state; AIDemo/EventDemo do not route to `GameOverState`
 
 ## State Transitions (UI + lifecycle)
 

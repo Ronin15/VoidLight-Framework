@@ -84,4 +84,4 @@ Typical manager order when present:
 
 ## GameOverState
 
-This branch adds a dedicated `GameOverState` so GamePlayState (and AIDemo/EventDemo if they set a return state) can route player death into a real state instead of handling game-over UI inline.
+This branch adds a dedicated `GameOverState` so GamePlayState can route player death into a real state instead of handling game-over UI inline. Only GamePlayState sets a return state (`setReturnState(GAME_PLAY)` before every transition); AIDemo and EventDemo do not route to `GameOverState`.

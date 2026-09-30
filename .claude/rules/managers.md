@@ -41,6 +41,11 @@ behavior rules are in `.claude/rules/ai.md`.
 - `recordCombatEvent()` and memory APIs store combat facts, totals,
   last attacker/target, and memory records. Emotion interpretation and
   behavior response belong in AI code.
+- Factory auto-registration (Slice 3 contract, the only AI policy in
+  EDM): `createNPCWithRaceClass` (`classes.json`, fallback `Wander`),
+  `createMonster` (`monster_variants.json`, fallback `Chase`), and
+  `createAnimal` (`animal_roles.json`, fallback `Wander`) each call
+  `AIManager::registerEntity` with the JSON `suggestedBehavior`.
 - Expansion rule (`EntityDataTypes.hpp`): every-frame fields go on the
   hot/character line; "some NPCs, sometimes" data goes in a
   `SparseSidecar`. Changes to `EntityHotData`, dense pools, sidecars, or

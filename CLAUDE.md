@@ -147,7 +147,7 @@ Boost.Test names are the `BOOST_AUTO_TEST_CASE` name (suite prefix optional); co
 
 ### EDM, AI, and Controllers
 
-- `EntityDataManager` is storage only for AI *decision* math. `createNPCWithRaceClass` still auto-registers `classes.json` suggestedBehavior via `AIManager::registerEntity`; do not add more policy there.
+- `EntityDataManager` is storage only for AI *decision* math. The `createNPCWithRaceClass`, `createMonster`, and `createAnimal` factories still auto-register JSON `suggestedBehavior` via `AIManager::registerEntity` (details in `.claude/rules/managers.md`); do not add more policy there.
 - `EDM::recordCombatEvent()` records stats and memory only; emotion math belongs outside EDM in AI/behavior code.
 - Witnessed combat/death memories are behavior-consumed state; EDM stores memory records only.
 - `AIManager::update()` commits command-bus changes and caches world/player data on the main thread before worker batches; behavior execution and emotional decay run in the AI batch path.

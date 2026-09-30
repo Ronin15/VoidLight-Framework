@@ -358,10 +358,6 @@ bool WorldManager::handleHarvestResource(int entityId, int targetX,
         return false;
     }
 
-    // Notify WorldResourceManager about resource depletion
-    // This is a placeholder - actual resource tracking would need proper resource
-    // handles
-
     WORLD_MANAGER_INFO(std::format("Resource harvested at ({}, {}) by entity {}",
         targetX, targetY, entityId));
     return true;

@@ -450,12 +450,12 @@ Status: Implemented and reviewed (two rounds). Round 1 Mediums (rejection/stall 
 
 Goal: Correct cross-slice contract gaps found reviewing Slices 2–6 on `emergent_play` before Slice 6.1 builds on them. The player has no NPC faction and per-faction standing is the single source of player relations; weather and environment scales follow one table; NPC forage never wastes a node and merchants stay near home; demos and NPC-free fixtures load worlds without population; dead code and stale docs are removed.
 
-Current foundation:
+Foundation before 6R (historical; the state this slice corrected):
 
-- Slice 5 stance table (`AIManager` 16×16, NPC-faction ↔ NPC-faction), EDM `SparseSidecar<PlayerFactionStanding>` keyed by the player slot, `StanceChangedEvent`, `queryTerritoryAtPixel`. Today the combat handler writes both stance directions toward faction 0; the player's `CharacterData.faction` stays 0 (same as settlements), so hitting a Warrior turns faction 1 Hostile toward every villager.
-- Slice 4 environment snapshot and modifier table; persistent Weather handler on `AIManager`. The handler also multiplies detection by visibility after the clamp, and `EventManager::changeWeather` reuses pooled events whose params depend on pool state.
-- Slice 6 need sidecar, Forage behavior, main-thread `commitQueuedHarvests` + `HarvestCommit::commit`, harvestable snapshot. A full NPC inventory currently depletes a node and discards the yield; harvest arbitration uses an atomic sequence.
-- `WorldManager::loadNewWorld` always populates; demos and fixtures clear the population afterwards.
+- Slice 5 stance table (`AIManager` 16×16, NPC-faction ↔ NPC-faction), EDM `SparseSidecar<PlayerFactionStanding>` keyed by the player slot, `StanceChangedEvent`, `queryTerritoryAtPixel`. The combat handler wrote both stance directions toward faction 0; the player's `CharacterData.faction` stayed 0 (same as settlements), so hitting a Warrior turned faction 1 Hostile toward every villager.
+- Slice 4 environment snapshot and modifier table; persistent Weather handler on `AIManager`. The handler also multiplied detection by visibility after the clamp, and `EventManager::changeWeather` reused pooled events whose params depended on pool state.
+- Slice 6 need sidecar, Forage behavior, main-thread `commitQueuedHarvests` + `HarvestCommit::commit`, harvestable snapshot. A full NPC inventory depleted a node and discarded the yield; harvest arbitration used an atomic sequence.
+- `WorldManager::loadNewWorld` always populated; demos and fixtures cleared the population afterwards.
 
 Architecture notes:
 
@@ -480,8 +480,8 @@ Checklist:
 - [x] WP6 defer-message contract (delete main-thread defer drain pre-pass)
 - [x] WP7 one harvestable container in `WorldResourceManager`
 - [x] WP8 dead code (a: `UIManager` animation/text-background; b: `ParticleManager` threading toggle wiring)
-- [ ] WP9 docs (return-state wording, stale comments, HUD getters, Slice 7 scaffolding fields, factory auto-registration wording, review non-issues)
-- [ ] Owning docs updated
+- [x] WP9 docs (return-state wording, stale comments, HUD getters, Slice 7 scaffolding fields, factory auto-registration wording, review non-issues)
+- [x] Owning docs updated
 - [ ] Tests updated in the same change
 
 Acceptance checks:
@@ -496,7 +496,7 @@ Acceptance checks:
 - [ ] Targeted Boost.Test executables for each work package pass
 - [ ] Slice reviewed (`game-systems-architect`) before commit
 
-Status: In progress. WP1–WP8 done; WP9 not started. Scheduled after Slice 6 and before 6.1.
+Status: In progress. WP1–WP9 done; slice-complete gate and review pending. Scheduled after Slice 6 and before 6.1.
 
 ## Slice 6.1: Harvestable respawn
 

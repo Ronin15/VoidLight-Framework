@@ -924,7 +924,6 @@ private:
         float deltaTime);
     void updateEffectInstance(EffectInstance& effect, float deltaTime);
     void swapBuffers();
-    void cleanupInactiveParticles();
     // precondition: caller holds m_effectsMutex (unique_lock)
     void compactInactiveEffectInstances();
     void updateEffectInstances(float deltaTime);
