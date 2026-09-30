@@ -64,7 +64,6 @@ checkLibraryFunction:hasBehavior
 checkLibraryFunction:wasKeyPressed
 checkLibraryFunction:isKeyDown
 checkLibraryFunction:createLabel
-checkLibraryFunction:enableTextBackground
 checkLibraryFunction:drawRect
 checkLibraryFunction:drawBorder
 checkLibraryFunction:getComponent

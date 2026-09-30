@@ -37,10 +37,6 @@ bool UIManager::init() {
     // Clear any existing data and reserve capacity for performance
     m_components.clear();
     m_layouts.clear();
-    m_animations.clear();
-    constexpr size_t ANIMATIONS_CAPACITY = 16;
-    m_animations.reserve(
-        ANIMATIONS_CAPACITY); // Reserve for typical UI animations
     m_clickedButtons.clear();
     constexpr size_t INTERACTIONS_CAPACITY = 8;
     m_clickedButtons.reserve(
@@ -121,11 +117,6 @@ void UIManager::update(float deltaTime) {
 
     // Handle input (may need component access)
     handleInput();
-
-    // PERFORMANCE: Skip animation update if no animations exist
-    if (!m_animations.empty()) {
-        updateAnimations(deltaTime);
-    }
 
     // Update tooltips
     updateTooltips(deltaTime);
@@ -795,13 +786,6 @@ void UIManager::markAllBindingsDirty() {
 }
 
 // Text background methods for label and title readability
-void UIManager::enableTextBackground(const std::string& id, bool enable) {
-    auto component = getComponent(id);
-    if (component && (component->m_type == UIComponentType::LABEL || component->m_type == UIComponentType::TITLE)) {
-        component->m_style.useTextBackground = enable;
-    }
-}
-
 void UIManager::setTextBackgroundColor(const std::string& id, SDL_Color color) {
     auto component = getComponent(id);
     if (component && (component->m_type == UIComponentType::LABEL || component->m_type == UIComponentType::TITLE)) {
@@ -1315,68 +1299,6 @@ bool UIManager::isInputFieldFocused(const std::string& id) const {
     return isComponentFocused(id);
 }
 
-// Animation system
-void UIManager::animateMove(const std::string& id, const UIRect& targetBounds,
-    float duration, std::function<void()> onComplete) {
-    auto component = getComponent(id);
-    if (!component) {
-        return;
-    }
-
-    auto animation = std::make_shared<UIAnimation>();
-    animation->m_componentID = id;
-    animation->m_duration = duration;
-    animation->m_elapsed = 0.0f;
-    animation->m_active = true;
-    animation->m_startBounds = component->m_bounds;
-    animation->m_targetBounds = targetBounds;
-    animation->m_onComplete = std::move(onComplete);
-
-    // Remove any existing animation for this component
-    stopAnimation(id);
-
-    m_animations.push_back(animation);
-}
-
-void UIManager::animateColor(const std::string& id,
-    const SDL_Color& targetColor, float duration,
-    std::function<void()> onComplete) {
-    auto component = getComponent(id);
-    if (!component) {
-        return;
-    }
-
-    auto animation = std::make_shared<UIAnimation>();
-    animation->m_componentID = id;
-    animation->m_duration = duration;
-    animation->m_elapsed = 0.0f;
-    animation->m_active = true;
-    animation->m_startColor = component->m_style.backgroundColor;
-    animation->m_targetColor = targetColor;
-    animation->m_onComplete = std::move(onComplete);
-
-    // Remove any existing animation for this component
-    stopAnimation(id);
-
-    m_animations.push_back(animation);
-}
-
-void UIManager::stopAnimation(const std::string& id) {
-    m_animations.erase(
-        std::remove_if(m_animations.begin(), m_animations.end(),
-            [&id](const std::shared_ptr<UIAnimation>& anim) {
-                return anim->m_componentID == id;
-            }),
-        m_animations.end());
-}
-
-bool UIManager::isAnimating(const std::string& id) const {
-    return std::any_of(m_animations.begin(), m_animations.end(),
-        [&id](const std::shared_ptr<UIAnimation>& anim) {
-            return anim->m_componentID == id && anim->m_active;
-        });
-}
-
 // Theme management
 void UIManager::loadTheme(const UITheme& theme) {
     m_currentTheme = theme;
@@ -1805,7 +1727,6 @@ void UIManager::clearAllComponents() {
 
     // Clear other collections
     m_layouts.clear();
-    m_animations.clear();
     m_clickedButtons.clear();
     m_hoveredComponents.clear();
     m_focusedComponent.clear();
@@ -1835,9 +1756,6 @@ void UIManager::prepareForStateTransition() {
 
     // Clear all layouts
     m_layouts.clear();
-
-    // Stop and clear all animations
-    m_animations.clear();
 
     // Clear any queued callbacks and frame-local GPU batch descriptors.
     m_deferredCallbacks.clear();
@@ -2174,44 +2092,6 @@ void UIManager::handleInput() {
     }
 }
 
-void UIManager::updateAnimations(float deltaTime) {
-    for (auto it = m_animations.begin(); it != m_animations.end();) {
-        auto& anim = *it;
-        if (!anim->m_active) {
-            it = m_animations.erase(it);
-            continue;
-        }
-
-        anim->m_elapsed += deltaTime;
-        float t = std::min(anim->m_elapsed / anim->m_duration, 1.0f);
-
-        auto component = getComponent(anim->m_componentID);
-        if (component) {
-            // Apply animation
-            if (anim->m_startBounds.width > 0) {
-                // Position/size animation
-                component->m_bounds =
-                    interpolateRect(anim->m_startBounds, anim->m_targetBounds, t);
-            } else {
-                // Color animation
-                component->m_style.backgroundColor =
-                    interpolateColor(anim->m_startColor, anim->m_targetColor, t);
-            }
-        }
-
-        if (t >= 1.0f) {
-            // Animation complete
-            anim->m_active = false;
-            if (anim->m_onComplete) {
-                anim->m_onComplete();
-            }
-            it = m_animations.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 void UIManager::updateTooltips(float deltaTime) {
     if (!m_tooltipsEnabled) {
         return;
@@ -2322,22 +2202,6 @@ void UIManager::applyStackLayout(const std::shared_ptr<UILayout>& layout) {
 void UIManager::applyAnchorLayout(const std::shared_ptr<UILayout>& layout) {
     // TODO: Implement anchor-based layout
     applyAbsoluteLayout(layout);
-}
-
-SDL_Color UIManager::interpolateColor(const SDL_Color& start,
-    const SDL_Color& end, float t) {
-    return {.r = static_cast<Uint8>(start.r + (end.r - start.r) * t),
-        .g = static_cast<Uint8>(start.g + (end.g - start.g) * t),
-        .b = static_cast<Uint8>(start.b + (end.b - start.b) * t),
-        .a = static_cast<Uint8>(start.a + (end.a - start.a) * t)};
-}
-
-UIRect UIManager::interpolateRect(const UIRect& start, const UIRect& end,
-    float t) {
-    return {static_cast<int>(start.x + (end.x - start.x) * t),
-        static_cast<int>(start.y + (end.y - start.y) * t),
-        static_cast<int>(start.width + (end.width - start.width) * t),
-        static_cast<int>(start.height + (end.height - start.height) * t)};
 }
 
 // Auto-sizing implementation

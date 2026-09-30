@@ -4,7 +4,7 @@
 
 ## Overview
 
-`UIManager` is the engine's main-thread UI system. It owns component creation, layout, theming, animation, input routing, and frame-local UI render batches. SDL_GPU device objects, pipelines, samplers, command buffers, render passes, and vertex pools stay owned by the GPU architecture.
+`UIManager` is the engine's main-thread UI system. It owns component creation, layout, theming, input routing, and frame-local UI render batches. SDL_GPU device objects, pipelines, samplers, command buffers, render passes, and vertex pools stay owned by the GPU architecture.
 
 Core contracts:
 

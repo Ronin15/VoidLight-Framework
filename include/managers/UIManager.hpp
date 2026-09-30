@@ -261,21 +261,6 @@ struct UITheme {
     }
 };
 
-// Animation data
-struct UIAnimation {
-    std::string m_componentID{};
-    float m_duration{0.0f};
-    float m_elapsed{0.0f};
-    bool m_active{false};
-
-    UIRect m_startBounds{};
-    UIRect m_targetBounds{};
-    SDL_Color m_startColor{};
-    SDL_Color m_targetColor{};
-
-    std::function<void()> m_onComplete{};
-};
-
 // Event log state for auto-updating
 struct EventLogState {
     float m_timer{0.0f};
@@ -483,14 +468,6 @@ public:
     void setInputFieldMaxLength(const std::string& id, int maxLength);
     bool isInputFieldFocused(const std::string& id) const;
 
-    // Animation system
-    void animateMove(const std::string& id, const UIRect& targetBounds,
-        float duration, std::function<void()> onComplete = nullptr);
-    void animateColor(const std::string& id, const SDL_Color& targetColor,
-        float duration, std::function<void()> onComplete = nullptr);
-    void stopAnimation(const std::string& id);
-    bool isAnimating(const std::string& id) const;
-
     // Theme management
     void loadTheme(const UITheme& theme);
     void setDefaultTheme();
@@ -510,7 +487,6 @@ public:
     void removeOverlay(); // Removes the overlay background
 
     // Text background methods (for labels and titles readability)
-    void enableTextBackground(const std::string& id, bool enable = true);
     void setTextBackgroundColor(const std::string& id, SDL_Color color);
     void setTextBackgroundPadding(const std::string& id, int padding);
 
@@ -603,7 +579,6 @@ private:
     // Core data
     std::unordered_map<std::string, std::shared_ptr<UIComponent>> m_components{};
     std::unordered_map<std::string, std::shared_ptr<UILayout>> m_layouts{};
-    std::vector<std::shared_ptr<UIAnimation>> m_animations{};
 
     // State tracking
     std::vector<std::string> m_clickedButtons{};
@@ -679,7 +654,6 @@ private:
     int calculateListItemHeight(const std::shared_ptr<UIComponent>& component) const;
 
     void handleInput();
-    void updateAnimations(float deltaTime);
     void updateTooltips(float deltaTime);
     void updateEventLogs(float deltaTime);
     // PERFORMANCE: Return const reference to avoid vector copy every frame
@@ -697,9 +671,6 @@ private:
     void applyAnchorLayout(const std::shared_ptr<UILayout>& layout);
 
     // Utility helpers
-    SDL_Color interpolateColor(const SDL_Color& start, const SDL_Color& end,
-        float t);
-    UIRect interpolateRect(const UIRect& start, const UIRect& end, float t);
     void executeDeferredCallbacks();
 
     // Deferred execution queue to prevent iterator invalidation

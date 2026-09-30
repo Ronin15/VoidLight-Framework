@@ -393,9 +393,9 @@ ui.addEventLogEntry("game_log", "Enemy detected");
 
 ---
 
-## Timing and Animation Constants
+## Timing and Scaling Constants
 
-Animation and interaction timing:
+Interaction timing and scale limits:
 
 ```cpp
 // Tooltips
