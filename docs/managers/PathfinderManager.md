@@ -201,40 +201,17 @@ Enables or disables diagonal movement in pathfinding.
 #### `void setMaxIterations(int maxIterations)`
 Sets the maximum A* iterations to prevent infinite loops.
 
-### Dynamic Weight Fields
-
-#### `void addWeightField(const std::string& name, const Vector2D& center, float radius, float weight)`
-Adds temporary movement cost modifiers.
-```cpp
-// Create danger zone around explosion
-PathfinderManager::Instance().addWeightField(
-    "explosion_danger",
-    explosionCenter,
-    100.0f,     // radius
-    10.0f       // high cost multiplier
-);
-
-// Create slow zone for water
-PathfinderManager::Instance().addWeightField(
-    "water_slow",
-    waterCenter,
-    50.0f,      // radius
-    2.0f        // moderate cost increase
-);
-```
-
-#### `void removeWeightField(const std::string& name)`
-Removes a named weight field.
-
-#### `void clearWeightFields()`
-Removes all temporary weight fields.
-
 ### Performance Monitoring
 
 #### `void update()`
-Main update loop - call once per frame from game update thread.
-- **Performance**: Minimal overhead - primarily for statistics and cache management
-- **Thread Safety**: Safe to call from update thread
+Main-thread frame slot (`GameEngine` step 5, before `CollisionManager::update()`).
+- Commits completed path requests to EDM (`commitCompletedPaths()`).
+- Applies dirty grid cells: copies the published grid, rebuilds the dirty rows
+  on the copy (`WorkerBudget` batches for `SystemType::Pathfinding`, joined
+  before `update()` returns, execution reported), then publishes the copy.
+- **Performance**: no allocation when nothing is dirty; a dirty frame pays one
+  grid copy plus the dirty rows.
+- **Thread Safety**: main thread only. Skipped while globally paused.
 
 #### `PathfindingStats getStatistics() const`
 Gets performance statistics.
@@ -251,28 +228,8 @@ GAMEENGINE_INFO("Pathfinding: " + std::to_string(stats.requestsPerSecond) + " re
 Behaviors call `requestPathToEDM(edmIndex, start, goal, priority)`. `AIManager` commits on the main thread via `commitCompletedPaths()`. Do not use worker callbacks.
 
 ### Collision Integration
-```cpp
-// PathfinderManager automatically receives collision events and invalidates cache
-// No manual integration required - handled internally
 
-// However, you can add custom obstacle avoidance:
-void createDynamicObstacle(const Vector2D& center, float radius) {
-    // Add temporary weight field for dynamic obstacle
-    PathfinderManager::Instance().addWeightField(
-        "dynamic_obstacle_" + std::to_string(obstacleId),
-        center,
-        radius,
-        5.0f  // Make area expensive to traverse
-    );
-
-    // Remove after obstacle is gone
-    timer.scheduleCallback(obstacleLifetime, [obstacleId]() {
-        PathfinderManager::Instance().removeWeightField(
-            "dynamic_obstacle_" + std::to_string(obstacleId)
-        );
-    });
-}
-```
+PathfinderManager receives `CollisionObstacleChanged` / `TileChanged`, invalidates cached paths through the area, marks the cells dirty, and rebuilds them in `update()` (see Dirty-Cell Updates). No manual integration is required. There is no manager-level weight-field API; static bodies and tile data are the only grid inputs.
 
 ### Player Movement Integration
 
@@ -338,7 +295,7 @@ void schedulePathfindingRequests() {
 
 ## Grid Rebuild Architecture
 
-The PathfinderManager implements intelligent grid management with threaded rebuilds and incremental updates for optimal state transition performance.
+The PathfinderManager builds the grid once per world load (detached, gated by LoadingState) and applies later obstacle/tile changes as dirty cells inside `update()`.
 
 ### Threaded Grid Rebuild System
 
@@ -346,8 +303,9 @@ Grid rebuilds execute on ThreadSystem workers using WorkerBudget allocation, ena
 
 #### Parallel Batching Strategy
 ```cpp
-// PathfinderManager automatically selects rebuild strategy based on grid size
-void rebuildGrid(bool allowIncremental = true);
+// Full rebuild into a new grid, published when done (isGridReady() tracks it).
+// Production caller: StaticCollidersReady during a load. Tests/benches may call it.
+void rebuildGrid();
 ```
 
 The system determines optimal rebuild strategy:
@@ -371,38 +329,38 @@ void prepareForStateTransition();
 void waitForGridRebuildCompletion();
 ```
 
-### Incremental Update System
+### Dirty-Cell Updates
 
-For dynamic world changes, the system supports event-driven partial rebuilds that only recalculate affected regions.
+Obstacle and tile changes after load are applied in the manager's own frame
+slot. Handlers never rebuild.
 
 #### Event Subscriptions
-PathfinderManager subscribes to EventManager for automatic grid updates:
-- **CollisionObstacleChanged**: Invalidates cache and marks dirty regions
-- **WorldLoaded**: Triggers full grid rebuild for new world
-- **WorldUnloaded**: Clears grid and cache
-- **TileChanged**: Marks affected cells for incremental rebuild
+PathfinderManager subscribes to EventManager (persistent handlers):
+- **StaticCollidersReady**: full detached `rebuildGrid()` for the new world
+- **WorldUnloaded**: joins rebuild futures and drops the grid
+- **CollisionObstacleChanged**: invalidates cached paths through the area and marks the cells dirty
+- **TileChanged**: invalidates cached paths near the tile and marks its cell dirty
 
-#### Dirty Region Tracking
+#### Dirty-Cell Flow
 ```cpp
-// When world tiles change:
-// 1. TileChangedEvent fires from WorldManager
-// 2. PathfinderManager marks affected grid cells as "dirty"
-// 3. Next rebuildGrid() call checks dirty percentage
-// 4. If dirty < 25%: Incremental rebuild (only dirty regions)
-// 5. If dirty ≥ 25%: Full parallel rebuild (faster for large changes)
+// 1. addStaticBody/removeCollisionBody or WorldManager tile update fires a
+//    deferred CollisionObstacleChanged / TileChanged
+// 2. EventManager::update() (main thread) delivers it; the handler marks dirty
+//    cells on the current grid (PathfindingGrid::markDirtyRegion)
+// 3. PathfinderManager::update() takes the dirty rows (takeDirtyRows), copies
+//    the grid, rebuilds those rows with rebuildFromWorld(rowStart, rowEnd) --
+//    the same row worker the full rebuild uses -- joins the batches, updates
+//    the coarse grid, and publishes the copy with the locked grid swap
+// 4. In-flight path requests keep the grid snapshot they captured
 ```
 
-#### Incremental Rebuild API
-```cpp
-// Grid tracks dirty regions internally
-m_grid->hasDirtyRegions();       // Check if incremental update needed
-m_grid->calculateDirtyPercent(); // Get percentage of grid needing update
-m_grid->rebuildDirtyRegions();   // Rebuild only marked cells
+Collision statics are read by the dirty-row batches while the main thread is
+blocked in `update()`, so no static mutation overlaps them. Published grids
+are never mutated in place.
 
-// Automatic: rebuildGrid(true) uses incremental when beneficial
-PathfinderManager::Instance().rebuildGrid(true);  // Smart: incremental if <25% dirty
-PathfinderManager::Instance().rebuildGrid(false); // Force: full parallel rebuild
-```
+Accepted gap: a path computed on the pre-publish grid can be cached just after
+publish (cache invalidation ran at mark time). For harvests this is a weight
+difference only.
 
 ### Performance Impact
 
@@ -410,7 +368,7 @@ PathfinderManager::Instance().rebuildGrid(false); // Force: full parallel rebuil
 |-----------|-------------|--------------|
 | Full Sequential | Single-threaded grid rebuild | 50-100ms (200×200) |
 | Full Parallel | WorkerBudget parallel batching | 15-30ms (200×200) |
-| Incremental | Dirty regions only (<25%) | 1-5ms |
+| Dirty cells | Dirty rows on a grid copy, in `update()` | grid copy + rows |
 | State Transition | prepareForStateTransition() | <1ms (waits for completion) |
 
 ### LoadingState Integration
@@ -418,12 +376,13 @@ PathfinderManager::Instance().rebuildGrid(false); // Force: full parallel rebuil
 The LoadingState uses PathfinderManager's synchronization to ensure grid availability:
 
 ```cpp
-// In LoadingState::enter() or update():
+// In LoadingState (global pause held; EventManager keeps draining):
 // 1. Submit world generation to ThreadSystem
-// 2. WorldManager fires WorldLoadedEvent
-// 3. PathfinderManager receives event, starts parallel grid rebuild
-// 4. LoadingState calls waitForGridRebuildCompletion() before transitioning
-// 5. Target state receives fully initialized pathfinding grid
+// 2. WorldManager posts WorldLoadedEvent (deferred)
+// 3. CollisionManager rebuilds statics (no per-body CollisionObstacleChanged)
+//    and fires StaticCollidersReady
+// 4. PathfinderManager starts the detached full grid rebuild
+// 5. LoadingState waits for isGridReady() before transitioning
 ```
 
 ## Error Handling

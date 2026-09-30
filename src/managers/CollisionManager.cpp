@@ -49,7 +49,6 @@ using namespace VoidLight::SIMD;
 using ::EventManager;
 using ::EventTypeId;
 using ::TileChangedEvent;
-using ::WorldGeneratedEvent;
 using ::WorldLoadedEvent;
 using ::WorldManager;
 using ::WorldUnloadedEvent;
@@ -163,8 +162,7 @@ void CollisionManager::prepareForStateTransition() {
     // Reset performance stats for clean slate
     m_perf = PerfStats{};
 
-    // Reset world bounds to minimal (will be set by
-    // WorldLoadedEvent/WorldGeneratedEvent)
+    // Reset world bounds to minimal (will be set by WorldLoadedEvent)
     m_worldBounds = AABB(0.0f, 0.0f, 0.0f, 0.0f);
 
     // Reset verbose logging to default
@@ -561,22 +559,30 @@ bool CollisionManager::queryAreaHasStaticOverlap(const AABB& area) const {
     float maxX = area.right();
     float maxY = area.bottom();
 
+    const auto overlapsArea = [this, &area](size_t idx) {
+        if (idx >= m_storage.hotData.size() || !m_storage.hotData[idx].active) {
+            return false;
+        }
+        const auto& hot = m_storage.hotData[idx];
+        if (static_cast<BodyType>(hot.bodyType) != BodyType::STATIC) {
+            return false;
+        }
+        AABB bodyAABB = m_storage.computeAABB(idx);
+        return bodyAABB.intersects(area);
+    };
+
     m_staticSpatialHash.queryRegionBoundsThreadSafe(minX, minY, maxX, maxY,
         staticIndices, queryBuffers);
+    if (std::any_of(staticIndices.begin(), staticIndices.end(), overlapsArea)) {
+        return true;
+    }
 
-    return std::any_of(staticIndices.begin(), staticIndices.end(),
-        [this, &area](size_t idx) {
-            if (idx >= m_storage.hotData.size() ||
-                !m_storage.hotData[idx].active) {
-                return false;
-            }
-            const auto& hot = m_storage.hotData[idx];
-            if (static_cast<BodyType>(hot.bodyType) != BodyType::STATIC) {
-                return false;
-            }
-            AABB bodyAABB = m_storage.computeAABB(idx);
-            return bodyAABB.intersects(area);
-        });
+    // EventOnly triggers (water edges) live in their own hash; the linear
+    // fallback above counts them, so the hash path must too.
+    staticIndices.clear();
+    m_eventOnlySpatialHash.queryRegionBoundsThreadSafe(minX, minY, maxX, maxY,
+        staticIndices, queryBuffers);
+    return std::any_of(staticIndices.begin(), staticIndices.end(), overlapsArea);
 }
 
 bool CollisionManager::getBodyCenter(EntityID id, Vector2D& outCenter) const {
@@ -754,6 +760,10 @@ size_t CollisionManager::getDynamicBodyCount() const {
 
 void CollisionManager::rebuildStaticFromWorld() {
     std::lock_guard<std::mutex> lock(m_staticRebuildMutex);
+    // A world load replaces every static; per-body CollisionObstacleChanged
+    // would dirty most of the pathfinding grid. StaticCollidersReady below
+    // triggers the full grid rebuild instead.
+    m_rebuildingStaticsFromWorld = true;
     int gridW = 0;
     int gridH = 0;
     if (WorldManager::Instance().getWorldDimensions(gridW, gridH) && gridW > 0 &&
@@ -802,6 +812,7 @@ void CollisionManager::rebuildStaticFromWorld() {
 
         rebuildStaticSpatialHashUnlocked();
     }
+    m_rebuildingStaticsFromWorld = false;
 
     EventManager::Instance().triggerStaticCollidersReady(
         solidBodies, waterTriggers, EventManager::DispatchMode::Immediate);
@@ -997,11 +1008,9 @@ void CollisionManager::onTileChanged(int x, int y) {
             }
 
             // ROCK and TREE movement penalties are handled by pathfinding system
-            // No collision triggers needed for these obstacle types
-
-            // Mark static hash as needing rebuild since tile changed
-            m_staticHashDirty = true;
-            m_staticQueryCacheDirty = true;
+            // No collision triggers needed for these obstacle types. The static
+            // hash is marked dirty only by addStaticBody/removeCollisionBody
+            // above, when a body actually changes.
         }
     });
 }
@@ -1031,16 +1040,6 @@ void CollisionManager::subscribeWorldEvents() {
                     this->setWorldBounds(minX, minY, maxX, maxY);
                 }
                 COLLISION_INFO("World loaded - rebuilding static colliders");
-                this->rebuildStaticFromWorld();
-                return;
-            }
-            if (std::dynamic_pointer_cast<WorldGeneratedEvent>(base)) {
-                const auto& worldManager = WorldManager::Instance();
-                float minX, minY, maxX, maxY;
-                if (worldManager.getWorldBounds(minX, minY, maxX, maxY)) {
-                    this->setWorldBounds(minX, minY, maxX, maxY);
-                }
-                COLLISION_INFO("World generated - rebuilding static colliders");
                 this->rebuildStaticFromWorld();
                 return;
             }
@@ -1102,11 +1101,13 @@ size_t CollisionManager::addStaticBody(EntityID id, const Vector2D& position,
             hot.coarseCellX = static_cast<int16_t>(coarseCell.x);
             hot.coarseCellY = static_cast<int16_t>(coarseCell.y);
 
-            float radius = std::max(hw, hh) + 16.0f;
-            std::string description =
-                std::format("Static obstacle updated at ({}, {})", px, py);
-            EventManager::Instance().triggerCollisionObstacleChanged(
-                position, radius, description, EventManager::DispatchMode::Deferred);
+            if (!m_rebuildingStaticsFromWorld) {
+                float radius = std::max(hw, hh) + 16.0f;
+                std::string description =
+                    std::format("Static obstacle updated at ({}, {})", px, py);
+                EventManager::Instance().triggerCollisionObstacleChanged(position,
+                    radius, description, EventManager::DispatchMode::Deferred);
+            }
             m_staticHashDirty = true;
             m_staticQueryCacheDirty = true;
             m_statisticsDirty = true;
@@ -1149,11 +1150,13 @@ size_t CollisionManager::addStaticBody(EntityID id, const Vector2D& position,
     m_storage.entityToIndex[id] = newIndex;
 
     // Fire event and mark hash dirty for static bodies
-    float radius = std::max(hw, hh) + 16.0f;
-    std::string description =
-        std::format("Static obstacle added at ({}, {})", px, py);
-    EventManager::Instance().triggerCollisionObstacleChanged(
-        position, radius, description, EventManager::DispatchMode::Deferred);
+    if (!m_rebuildingStaticsFromWorld) {
+        float radius = std::max(hw, hh) + 16.0f;
+        std::string description =
+            std::format("Static obstacle added at ({}, {})", px, py);
+        EventManager::Instance().triggerCollisionObstacleChanged(
+            position, radius, description, EventManager::DispatchMode::Deferred);
+    }
     m_staticHashDirty = true;
     m_staticQueryCacheDirty = true;
     m_statisticsDirty = true;
@@ -1174,28 +1177,30 @@ void CollisionManager::removeCollisionBody(EntityID id) {
     if (indexToRemove < m_storage.size()) {
         const auto& hot = m_storage.hotData[indexToRemove];
         if (static_cast<BodyType>(hot.bodyType) == BodyType::STATIC) {
-            Vector2D position;
-            float halfW, halfH;
-            if (hot.edmIndex != SIZE_MAX) {
-                const auto& edm = EntityDataManager::Instance();
-                const auto& edmHot = edm.getStaticHotDataByIndex(hot.edmIndex);
-                position = edmHot.transform.position;
-                halfW = edmHot.halfWidth;
-                halfH = edmHot.halfHeight;
-            } else {
-                position = Vector2D((hot.aabbMinX + hot.aabbMaxX) * 0.5f,
-                    (hot.aabbMinY + hot.aabbMaxY) * 0.5f);
-                halfW = (hot.aabbMaxX - hot.aabbMinX) * 0.5f;
-                halfH = (hot.aabbMaxY - hot.aabbMinY) * 0.5f;
-            }
-            float radius = std::max(halfW, halfH) + 16.0f;
-            std::string description =
-                std::format("Static obstacle removed from ({}, {})", position.getX(),
-                    position.getY());
-            EventManager::Instance().triggerCollisionObstacleChanged(
-                position, radius, description, EventManager::DispatchMode::Deferred);
             m_staticHashDirty = true;
             m_staticQueryCacheDirty = true;
+            if (!m_rebuildingStaticsFromWorld) {
+                Vector2D position;
+                float halfW, halfH;
+                if (hot.edmIndex != SIZE_MAX) {
+                    const auto& edm = EntityDataManager::Instance();
+                    const auto& edmHot = edm.getStaticHotDataByIndex(hot.edmIndex);
+                    position = edmHot.transform.position;
+                    halfW = edmHot.halfWidth;
+                    halfH = edmHot.halfHeight;
+                } else {
+                    position = Vector2D((hot.aabbMinX + hot.aabbMaxX) * 0.5f,
+                        (hot.aabbMinY + hot.aabbMaxY) * 0.5f);
+                    halfW = (hot.aabbMaxX - hot.aabbMinX) * 0.5f;
+                    halfH = (hot.aabbMaxY - hot.aabbMinY) * 0.5f;
+                }
+                float radius = std::max(halfW, halfH) + 16.0f;
+                std::string description =
+                    std::format("Static obstacle removed from ({}, {})", position.getX(),
+                        position.getY());
+                EventManager::Instance().triggerCollisionObstacleChanged(
+                    position, radius, description, EventManager::DispatchMode::Deferred);
+            }
         }
     }
 

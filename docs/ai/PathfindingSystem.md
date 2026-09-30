@@ -220,46 +220,28 @@ There is no public callback `requestPath`.
 Wander, Patrol, Flee, Guard, Chase, and Follow call `requestPathToEDM` from the behavior executor. Path progress lives in EDM `PathData`. `AIManager` calls `commitCompletedPaths()` on the main thread. Do not store paths in behavior-local members and do not use worker callbacks.
 
 ### World Integration
-```cpp
-void PathfindingGrid::rebuildFromWorld() {
-    WorldManager& worldMgr = WorldManager::Instance();
 
-    // Update grid from world tiles
-    for (int y = 0; y < m_h; ++y) {
-        for (int x = 0; x < m_w; ++x) {
-            Vector2D worldPos = gridToWorld(x, y);
-            int worldX = static_cast<int>(worldPos.x / TILE_SIZE);
-            int worldY = static_cast<int>(worldPos.y / TILE_SIZE);
+`PathfindingGrid::rebuildFromWorld(rowStart, rowEnd)` is the single cell
+worker. For each 64 px cell it samples the covered 32 px tiles:
 
-            // Check if tile blocks movement
-            auto tileType = worldMgr.getTileType(worldX, worldY);
-            bool blocked = (tileType == TileType::WALL ||
-                           tileType == TileType::OBSTACLE ||
-                           tileType == TileType::WATER);
+- blocked when more than half the tiles are `BUILDING` obstacles or
+  `MOUNTAIN` biome, or when `CollisionManager::queryAreaHasStaticOverlap()`
+  finds a static body (EventOnly water-edge triggers included) within the
+  cell plus 28 px clearance;
+- weight is the tile average: water 2.0, `TREE` / `ROCK` 2.5, else 1.0. A
+  harvested tree or rock lowers the cell weight; it does not unblock it.
 
-            setBlocked(x, y, blocked);
+Two callers share it:
 
-            // Set movement cost based on terrain
-            float weight = getTerrainWeight(tileType);
-            setWeight(x, y, weight);
-        }
-    }
-
-    // Update coarse grid for hierarchical pathfinding
-    updateCoarseGrid();
-}
-
-float getTerrainWeight(TileType type) {
-    switch (type) {
-        case TileType::GRASS:    return 1.0f;   // Normal movement
-        case TileType::DIRT:     return 1.2f;   // Slightly slower
-        case TileType::SAND:     return 1.5f;   // Slow movement
-        case TileType::SWAMP:    return 3.0f;   // Very slow
-        case TileType::ROAD:     return 0.8f;   // Fast movement
-        default:                 return 1.0f;
-    }
-}
-```
+- **Load:** `StaticCollidersReady` → `PathfinderManager::rebuildGrid()` builds
+  a new grid in `WorkerBudget` row batches on a detached task (LoadingState's
+  pause window), then `updateCoarseGrid()` and publish.
+- **Gameplay:** `CollisionObstacleChanged` / `TileChanged` handlers mark dirty
+  cells (`markDirtyRegion`). `PathfinderManager::update()` takes the dirty rows
+  (`takeDirtyRows`), rebuilds them on a copy of the published grid in joined
+  `WorkerBudget` batches, updates the coarse grid, and publishes the copy.
+  Published grids are never mutated in place; path tasks keep the snapshot
+  they captured.
 
 ## Performance Characteristics
 

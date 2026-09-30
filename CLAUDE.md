@@ -141,6 +141,7 @@ Boost.Test names are the `BOOST_AUTO_TEST_CASE` name (suite prefix optional); co
 - Use `ThreadSystem`, not raw threads.
 - Use `WorkerBudget` to decide threading and batch sizing, and report execution after work completes.
 - Futures must complete before dependent operations.
+- Managers update sequentially on the main thread; a manager's worker batches join before its update or handler returns; detached cross-slot work is limited to the exceptions in docs/ARCHITECTURE.md.
 - Avoid non-`thread_local` static state in threaded code.
 - Align hot atomics with `alignas(64)` when contention matters.
 - Use `include/utils/SIMDMath.hpp` for SIMD work. Process 4 elements per iteration plus a scalar tail.

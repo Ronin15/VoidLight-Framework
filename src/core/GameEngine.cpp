@@ -1096,7 +1096,7 @@ void GameEngine::update(float deltaTime) {
     // - AIManager: Parallel batch processing with internal sync (self-contained)
     // - GameStateManager: Player movement and state-specific logic (reads AI velocities)
     // - ParticleManager: Global particle system with weather integration
-    // - PathfinderManager: Periodic pathfinding grid updates (every 300/600 frames)
+    // - PathfinderManager: commits completed paths and applies dirty grid rows (batches joined in-slot)
     // - CollisionManager: Collision detection and resolution for all entities
     // - InputManager: Handled in handleEvents() for proper SDL event polling architecture
     //
@@ -1154,7 +1154,8 @@ void GameEngine::update(float deltaTime) {
         mp_particleManager->update(deltaTime);
     }
 
-    // 5. Pathfinding system - periodic grid updates (every 300/600 frames)
+    // 5. Pathfinding system - commits completed paths and applies dirty grid rows
+    //    (batches joined in-slot)
     // PathfinderManager initialized by AIManager, cached by GameEngine for
     // performance
     {

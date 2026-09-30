@@ -46,6 +46,24 @@ Typical frame shape:
 5. render path draws scene/UI
 6. present completes the frame
 
+### Sequential manager slots
+
+Managers update one after another on the main thread. A manager that fans
+work out to `ThreadSystem` (sized by `WorkerBudget`) joins those batches
+before its `update()` or event handler returns, so the next slot never runs
+beside another manager's workers. Detached work that outlives its slot is
+limited to:
+
+- `PathfinderManager::requestPathToEDM()` path tasks. Each reads the grid
+  snapshot it captured; results are committed on the main thread by
+  `PathfinderManager::update()`.
+- The `LoadingState` load task and the load-time pathfinding grid rebuild
+  (`StaticCollidersReady` → `PathfinderManager::rebuildGrid()`), both inside
+  LoadingState's global-pause window; Loading waits on `isGridReady()`.
+- The `WorldManager` task that posts the deferred `WorldLoaded` event after a
+  load.
+- `GameEngine::init()` manager initialization tasks.
+
 ## Rendering Path
 
 ```text

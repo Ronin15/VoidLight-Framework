@@ -42,6 +42,10 @@ inline std::ostream& operator<<(std::ostream& os, const PathfindingResult& resul
 class PathfindingGrid {
 public:
     PathfindingGrid(int width, int height, float cellSize, const Vector2D& worldOffset, bool createCoarseGrid = true);
+    // Deep copy of cells, config, and coarse grid. The copy starts with no
+    // dirty regions and fresh stats (stats are written by concurrent findPath()).
+    PathfindingGrid(const PathfindingGrid& other);
+    PathfindingGrid& operator=(const PathfindingGrid&) = delete;
 
     void rebuildFromWorld(); // pull from WorldManager::grid (full rebuild)
     void rebuildFromWorld(int rowStart, int rowEnd); // rebuild specific row range (for parallel batching)
@@ -50,10 +54,9 @@ public:
 
     // Incremental update support
     void markDirtyRegion(int cellX, int cellY, int width = 1, int height = 1); // mark region as needing rebuild
-    void rebuildDirtyRegions(); // rebuild only dirty regions (incremental update)
-    bool hasDirtyRegions() const; // check if any dirty regions exist
-    float calculateDirtyPercent() const; // calculate percentage of grid that is dirty
-    void clearDirtyRegions(); // clear dirty region tracking
+    // Move the dirty regions out as sorted, unique row indices (outRows is
+    // cleared first) and clear this grid's dirty state.
+    void takeDirtyRows(std::vector<int>& outRows);
 
     PathfindingResult findPath(const Vector2D& start, const Vector2D& goal,
         std::vector<Vector2D>& outPath);
@@ -75,16 +78,6 @@ public:
     // Dynamic weighting for avoidance fields
     void resetWeights(float defaultWeight = 1.0f);
     void addWeightCircle(const Vector2D& worldCenter, float worldRadius, float weightMultiplier);
-
-    // Publish a new grid with weights reset instead of mutating this one in
-    // place. Callers holding a shared_ptr snapshot of the current grid (e.g.
-    // an in-flight findPath() on a worker thread) keep reading it safely --
-    // there is nothing to synchronize against, since nobody mutates the
-    // instance they're holding. Preserves blocked/config state as-is (no
-    // world rescan); matches resetWeights()'s existing scope of the fine
-    // grid only -- the coarse grid's own weights are likewise preserved
-    // as-is, just given a new identity so it isn't shared with the original.
-    std::shared_ptr<PathfindingGrid> cloneWithResetWeights(float defaultWeight = 1.0f) const;
 
     // Hierarchical grid access
     float getCellSize() const { return m_cell; }

@@ -320,7 +320,7 @@ BOOST_FIXTURE_TEST_SUITE(AICollisionIntegrationTestSuite, AICollisionTestFixture
  * Wanderers spawned in a gap of a static obstacle field stay out of the
  * obstacles. The world loads first (its WorldLoaded rebuild replaces every
  * STATIC body), then the obstacles are added; their CollisionObstacleChanged
- * events mark pathfinding dirty regions, which rebuildGrid() applies. The test
+ * events mark pathfinding dirty cells, which PathfinderManager::update() applies. The test
  * asserts the obstacles exist in CollisionManager and block the pathfinding
  * grid for the whole run, so the overlap check is against live obstacles.
  */
@@ -359,12 +359,10 @@ BOOST_AUTO_TEST_CASE(TestAINavigatesObstacleField) {
     };
     requireObstaclesPresent();
 
-    // Deferred CollisionObstacleChanged events mark dirty regions; rebuildGrid()
-    // applies them (incremental, or full when the dirty area exceeds its
-    // threshold). No production path calls it for dirty regions today.
+    // Deferred CollisionObstacleChanged events mark dirty cells; the next
+    // PathfinderManager::update() rebuilds them and publishes the grid.
     EventManager::Instance().update();
-    PathfinderManager::Instance().rebuildGrid();
-    waitForGridReady();
+    PathfinderManager::Instance().update();
 
     // The grid blocks every obstacle cell: snapping an obstacle center to an
     // open cell moves it off the obstacle (an open cell would snap in place).

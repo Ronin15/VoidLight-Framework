@@ -14,7 +14,6 @@
 #include <cmath>
 #include <format>
 #include <memory>
-#include <numeric>
 #include <queue>
 #include <stdexcept>
 
@@ -46,6 +45,9 @@ PathfindingGrid::PathfindingGrid(int width, int height, float cellSize,
         initializeCoarseGrid();
     }
 }
+
+PathfindingGrid::PathfindingGrid(const PathfindingGrid& other)
+    : m_w(other.m_w), m_h(other.m_h), m_cell(other.m_cell), m_offset(other.m_offset), m_blocked(other.m_blocked), m_weight(other.m_weight), m_coarseGrid(other.m_coarseGrid ? std::make_unique<PathfindingGrid>(*other.m_coarseGrid) : nullptr), m_allowDiagonal(other.m_allowDiagonal), m_maxIterations(other.m_maxIterations), m_costStraight(other.m_costStraight), m_costDiagonal(other.m_costDiagonal) {}
 
 bool PathfindingGrid::inBounds(int gx, int gy) const {
     return gx >= 0 && gy >= 0 && gx < m_w && gy < m_h;
@@ -350,62 +352,19 @@ void PathfindingGrid::markDirtyRegion(int cellX, int cellY, int width,
     }
 }
 
-void PathfindingGrid::rebuildDirtyRegions() {
-    std::vector<DirtyRegion> regions;
-    {
-        std::lock_guard<std::mutex> lock(m_dirtyRegionMutex);
-        if (m_dirtyRegions.empty()) {
-            return; // Nothing to rebuild
+void PathfindingGrid::takeDirtyRows(std::vector<int>& outRows) {
+    outRows.clear();
+    std::lock_guard<std::mutex> lock(m_dirtyRegionMutex);
+    for (const auto& region : m_dirtyRegions) {
+        const int rowEnd = std::min(region.y + region.height, m_h);
+        for (int row = region.y; row < rowEnd; ++row) {
+            outRows.push_back(row);
         }
-        regions.swap(m_dirtyRegions); // Move regions out for processing
     }
-
-    // Rebuild each dirty region using the row-range rebuild
-    for (const auto& region : regions) {
-        int rowStart = region.y;
-        int rowEnd = std::min(region.y + region.height, m_h);
-
-        // Rebuild rows in this region
-        rebuildFromWorld(rowStart, rowEnd);
-    }
-
-    // Update coarse grid after all dirty regions rebuilt
-    if (m_coarseGrid) {
-        updateCoarseGrid();
-    }
-
-    PATHFIND_DEBUG(
-        std::format("Incremental rebuild complete: {} dirty regions processed",
-            regions.size()));
-}
-
-bool PathfindingGrid::hasDirtyRegions() const {
-    std::lock_guard<std::mutex> lock(m_dirtyRegionMutex);
-    return !m_dirtyRegions.empty();
-}
-
-float PathfindingGrid::calculateDirtyPercent() const {
-    std::lock_guard<std::mutex> lock(m_dirtyRegionMutex);
-    if (m_dirtyRegions.empty() || m_w <= 0 || m_h <= 0) {
-        return 0.0f;
-    }
-
-    // Calculate total dirty cells (with overlap handling)
-    int totalDirtyCells =
-        std::accumulate(m_dirtyRegions.begin(), m_dirtyRegions.end(), 0,
-            [](int sum, const auto& region) {
-                return sum + region.width * region.height;
-            });
-
-    // Simple approximation (may overcount overlaps, but conservative)
-    int const totalCells = m_w * m_h;
-    return std::min(100.0f,
-        (static_cast<float>(totalDirtyCells) / totalCells) * 100.0f);
-}
-
-void PathfindingGrid::clearDirtyRegions() {
-    std::lock_guard<std::mutex> lock(m_dirtyRegionMutex);
     m_dirtyRegions.clear();
+
+    std::sort(outRows.begin(), outRows.end());
+    outRows.erase(std::unique(outRows.begin(), outRows.end()), outRows.end());
 }
 
 void PathfindingGrid::smoothPath(std::vector<Vector2D>& path) {
@@ -871,34 +830,6 @@ PathfindingResult PathfindingGrid::findPath(const Vector2D& start,
 
 void PathfindingGrid::resetWeights(float defaultWeight) {
     m_weight.assign(static_cast<size_t>(m_w * m_h), defaultWeight);
-}
-
-std::shared_ptr<PathfindingGrid>
-PathfindingGrid::cloneWithResetWeights(float defaultWeight) const {
-    auto clone = std::make_shared<PathfindingGrid>(m_w, m_h, m_cell, m_offset,
-        /*createCoarseGrid=*/false);
-    clone->m_blocked = m_blocked;
-    clone->m_weight.assign(static_cast<size_t>(m_w * m_h), defaultWeight);
-    clone->m_allowDiagonal = m_allowDiagonal;
-    clone->m_maxIterations = m_maxIterations;
-    clone->m_costStraight = m_costStraight;
-    clone->m_costDiagonal = m_costDiagonal;
-
-    if (m_coarseGrid) {
-        // Coarse grid's own weights are untouched by resetWeights() today too --
-        // preserve its blocked/config state as-is, just give it a new identity.
-        clone->m_coarseGrid = std::make_unique<PathfindingGrid>(
-            m_coarseGrid->m_w, m_coarseGrid->m_h, m_coarseGrid->m_cell,
-            m_coarseGrid->m_offset, /*createCoarseGrid=*/false);
-        clone->m_coarseGrid->m_blocked = m_coarseGrid->m_blocked;
-        clone->m_coarseGrid->m_weight = m_coarseGrid->m_weight;
-        clone->m_coarseGrid->m_allowDiagonal = m_coarseGrid->m_allowDiagonal;
-        clone->m_coarseGrid->m_maxIterations = m_coarseGrid->m_maxIterations;
-        clone->m_coarseGrid->m_costStraight = m_coarseGrid->m_costStraight;
-        clone->m_coarseGrid->m_costDiagonal = m_coarseGrid->m_costDiagonal;
-    }
-
-    return clone;
 }
 
 void PathfindingGrid::addWeightCircle(const Vector2D& worldCenter,

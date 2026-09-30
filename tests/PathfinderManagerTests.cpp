@@ -216,26 +216,6 @@ BOOST_FIXTURE_TEST_CASE(TestBasicFunctionality, PathfinderRequestFixture) {
     BOOST_CHECK(waitForEdmPathCommit(manager, edmIndex));
 }
 
-BOOST_AUTO_TEST_CASE(TestWeightFields) {
-    PathfinderManager& manager = PathfinderManager::Instance();
-
-    BOOST_REQUIRE(manager.init());
-
-    Vector2D center(150.0f, 150.0f);
-    float radius = 50.0f;
-    float weight = 2.0f;
-
-    // Add temporary weight field
-    manager.addTemporaryWeightField(center, radius, weight);
-
-    // Clear weight fields
-    manager.clearWeightFields();
-
-    // These should not crash
-
-    manager.clean();
-}
-
 BOOST_AUTO_TEST_CASE(TestStatistics) {
     PathfinderManager& manager = PathfinderManager::Instance();
 

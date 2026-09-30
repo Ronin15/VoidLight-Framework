@@ -139,6 +139,11 @@ behavior rules are in `.claude/rules/ai.md`.
   index and pre-checks NPC inventory capacity (`EDM::canAddToInventory`); a
   forager that cannot hold the yield abandons without depleting the node.
   Workers read AIManager's harvestable snapshot view, never WRM.
+- **Pathfinding grid:** `CollisionObstacleChanged` / `TileChanged`
+  handlers only mark dirty cells and invalidate cached paths;
+  `PathfinderManager::update()` applies them (dirty rows rebuilt on a copy
+  in joined `WorkerBudget` batches, then published). Published grids are
+  not mutated in place. The detached full `rebuildGrid()` is load-time only.
 - **WorldManager stays a coordinator** (load/unload, registry,
   settlement queries). Never add environment, stance, forage, decision,
   discovery, or background-tick policy to it.

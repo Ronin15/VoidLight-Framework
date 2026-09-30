@@ -751,6 +751,49 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyCacheInvalidation) {
     edm.clean();
 }
 
+BOOST_AUTO_TEST_CASE(TestStaticOverlapQueryCountsEventOnlyTriggers) {
+    // Pathfinding grid rebuilds block shoreline cells through
+    // queryAreaHasStaticOverlap(). The dirty linear fallback counts EventOnly
+    // water-edge triggers; the spatial-hash path must agree after the hash
+    // rebuild, or a dirty-cell rebuild would reopen shoreline cells.
+    auto& edm = EntityDataManager::Instance();
+    BOOST_REQUIRE(edm.init());
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+    auto& bgm = BackgroundSimulationManager::Instance();
+    BOOST_REQUIRE(bgm.init());
+    bgm.setActiveRadius(2000.0f);
+
+    const AABB triggerAABB(400.0f, 400.0f, 16.0f, 16.0f);
+    const EntityID triggerId = CollisionManager::Instance().createTriggerArea(
+        triggerAABB, VoidLight::TriggerTag::Water, VoidLight::TriggerType::EventOnly,
+        CollisionLayer::Layer_Environment, 0xFFFFFFFFu);
+    BOOST_REQUIRE_NE(triggerId, 0);
+
+    const AABB query(410.0f, 410.0f, 8.0f, 8.0f);
+    const AABB farQuery(900.0f, 900.0f, 8.0f, 8.0f);
+
+    // Static hash dirty after the add: linear fallback.
+    BOOST_CHECK(CollisionManager::Instance().queryAreaHasStaticOverlap(query));
+    BOOST_CHECK(!CollisionManager::Instance().queryAreaHasStaticOverlap(farQuery));
+
+    // CollisionManager::update() rebuilds the static hashes when a movable is
+    // active; the query then takes the hash path.
+    const Vector2D npcPos(100.0f, 100.0f);
+    EntityHandle npcHandle = edm.createNPCWithRaceClass(npcPos, "Human", "Guard");
+    BOOST_REQUIRE(npcHandle.isValid());
+    bgm.update(npcPos, 0.016f);
+    BOOST_REQUIRE_GE(edm.getActiveIndices().size(), 1u);
+    CollisionManager::Instance().update(0.016f);
+
+    BOOST_CHECK(CollisionManager::Instance().queryAreaHasStaticOverlap(query));
+    BOOST_CHECK(!CollisionManager::Instance().queryAreaHasStaticOverlap(farQuery));
+
+    CollisionManager::Instance().removeCollisionBody(triggerId);
+    CollisionManager::Instance().clean();
+    bgm.clean();
+    edm.clean();
+}
+
 BOOST_AUTO_TEST_CASE(TestTriggerSystemCreation) {
     // Test trigger area creation and basic functionality
     BOOST_REQUIRE(CollisionManager::Instance().init());

@@ -68,7 +68,8 @@ World-trigger and obstacle-change traffic still uses EventManager. General non-p
 - `init()` registers persistent world handlers (`subscribeWorldEvents()`). Do not re-subscribe on state transition.
 - `prepareForStateTransition()` **always clears all collision bodies**. States call this in AI-heavy `exit()`; `GameStateManager` does **not** call it.
 - `WorldUnloaded` is dispatched **Immediate**. Bodies are already cleared in `prepareForStateTransition`; the unload handler is not the teardown owner.
-- `rebuildStaticFromWorld()` runs from the persistent `WorldLoaded` handler after a new world is ready.
+- `rebuildStaticFromWorld()` runs from the persistent `WorldLoaded` handler after a new world is ready (there is no `WorldGenerated` handler). While it runs, `addStaticBody` / `removeCollisionBody` do not fire per-body `CollisionObstacleChanged`, so a load does not dirty the pathfinding grid; the closing `StaticCollidersReady` (Immediate) starts the full grid rebuild instead.
+- Outside that rebuild, static add, re-add (existing id), and remove fire a deferred `CollisionObstacleChanged` (`updateCollisionBodyPosition` fires nothing); `PathfinderManager` marks the area dirty and rebuilds it in its own `update()`.
 
 ```cpp
 auto& cm = CollisionManager::Instance();
@@ -83,6 +84,10 @@ Resolution: `update()` runs broadphase → narrowphase → `resolve()`. `resolve
 ## Queries
 
 `overlaps`, `queryArea`, `queryAreaHasStaticOverlap`, `getBodyCenter`, `isDynamic` / `isKinematic` / `isStatic` / `isTrigger`. World helpers: `rebuildStaticFromWorld`, `createStaticObstacleBodies`, `createTriggersForWaterTiles`, `createTriggersForObstacles`.
+
+`onTileChanged` marks the static hash dirty only through those add/remove calls; a `TREE` / `ROCK` tile change touches no body and leaves the hash clean.
+
+`queryAreaHasStaticOverlap` counts every active STATIC body, EventOnly triggers (water edges) included: the hash path queries both `m_staticSpatialHash` and `m_eventOnlySpatialHash`, matching the linear fallback used while the static hash is dirty. Pathfinding grid rebuild workers call it: the load-time rebuild inside LoadingState's pause window, and `PathfinderManager::update()` dirty-row batches while the main thread waits on them. No static mutation overlaps either.
 
 Triggers are created through `EDM::createTrigger()` (`createTriggerArea` / `createTriggerAreaAt`).
 

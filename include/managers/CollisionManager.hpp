@@ -119,6 +119,9 @@ public:
     // Queries
     bool overlaps(EntityID a, EntityID b) const;
     void queryArea(const AABB& area, std::vector<EntityID>& out) const;
+    // Any active STATIC body intersecting area, EventOnly triggers included
+    // (hash path and dirty linear fallback agree). Read by pathfinding grid
+    // rebuild workers while the main thread waits on them.
     bool queryAreaHasStaticOverlap(const AABB& area) const;
     // Query a body's center by id; returns true if found
     bool getBodyCenter(EntityID id, Vector2D& outCenter) const;
@@ -669,6 +672,10 @@ private:
 
     // Optimization: Track when static spatial hash needs rebuilding
     bool m_staticHashDirty{false};
+
+    // True inside rebuildStaticFromWorld(): addStaticBody/removeCollisionBody
+    // skip per-body CollisionObstacleChanged (StaticCollidersReady covers it).
+    bool m_rebuildingStaticsFromWorld{false};
 
     // Optimization: Track when collision statistics need recalculation
     mutable bool m_statisticsDirty{true};

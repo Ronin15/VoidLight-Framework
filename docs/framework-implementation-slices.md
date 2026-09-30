@@ -508,36 +508,41 @@ Status: Complete. WP1–WP9, the slice-complete gate, and the whole-slice review
 
 Goal: Pathfinding grid rebuild workers never read CollisionManager static storage while the main thread mutates it, and dirty regions marked by obstacle/tile changes are rebuilt by a production owner. Found in the Slice 6R WP1 `ai_collision_integration_tests` fixture-crash investigation (c3fb5047). Scheduled before 6.1 because 6.1's tile restore adds main-thread static-body mutations during gameplay.
 
-Current foundation:
+Current foundation (before this slice):
 
 - `PathfindingGrid::rebuildFromWorld` (`src/ai/pathfinding/PathfindingGrid.cpp`) runs on `ThreadSystem` workers and calls `CollisionManager::queryAreaHasStaticOverlap` (`src/managers/CollisionManager.cpp`) per cell. That query reads `m_storage.hotData` and the plain `bool m_staticHashDirty` (linear-scan fallback) or the static spatial hash, with no synchronization.
 - Main-thread static mutation paths: `addStaticBody` / `removeCollisionBody` (push/erase `m_storage`, set `m_staticHashDirty`), `onTileChanged` (from `TileChangedEvent`), `rebuildStaticFromWorld` (on `WorldLoaded`), and `CollisionManager::update` rebuilding the static hash when dirty.
 - Today full rebuilds are clear of mutation only by ordering: `WorldLoaded` builds statics, then `StaticCollidersReady` starts the rebuild, and `LoadingState` waits on `PathfinderManager::isGridReady()` before gameplay updates resume.
 - `onCollisionObstacleChanged` / `onTileChanged` only mark dirty regions and invalidate cached paths. `rebuildGrid(true)` (the incremental `rebuildDirtyRegions` path) has no production caller; only tests and benches call `rebuildGrid()`. After a harvest removes a tile obstacle, the grid stays stale.
 
-Architecture notes:
+Contract (user-approved minimal plan, 2026-09-30):
 
-- Needs a `cpp-design-specialist` design first: ownership of the static-collision read contract for worker rebuilds (e.g. a main-thread snapshot of static AABBs handed to the rebuild, or a documented exclusion window), and which owner schedules dirty-region rebuilds and when (main thread, after collision updates, joined before the next static mutation).
-- Keep `WorkerBudget` sizing and `ThreadSystem` execution for rebuilds; no raw threads or private pools. No locks on the per-frame collision hot path unless the design proves they are uncontended.
+- Events unchanged: `CollisionObstacleChanged` / `TileChanged` handlers mark dirty cells on the current grid and invalidate cached paths through the area.
+- `PathfinderManager::update()` (main thread, before `CollisionManager::update()`) owns dirty-cell rebuilds: take the dirty rows from the published grid, copy the grid (allocation only on dirty frames), rebuild those rows on the copy with the shared row worker `PathfindingGrid::rebuildFromWorld(rowStart, rowEnd)` in `WorkerBudget` (`SystemType::Pathfinding`) batches on `ThreadSystem`, join every batch before returning, report execution, update the coarse grid, and publish with the locked grid swap. In-flight path requests keep their old snapshot. The copy starts with no dirt.
+- Workers read collision statics only while the main thread waits on them, so no static mutation overlaps a gameplay rebuild. No locks on the collision hot path.
+- The load-time full rebuild stays detached (`StaticCollidersReady` → `rebuildGrid()`), gated by LoadingState's global pause and `isGridReady()`: the documented exception (`docs/ARCHITECTURE.md` "Sequential manager slots").
+- Correctness fixes: `queryAreaHasStaticOverlap` hash path includes EventOnly water-edge triggers (matches the linear fallback the load-time rebuild uses); `rebuildStaticFromWorld` suppresses per-body `CollisionObstacleChanged` so a world load does not dirty most of the grid; `CollisionManager::onTileChanged` no longer marks the static hash dirty unconditionally (only body add/remove does), so a `TREE` / `ROCK` harvest keeps the in-slot rebuild on the hash path.
+- Dead code removed: the detached incremental branch of `rebuildGrid(true)` (and its parameter), `rebuildDirtyRegions` / `hasDirtyRegions` / `calculateDirtyPercent` / `clearDirtyRegions` / `DIRTY_THRESHOLD_PERCENT`, CollisionManager's `WorldGenerated` rebuild branch (no production trigger), and the unused manager weight-field API (`PathfinderManager::addTemporaryWeightField` / `clearWeightFields`, `PathfindingGrid::cloneWithResetWeights`, `TestWeightFields`); grid-level `addWeightCircle` / `resetWeights` stay.
+- Accepted gap: a path computed on the pre-publish grid can be inserted into the path cache just after publish (invalidation ran at mark time). For harvests this is a weight difference only.
 - Out of scope: pathfinding algorithm changes, spatial-hash redesign.
 
 Checklist:
 
-- [ ] Design (`cpp-design-specialist`): static-collision read contract for grid rebuild workers and the dirty-region rebuild owner
-- [ ] Rebuild workers read static collision data without racing main-thread mutation
-- [ ] Dirty regions from `CollisionObstacleChanged` / `TileChanged` are rebuilt by the chosen production owner
-- [ ] Owning docs updated (`docs/managers/CollisionManager.md`, `docs/managers/PathfinderManager.md`, `docs/ai/PathfindingSystem.md`)
-- [ ] Tests updated in the same change (static mutation during an in-flight rebuild; tile change reflected in the grid)
+- [x] Design: user-approved minimal plan (contract above) instead of a `cpp-design-specialist` round
+- [x] Rebuild workers read static collision data without racing main-thread mutation (gameplay rebuild joins inside `PathfinderManager::update()`; load rebuild stays in the paused window)
+- [x] Dirty regions from `CollisionObstacleChanged` / `TileChanged` are rebuilt by `PathfinderManager::update()`
+- [x] Owning docs updated (`docs/managers/CollisionManager.md`, `docs/managers/PathfinderManager.md`, `docs/ai/PathfindingSystem.md`, `docs/ARCHITECTURE.md`, `.claude/rules/managers.md`, `CLAUDE.md`)
+- [x] Tests updated in the same change (tile change and static add/remove applied after drain + `update()`; in-flight path request across a publish; EventOnly overlap on the hash path; no obstacle-event flood on world load; `TREE` / `ROCK` tile change keeps the static hash clean; `rebuildGrid()` / sleep waits for dirty rebuilds replaced by `update()`)
 
 Acceptance checks:
 
 - [ ] A static-body add/remove or tile change during a grid rebuild is race-free (TSan clean at the Branch/PR gate)
-- [ ] A harvest tile removal unblocks the matching grid cells without a manual `rebuildGrid()`
-- [ ] `ninja -C build` passes
-- [ ] Targeted Boost.Test: `ai_collision_integration_tests`, `collision_pathfinding_integration_tests`, `pathfinder_manager_tests`, `collision_system_tests`
-- [ ] Slice reviewed (`game-systems-architect`) before commit
+- [x] Tile change → dirty cell → `update()` refreshes blocked and weight via the shared row worker; blocked asserted (`TestTileChangeAppliedOnPathfinderUpdate`, `MOUNTAIN` block/unblock), weight updated by construction (same loop), not directly asserted. Only `BUILDING` / `MOUNTAIN` block; a `TREE` / `ROCK` harvest changes weight only and leaves the static hash clean (`TestTreeTileChangeKeepsStaticHashClean`)
+- [x] `ninja -C build` passes (incremental, 0 errors, 0 warnings)
+- [x] Targeted Boost.Test: `ai_collision_integration_tests`, `collision_pathfinding_integration_tests`, `pathfinder_manager_tests`, `collision_system_tests`, plus `pathfinding_system_tests`, `pathfinder_manager_edm_integration_tests`, `loading_state_tests`, `behavior_functionality_tests` and every other test executable whose sources use PathfinderManager / CollisionManager / PathfindingGrid (27 executables, all pass; `ai_collision_integration_tests` 20/20 looped)
+- [x] Slice reviewed (`game-systems-architect`) before commit (approved; review fixes applied: `onTileChanged` hash-dirty removal, weight-field API deletion, acceptance wording, stale comments)
 
-Status: Not started. Scheduled after 6R and before 6.1.
+Status: Complete. Implemented and reviewed; slice-complete gate green. TSan acceptance runs at the Branch/PR gate.
 
 ## Slice 6.1: Harvestable respawn
 

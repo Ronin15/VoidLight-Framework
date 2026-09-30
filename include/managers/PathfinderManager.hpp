@@ -19,38 +19,30 @@
  * - Scales to 10K+ entities while maintaining 60+ FPS
  * - Lock-free request queuing with minimal contention
  *
- * ARCHITECTURE: Strict Event-Driven Grid Rebuilding
- * ===================================================
- * Grid rebuilds happen ONLY via event system (no synchronous fallbacks):
- *
- * 1. StaticCollidersReadyEvent → PathfinderManager::onStaticCollidersReady() → rebuildGrid() (async)
- * 2. CollisionObstacleChanged → PathfinderManager::onCollisionObstacleChanged() → rebuildGrid() (async)
- * 3. TileChanged → PathfinderManager::onTileChanged() → rebuildGrid() (async)
+ * ARCHITECTURE: Event-Driven Grid Rebuilding
+ * ===========================================
+ * 1. StaticCollidersReadyEvent → onStaticCollidersReady() → rebuildGrid(): full
+ *    rebuild on ThreadSystem, detached from the frame. This is the load-time
+ *    exception: LoadingState holds the global pause and waits on isGridReady(),
+ *    so no main-thread static mutation overlaps it.
+ * 2. CollisionObstacleChanged / TileChanged → mark dirty cells on the current
+ *    grid and invalidate cached paths through the area. Nothing is rebuilt in
+ *    the handler.
+ * 3. update() applies dirty cells: copies the published grid, rebuilds the
+ *    dirty rows on the copy (WorkerBudget batches, joined before update()
+ *    returns), then publishes the copy. Published grids are never mutated in
+ *    place; in-flight path requests keep the snapshot they captured.
  *
  * Event Flow for World Loading:
  * - WorldManager fires WorldLoadedEvent after world data is ready
  * - CollisionManager receives WorldLoadedEvent, creates static collision bodies
+ *   (no per-body CollisionObstacleChanged during that rebuild)
  * - CollisionManager fires StaticCollidersReadyEvent when bodies are complete
  * - PathfinderManager receives StaticCollidersReadyEvent, builds navigation grid
  *
- * This ordering ensures PathfinderManager can query CollisionManager for obstacle
- * data during grid construction without race conditions.
- *
- * Integration Requirements:
- * - GameEngine MUST call EventManager::update() each frame to process events
- * - CollisionManager MUST fire StaticCollidersReadyEvent after rebuilding static bodies
- * - CollisionManager MUST fire CollisionObstacleChanged when individual obstacles change
- *
  * Entity Behavior When Grid Not Ready:
- * - PathfindingResult::NO_PATH_FOUND returned if grid doesn't exist
- * - Entities should continue current path or use fallback behavior
- * - Retry path request next frame (grid rebuild completes asynchronously)
- *
- * This ensures:
- * - No blocking operations on main thread (grid rebuilds on worker threads)
- * - Clean separation between pathfinding and world systems
- * - Testable event-driven architecture
- * - Entities handle gracefully degraded service during rebuilds
+ * - requestPathToEDM() returns 0 if no grid exists
+ * - Entities should continue current path or use fallback behavior and retry
  */
 
 #include "utils/Vector2D.hpp"
@@ -111,7 +103,11 @@ public:
     bool isInitialized() const;
 
     /**
-     * @brief Updates pathfinding systems and processes pending requests
+     * @brief Commits completed paths and applies dirty grid cells
+     *
+     * Main thread. Dirty rows are rebuilt on a copy of the published grid in
+     * WorkerBudget batches that join before this returns; the copy is then
+     * published. No allocation when nothing is dirty.
      */
     void update();
 
@@ -198,23 +194,13 @@ public:
     // ===== Grid Management =====
 
     /**
-     * @brief Rebuild the pathfinding grid from world data
-     * @param allowIncremental If true, allow incremental rebuild if grid has dirty regions (default: true)
+     * @brief Full rebuild of the pathfinding grid from world data
+     *
+     * Runs detached on ThreadSystem and publishes a new grid when done
+     * (isGridReady() tracks it). Production calls it only from
+     * StaticCollidersReady during a load; dirty cells are applied by update().
      */
-    void rebuildGrid(bool allowIncremental = true);
-
-    /**
-     * @brief Add a temporary weight field (for avoidance)
-     * @param center Center of the weight field in world coordinates
-     * @param radius Radius of the weight field
-     * @param weight Weight multiplier (higher = more expensive to traverse)
-     */
-    void addTemporaryWeightField(const Vector2D& center, float radius, float weight);
-
-    /**
-     * @brief Clear all temporary weight fields
-     */
-    void clearWeightFields();
+    void rebuildGrid();
 
     // ===== Configuration =====
 
@@ -488,8 +474,9 @@ private:
     std::vector<PathCompletion> m_pendingPathCompletions;
     std::vector<PathCompletion> m_reusablePathCompletions;
 
-    // Incremental update configuration
-    static constexpr float DIRTY_THRESHOLD_PERCENT = 0.25f; // Full rebuild if >25% of grid is dirty
+    // Dirty-cell apply scratch (main thread only, used by rebuildDirtyRows()).
+    std::vector<int> m_dirtyRows;
+    std::vector<std::future<void>> m_dirtyRowFutures;
 
     // DIRECT THREADSYSTEM SUBMISSION (no intermediate buffer needed)
     // Requests are submitted directly to ThreadSystem in requestPathToEDM()
@@ -503,6 +490,7 @@ private:
     void clearOldestCacheEntries(float percentage); // Smart cache clearing (partial LRU eviction)
     void clearAllCache(); // Complete cache clear for world load/unload
     void waitForGridRebuildCompletion(); // Wait for pending async grid rebuild tasks
+    void rebuildDirtyRows(); // update(): rebuild dirty rows on a copy, publish it
     void subscribeToEvents(); // Subscribe to collision and world events
     void unsubscribeFromEvents(); // Unsubscribe from events
 

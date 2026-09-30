@@ -20,6 +20,8 @@
 #include "utils/Vector2D.hpp"
 #include "ai/pathfinding/PathfindingGrid.hpp"
 #include "world/WorldData.hpp"
+#include "events/WorldEvent.hpp"
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <vector>
@@ -71,8 +73,10 @@ struct CollisionPathfindingFixture {
         // Set up a test world with some static obstacles
         setupTestWorld();
 
-        // Process any deferred collision events from setupTestWorld()
+        // Deferred CollisionObstacleChanged events from setupTestWorld() mark
+        // dirty cells; PathfinderManager::update() applies them.
         EventManager::Instance().update();
+        PathfinderManager::Instance().update();
     }
 
     ~CollisionPathfindingFixture() {
@@ -188,14 +192,20 @@ struct CollisionPathfindingFixture {
 
     bool requestPathAndWait(size_t edmIndex, const Vector2D& start, const Vector2D& goal,
         std::vector<Vector2D>& outPath, int maxPolls = 50) {
-        auto& pm = PathfinderManager::Instance();
-        auto& edm = EntityDataManager::Instance();
-        const uint64_t requestId = pm.requestPathToEDM(
+        const uint64_t requestId = PathfinderManager::Instance().requestPathToEDM(
             edmIndex, start, goal, PathfinderManager::Priority::High);
         if (requestId == 0) {
             return false;
         }
+        return waitForPathCommit(edmIndex, outPath, maxPolls);
+    }
 
+    // Polls the async path request (a detached ThreadSystem task by design)
+    // until its completion is committed to EDM.
+    bool waitForPathCommit(size_t edmIndex, std::vector<Vector2D>& outPath,
+        int maxPolls = 50) {
+        auto& pm = PathfinderManager::Instance();
+        auto& edm = EntityDataManager::Instance();
         for (int i = 0; i < maxPolls; ++i) {
             pm.update();
             pm.commitCompletedPaths();
@@ -214,9 +224,230 @@ struct CollisionPathfindingFixture {
         }
         return false;
     }
+
+    static Vector2D cellCenter(int gx, int gy) {
+        constexpr float CELL = 64.0f; // PathfinderManager cell size
+        return Vector2D((static_cast<float>(gx) + 0.5f) * CELL,
+            (static_cast<float>(gy) + 0.5f) * CELL);
+    }
+
+    // adjustSpawnToNavigable() keeps an open cell's center in place and moves a
+    // blocked one, so it reports the published grid's blocked state.
+    static bool isCellOpen(const Vector2D& center) {
+        const Vector2D snapped = PathfinderManager::Instance().adjustSpawnToNavigable(
+            center, 16.0f, 16.0f, 0.0f);
+        return (snapped - center).length() < 1.0f;
+    }
+
+    // First open cell in the fixture world's lower half (away from
+    // setupTestWorld() obstacles), scanned in a fixed order.
+    static Vector2D findOpenCellCenter() {
+        for (int gy = 12; gy < 22; ++gy) {
+            for (int gx = 3; gx < 22; ++gx) {
+                const Vector2D center = cellCenter(gx, gy);
+                if (isCellOpen(center)) {
+                    return center;
+                }
+            }
+        }
+        BOOST_FAIL("No open pathfinding cell in the fixture world");
+        return {};
+    }
+
+    EntityID addObstacleAt(const Vector2D& center, float halfSize) {
+        auto& edm = EntityDataManager::Instance();
+        EntityHandle handle = edm.createStaticBody(center, halfSize, halfSize);
+        BOOST_REQUIRE(handle.isValid());
+        CollisionManager::Instance().addStaticBody(handle.getId(), center,
+            Vector2D(halfSize, halfSize), CollisionLayer::Layer_Environment,
+            0xFFFFFFFFu, false, 0, 1, edm.getStaticIndex(handle));
+        return handle.getId();
+    }
+
+    // One production frame for the grid: drain deferred events, then let
+    // PathfinderManager apply the dirty cells they marked.
+    static void drainAndUpdatePathfinder() {
+        EventManager::Instance().update();
+        PathfinderManager::Instance().update();
+    }
 };
 
 BOOST_AUTO_TEST_SUITE(CollisionPathfindingIntegrationSuite)
+
+BOOST_FIXTURE_TEST_CASE(TestTileChangeAppliedOnPathfinderUpdate, CollisionPathfindingFixture) {
+    // TileChanged marks the cell dirty; the next PathfinderManager::update()
+    // rebuilds it. No rebuildGrid() call.
+    const Vector2D center = findOpenCellCenter();
+    const int tileX0 = static_cast<int>(center.getX() / TILE_SIZE) - 1;
+    const int tileY0 = static_cast<int>(center.getY() / TILE_SIZE) - 1;
+
+    auto& wm = WorldManager::Instance();
+    std::vector<Tile> originalTiles;
+    for (int dy = 0; dy < 2; ++dy) {
+        for (int dx = 0; dx < 2; ++dx) {
+            const auto tile = wm.getTileCopyAt(tileX0 + dx, tileY0 + dy);
+            BOOST_REQUIRE(tile.has_value());
+            originalTiles.push_back(*tile);
+            BOOST_REQUIRE(wm.modifyTile(tileX0 + dx, tileY0 + dy,
+                [](Tile& t) { t.biome = Biome::MOUNTAIN; }));
+        }
+    }
+
+    // Dirt is applied by update(), not by the event handler.
+    EventManager::Instance().update();
+    BOOST_CHECK(isCellOpen(center));
+    PathfinderManager::Instance().update();
+    BOOST_CHECK(!isCellOpen(center));
+
+    // Restoring the tiles reopens the cell the same way.
+    for (int dy = 0; dy < 2; ++dy) {
+        for (int dx = 0; dx < 2; ++dx) {
+            BOOST_REQUIRE(wm.updateTile(tileX0 + dx, tileY0 + dy,
+                originalTiles[static_cast<size_t>(dy * 2 + dx)]));
+        }
+    }
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(isCellOpen(center));
+}
+
+BOOST_FIXTURE_TEST_CASE(TestStaticBodyChangeAppliedOnPathfinderUpdate, CollisionPathfindingFixture) {
+    // CollisionObstacleChanged from addStaticBody/removeCollisionBody marks the
+    // area dirty; the next PathfinderManager::update() blocks/unblocks it.
+    const Vector2D center = findOpenCellCenter();
+
+    const EntityID obstacle = addObstacleAt(center, 24.0f);
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(!isCellOpen(center));
+
+    CollisionManager::Instance().removeCollisionBody(obstacle);
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(isCellOpen(center));
+}
+
+BOOST_FIXTURE_TEST_CASE(TestTreeTileChangeKeepsStaticHashClean, CollisionPathfindingFixture) {
+    // A TREE/ROCK tile change changes no collision body, so it must not dirty
+    // the static hash: the in-slot dirty-row rebuild then queries the hash
+    // instead of scanning every static. queryArea() exposes which path runs:
+    // the dirty linear fallback returns EventOnly triggers, the hash path
+    // (m_staticSpatialHash only) does not.
+    auto& cm = CollisionManager::Instance();
+    const AABB triggerArea(1400.0f, 1400.0f, 16.0f, 16.0f);
+    const EntityID triggerId = cm.createTriggerArea(triggerArea, TriggerTag::Water,
+        TriggerType::EventOnly, CollisionLayer::Layer_Environment, 0xFFFFFFFFu);
+    BOOST_REQUIRE_NE(triggerId, 0);
+    const auto linearPathRuns = [&cm, &triggerArea, triggerId]() {
+        std::vector<EntityID> found;
+        cm.queryArea(triggerArea, found);
+        return std::find(found.begin(), found.end(), triggerId) != found.end();
+    };
+    BOOST_REQUIRE(linearPathRuns()); // hash dirty after the add
+
+    // CollisionManager::update() rebuilds the static hash when a movable is active.
+    createPathNpc(Vector2D(100.0f, 100.0f));
+    BOOST_REQUIRE(!EntityDataManager::Instance().getActiveIndices().empty());
+    cm.update(0.016f);
+    BOOST_REQUIRE(!linearPathRuns());
+
+    const Vector2D center = findOpenCellCenter();
+    const int tileX = static_cast<int>(center.getX() / TILE_SIZE);
+    const int tileY = static_cast<int>(center.getY() / TILE_SIZE);
+    const auto tile = WorldManager::Instance().getTileCopyAt(tileX, tileY);
+    BOOST_REQUIRE(tile.has_value());
+    BOOST_REQUIRE(!tile->isWater);
+    BOOST_REQUIRE_EQUAL(tile->buildingId, 0U);
+    const ObstacleType newType =
+        tile->obstacleType == ObstacleType::TREE ? ObstacleType::ROCK : ObstacleType::TREE;
+    BOOST_REQUIRE(WorldManager::Instance().modifyTile(
+        tileX, tileY, [newType](Tile& t) { t.obstacleType = newType; }));
+
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(!linearPathRuns());
+    // TREE/ROCK only weight the cell; it stays open after the dirty-row rebuild.
+    BOOST_CHECK(isCellOpen(center));
+
+    cm.removeCollisionBody(triggerId);
+}
+
+BOOST_FIXTURE_TEST_CASE(TestInFlightPathRequestSurvivesGridPublish, CollisionPathfindingFixture) {
+    // A path request captures the grid snapshot it was issued against. Applying
+    // dirty cells publishes a new grid instead of mutating that snapshot, so
+    // the request completes and the new grid carries the change.
+    const Vector2D start(100.0f, 100.0f);
+    const Vector2D goal(600.0f, 600.0f);
+    const Vector2D obstacleCenter = findOpenCellCenter();
+
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE_GT(PathfinderManager::Instance().requestPathToEDM(
+                         npc, start, goal, PathfinderManager::Priority::High),
+        0U);
+
+    const EntityID obstacle = addObstacleAt(obstacleCenter, 24.0f);
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(!isCellOpen(obstacleCenter));
+
+    std::vector<Vector2D> path;
+    BOOST_CHECK(waitForPathCommit(npc, path));
+    BOOST_CHECK_GE(path.size(), 2U);
+
+    CollisionManager::Instance().removeCollisionBody(obstacle);
+}
+
+BOOST_AUTO_TEST_CASE(TestWorldLoadDoesNotFloodObstacleEvents) {
+    // rebuildStaticFromWorld() replaces every static without per-body
+    // CollisionObstacleChanged; StaticCollidersReady drives the grid rebuild.
+    BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
+    BOOST_REQUIRE(EventManager::Instance().init());
+    BOOST_REQUIRE(WorldResourceManager::Instance().init());
+    BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+    BOOST_REQUIRE(WorldManager::Instance().init());
+    BOOST_REQUIRE(EntityDataManager::Instance().init());
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+
+    int obstacleEvents = 0;
+    size_t collidersReadyStatics = 0;
+    auto obstacleToken = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::CollisionObstacleChanged,
+        [&obstacleEvents](const EventData&) { ++obstacleEvents; });
+    auto worldToken = EventManager::Instance().registerHandlerWithToken(EventTypeId::World,
+        [&collidersReadyStatics](const EventData& data) {
+            if (auto ready = std::dynamic_pointer_cast<StaticCollidersReadyEvent>(data.event)) {
+                collidersReadyStatics = ready->getSolidBodyCount() + ready->getTriggerCount();
+            }
+        });
+
+    VoidLight::WorldGenerationConfig cfg{};
+    cfg.width = 50;
+    cfg.height = 50;
+    cfg.seed = 1234;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
+    cfg.populate = false;
+    BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
+
+    // WorldLoaded is posted by a WorldManager ThreadSystem task (a documented
+    // async exception), so poll the drain until the statics rebuild runs.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (collidersReadyStatics == 0 && std::chrono::steady_clock::now() < deadline) {
+        EventManager::Instance().update();
+        std::this_thread::yield();
+    }
+    // Deliver anything the statics rebuild deferred.
+    EventManager::Instance().update();
+
+    BOOST_REQUIRE_GT(collidersReadyStatics, 0U);
+    BOOST_CHECK_EQUAL(obstacleEvents, 0);
+
+    EventManager::Instance().removeHandler(obstacleToken);
+    EventManager::Instance().removeHandler(worldToken);
+    CollisionManager::Instance().clean();
+    EntityDataManager::Instance().clean();
+    WorldManager::Instance().clean();
+    ResourceTemplateManager::Instance().clean();
+    WorldResourceManager::Instance().clean();
+    EventManager::Instance().clean();
+}
 
 BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFixture) {
     // Production path: requestPathToEDM + main-thread commitCompletedPaths.
@@ -268,11 +499,9 @@ BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixt
     size_t dynamicEdmIndex = edm.getStaticIndex(dynamicHandle);
     CollisionManager::Instance().addStaticBody(dynamicObstacle, obstacleAABB.center, obstacleAABB.halfSize, CollisionLayer::Layer_Enemy, 0xFFFFFFFFu, false, 0, 1, dynamicEdmIndex);
 
-    // Event-driven: PathfinderManager automatically updates via CollisionObstacleChanged events
+    // CollisionObstacleChanged marks dirty cells; update() applies them.
     EventManager::Instance().update();
-
-    // Give time for grid rebuild
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    PathfinderManager::Instance().update();
 
     std::vector<Vector2D> newPath;
     BOOST_REQUIRE(requestPathAndWait(npc, start, goal, newPath));
@@ -307,9 +536,9 @@ BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFix
     size_t newObstacleEdmIndex = edm.getStaticIndex(newObstacleHandle);
     CollisionManager::Instance().addStaticBody(newObstacle, newObstacleAABB.center, newObstacleAABB.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu, false, 0, 1, newObstacleEdmIndex);
 
-    // Process events and allow grid rebuild
+    // Process events; update() applies the dirty cells
     EventManager::Instance().update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    PathfinderManager::Instance().update();
 
     std::vector<Vector2D> newPath;
     BOOST_REQUIRE(requestPathAndWait(npc, start, goal, newPath));
@@ -501,9 +730,9 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
         CollisionLayer::Layer_Environment,
         CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy);
 
-    // Event-driven: PathfinderManager automatically updates via CollisionObstacleChanged events
+    // CollisionObstacleChanged marks dirty cells; update() applies them.
     EventManager::Instance().update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Allow grid rebuild
+    PathfinderManager::Instance().update();
 
     // Test pathfinding around the layered obstacles using async API
     Vector2D start(200.0f, 200.0f);

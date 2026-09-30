@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <cmath>
 #include <format>
+#include <span>
 
 PathfinderManager& PathfinderManager::Instance() {
     static PathfinderManager instance;
@@ -39,6 +40,20 @@ inline VoidLight::TaskPriority mapEnumToTaskPriority(PathfinderManager::Priority
         case PathfinderManager::Priority::Normal: return VoidLight::TaskPriority::Normal;
         case PathfinderManager::Priority::Low: return VoidLight::TaskPriority::Low;
         default: return VoidLight::TaskPriority::Normal;
+    }
+}
+
+// Rebuild sorted row indices, one rebuildFromWorld(rowStart, rowEnd) call per
+// contiguous run. Shared by the serial and batched dirty-row paths.
+void rebuildRows(VoidLight::PathfindingGrid& grid, std::span<const int> rows) {
+    size_t runStart = 0;
+    while (runStart < rows.size()) {
+        size_t runEnd = runStart + 1;
+        while (runEnd < rows.size() && rows[runEnd] == rows[runEnd - 1] + 1) {
+            ++runEnd;
+        }
+        grid.rebuildFromWorld(rows[runStart], rows[runEnd - 1] + 1);
+        runStart = runEnd;
     }
 }
 }
@@ -90,6 +105,8 @@ void PathfinderManager::update() {
     commitCompletedPaths();
 
     // Requests are submitted directly to ThreadSystem in requestPathToEDM() - no processing needed here
+
+    rebuildDirtyRows();
 
     VOIDLIGHT_DEBUG_ONLY(
         // Interval stats logging - zero overhead in release (entire block compiles out)
@@ -626,48 +643,13 @@ bool PathfinderManager::hasPendingWork() const {
     return false; // No queue - work submitted directly to ThreadSystem
 }
 
-void PathfinderManager::rebuildGrid(bool allowIncremental) {
-    // HYBRID OPTIMIZATION: Smart decision between full parallel rebuild and incremental update
-    // - Full rebuild: Use WorkerBudget parallel batching (2-4× speedup)
-    // - Incremental: Rebuild only dirty regions (~10-30× speedup for small changes)
-
+void PathfinderManager::rebuildGrid() {
+    // Full rebuild into a new grid on ThreadSystem (WorkerBudget row batches),
+    // published when complete. Dirty cells are applied by update() instead.
     const auto& worldManager = WorldManager::Instance();
     if (!worldManager.hasActiveWorld()) {
         PATHFIND_DEBUG("Cannot rebuild grid - no active world");
         return;
-    }
-
-    // Smart rebuild decision: check if incremental update is beneficial
-    auto currentGrid = getGridSnapshot();
-    if (allowIncremental && currentGrid && currentGrid->hasDirtyRegions()) {
-        float dirtyPercent = currentGrid->calculateDirtyPercent();
-
-        if (dirtyPercent <= DIRTY_THRESHOLD_PERCENT * 100.0f) {
-            // Incremental update is beneficial (small change)
-            PATHFIND_DEBUG(std::format("Incremental rebuild: {}% dirty (threshold: {}%)",
-                dirtyPercent, DIRTY_THRESHOLD_PERCENT * 100.0f));
-
-            // Submit incremental rebuild to ThreadSystem (non-blocking)
-            auto& threadSystem = VoidLight::ThreadSystem::Instance();
-            auto rebuildFuture = threadSystem.enqueueTaskWithResult(
-                [this]() {
-                    if (auto grid = getGridSnapshot()) {
-                        grid->rebuildDirtyRegions();
-                        PATHFIND_INFO("Incremental grid rebuild complete");
-                    }
-                },
-                VoidLight::TaskPriority::Low,
-                "PathfindingGridRebuild_Incremental");
-
-            std::lock_guard<std::mutex> lock(m_gridRebuildFuturesMutex);
-            m_gridRebuildFutures.push_back(std::move(rebuildFuture));
-            return; // Early return - incremental rebuild submitted
-        } else {
-            // Too much dirty (>25%) - full rebuild is faster
-            PATHFIND_DEBUG(std::format("Full rebuild: {}% dirty exceeds threshold ({}%)",
-                dirtyPercent, DIRTY_THRESHOLD_PERCENT * 100.0f));
-            currentGrid->clearDirtyRegions(); // Clear dirty regions, will do full rebuild
-        }
     }
 
     int worldWidth = 0, worldHeight = 0;
@@ -815,31 +797,6 @@ void PathfinderManager::rebuildGrid(bool allowIncremental) {
     }
 
     PATHFIND_DEBUG("Parallel grid rebuild submitted");
-}
-
-void PathfinderManager::addTemporaryWeightField(const Vector2D& center, float radius, float weight) {
-    if (!ensureGridInitialized()) {
-        return;
-    }
-
-    if (auto grid = getGridSnapshot()) {
-        grid->addWeightCircle(center, radius, weight);
-    }
-}
-
-void PathfinderManager::clearWeightFields() {
-    if (!ensureGridInitialized()) {
-        return;
-    }
-
-    // Publish a fresh grid with weights reset instead of mutating the live
-    // one in place. In-flight findPath() calls on worker threads hold their
-    // own gridSnapshot shared_ptr (captured at request time) and keep
-    // reading the old grid safely until they finish -- there is nothing to
-    // wait for, since nobody mutates the instance they're holding.
-    if (auto grid = getGridSnapshot()) {
-        setGrid(grid->cloneWithResetWeights(1.0f));
-    }
 }
 
 void PathfinderManager::setAllowDiagonal(bool allow) {
@@ -1609,7 +1566,7 @@ void PathfinderManager::onCollisionObstacleChanged(const Vector2D& position, flo
                 removedCount, description));
     }
 
-    // Mark dirty region on pathfinding grid for incremental update
+    // Mark dirty cells on the current grid; update() rebuilds and publishes them
     auto currentGrid = getGridSnapshot();
     if (currentGrid) {
         // Convert world position to grid cell coordinates
@@ -1652,7 +1609,7 @@ void PathfinderManager::onStaticCollidersReady() {
         worldWidth, worldHeight));
 
     clearAllCache();
-    rebuildGrid(false); // allowIncremental=false for world loads
+    rebuildGrid();
     PATHFIND_INFO("Pathfinding grid rebuild initiated (async)");
 }
 
@@ -1701,7 +1658,7 @@ void PathfinderManager::onTileChanged(int x, int y) {
         std::format("Tile changed at ({}, {}), invalidated {} cached paths",
             x, y, removedCount));
 
-    // Mark dirty region on pathfinding grid for incremental update
+    // Mark dirty cells on the current grid; update() rebuilds and publishes them
     auto tileGrid = getGridSnapshot();
     if (tileGrid) {
         // Convert tile coordinates to grid cell coordinates
@@ -1714,6 +1671,75 @@ void PathfinderManager::onTileChanged(int x, int y) {
         PATHFIND_DEBUG(std::format("Marked dirty region for tile change at grid ({},{})",
             gridX, gridY));
     }
+}
+
+void PathfinderManager::rebuildDirtyRows() {
+    auto grid = getGridSnapshot();
+    if (!grid) {
+        return;
+    }
+    grid->takeDirtyRows(m_dirtyRows);
+    if (m_dirtyRows.empty()) {
+        return;
+    }
+
+    // Published grids are never mutated in place: in-flight path requests hold
+    // their own snapshot. Rebuild the dirty rows on a copy, then publish it.
+    // Collision statics are read by the batches while the main thread waits
+    // here, so no static mutation overlaps them.
+    auto nextGrid = std::make_shared<VoidLight::PathfindingGrid>(*grid);
+    VoidLight::PathfindingGrid& next = *nextGrid;
+    const std::span<const int> rows(m_dirtyRows);
+    const size_t rowCount = rows.size();
+
+    auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
+    const bool useThreading =
+        budgetMgr.shouldUseThreading(VoidLight::SystemType::Pathfinding, rowCount).shouldThread;
+    size_t batchCount = 1;
+
+    const auto workStart = std::chrono::steady_clock::now();
+    if (useThreading) {
+        const size_t optimalWorkers =
+            budgetMgr.getOptimalWorkers(VoidLight::SystemType::Pathfinding, rowCount);
+        batchCount = std::max<size_t>(1,
+            budgetMgr.getBatchStrategy(VoidLight::SystemType::Pathfinding, rowCount,
+                         optimalWorkers)
+                .first);
+        batchCount = std::min(batchCount, rowCount);
+        const size_t rowsPerBatch = rowCount / batchCount;
+        const size_t remainder = rowCount % batchCount;
+
+        auto& threadSystem = VoidLight::ThreadSystem::Instance();
+        m_dirtyRowFutures.clear();
+        m_dirtyRowFutures.reserve(batchCount);
+        for (size_t i = 0; i < batchCount; ++i) {
+            const size_t batchStart = i * rowsPerBatch;
+            const size_t batchLen = rowsPerBatch + (i == batchCount - 1 ? remainder : 0);
+            m_dirtyRowFutures.push_back(threadSystem.enqueueTaskWithResult(
+                [&next, batchRows = rows.subspan(batchStart, batchLen)]() {
+                    rebuildRows(next, batchRows);
+                },
+                VoidLight::TaskPriority::High, "PathfindingDirtyRows"));
+        }
+        // Join every batch before get() can rethrow: batches reference next.
+        for (auto& future : m_dirtyRowFutures) {
+            future.wait();
+        }
+        for (auto& future : m_dirtyRowFutures) {
+            future.get();
+        }
+        m_dirtyRowFutures.clear();
+    } else {
+        rebuildRows(next, rows);
+    }
+    const double workMs = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - workStart)
+                              .count();
+    budgetMgr.reportExecution(VoidLight::SystemType::Pathfinding, rowCount, useThreading,
+        batchCount, workMs);
+
+    next.updateCoarseGrid();
+    setGrid(std::move(nextGrid));
 }
 
 void PathfinderManager::waitForGridRebuildCompletion() {

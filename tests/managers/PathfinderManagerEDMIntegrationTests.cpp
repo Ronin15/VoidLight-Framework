@@ -335,7 +335,7 @@ BOOST_AUTO_TEST_CASE(StaleCompletionFromReusedSlotDoesNotOverwriteNewEntityPath)
     BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
         "Expected active world for grid rebuild");
     cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
-    pm.rebuildGrid(false);
+    pm.rebuildGrid();
 
     const bool gridReady = waitForGridReady(pm);
     BOOST_REQUIRE_MESSAGE(gridReady, "Expected grid rebuild to complete for stale completion test");
@@ -406,7 +406,7 @@ BOOST_AUTO_TEST_CASE(StaleCompletionFilteringStressLoop) {
     BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
         "Expected active world for grid rebuild");
     cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
-    pm.rebuildGrid(false);
+    pm.rebuildGrid();
 
     const bool gridReady = waitForGridReady(pm);
     BOOST_REQUIRE_MESSAGE(gridReady, "Expected grid rebuild to complete for stale completion stress loop");
@@ -472,7 +472,7 @@ BOOST_AUTO_TEST_CASE(TestGridDroppedOnPrepareForStateTransition) {
     BOOST_REQUIRE_MESSAGE(ensureActiveWorldForPathfindingTests(),
         "Expected active world for grid rebuild");
     cm.setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
-    pm.rebuildGrid(false);
+    pm.rebuildGrid();
 
     BOOST_REQUIRE_MESSAGE(waitForGridReady(pm),
         "Expected grid rebuild to complete before transition");
