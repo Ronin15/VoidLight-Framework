@@ -129,7 +129,7 @@ bool InventoryController::attemptPickup() {
         return false;
     }
 
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
     auto& edm = EntityDataManager::Instance();
 
     size_t itemIdx;
@@ -182,7 +182,7 @@ bool InventoryController::tryOpenNearbyContainer() {
         return false;
     }
 
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
     auto& edm = EntityDataManager::Instance();
     m_nearbyContainerIndices.clear();
     wrm.queryContainersInRadius(player->getPosition(), PICKUP_RADIUS,
@@ -691,7 +691,7 @@ void InventoryController::setInventoryVisible(bool visible) {
 }
 
 void InventoryController::handleHotbarAssignmentInput(HudController& hudController) {
-    auto& input = InputManager::Instance();
+    const auto& input = InputManager::Instance();
     const bool leftMouseDown = input.getMouseButtonState(LEFT);
     const bool mouseJustPressed = leftMouseDown && !m_leftMouseWasDown;
     const bool mouseJustReleased = !leftMouseDown && m_leftMouseWasDown;

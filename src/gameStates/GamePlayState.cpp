@@ -886,7 +886,7 @@ void GamePlayState::spawnStarterGearChest() {
         return;
     }
 
-    auto& container = edm.getContainerData(chest);
+    const auto& container = edm.getContainerData(chest);
     constexpr std::array<std::string_view, 6> starterGearIds{
         "wooden_sword",
         "wooden_shield",
@@ -924,8 +924,8 @@ bool GamePlayState::tryOpenNearbyMerchantTrade() {
         return false;
     }
 
-    auto& edm = EntityDataManager::Instance();
-    auto& aiMgr = AIManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
+    const auto& aiMgr = AIManager::Instance();
     Vector2D const playerPos = mp_Player->getPosition();
 
     m_nearbyHandlesBuffer.clear();

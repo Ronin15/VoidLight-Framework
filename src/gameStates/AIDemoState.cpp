@@ -205,7 +205,7 @@ void AIDemoState::handleInput() {
     // NPC spawning controls - use EventManager for unified spawning
     if (inputMgr.wasKeyPressed(SDL_SCANCODE_N) ||
         inputMgr.wasKeyPressed(SDL_SCANCODE_M)) {
-        auto& eventMgr = EventManager::Instance();
+        const auto& eventMgr = EventManager::Instance();
 
         if (inputMgr.wasKeyPressed(SDL_SCANCODE_N)) {
             // Spawn 2000 Villagers across entire world via events
@@ -253,7 +253,7 @@ bool AIDemoState::enter() {
     GAMESTATE_INFO("World already loaded - initializing AI demo");
 
     try {
-        auto& worldManager = WorldManager::Instance();
+        const auto& worldManager = WorldManager::Instance();
 
         // Update world dimensions from loaded world
         float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;

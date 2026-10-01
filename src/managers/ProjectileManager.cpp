@@ -238,7 +238,7 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
         return;
     }
 
-    auto& projHot = edm.getHotDataByIndex(projIdx);
+    const auto& projHot = edm.getHotDataByIndex(projIdx);
     if (!projHot.isAlive()) {
         return;
     }
@@ -276,7 +276,7 @@ void ProjectileManager::handleProjectileCollision(const VoidLight::CollisionInfo
     }
 
     // Create and enqueue DamageEvent (deferred — same pipeline as NPC combat)
-    auto& eventMgr = EventManager::Instance();
+    const auto& eventMgr = EventManager::Instance();
     auto damageEvent = eventMgr.acquireDamageEvent();
 
     // Knockback scaled by impact speed — faster projectiles hit harder
@@ -337,7 +337,7 @@ void ProjectileManager::update(float deltaTime) {
     // Query world bounds ONCE per frame
     float worldWidth = 32000.0f;
     float worldHeight = 32000.0f;
-    auto& pathMgr = PathfinderManager::Instance();
+    const auto& pathMgr = PathfinderManager::Instance();
     if (pathMgr.isInitialized()) {
         float w, h;
         if (pathMgr.getCachedWorldBounds(w, h) && w > 0 && h > 0) {

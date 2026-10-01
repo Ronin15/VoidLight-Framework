@@ -496,7 +496,7 @@ private:
         const Vector2D& playerVel, bool playerValid,
         float gameTime,
         EnvironmentSnapshot envSnapshot,
-        HarvestableSnapshotView harvestables,
+        const HarvestableSnapshotView& harvestables,
         std::vector<EventManager::DeferredEvent>& outEvents,
         std::vector<uint32_t>& outKnockbackClears,
         std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages);

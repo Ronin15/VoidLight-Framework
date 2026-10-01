@@ -100,7 +100,7 @@ bool EventDemoState::enter() {
     GAMESTATE_INFO("World already loaded - initializing event demo");
 
     try {
-        auto& worldManager = WorldManager::Instance();
+        const auto& worldManager = WorldManager::Instance();
 
         // Update world dimensions from loaded world
         float minX = 0.0f, minY = 0.0f, maxX = 0.0f, maxY = 0.0f;
@@ -720,7 +720,7 @@ void EventDemoState::triggerWeatherDemo() {
     m_currentWeatherIndex = (m_currentWeatherIndex + 1) % m_weatherSequence.size();
 
     // Use EventManager hub to change weather
-    auto& eventMgr = EventManager::Instance();
+    const auto& eventMgr = EventManager::Instance();
     if (newWeather == WeatherType::Custom && !customType.empty()) {
         eventMgr.changeWeather(customType, m_weatherTransitionTime,
             EventManager::DispatchMode::Deferred);
@@ -776,7 +776,7 @@ void EventDemoState::triggerResourceDemo() {
 
     // Cache manager references for better performance
     auto& edm = EntityDataManager::Instance();
-    auto& eventMgr = EventManager::Instance();
+    const auto& eventMgr = EventManager::Instance();
     const auto& templateManager = ResourceTemplateManager::Instance();
 
     if (!templateManager.isInitialized()) {
@@ -978,7 +978,7 @@ void EventDemoState::triggerConvenienceMethodsDemo() {
     m_convenienceDemoCounter++;
 
     // Cache EventManager reference for multiple calls
-    auto& eventMgr = EventManager::Instance();
+    const auto& eventMgr = EventManager::Instance();
 
     // Demonstrate trigger methods (dispatch-only architecture)
     // Weather change

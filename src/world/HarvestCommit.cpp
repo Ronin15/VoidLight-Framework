@@ -71,7 +71,7 @@ std::optional<HarvestYield> commit(EntityHandle harvestable,
     // EDM-based harvestables coexist.
     const int tileX = static_cast<int>(position.getX() / TILE_SIZE);
     const int tileY = static_cast<int>(position.getY() / TILE_SIZE);
-    auto& eventMgr = EventManager::Instance();
+    const auto& eventMgr = EventManager::Instance();
     eventMgr.dispatchEvent(std::make_shared<HarvestResourceEvent>(
         static_cast<int>(harvestable.getId()),
         tileX,

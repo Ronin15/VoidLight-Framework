@@ -609,7 +609,7 @@ void HudController::handleHotbarInput() {
         C::HotbarSlot8,
         C::HotbarSlot9,
     };
-    auto& inputMgr = InputManager::Instance();
+    const auto& inputMgr = InputManager::Instance();
     for (size_t i = 0; i < kHotbarCommands.size(); ++i) {
         if (inputMgr.isCommandPressed(kHotbarCommands[i])) {
             setHotbarSelectedIndex(i);
@@ -733,7 +733,7 @@ void HudController::refreshHotbarUI() {
     auto player = mp_player.lock();
     const uint32_t inventoryIndex = player ? player->getInventoryIndex() : INVALID_INVENTORY_INDEX;
     auto& edm = EntityDataManager::Instance();
-    auto& rtm = ResourceTemplateManager::Instance();
+    const auto& rtm = ResourceTemplateManager::Instance();
 
     for (size_t i = 0; i < HOTBAR_SLOT_COUNT; ++i) {
         const std::string iconComponentId = hotbarIconId(i);

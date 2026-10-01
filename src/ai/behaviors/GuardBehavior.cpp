@@ -131,7 +131,7 @@ Vector2D generateRoamTarget(const Vector2D& center, float radius) {
     return center + Vector2D(dist * std::cos(angle), dist * std::sin(angle));
 }
 
-Vector2D getNextPatrolWaypoint(VoidLight::GuardStateData& guard) {
+Vector2D getNextPatrolWaypoint(const VoidLight::GuardStateData& guard) {
     if (guard.patrolWaypointCount == 0) {
         return guard.assignedPosition;
     }

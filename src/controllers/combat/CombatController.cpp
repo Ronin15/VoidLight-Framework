@@ -36,7 +36,7 @@ bool equipFirstAvailableMeleeWeapon(Player& player, EntityDataManager& edm) {
     }
 
     const size_t maxSlots = edm.getInventoryData(charData.inventoryIndex).maxSlots;
-    auto& resourceManager = ResourceTemplateManager::Instance();
+    const auto& resourceManager = ResourceTemplateManager::Instance();
     for (size_t slot = 0; slot < maxSlots; ++slot) {
         const InventorySlotData inventorySlot =
             edm.getInventorySlot(charData.inventoryIndex, slot);
@@ -152,7 +152,7 @@ bool CombatController::performAttack(Player* player) {
 
     // Cache manager references at function scope
     auto& edm = EntityDataManager::Instance();
-    auto& aiMgr = AIManager::Instance();
+    const auto& aiMgr = AIManager::Instance();
     const Vector2D playerPos = player->getPosition();
     EntityHandle playerHandle = player->getHandle();
     CharacterData activeCharData = edm.getCharacterData(playerHandle);
@@ -233,7 +233,7 @@ bool CombatController::performAttack(Player* player) {
 
         // Dispatch the mutable damage payload. EventManager applies combat results
         // on the main thread immediately for player attacks.
-        auto& eventMgr = EventManager::Instance();
+        const auto& eventMgr = EventManager::Instance();
         auto damageEvent = eventMgr.acquireDamageEvent();
         damageEvent->configure(playerHandle, handle, activeCharData.attackDamage,
             knockback);

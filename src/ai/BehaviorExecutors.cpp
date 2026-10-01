@@ -64,7 +64,7 @@ void switchBehavior(size_t edmIndex, BehaviorType newType) {
 }
 
 void switchBehavior(size_t edmIndex, const VoidLight::BehaviorConfigData& config) {
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     VoidLight::AICommandBus::Instance().enqueueBehaviorTransition(
         edm.getHandle(edmIndex), edmIndex, config);
 }
@@ -288,7 +288,7 @@ float calculateAngleToTarget(const Vector2D& from, const Vector2D& to) {
 // ============================================================================
 
 void queueBehaviorMessage(size_t edmIndex, uint8_t messageId, uint8_t param) {
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
         edm.getHandle(edmIndex), edmIndex, messageId, param);
 }
@@ -348,7 +348,7 @@ bool getCachedWorldBounds(float& minX, float& minY, float& maxX, float& maxY) {
 // ============================================================================
 
 void deferBehaviorMessage(size_t targetEdmIndex, uint8_t messageId, uint8_t param) {
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     t_deferredBehaviorMessages.push_back({edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param, 0});
 }
 

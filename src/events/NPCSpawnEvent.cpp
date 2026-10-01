@@ -291,7 +291,7 @@ std::vector<EntityHandle>
 NPCSpawnEvent::spawnNPCs(const SpawnParameters& params, float x, float y) {
     std::vector<EntityHandle> spawnedHandles;
     spawnedHandles.reserve(static_cast<size_t>(params.count));
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
 
     // Check if we're spawning random class and/or race
     bool isRandomClass = params.npcType.empty() || params.npcType == "Random";

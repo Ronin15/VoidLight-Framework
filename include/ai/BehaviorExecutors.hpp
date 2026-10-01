@@ -165,7 +165,7 @@ struct BehaviorContext {
         SparseSidecar<KnockbackData>& kbSidecar,
         SparseSidecar<NpcNeedData>& needSidecar,
         EnvironmentSnapshot env = {},
-        HarvestableSnapshotView harvestableView = {})
+        const HarvestableSnapshotView& harvestableView = {})
         : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), hostileTowardPlayer(hostileTowardPlayerFlag), hasHostileInRow(hostileInRow), knockback(kbSidecar), needs(needSidecar), envSnapshot(env), harvestables(harvestableView) {
     }
 };

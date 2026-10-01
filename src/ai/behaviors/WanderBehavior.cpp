@@ -41,7 +41,7 @@ bool handleStartDelay(BehaviorContext& ctx, VoidLight::WanderStateData& wander, 
     return true;
 }
 
-float calculateMoveDistance(BehaviorData& shared, VoidLight::WanderStateData& wander,
+float calculateMoveDistance(const BehaviorData& shared, VoidLight::WanderStateData& wander,
     const Vector2D& position, float baseDistance,
     const VoidLight::WanderBehaviorConfig& config) {
     int nearbyCount = shared.cachedNearbyCount;
@@ -147,7 +147,7 @@ void chooseNewDirection(BehaviorContext& ctx, VoidLight::WanderStateData& wander
 
 void handleMovement(BehaviorContext& ctx, VoidLight::WanderStateData& wander,
     const VoidLight::WanderBehaviorConfig& config, float envSpeed) {
-    auto& shared = ctx.sharedState;
+    const auto& shared = ctx.sharedState;
     float baseDistance = config.baseGoalDistance;
     Vector2D position = ctx.transform.position;
 

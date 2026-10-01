@@ -15,13 +15,13 @@
 namespace VoidLight {
 
 struct WorldGenerationConfig {
-    int width;
-    int height;
-    int seed;
-    float elevationFrequency;
-    float humidityFrequency;
-    float waterLevel;
-    float mountainLevel;
+    int width{};
+    int height{};
+    int seed{};
+    float elevationFrequency{};
+    float humidityFrequency{};
+    float waterLevel{};
+    float mountainLevel{};
     // false skips WorldManager settlement/wilderness NPC population on
     // loadNewWorld (no populate registry entry). Harvestables and
     // settlements are still generated.

@@ -371,7 +371,7 @@ void EntityDataManager::clearAllEntityStorage() {
     m_memoryData.clear();
 
     // Transient state sidecars — must be reset alongside m_hotData.
-    for (auto& hook : m_sidecarResetHooks) hook();
+    for (const auto& hook : m_sidecarResetHooks) hook();
 
     // Type-specific free-lists
     m_freeCharacterSlots.clear();
@@ -478,7 +478,7 @@ size_t EntityDataManager::allocateSlot() {
         // New entity starts with no active behavior config — ref is {None, UINT32_MAX}
         m_behaviorConfigRef.emplace_back(BehaviorConfigRef{BehaviorType::None, {0, 0, 0}, std::numeric_limits<uint32_t>::max()});
         m_memoryData.emplace_back(); // NPC memory data
-        for (auto& hook : m_sidecarGrowHooks) hook(m_hotData.size());
+        for (const auto& hook : m_sidecarGrowHooks) hook(m_hotData.size());
     }
 
     m_tierIndicesDirty = true;
@@ -504,7 +504,7 @@ void EntityDataManager::freeSlot(size_t index) {
     clearMemoryData(index);
 
     // Clear transient sidecar state — must be cleared before the slot is reused.
-    for (auto& hook : m_sidecarPerEntityHooks) hook(static_cast<uint32_t>(index));
+    for (const auto& hook : m_sidecarPerEntityHooks) hook(static_cast<uint32_t>(index));
 
     // Clear the slot
     m_hotData[index] = EntityHotData{};
@@ -1272,7 +1272,7 @@ EntityHandle EntityDataManager::createDroppedItem(const Vector2D& position,
     renderData.clear();
 
     // Get atlas coords and animation data from resource template
-    auto& rtm = ResourceTemplateManager::Instance();
+    const auto& rtm = ResourceTemplateManager::Instance();
     ResourcePtr resource = rtm.getResourceTemplate(resourceHandle);
     if (resource) {
         renderData.atlasX = static_cast<uint16_t>(resource->getAtlasX());
@@ -2699,7 +2699,7 @@ namespace {
 // Max stack size from ResourceTemplateManager (resolved outside the inventory
 // lock); 99 when the manager is down or the template reports a bad size.
 int inventoryMaxStackFor(VoidLight::ResourceHandle handle) {
-    auto& rtm = ResourceTemplateManager::Instance();
+    const auto& rtm = ResourceTemplateManager::Instance();
     const int maxStack = rtm.isInitialized() ? rtm.getMaxStackSize(handle) : 99;
     return maxStack > 0 ? maxStack : 99;
 }
@@ -2924,7 +2924,7 @@ std::optional<InventoryTransferResult> EntityDataManager::transferInventoryItem(
         return std::nullopt;
     }
 
-    auto& rtm = ResourceTemplateManager::Instance();
+    const auto& rtm = ResourceTemplateManager::Instance();
     int maxStack = rtm.isInitialized() ? rtm.getMaxStackSize(handle) : 99;
     if (maxStack <= 0) {
         maxStack = 99;

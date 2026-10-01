@@ -35,7 +35,7 @@ void ResourceRenderController::update(float deltaTime, const VoidLight::Camera& 
 
 void ResourceRenderController::updateDroppedItemAnimations(float deltaTime, const VoidLight::Camera& camera) {
     auto& edm = EntityDataManager::Instance();
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
 
     // Query items in camera view + buffer (not all items in world)
     Vector2D cameraCenter = camera.getPosition();
@@ -84,7 +84,7 @@ void ResourceRenderController::recordGPUDroppedItems(const VoidLight::GPUSceneCo
     if (!ctx.spriteBatch) { return; }
 
     auto& edm = EntityDataManager::Instance();
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
 
     // Query visible items using rendered camera center (not camera.getPosition()
     // which lags in Follow mode due to blend factor)
@@ -139,7 +139,7 @@ void ResourceRenderController::recordGPUContainers(const VoidLight::GPUSceneCont
     if (!ctx.spriteBatch) { return; }
 
     auto& edm = EntityDataManager::Instance();
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
 
     // Query visible containers using rendered camera center (not camera.getPosition()
     // which lags in Follow mode due to blend factor)

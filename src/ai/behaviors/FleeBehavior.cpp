@@ -226,7 +226,7 @@ void updateStrategicRetreat(BehaviorContext& ctx, VoidLight::FleeStateData& flee
     const Vector2D& threatPos,
     const VoidLight::FleeBehaviorConfig& config,
     float envSpeed) {
-    auto& shared = ctx.sharedState;
+    const auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
     if (flee.directionChangeTimer > 1.0f || flee.fleeDirection.length() < 0.001f) {
@@ -288,7 +288,7 @@ void updateSeekCover(BehaviorContext& ctx, VoidLight::FleeStateData& flee,
     const Vector2D& threatPos,
     const VoidLight::FleeBehaviorConfig& config,
     float envSpeed) {
-    auto& shared = ctx.sharedState;
+    const auto& shared = ctx.sharedState;
     Vector2D currentPos = ctx.transform.position;
 
     int nearbyCount = shared.cachedNearbyCount;

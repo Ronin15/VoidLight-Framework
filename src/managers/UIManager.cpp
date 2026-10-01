@@ -1922,7 +1922,7 @@ void UIManager::handleInput() {
     bool mouseHandled = false;
     const auto& sortedComponents = getSortedComponents();
     for (auto it = sortedComponents.rbegin(); it != sortedComponents.rend(); ++it) {
-        auto& component = *it;
+        const auto& component = *it;
         if (!component || !component->m_visible || !component->m_enabled) {
             continue;
         }
@@ -2534,7 +2534,7 @@ void UIManager::applyPositioning(std::shared_ptr<UIComponent> component,
         return;
     }
 
-    auto& pos = component->m_positioning;
+    const auto& pos = component->m_positioning;
     auto& bounds = component->m_bounds;
 
     // Update dimensions if fixed sizes specified, applying global scale for resolution adaptation

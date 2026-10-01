@@ -111,7 +111,7 @@ void LogoState::handleInput() {
 void LogoState::recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
     float) {
     // Check if window dimensions changed
-    GameEngine& gameEngine = GameEngine::Instance();
+    const GameEngine& gameEngine = GameEngine::Instance();
     int currentWidth = gameEngine.getWidthInPixels();
     int currentHeight = gameEngine.getHeightInPixels();
     if (currentWidth != m_windowWidth || currentHeight != m_windowHeight) {

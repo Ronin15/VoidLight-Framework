@@ -335,7 +335,7 @@ void PathfindingGrid::markDirtyRegion(int cellX, int cellY, int width,
         // Simple heuristic: merge first two regions (could be improved)
         // Note: size() > 32 guarantees size() >= 2, so no additional check needed
         auto& r1 = m_dirtyRegions[0];
-        auto& r2 = m_dirtyRegions[1];
+        const auto& r2 = m_dirtyRegions[1];
 
         int mergedX1 = std::min(r1.x, r2.x);
         int mergedY1 = std::min(r1.y, r2.y);

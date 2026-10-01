@@ -243,8 +243,10 @@ bool GameEngine::init(std::string_view title) {
     // Track initial fullscreen state
     m_isFullscreen = fullscreen;
 
-    mp_window.reset(
-        SDL_CreateWindow(title.data(), m_windowWidth, m_windowHeight, flags));
+    // SDL needs a NUL-terminated title; string_view does not guarantee one.
+    const std::string windowTitle(title);
+    mp_window.reset(SDL_CreateWindow(
+        windowTitle.c_str(), m_windowWidth, m_windowHeight, flags));
 
     if (!mp_window) {
         GAMEENGINE_ERROR(
@@ -348,7 +350,7 @@ bool GameEngine::init(std::string_view title) {
     m_timestepManager = std::make_unique<TimestepManager>();
     updateDisplayRefreshRate();
 
-    auto& gpuDev = VoidLight::GPUDevice::Instance();
+    const auto& gpuDev = VoidLight::GPUDevice::Instance();
     const SDL_GPUPresentMode requestedMode = vsyncRequested
         ? SDL_GPU_PRESENTMODE_VSYNC
         : SDL_GPU_PRESENTMODE_MAILBOX;
@@ -1370,7 +1372,7 @@ bool GameEngine::setVSyncEnabled(bool enable) {
     GAMEENGINE_INFO(
         std::format("{} VSync...", enable ? "Enabling" : "Disabling"));
 
-    auto& gpuDevice = VoidLight::GPUDevice::Instance();
+    const auto& gpuDevice = VoidLight::GPUDevice::Instance();
     if (!gpuDevice.isInitialized()) {
         GAMEENGINE_ERROR("Cannot set VSync - GPU device not initialized");
         return false;

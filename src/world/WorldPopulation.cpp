@@ -37,12 +37,9 @@ void markUsed(std::vector<uint8_t>& used, int x, int y, int width) {
 }
 
 [[nodiscard]] bool isInsideAnySettlement(const WorldData& world, int tileX, int tileY) noexcept {
-    for (const auto& settlement : world.settlements) {
-        if (settlement.containsTile(tileX, tileY)) {
-            return true;
-        }
-    }
-    return false;
+    return std::ranges::any_of(world.settlements, [tileX, tileY](const auto& settlement) {
+        return settlement.containsTile(tileX, tileY);
+    });
 }
 
 template <typename Pred>

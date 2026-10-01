@@ -3013,7 +3013,7 @@ void CollisionManager::setBodyLayer(EntityID id, uint32_t layerMask,
 void CollisionManager::setVelocity(EntityID id, const Vector2D& velocity) {
     size_t index;
     if (getCollisionBody(id, index)) {
-        auto& hot = m_storage.hotData[index];
+        const auto& hot = m_storage.hotData[index];
         // Static bodies have no velocity
         if (static_cast<BodyType>(hot.bodyType) == BodyType::STATIC) {
             return;

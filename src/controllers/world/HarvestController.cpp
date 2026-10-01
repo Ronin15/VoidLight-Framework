@@ -138,7 +138,7 @@ bool HarvestController::findNearestHarvestable(EntityHandle& outHandle, size_t& 
         return false;
     }
 
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
     auto& edm = EntityDataManager::Instance();
 
     Vector2D playerPos = player->getPosition();

@@ -669,7 +669,7 @@ void WorldManager::populateWorldEntities() {
 
 void WorldManager::destroyHarvestablesForWorld(const std::string& worldId) {
     auto& edm = EntityDataManager::Instance();
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
     std::vector<size_t> harvestableIndices;
     wrm.copyHarvestableIndices(worldId, harvestableIndices);
     for (size_t staticIndex : harvestableIndices) {

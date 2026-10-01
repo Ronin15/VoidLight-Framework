@@ -34,7 +34,7 @@ using ResourceQuantitySnapshot =
     std::unordered_map<VoidLight::ResourceHandle, int>;
 
 void addTrackedResource(ResourceQuantitySnapshot& snapshot,
-    EntityDataManager& edm,
+    const EntityDataManager& edm,
     uint32_t inventoryIndex,
     VoidLight::ResourceHandle handle) {
     if (!handle.isValid() || snapshot.contains(handle)) {
@@ -323,7 +323,7 @@ void Player::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
 
     // Get entity batch and vertex pool
     auto& entityBatch = gpuRenderer.getEntityBatch();
-    auto& vertexPool = gpuRenderer.getEntityVertexPool();
+    const auto& vertexPool = gpuRenderer.getEntityVertexPool();
 
     auto* writePtr = static_cast<VoidLight::SpriteVertex*>(vertexPool.getMappedPtr());
     if (!writePtr) {
@@ -375,7 +375,7 @@ void Player::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
 void Player::renderGPU(VoidLight::GPURenderer& gpuRenderer,
     SDL_GPURenderPass* scenePass) {
     auto& entityBatch = gpuRenderer.getEntityBatch();
-    auto& vertexPool = gpuRenderer.getEntityVertexPool();
+    const auto& vertexPool = gpuRenderer.getEntityVertexPool();
 
     if (!entityBatch.hasSprites()) {
         return;

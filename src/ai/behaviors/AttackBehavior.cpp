@@ -279,7 +279,7 @@ bool hasRequiredAmmoForRangedAttack(const CharacterData& charData) {
 
     const std::string& requiredAmmo = weapon->getAmmoTypeRequired();
     auto& edm = EntityDataManager::Instance();
-    auto& resourceMgr = ResourceTemplateManager::Instance();
+    const auto& resourceMgr = ResourceTemplateManager::Instance();
     const size_t maxSlots = edm.getInventoryData(charData.inventoryIndex).maxSlots;
     for (size_t slot = 0; slot < maxSlots; ++slot) {
         const InventorySlotData inventorySlot =
@@ -710,7 +710,7 @@ bool executeAttackAction(BehaviorContext& ctx, VoidLight::AttackStateData& attac
 // ============================================================================
 
 bool applyRangedPositioning(BehaviorContext& ctx, const Vector2D& entityPos, const Vector2D& targetPos,
-    VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
+    const VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
     float moveSpeed) {
     float optimalRange = config.attackRange * config.optimalRangeMultiplier;
     float minimumRange = config.attackRange * config.minimumRangeMultiplier;
@@ -749,7 +749,7 @@ bool applyChargePositioning(BehaviorContext& ctx, const Vector2D& entityPos, con
 }
 
 bool applyHitAndRunPositioning(BehaviorContext& ctx, const Vector2D& entityPos, const Vector2D& targetPos,
-    VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
+    const VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
     float moveSpeed) {
     if (attack.currentState == static_cast<uint8_t>(AttackState::RECOVERING) ||
         attack.currentState == static_cast<uint8_t>(AttackState::TACTICAL_RESET)) {

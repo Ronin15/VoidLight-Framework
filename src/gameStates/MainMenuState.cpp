@@ -44,7 +44,7 @@ bool MainMenuState::enter() {
     ParticleManager::Instance().setGlobalPause(false);
 
     auto& ui = UIManager::Instance();
-    auto& fontMgr = FontManager::Instance();
+    const auto& fontMgr = FontManager::Instance();
 
     // Full-screen owner: ensure a clean UI slate before building menu UI.
     // GameStateManager already clears UI on full-screen replace; this is
@@ -385,7 +385,7 @@ void MainMenuState::recordDiorama(VoidLight::GPURenderer& gpuRenderer) {
         return;
     }
 
-    auto& vertexPool = gpuRenderer.getSpriteVertexPool();
+    const auto& vertexPool = gpuRenderer.getSpriteVertexPool();
     auto* writePtr = static_cast<VoidLight::SpriteVertex*>(vertexPool.getMappedPtr());
     if (!writePtr) {
         return;

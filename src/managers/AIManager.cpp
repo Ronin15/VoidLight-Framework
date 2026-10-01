@@ -113,7 +113,7 @@ bool equipFirstAvailableMeleeWeapon(EntityDataManager& edm, EntityHandle handle)
     }
 
     const size_t maxSlots = edm.getInventoryData(charData.inventoryIndex).maxSlots;
-    auto& resourceManager = ResourceTemplateManager::Instance();
+    const auto& resourceManager = ResourceTemplateManager::Instance();
     for (size_t slot = 0; slot < maxSlots; ++slot) {
         const InventorySlotData inventorySlot =
             edm.getInventorySlot(charData.inventoryIndex, slot);
@@ -1091,7 +1091,7 @@ void AIManager::onEntityFactionChanged(size_t edmIndex, uint8_t oldFaction, uint
     if (oldFaction >= MAX_FACTIONS || newFaction >= MAX_FACTIONS || oldFaction == newFaction) {
         return;
     }
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     VoidLight::AICommandBus::Instance().enqueueFactionChange(
         edm.getHandle(edmIndex), edmIndex, oldFaction, newFaction);
     syncNpcCollisionTowardPlayer(edmIndex);
@@ -1252,13 +1252,8 @@ FactionStance AIManager::getStance(uint8_t fromFaction, uint8_t towardFaction) c
 }
 
 void AIManager::refreshFactionHasHostile(uint8_t faction) {
-    m_factionHasHostile[faction] = false;
-    for (FactionStance stance : m_factionStances[faction]) {
-        if (stance == FactionStance::Hostile) {
-            m_factionHasHostile[faction] = true;
-            return;
-        }
-    }
+    m_factionHasHostile[faction] = std::ranges::any_of(m_factionStances[faction],
+        [](FactionStance stance) { return stance == FactionStance::Hostile; });
 }
 
 void AIManager::setStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance stance) {
@@ -1418,7 +1413,7 @@ int8_t AIManager::getPlayerStanding(EntityHandle playerHandle, uint8_t faction) 
     if (!playerHandle.isValid() || faction >= MAX_FACTIONS) {
         return 0;
     }
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     const size_t idx = edm.getIndex(playerHandle);
     if (idx == SIZE_MAX) {
         return 0;
@@ -1824,7 +1819,7 @@ void AIManager::commitQueuedHarvests() {
 }
 
 void AIManager::refreshHarvestableSnapshot() {
-    auto& wrm = WorldResourceManager::Instance();
+    const auto& wrm = WorldResourceManager::Instance();
     if (!wrm.isInitialized()) {
         if (!m_harvestableSnapshot.empty()) {
             clearHarvestableSnapshot();
@@ -2182,7 +2177,7 @@ void AIManager::processBatch(
     const Vector2D& playerVel, bool playerValid,
     float gameTime,
     EnvironmentSnapshot envSnapshot,
-    HarvestableSnapshotView harvestables,
+    const HarvestableSnapshotView& harvestables,
     std::vector<EventManager::DeferredEvent>& outEvents,
     std::vector<uint32_t>& outKnockbackClears,
     std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages) {

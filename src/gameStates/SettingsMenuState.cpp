@@ -38,7 +38,7 @@ bool SettingsMenuState::enter() {
 
     // Get manager references at function start
     auto& ui = UIManager::Instance();
-    auto& fontMgr = FontManager::Instance();
+    const auto& fontMgr = FontManager::Instance();
 
     // Wait for fonts to load
     constexpr int kMaxWaitMs = 1500;
@@ -74,7 +74,7 @@ bool SettingsMenuState::enter() {
 
 void SettingsMenuState::update(float deltaTime) {
     auto& ui = UIManager::Instance();
-    auto& inputMgr = InputManager::Instance();
+    const auto& inputMgr = InputManager::Instance();
 
     // Skip UIManager input processing while a rebind is in flight AND on the
     // frame it completes. Otherwise the mouse-button press that finalizes the

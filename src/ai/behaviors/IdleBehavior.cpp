@@ -133,7 +133,7 @@ void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config, Void
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Idle);
     auto& sharedState = edm.getBehaviorData(edmIndex);
-    auto& hotData = edm.getHotDataByIndex(edmIndex);
+    const auto& hotData = edm.getHotDataByIndex(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
     sharedState.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;

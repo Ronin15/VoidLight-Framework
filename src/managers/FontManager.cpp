@@ -412,7 +412,7 @@ bool FontManager::ensureGPUTextEngine() {
         return true;
     }
 
-    auto& gpuDevice = VoidLight::GPUDevice::Instance();
+    const auto& gpuDevice = VoidLight::GPUDevice::Instance();
     if (!gpuDevice.isInitialized() || !gpuDevice.get()) {
         FONT_ERROR("Cannot create GPU text engine before GPUDevice initialization");
         return false;

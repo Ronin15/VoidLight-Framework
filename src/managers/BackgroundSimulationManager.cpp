@@ -127,7 +127,7 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
 
     // Get background tier indices from EntityDataManager
     // Note: Tier updates now happen in unified update() method
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     auto backgroundSpan = edm.getBackgroundIndices();
 
     if (backgroundSpan.empty()) {

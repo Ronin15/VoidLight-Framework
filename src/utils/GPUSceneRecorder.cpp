@@ -64,7 +64,7 @@ GPUSceneContext GPUSceneRecorder::beginRecording(GPURenderer& gpuRenderer,
 
     // Get sprite batch and vertex pool
     auto& spriteBatch = gpuRenderer.getSpriteBatch();
-    auto& vertexPool = gpuRenderer.getSpriteVertexPool();
+    const auto& vertexPool = gpuRenderer.getSpriteVertexPool();
 
     // Get mapped vertex buffer (GPURenderer::beginFrame already mapped it)
     auto* writePtr = static_cast<SpriteVertex*>(vertexPool.getMappedPtr());
@@ -136,7 +136,7 @@ void GPUSceneRecorder::renderRecordedScene(GPURenderer& gpuRenderer,
     PROFILE_RENDER_GPU(RenderPhase::WorldTiles);
 
     auto& spriteBatch = gpuRenderer.getSpriteBatch();
-    auto& vertexPool = gpuRenderer.getSpriteVertexPool();
+    const auto& vertexPool = gpuRenderer.getSpriteVertexPool();
 
     // Skip if no sprites recorded
     if (!spriteBatch.hasSprites()) {
