@@ -42,7 +42,7 @@ SOUND_WARN("Audio device not found, using software mixing");
 
 ### Design Principles
 
-1. **Zero Overhead in Release**: No logging overhead in release builds except CRITICAL messages
+1. **Zero Overhead in Release**: No logging overhead in release builds except CRITICAL and ERROR messages (written to the release log file)
 2. **Fast printf-based Output**: Uses printf for maximum performance in debug builds
 3. **Immediate Flushing**: Real-time output for debugging with fflush()
 4. **Type Safety**: String conversion handled automatically in macros
@@ -51,16 +51,16 @@ SOUND_WARN("Audio device not found, using software mixing");
 ### Class Structure
 
 ```cpp
-namespace VoidLight-Framework {
+namespace VoidLight {
     enum class LogLevel : uint8_t {
-        CRITICAL = 0,  // Always logged (even in release)
-        ERROR = 1,     // Debug only
-        WARNING = 2,   // Debug only
-        INFO = 3,      // Debug only
-        DEBUG_LEVEL = 4      // Debug only (renamed to avoid macro conflicts)
+        CRITICAL = 0,     // Always logged (release: log file)
+        ERROR_LEVEL = 1,  // Always logged (release: log file); renamed to avoid macro conflicts
+        WARNING = 2,      // Debug only
+        INFO = 3,         // Debug only
+        DEBUG_LEVEL = 4   // Debug only (renamed to avoid macro conflicts)
     };
 
-    class Logger {
+    class Logger {  // debug build; release declares Log(const char* level, ...) in Logger.cpp
         static void Log(LogLevel level, const char* system, const std::string& message);
         static void Log(LogLevel level, const char* system, const char* message);
         static void SetBenchmarkMode(bool enabled);
@@ -77,7 +77,7 @@ namespace VoidLight-Framework {
 - Automatically flushed to ensure output before potential crash
 
 ### ERROR (Level 1)
-- **Debug builds only**
+- Logged in **both** debug (stdout) and release (log file) builds
 - Used for error conditions that don't crash the application
 - Non-recoverable errors that affect functionality
 
@@ -101,24 +101,22 @@ namespace VoidLight-Framework {
 ### Debug Build Behavior
 ```cpp
 #ifdef DEBUG
-    // Full Logger class with printf-based output
-    // All log levels functional
-    // Immediate flushing for real-time feedback
-    #define VOIDLIGHT_INFO(system, msg) VoidLight::Logger::Log(VoidLight::LogLevel::INFO, system, std::string(msg))
+    // Full Logger class with printf-based output (mutex-protected)
+    // All log levels functional; ERROR and CRITICAL flush stdout
+    #define VOIDLIGHT_INFO(system, msg) VoidLight::Logger::Log(VoidLight::LogLevel::INFO, system, msg)
 #endif
 ```
 
 ### Release Build Behavior
 ```cpp
 #else
-    // Ultra-minimal overhead
-    #define VOIDLIGHT_CRITICAL(system, msg) do { \
-        printf("VoidLight Engine - [%s] CRITICAL: %s\n", system, std::string(msg).c_str()); \
-    } while(0)
+    // CRITICAL and ERROR write to the release log file (src/core/Logger.cpp)
+    #define VOIDLIGHT_CRITICAL(system, msg) VoidLight::Logger::Log("CRITICAL", system, msg)
+    #define VOIDLIGHT_ERROR(system, msg) VoidLight::Logger::Log("ERROR", system, msg)
 
-    // All other levels become no-ops
-    #define VOIDLIGHT_ERROR(system, msg) ((void)0)
-    #define VOIDLIGHT_WARN(system, msg) ((void)0)
+    // WARN / INFO / DEBUG (and the *_IF forms) are dead code: the argument is
+    // referenced under if (false) so log-only variables do not trigger -Wunused
+    #define VOIDLIGHT_WARN(system, msg) do { if (false) { (void)(msg); } } while (0)
     // ... etc
 #endif
 ```
@@ -149,17 +147,18 @@ Started: YYYY-MM-DD HH:MM:SS
 
 | Macro | Parameters | Description |
 |-------|------------|-------------|
-| `VOIDLIGHT_CRITICAL(system, msg)` | system: const char*, msg: any type | Critical error logging |
-| `VOIDLIGHT_ERROR(system, msg)` | system: const char*, msg: any type | Error logging |
-| `VOIDLIGHT_WARN(system, msg)` | system: const char*, msg: any type | Warning logging |
-| `VOIDLIGHT_INFO(system, msg)` | system: const char*, msg: any type | Information logging |
-| `VOIDLIGHT_DEBUG(system, msg)` | system: const char*, msg: any type | Debug logging |
+| `VOIDLIGHT_CRITICAL(system, msg)` | system: const char*, msg: `const char*` or `std::string` | Critical error logging |
+| `VOIDLIGHT_ERROR(system, msg)` | system: const char*, msg: `const char*` or `std::string` | Error logging |
+| `VOIDLIGHT_WARN(system, msg)` | system: const char*, msg: `const char*` or `std::string` | Warning logging |
+| `VOIDLIGHT_INFO(system, msg)` | system: const char*, msg: `const char*` or `std::string` | Information logging |
+| `VOIDLIGHT_DEBUG(system, msg)` | system: const char*, msg: `const char*` or `std::string` | Debug logging |
+| `VOIDLIGHT_WARN_IF` / `VOIDLIGHT_INFO_IF` / `VOIDLIGHT_DEBUG_IF(cond, system, msg)` | cond, system, msg | Log only when `cond` holds; condition compiled out in release |
 
 ### Message Parameter Types
 The `msg` parameter accepts:
 - `const char*` strings
 - `std::string` objects
-- Any type convertible to string via `std::string(msg)`
+- Anything else must be formatted first with `std::format()`
 
 ## System-Specific Logging
 
@@ -343,11 +342,11 @@ VOIDLIGHT_INFO("SoundManager", "Audio subsystem initialized with OpenAL");
 ### 4. Format Complex Data
 ```cpp
 // Good: Format complex data clearly
-GAMELOOP_DEBUG("Frame timing - Delta: " + std::to_string(deltaTime) +
-               "s, FPS: " + std::to_string(currentFPS));
+GAMELOOP_DEBUG(std::format("Frame timing - Delta: {}s, FPS: {}", deltaTime, currentFPS));
 
-// Good: Use string concatenation for readable output
-AI_INFO("Entity " + std::to_string(entityId) + " switched to patrol mode");
+// Bad: string concatenation with + (not allowed in this codebase)
+// AI_INFO("Entity " + std::to_string(entityId) + " switched to patrol mode");
+AI_INFO(std::format("Entity {} switched to patrol mode", entityId));
 ```
 
 ## Benchmark Mode
@@ -400,7 +399,7 @@ void runPerformanceTest() {
     VOIDLIGHT_DISABLE_BENCHMARK_MODE();
 
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
-    GAMELOOP_INFO("Performance test completed in " + std::to_string(duration.count()) + " microseconds");
+    GAMELOOP_INFO(std::format("Performance test completed in {} microseconds", duration.count()));
 }
 ```
 
@@ -414,8 +413,8 @@ void runPerformanceTest() {
 - Benchmark mode available for zero-overhead testing
 
 ### Release Build Performance
-- **Zero overhead** for ERROR, WARNING, INFO, DEBUG levels
-- CRITICAL and ERROR messages have minimal overhead (single printf call with mutex protection)
+- **Zero overhead** for WARNING, INFO, DEBUG levels
+- CRITICAL and ERROR messages have minimal overhead (single mutex-protected write to the log file)
 - No function calls or string processing for disabled levels
 - Compiler optimizes away disabled macros completely
 - Benchmark mode affects CRITICAL and ERROR levels in release builds
@@ -423,183 +422,38 @@ void runPerformanceTest() {
 ### Memory Usage
 - No dynamic memory allocation
 - No log buffering or storage
-- Immediate output to stdout
+- Immediate output (stdout in debug, log file in release)
 - No memory leaks possible
 - Thread-safe mutex protection with minimal memory footprint
 
 ## Examples
 
-### Basic System Initialization
+Messages are built with `std::format()`; never concatenate log strings with `+`.
+
+### Initialization with Error Handling
 ```cpp
-bool GameEngine::init(std::string_view title, int width, int height, bool fullscreen) {
-    GAMEENGINE_INFO("Initializing VoidLight Engine");
+if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
+    GAMEENGINE_CRITICAL(std::format("Failed to initialize SDL: {}", SDL_GetError()));
+    return false;
+}
+GAMEENGINE_DEBUG(std::format("Window created: {}x{} ({})", width, height,
+                             fullscreen ? "fullscreen" : "windowed"));
+```
 
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-        GAMEENGINE_CRITICAL("Failed to initialize SDL: " + std::string(SDL_GetError()));
-        return false;
-    }
-
-    GAMEENGINE_INFO("SDL initialized successfully");
-
-    // Create window
-    mp_window.reset(SDL_CreateWindow(title, width, height,
-                    fullscreen ? SDL_WINDOW_FULLSCREEN : 0));
-
-    if (!mp_window) {
-        GAMEENGINE_ERROR("Failed to create window: " + std::string(SDL_GetError()));
-        return false;
-    }
-
-    GAMEENGINE_DEBUG("Window created: " + std::to_string(width) + "x" +
-                     std::to_string(height) + (fullscreen ? " (fullscreen)" : " (windowed)"));
-
-    return true;
+### Resource Loading
+```cpp
+TEXTURE_INFO(std::format("Loading texture: {} as ID: {}", fileName, textureID));
+if (!loaded) {
+    TEXTURE_ERROR(std::format("Failed to load image '{}': {}", fileName, SDL_GetError()));
+    return false;
 }
 ```
 
-### Resource Loading with Error Handling
+### Conditional Logging
 ```cpp
-bool TextureManager::load(const std::string& fileName, const std::string& textureID,
-                         SDL_Renderer* renderer) {
-    TEXTURE_INFO("Loading texture: " + fileName + " as ID: " + textureID);
-
-    SDL_Surface* surface = IMG_Load(fileName.c_str());
-    if (!surface) {
-        TEXTURE_ERROR("Failed to load image '" + fileName + "': " + std::string(IMG_GetError()));
-        return false;
-    }
-
-    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
-    SDL_FreeSurface(surface);
-
-    if (!texture) {
-        TEXTURE_ERROR("Failed to create texture from '" + fileName + "': " + std::string(SDL_GetError()));
-        return false;
-    }
-
-    m_textureMap[textureID] = std::shared_ptr<SDL_Texture>(texture, SDL_DestroyTexture);
-    TEXTURE_DEBUG("Texture loaded successfully - ID: " + textureID + ", File: " + fileName);
-
-    return true;
-}
-```
-
-### Game Loop with Performance Monitoring
-```cpp
-void GameLoop::runMainThread() {
-    GAMELOOP_INFO("Starting main game loop thread");
-
-    while (m_running.load()) {
-        auto frameStart = std::chrono::high_resolution_clock::now();
-
-        processEvents();
-
-        if (!m_paused.load()) {
-            processUpdates();
-        }
-
-        processRender();
-
-        auto frameEnd = std::chrono::high_resolution_clock::now();
-        auto frameDuration = std::chrono::duration_cast<std::chrono::microseconds>(frameEnd - frameStart);
-
-        if (frameDuration.count() > 20000) { // > 20ms frame time
-            GAMELOOP_WARN("Long frame detected: " + std::to_string(frameDuration.count()) + " microseconds");
-        }
-
-        GAMELOOP_DEBUG("Frame completed in " + std::to_string(frameDuration.count()) + " microseconds");
-    }
-
-    GAMELOOP_INFO("Game loop thread terminated");
-}
-```
-
-### Error Recovery with Logging
-```cpp
-bool SoundManager::playSound(const std::string& soundID) {
-    auto it = m_soundMap.find(soundID);
-    if (it == m_soundMap.end()) {
-        SOUND_ERROR("Attempted to play unknown sound: " + soundID);
-        return false;
-    }
-
-    if (Mix_PlayChannel(-1, it->second.get(), 0) == -1) {
-        SOUND_WARN("Failed to play sound '" + soundID + "': " + std::string(Mix_GetError()) +
-                   " - attempting retry");
-
-        // Retry once
-        if (Mix_PlayChannel(-1, it->second.get(), 0) == -1) {
-            SOUND_ERROR("Sound playback failed after retry: " + soundID);
-            return false;
-        }
-    }
-
-    SOUND_DEBUG("Sound played successfully: " + soundID);
-    return true;
-}
-```
-
-### Entity Management with Logging
-```cpp
-bool Player::loadDimensionsFromTexture() {
-    PLAYER_DEBUG("Loading texture dimensions for player");
-
-    auto& textureManager = TextureManager::Instance();
-    auto texture = textureManager.getTexture(m_textureID);
-
-    if (texture) {
-        float width, height;
-        if (SDL_GetTextureSize(texture.get(), &width, &height)) {
-            PLAYER_DEBUG("Original texture dimensions: " + std::to_string(width) + "x" + std::to_string(height));
-
-            m_width = static_cast<int>(width);
-            m_height = static_cast<int>(height);
-
-            // Calculate frame dimensions for sprite sheets
-            m_frameWidth = m_width / m_numFrames;
-            int frameHeight = m_height / m_spriteSheetRows;
-            m_height = frameHeight;
-
-            PLAYER_DEBUG("Frame dimensions: " + std::to_string(m_frameWidth) + "x" + std::to_string(frameHeight));
-            PLAYER_DEBUG("Sprite layout: " + std::to_string(m_numFrames) + " columns x " + std::to_string(m_spriteSheetRows) + " rows");
-
-            return true;
-        } else {
-            PLAYER_ERROR("Failed to query texture dimensions: " + std::string(SDL_GetError()));
-            return false;
-        }
-    } else {
-        PLAYER_ERROR("Texture '" + m_textureID + "' not found in TextureManager");
-        return false;
-    }
-}
-
-void NPC::setWanderArea(float x1, float y1, float x2, float y2) {
-    m_wanderBounds = {x1, y1, x2, y2};
-    m_hasWanderBounds = true;
-
-    NPC_DEBUG("NPC wander area set: (" + std::to_string(x1) + ", " + std::to_string(y1) +
-              ") to (" + std::to_string(x2) + ", " + std::to_string(y2) + ")");
-}
-
-void EntityStateManager::setState(const std::string& stateName) {
-    if (auto current = currentState.lock()) {
-        ENTITYSTATE_INFO("Exiting entity state: " + getCurrentStateName());
-        current->exit();
-    }
-
-    auto it = states.find(stateName);
-    if (it != states.end()) {
-        currentState = it->second;
-        if (auto current = currentState.lock()) {
-            ENTITYSTATE_INFO("Entering entity state: " + stateName);
-            current->enter();
-        }
-    } else {
-        ENTITYSTATE_ERROR("Entity state not found: " + stateName);
-        currentState.reset();
-    }
-}
+// Use the *_IF form when logging is the only content of the if-block;
+// the condition is compiled out in release builds.
+AI_INFO_IF(transitions > 0, std::format("{} behavior transitions committed", transitions));
 ```
 
 ## Integration with Other Systems
@@ -609,10 +463,10 @@ The logging system is thread-safe through the use of printf, which is atomic for
 
 ```cpp
 // Safe: Single printf call per log message
-THREADSYSTEM_INFO("Worker thread " + std::to_string(threadId) + " started");
+THREADSYSTEM_INFO(std::format("Worker thread {} started", threadId));
 
 // Safe: System-specific macros are thread-safe
-AI_DEBUG("Processing AI update for entity " + std::to_string(entityId));
+AI_DEBUG(std::format("Processing AI update for entity {}", entityId));
 ```
 
 ### Performance Monitoring Integration
@@ -623,7 +477,7 @@ processAIUpdates();
 auto end = std::chrono::high_resolution_clock::now();
 auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 
-AI_DEBUG("AI update completed in " + std::to_string(duration.count()) + " microseconds");
+AI_DEBUG(std::format("AI update completed in {} microseconds", duration.count()));
 ```
 
 ---

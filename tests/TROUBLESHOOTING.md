@@ -59,7 +59,7 @@ This guide addresses common issues you might encounter when working with our tes
 **Solution**:
 - Add `#define BOOST_TEST_NO_SIGNAL_HANDLING` before including Boost.Test headers
 - Use `--catch_system_errors=no --no_result_code --detect_memory_leak=0` options when running tests
-- Disable threading before cleanup: `AIManager::Instance().enableThreading(false)` or `EventManager::Instance().enableThreading(false)`
+- Disable threading before cleanup: `AIManager::Instance().enableThreading(false)` (debug builds only; `VOIDLIGHT_DEBUG_ONLY`) or `EventManager::Instance().enableThreading(false)`
 - Add sleep between operations: `std::this_thread::sleep_for(std::chrono::milliseconds(100))`
 - Use timeout when waiting for futures: `future.wait_for(std::chrono::seconds(1))` instead of blocking `get()`
 - Always clean up resources in reverse order of initialization
@@ -68,7 +68,7 @@ This guide addresses common issues you might encounter when working with our tes
 
 ## If you still have issues:
 
-1. Clean the build completely: `./run_all_tests.sh --clean-all` or `./run_save_tests.sh --clean-all`
+1. Clean the build completely: `./tests/test_scripts/run_all_tests.sh --clean-all` or `./tests/test_scripts/run_save_tests.sh --clean-all`
 2. Run the tests with verbose output: `./bin/debug/save_manager_tests --log_level=all`
 3. Check the console output for detailed error messages
 4. Verify the test formatting by running: `./bin/debug/ai_optimization_tests --list_content`
@@ -82,10 +82,10 @@ This guide addresses common issues you might encounter when working with our tes
 
 If you need to modify the tests:
 
-1. Update MockPlayer.hpp if you're changing player-related tests
+1. Update `tests/mocks/MockPlayer.hpp` if you're changing player-related tests
 2. Edit the test files to add or modify test cases
 3. Follow the standard Boost.Test patterns shown in existing tests
-4. Run with `--clean` to ensure changes are compiled: `./run_save_tests.sh --clean`
+4. Run with `--clean` to ensure changes are compiled: `./tests/test_scripts/run_save_tests.sh --clean`
 
 ## Boost Test Framework Reference
 
@@ -142,12 +142,12 @@ When testing components that use ThreadSystem's priority-based scheduling (AIMan
 1. **Initialization with Priorities**:
    ```cpp
    // Initialize ThreadSystem first
-   VoidLight-Framework::ThreadSystem::Instance().init();
+   BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
 
    // Initialize manager
-   AIManager::Instance().init();
+   BOOST_REQUIRE(AIManager::Instance().init());
 
-   // Enable threading
+   // Enable threading (debug builds only)
    AIManager::Instance().enableThreading(true);
    ```
 

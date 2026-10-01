@@ -103,8 +103,9 @@ not a `GamePlayState` tile loop.
   `findSettlementAtTile`, and `findSettlementAtPixel` for the current world
   (same current-world rule as `getTileCopyAt`).
 - Debug `R` Warriors spawned from `GamePlayState` via `spawnNpc` are not
-  registered in the populated-NPC map. `R` sets mutual Hostile stance with
-  the player so the spawn is a combat hook.
+  registered in the populated-NPC map. `R` drops the player's standing with
+  faction 1 to `AIManager::PLAYER_STANDING_MIN` (`adjustPlayerStanding`) so the
+  spawn is a combat hook; the NPC stance table is untouched.
 
 Do not dump later-slice policy into WorldManager (environment/stance/forage/
 decision → AI/EDM; discovery → WorldData + SaveGameManager + HUD; background

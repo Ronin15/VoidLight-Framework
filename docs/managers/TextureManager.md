@@ -19,9 +19,9 @@
 
 ```cpp
 // Load a texture from file — queues an upload, not immediately available
-bool loadGPU(const std::string& fileName, const std::string& textureID);
+[[nodiscard]] bool loadGPU(const std::string& fileName, const std::string& textureID);
 
-// Flush pending uploads into the copy pass (call once per frame during beginFrame)
+// Flush pending uploads into the copy pass (GPURenderer::beginScenePass() calls this before ending the frame's copy pass)
 void processPendingUploads(SDL_GPUCopyPass* copyPass);
 
 // Get GPU texture data for use in sprite batch / render controllers
@@ -48,15 +48,20 @@ struct GPUTextureData {
 
 ```cpp
 // Loading phase (LoadingState / init)
-TextureManager::Instance().loadGPU("res/img/player.png", "player");
+if (!TextureManager::Instance().loadGPU("res/img/player.png", "player")) {
+    // handle load failure
+}
 
-// Each frame — in GameEngine beginFrame copy pass
+// Each frame — GPURenderer::beginScenePass() flushes the copy pass
 TextureManager::Instance().processPendingUploads(copyPass);
 
 // Render phase — retrieve texture for SpriteBatch
 auto data = TextureManager::Instance().getGPUTextureData("player");
-if (data) {
-    spriteBatch.draw(data->texture->getGPUTexture(), srcRect, dstRect);
+if (data && data->texture) {
+    // The SDL texture is bound once per batch; .get() only at the GPU API boundary
+    spriteBatch.begin(writePtr, maxVertices, data->texture->get(), sampler,
+        data->width, data->height, targetHeight);
+    spriteBatch.draw(srcX, srcY, srcW, srcH, dstX, dstY, dstW, dstH);
 }
 ```
 

@@ -57,6 +57,9 @@ into `HudController::setHarvestProgress()`.
 - `ResourceRenderController`
 - `SocialController`
 
+`NPCRenderController` and `ProjectileRenderController` are direct state
+members (render helpers), not registry entries.
+
 The state stores controllers in `ControllerRegistry` and calls
 `m_controllers.clear()` during exit so re-entry creates fresh instances with
 valid player/UI references.

@@ -32,7 +32,7 @@ if (reader.parse("{\"name\": \"John\", \"age\": 30}")) {
 }
 
 // Load from file
-if (reader.parseFromFile("config.json")) {
+if (reader.loadFromFile("config.json")) {
     // Access parsed data...
 }
 ```
@@ -44,7 +44,7 @@ The main parser class that handles JSON string parsing and file loading.
 
 **Key Methods:**
 - `parse(const std::string& json)` - Parse JSON from string
-- `parseFromFile(const std::string& filename)` - Parse JSON from file
+- `loadFromFile(const std::string& path)` - Parse JSON from file
 - `getRoot()` - Get the root JsonValue after successful parsing
 - `getLastError()` - Get detailed error message if parsing fails
 
@@ -175,7 +175,7 @@ JsonReader reader;
 // Parse with error handling
 bool success = reader.parse(jsonString);
 if (!success) {
-    GAMEENGINE_ERROR("JSON Parse Error: {}", reader.getLastError());
+    GAMEENGINE_ERROR(std::format("JSON Parse Error: {}", reader.getLastError()));
     // Use default values or alternative data source
     return false;
 }
@@ -192,7 +192,7 @@ const JsonValue& root = reader.getRoot();
 JsonReader reader;
 
 // Load configuration file
-if (reader.parseFromFile("config/settings.json")) {
+if (reader.loadFromFile("config/settings.json")) {
     const JsonValue& config = reader.getRoot();
     
     // Access configuration values
@@ -206,14 +206,14 @@ if (reader.parseFromFile("config/settings.json")) {
 ```cpp
 JsonReader reader;
 
-if (!reader.parseFromFile("data/items.json")) {
+if (!reader.loadFromFile("data/items.json")) {
     std::string error = reader.getLastError();
     
     if (error.find("Failed to open file") != std::string::npos) {
-        GAMEENGINE_ERROR("Item data file not found: {}", error);
+        GAMEENGINE_ERROR(std::format("Item data file not found: {}", error));
         // Create default item data
     } else {
-        GAMEENGINE_ERROR("Invalid item data format: {}", error);
+        GAMEENGINE_ERROR(std::format("Invalid item data format: {}", error));
         // Handle parsing errors
     }
 }
@@ -311,7 +311,7 @@ if (reader.parse(jsonData)) {
 ```cpp
 JsonReader reader;
 if (!reader.parse(jsonString)) {
-    GAMEENGINE_ERROR("JSON parsing failed: {}", reader.getLastError());
+    GAMEENGINE_ERROR(std::format("JSON parsing failed: {}", reader.getLastError()));
     return false;
 }
 ```
@@ -341,9 +341,9 @@ if (player.hasKey("optionalField")) {
 ### 4. Use Meaningful Error Messages
 
 ```cpp
-if (!reader.parseFromFile(filename)) {
-    GAMEENGINE_ERROR("Failed to load game data from '{}': {}", 
-                     filename, reader.getLastError());
+if (!reader.loadFromFile(filename)) {
+    GAMEENGINE_ERROR(std::format("Failed to load game data from '{}': {}", 
+                     filename, reader.getLastError()));
 }
 ```
 
@@ -366,14 +366,14 @@ class JsonReader {
 public:
     // Parsing methods
     bool parse(const std::string& json);
-    bool parseFromFile(const std::string& filename);
+    bool loadFromFile(const std::string& path);
     
     // Result access
     const JsonValue& getRoot() const;
     const std::string& getLastError() const;
     
     // State management
-    void clear();
+    void clearError();
 };
 ```
 
@@ -425,8 +425,8 @@ private:
     
 public:
     bool loadConfig(const std::string& filename) {
-        if (!m_reader.parseFromFile(filename)) {
-            GAMEENGINE_ERROR("Failed to load config: {}", m_reader.getLastError());
+        if (!m_reader.loadFromFile(filename)) {
+            GAMEENGINE_ERROR(std::format("Failed to load config: {}", m_reader.getLastError()));
             return false;
         }
         
@@ -466,8 +466,8 @@ std::vector<ItemDefinition> loadItems(const std::string& filename) {
     std::vector<ItemDefinition> items;
     
     JsonReader reader;
-    if (!reader.parseFromFile(filename)) {
-        GAMEENGINE_ERROR("Failed to load items: {}", reader.getLastError());
+    if (!reader.loadFromFile(filename)) {
+        GAMEENGINE_ERROR(std::format("Failed to load items: {}", reader.getLastError()));
         return items;
     }
     
@@ -519,9 +519,9 @@ public:
     bool loadConfiguration(const std::string& filename) {
         createDefaultConfig();
         
-        if (!m_reader.parseFromFile(filename)) {
-            GAMEENGINE_WARNING("Config file '{}' not found or invalid: {}", 
-                              filename, m_reader.getLastError());
+        if (!m_reader.loadFromFile(filename)) {
+            GAMEENGINE_WARN(std::format("Config file '{}' not found or invalid: {}", 
+                              filename, m_reader.getLastError()));
             GAMEENGINE_INFO("Using default configuration");
             return true; // Continue with defaults
         }

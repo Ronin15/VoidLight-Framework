@@ -311,13 +311,6 @@ public:
 
     // Effect Management
     /**
-   * @brief Registers a particle effect definition for use
-   * @param effectDef Effect definition to register
-   * @return true if registration successful, false otherwise
-   */
-    bool registerEffect(const ParticleEffectDefinition& effectDef);
-
-    /**
    * @brief Creates and plays a particle effect at specified position
    * @param effectType Type of the effect to play
    * @param position World position to play effect

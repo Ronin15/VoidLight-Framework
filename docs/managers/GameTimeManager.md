@@ -101,15 +101,17 @@ Bounds are owned by free `hourToTimePeriod()` in `include/events/TimeEvent.hpp`.
 | Evening | 17:00 - 21:00| Sunset, cooling light |
 | Night   | 21:00 - 5:00 | Darkness |
 
-### Pause/Resume
+### Pause
 
 ```cpp
 auto& gameTimeManager = GameTimeManager::Instance();
 
-gameTimeManager.pause();    // Stop time progression
-gameTimeManager.resume();   // Resume time (resets internal timing to avoid jumps)
-bool paused = gameTimeManager.isPaused();
+gameTimeManager.setGlobalPause(true);   // update() stops advancing time and dispatching events
+gameTimeManager.setGlobalPause(false);  // Resume
+bool paused = gameTimeManager.isGloballyPaused();
 ```
+
+`GameEngine::setGlobalPause()` calls `setGlobalPause()` alongside the other managers.
 
 ## Calendar System
 
@@ -337,9 +339,8 @@ struct TimePeriodVisuals {
 static GameTimeManager& Instance();             // Singleton access
 bool init(float startHour = 12.0f, float timeScale = 1.0f);
 void update(float deltaTime);                   // Call from game state
-void pause();
-void resume();
-bool isPaused() const;
+void setGlobalPause(bool paused);
+bool isGloballyPaused() const;
 ```
 
 ### Time Queries
@@ -403,13 +404,13 @@ The recommended pattern uses Controllers for state-specific time handling:
 
 ```cpp
 // GamePlayState::enter()
+m_controllers.add<WeatherController>();
+m_controllers.add<DayNightController>();
 GameTimeManager::Instance().enableAutoWeather(true);
-m_weatherController.subscribe();
-m_dayNightController.subscribe();
+m_controllers.subscribeAll();
 
 // GamePlayState::exit()
-m_weatherController.unsubscribe();
-m_dayNightController.unsubscribe();
+m_controllers.clear();
 ```
 
 See: `docs/controllers/README.md` for Controller pattern details.
@@ -430,13 +431,15 @@ m_seasonTexturesDirty.store(true, std::memory_order_release);
 ```cpp
 // WeatherController converts WeatherCheckEvent to actual weather change
 void WeatherController::onTimeEvent(const EventData& data) {
-    auto weatherCheck = std::dynamic_pointer_cast<WeatherCheckEvent>(data.event);
-    if (weatherCheck) {
-        // Apply the recommended weather
-        EventManager::Instance().changeWeather(
-            weatherCheck->getRecommendedWeather()
-        );
+    const auto* timeEvent = static_cast<const TimeEvent*>(data.event.get());
+    if (timeEvent->getTimeEventType() != TimeEventType::WeatherCheck) {
+        return;
     }
+    const auto* weatherCheck = static_cast<const WeatherCheckEvent*>(timeEvent);
+    m_currentWeather = weatherCheck->getRecommendedWeather();
+    // changeWeather takes the weather name string
+    EventManager::Instance().changeWeather(std::string(getCurrentWeatherString()), 2.0f,
+        EventManager::DispatchMode::Deferred);
 }
 ```
 
@@ -458,8 +461,9 @@ void GamePlayState::update(float deltaTime) {
 
 ```cpp
 // GOOD: Use Controllers for common patterns
-m_weatherController.subscribe();      // Weather events
-m_dayNightController.subscribe();     // Time period changes
+m_controllers.add<WeatherController>();     // Weather events
+m_controllers.add<DayNightController>();    // Time period changes
+m_controllers.subscribeAll();
 
 // AVOID: Manual event subscription for common cases
 // (Controllers handle zero-allocation, proper lifecycle)
@@ -543,19 +547,19 @@ void updateSeasonalBehavior() {
 ```cpp
 void setupDebugTimeControls() {
     // Fast-forward time for testing
-    if (InputManager::Instance().isKeyPressed(SDL_SCANCODE_PERIOD)) {
+    if (InputManager::Instance().wasKeyPressed(SDL_SCANCODE_PERIOD)) {
         GameTimeManager::Instance().setTimeScale(600.0f);  // 10x faster
     }
 
     // Normal speed
-    if (InputManager::Instance().isKeyPressed(SDL_SCANCODE_COMMA)) {
+    if (InputManager::Instance().wasKeyPressed(SDL_SCANCODE_COMMA)) {
         GameTimeManager::Instance().setTimeScale(60.0f);   // Default
     }
 
     // Pause
-    if (InputManager::Instance().isKeyPressed(SDL_SCANCODE_P)) {
+    if (InputManager::Instance().wasKeyPressed(SDL_SCANCODE_P)) {
         auto& gameTimeManager = GameTimeManager::Instance();
-        gameTimeManager.isPaused() ? gameTimeManager.resume() : gameTimeManager.pause();
+        gameTimeManager.setGlobalPause(!gameTimeManager.isGloballyPaused());
     }
 }
 ```

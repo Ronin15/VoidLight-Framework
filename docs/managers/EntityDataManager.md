@@ -185,9 +185,11 @@ void prepareForStateTransition();
 
 ```cpp
 // Create new entities (returns handle)
-EntityHandle createNPC(const Vector2D& position, float halfWidth = 16.0f, float halfHeight = 16.0f);
-EntityHandle createPlayer(const Vector2D& position);
-EntityHandle createDroppedItem(const Vector2D& position, ResourceHandle handle, int quantity = 1);
+// NPC factories (createNPC() is private; these auto-register JSON suggestedBehavior)
+EntityHandle createNPCWithRaceClass(const Vector2D& position, const std::string& race, const std::string& charClass, Sex sex = Sex::Unknown, uint8_t factionOverride = 0xFF);
+EntityHandle createMonster(const Vector2D& position, const std::string& monsterType, const std::string& variant, Sex sex = Sex::Unknown, uint8_t factionOverride = 0xFF);
+EntityHandle createAnimal(const Vector2D& position, const std::string& species, const std::string& role, Sex sex = Sex::Unknown, uint8_t factionOverride = 0xFF);
+EntityHandle createDroppedItem(const Vector2D& position, ResourceHandle handle, int quantity = 1, const std::string& worldId = "");
 EntityHandle createContainer(const Vector2D& position, ContainerType type, uint16_t maxSlots = 20, uint8_t lockLevel = 0, const std::string& worldId = "");
 EntityHandle createHarvestable(const Vector2D& position, ResourceHandle yieldResource, int yieldMin = 1, int yieldMax = 3, float respawnTime = 60.0f, const std::string& worldId = "", HarvestType harvestType = HarvestType::Gathering);
 EntityHandle createProjectile(const Vector2D& position, const Vector2D& velocity, EntityHandle owner, float damage, float lifetime = 5.0f);
@@ -205,9 +207,8 @@ void processDestructionQueue();  // GameEngine frame-end, public unloadWorld, pr
 For entities created via legacy `Entity` subclass constructors:
 
 ```cpp
-EntityHandle registerNPC(EntityID entityId, const Vector2D& position, float halfWidth, float halfHeight, float health, float maxHealth);
-EntityHandle registerPlayer(EntityID entityId, const Vector2D& position, float halfWidth, float halfHeight);
-EntityHandle registerDroppedItem(EntityID entityId, const Vector2D& position, ResourceHandle handle, int quantity);
+EntityHandle registerPlayer(EntityID entityId, const Vector2D& position, float halfWidth = 32.0f, float halfHeight = 32.0f);
+EntityHandle registerDroppedItem(EntityID entityId, const Vector2D& position, ResourceHandle handle, int quantity = 1);
 void unregisterEntity(EntityID entityId);
 ```
 
@@ -437,8 +438,8 @@ for (size_t edmIndex : edm.getActiveIndices()) {
 Tier assignments are recalculated periodically (not every frame) for performance:
 
 ```cpp
-// In GameEngine or BackgroundSimulationManager
-// Called every ~60 frames (~1 second at 60Hz)
+// In BackgroundSimulationManager::update() (the only production caller)
+// TIER_UPDATE_INTERVAL = 120 frames (~2 seconds at 60Hz), or sooner when invalidateTiers() marks tiers dirty
 if (m_framesSinceTierUpdate++ >= TIER_UPDATE_INTERVAL) {
     edm.updateSimulationTiers(playerPosition, activeRadius, backgroundRadius);
     m_framesSinceTierUpdate = 0;
@@ -499,8 +500,8 @@ EntityHandle getHandle(size_t index) const;
 ```cpp
 auto& edm = EntityDataManager::Instance();
 
-// Create NPC
-EntityHandle npc = edm.createNPC(Vector2D(100, 200), 16.0f, 16.0f);
+// Create NPC (race/class factory; auto-registers JSON suggestedBehavior)
+EntityHandle npc = edm.createNPCWithRaceClass(Vector2D(100, 200), "Human", "Guard");
 
 // Access data
 auto& transform = edm.getTransform(npc);
@@ -545,21 +546,14 @@ void AIManager::processBatch(float dt, size_t start, size_t end)
 ### Tier-Based Processing
 
 ```cpp
-void GameEngine::update(float dt) {
-    auto& edm = EntityDataManager::Instance();
+// GameEngine::update() manager slots (main thread, sequential)
+mp_aiManager->update(deltaTime);         // Active tier
+mp_collisionManager->update(deltaTime);  // Active tier with collision
 
-    // Update tiers periodically
-    edm.updateSimulationTiers(playerPosition);
-
-    // AIManager processes Active tier
-    AIManager::Instance().update(dt);
-
-    // CollisionManager processes Active tier with collision
-    CollisionManager::Instance().update(dt);
-
-    // BackgroundSimManager processes Background tier at 10Hz
-    BackgroundSimulationManager::Instance().update(playerPosition, dt);
-}
+// BackgroundSimulationManager processes Background tier at 10Hz and owns the
+// periodic tier recalculation: it calls
+// edm.updateSimulationTiers(referencePoint, activeRadius, backgroundRadius)
+mp_backgroundSimManager->update(mp_aiManager->getPlayerPosition(), deltaTime);
 ```
 
 ## Performance Characteristics
@@ -569,7 +563,7 @@ void GameEngine::update(float dt) {
 | `getHotDataByIndex()` | O(1) | Inlined, zero overhead |
 | `getTransformByIndex()` | O(1) | Inlined, zero overhead |
 | `getIndex(handle)` | O(1) | Map lookup (main thread only) |
-| `createNPC()` | O(1) amortized | May grow vectors |
+| `createNPCWithRaceClass()` | O(1) amortized | May grow vectors |
 | `destroyEntity()` | O(1) | Queued, processed end of frame |
 | `updateSimulationTiers()` | O(n) | Called periodically, not every frame |
 

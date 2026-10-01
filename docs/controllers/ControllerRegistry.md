@@ -173,11 +173,11 @@ void GamePlayState::update(float dt) {
     }
 }
 
-void GamePlayState::render() {
-    auto* weather = m_controllers.get<WeatherController>();
+void GamePlayState::handleInput() {
+    auto* weather = m_controllers.get<WeatherController>();  // local lookup, not a cached member
     if (weather) {
-        auto currentWeather = weather->getCurrentWeather();
-        renderWeatherEffects(currentWeather);
+        std::string_view currentWeather = weather->getCurrentWeatherString();
+        // ...
     }
 }
 ```
@@ -227,6 +227,9 @@ m_controllers.add<CombatController>(mp_player);
 ## Ownership Examples
 
 ### Manual Ownership
+
+Not used by production states: they use registry ownership and must not keep
+cached `mp_*` controller members. Shown only for contrast.
 
 ```cpp
 class GamePlayState : public GameState {

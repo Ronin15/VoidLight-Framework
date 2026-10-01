@@ -38,7 +38,7 @@ fontMgr.reloadFontsForDisplay("res/fonts", newWidth, newHeight, newDpi);
 Text rendering is a two-step process:
 
 1. **Prepare** — call once per unique text string/position to create or update the `TTF_Text` object.
-2. **Draw** — retrieve the atlas draw sequence during the swapchain render pass and submit it.
+2. **Record** — retrieve the atlas draw sequence while recording UI vertices (before the passes) and emit it as UI vertices; the UI pass draws them.
 
 ```cpp
 // 1. Prepare (during update or on content change)
@@ -46,17 +46,18 @@ int textW = 0, textH = 0;
 fontMgr.prepareGPUText("score_label", "Score: 1234", "fonts_UI", &textW, &textH);
 fontMgr.setGPUTextPosition("score_label", x, y);
 
-// 2. Draw (during swapchain render pass)
+// 2. Record (UIManager::recordGPUVertices / a state's recordGPUUIVertices)
 TTF_GPUAtlasDrawSequence* seq = fontMgr.getGPUTextDrawData("score_label");
-if (seq) {
-    TTF_DrawGPUText(textEngine, renderPass, seq);  // SDL3_ttf call
+for (; seq != nullptr; seq = seq->next) {
+    // Emit seq->xy / seq->uv / seq->indices as UI vertices bound to
+    // seq->atlas_texture (see UIManager text recording); SDL3_ttf has no draw call
 }
 
 // Clear cache on state transitions
 fontMgr.clearGPUTextCache();
 ```
 
-**Important:** `getGPUTextDrawData()` must be called on the main thread during the swapchain pass, after all copy-pass upload work has completed.
+**Important:** `getGPUTextDrawData()` must be called on the main thread during UI vertex recording (`recordGPUUIVertices()`), not from workers.
 
 ## Text Measurement
 

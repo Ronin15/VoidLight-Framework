@@ -1,6 +1,6 @@
 # Resource Handle System
 
-**Code:** `include/utils/ResourceHandle.hpp`, `include/managers/ResourceTemplateManager.hpp`, `src/managers/ResourceTemplateManager.cpp`, `src/gameStates/GamePlayState.cpp`, `src/entities/Player.cpp`, `src/entities/NPC.cpp`
+**Code:** `include/utils/ResourceHandle.hpp`, `include/managers/ResourceTemplateManager.hpp`, `src/managers/ResourceTemplateManager.cpp`, `src/gameStates/GamePlayState.cpp`, `src/entities/Player.cpp`
 
 ## Overview
 
@@ -95,7 +95,7 @@ public:
         const auto& rtm = ResourceTemplateManager::Instance();
         
         if (m_goldHandle.isValid()) {
-            int goldAmount = player->getInventory()->getResourceQuantity(m_goldHandle);
+            int goldAmount = player->getInventoryQuantity(m_goldHandle);
             ui->updateGoldDisplay(goldAmount);
         }
     }
@@ -103,7 +103,7 @@ public:
     void addDemoResource() {
         // Runtime: Fast handle-based operations
         if (m_healthPotionHandle.isValid()) {
-            player->getInventory()->addResource(m_healthPotionHandle, 1);
+            player->addToInventory(m_healthPotionHandle, 1);
         }
     }
 };
@@ -279,7 +279,7 @@ bool Player::equipItem(VoidLight::ResourceHandle itemHandle) {
 | Component | Old Signature | New Signature |
 |-----------|---------------|---------------|
 | Equipment | `equipItem(const std::string& itemId)` | `equipItem(VoidLight::ResourceHandle handle)` |
-| Inventory | `addResource(const std::string& name, int qty)` | `addResource(VoidLight::ResourceHandle handle, int qty)` |
+| Inventory | `addResource(const std::string& name, int qty)` | `addToInventory(VoidLight::ResourceHandle handle, int qty)` |
 | Trading | `canTrade(const std::string& itemId)` | `canTrade(VoidLight::ResourceHandle handle)` |
 | Loot | `dropSpecificItem(const std::string& itemId)` | `dropSpecificItem(VoidLight::ResourceHandle handle)` |
 
@@ -290,13 +290,13 @@ bool Player::equipItem(VoidLight::ResourceHandle itemHandle) {
 void safeResourceOperation(VoidLight::ResourceHandle handle) {
     // Always validate handles before use
     if (!handle.isValid()) {
-        GAME_ERROR("Invalid resource handle provided");
+        RESOURCE_ERROR("Invalid resource handle provided");
         return;
     }
     
     const auto& rtm = ResourceTemplateManager::Instance();
     if (!rtm.isValidHandle(handle)) {
-        GAME_ERROR("Resource handle not found in template manager");
+        RESOURCE_ERROR("Resource handle not found in template manager");
         return;
     }
     
@@ -327,22 +327,18 @@ void performanceAudit() {
     size_t memoryUsage = rtm.getMemoryUsage();
     size_t templateCount = rtm.getResourceTemplateCount();
     
-    PERF_LOG("Resource templates: %zu", templateCount);
-    PERF_LOG("Memory usage: %zu bytes", memoryUsage);
-    PERF_LOG("Templates loaded: %llu", stats.templatesLoaded.load());
-    PERF_LOG("Resources created: %llu", stats.resourcesCreated.load());
+    RESOURCE_INFO(std::format("Resource templates: {}", templateCount));
+    RESOURCE_INFO(std::format("Memory usage: {} bytes", memoryUsage));
+    RESOURCE_INFO(std::format("Templates loaded: {}", stats.templatesLoaded.load()));
+    RESOURCE_INFO(std::format("Resources created: {}", stats.resourcesCreated.load()));
 }
 ```
 
 ### Profiling Name-Based Lookups
 ```cpp
 // Use this to identify remaining string-based operations
-#ifdef DEBUG
 #define NAME_LOOKUP_WARNING(name) \
-    GAME_DEBUG("String-based lookup detected: %s", (name).c_str())
-#else
-#define NAME_LOOKUP_WARNING(name)
-#endif
+    RESOURCE_DEBUG(std::format("String-based lookup detected: {}", (name)))
 
 ResourcePtr getResourceByName(const std::string& name) {
     NAME_LOOKUP_WARNING(name);

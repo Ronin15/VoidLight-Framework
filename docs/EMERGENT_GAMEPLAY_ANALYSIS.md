@@ -1,11 +1,17 @@
 # Emergent Gameplay Analysis
 
-**Code:** `include/ai/AIBehavior.hpp`, `include/managers/EventManager.hpp`, `include/managers/EntityDataManager.hpp`, `include/managers/WorldResourceManager.hpp`
+**Code:** `include/ai/BehaviorExecutors.hpp`, `include/managers/EventManager.hpp`, `include/managers/EntityDataManager.hpp`, `include/managers/WorldResourceManager.hpp`
 
 **Not a runtime contract.** Faction stance now lives in `docs/ai/AIManager.md`
-(`FactionStance` 16×16 table). NPC memory lives in `docs/ai/NPCMemory.md`.
+(`FactionStance` 16×16 table; the player has no faction and uses per-faction
+standing instead). NPC memory lives in `docs/ai/NPCMemory.md`. Resource-driven
+AI exists as the Forage behavior (`docs/ai/BehaviorModes.md`), and weather/time
+scale detection, speed, and caution through `include/ai/EnvironmentModifiers.hpp`.
 Durable architecture is `CLAUDE.md` and those subsystem docs. The gaps listed
-below (no faction system / no NPC memory) are historical as of January 2026.
+below (no factions, no NPC memory, resources and environment not affecting AI)
+are historical as of January 2026. Behaviors are now free functions in
+`src/ai/behaviors/*.cpp` dispatched through `include/ai/BehaviorExecutors.hpp`,
+not behavior classes; the class names below refer to those behavior types.
 
 Analysis of SDL3 VoidLight-Framework's current capabilities and recommendations for supporting emergent gameplay systems.
 
@@ -48,20 +54,20 @@ SDL3 VoidLight-Framework has **strong foundational support** for emergent gamepl
 
 ### AI Behavior System
 
-The engine implements 8 modular behaviors in `include/ai/behaviors/`:
+The engine implemented 8 modular behaviors (now `src/ai/behaviors/`; Forage is a ninth):
 
 | Behavior | Emergent Features |
 |----------|-------------------|
-| **GuardBehavior** | 5-level alert cascade (CALM → SUSPICIOUS → INVESTIGATING → HOSTILE → ALARM) with `callForHelp()` broadcasts to nearby guards |
+| **GuardBehavior** | 5-level alert cascade (CALM → SUSPICIOUS → INVESTIGATING → HOSTILE → ALARM) with an alarm help call (`scanAlliedInRadius` + `RAISE_ALERT` message) to nearby same-faction allies |
 | **AttackBehavior** | 7 attack modes (MELEE, RANGED, CHARGE, AMBUSH, COORDINATED, HIT_AND_RUN, BERSERKER) with combo system, flanking, circle strafing |
 | **FleeBehavior** | 4 modes including SEEK_COVER that distributes fleeing NPCs to safe zones |
 | **FollowBehavior** | 5 formation modes with atomic slot assignment for self-organization |
 | **WanderBehavior** | Crowd escape triggers when `cachedNearbyCount > crowdEscapeThreshold` |
-| **PatrolBehavior** | Dynamic waypoint generation with `expandPatrolAreaIfCrowded()` |
+| **PatrolBehavior** | Dynamic waypoint generation |
 | **ChaseBehavior** | Line-of-sight tracking with last-known-position fallback |
 | **IdleBehavior** | 4 visual variety modes for natural NPC appearance |
 
-**Key Pattern**: `BehaviorContext` (`include/ai/AIBehavior.hpp`) provides lock-free EDM access:
+**Key Pattern**: `BehaviorContext` (`include/ai/BehaviorExecutors.hpp`) provides lock-free EDM access:
 
 ```cpp
 struct BehaviorContext {
@@ -446,16 +452,16 @@ void onTimePeriodChanged(TimePeriod period) {
 |------|---------|
 | `include/managers/EntityDataManager.hpp` | Single source of truth for entity data (extend for new systems) |
 | `include/managers/AIManager.hpp` | Behavior lifecycle and batch processing |
-| `include/ai/AIBehavior.hpp` | Base behavior class and BehaviorContext |
+| `include/ai/BehaviorExecutors.hpp` | BehaviorContext and behavior dispatch |
 | `include/managers/EventManager.hpp` | Type-indexed event dispatch |
 
 ### Existing Behaviors
 | File | Purpose |
 |------|---------|
-| `include/ai/behaviors/GuardBehavior.hpp` | Alert cascade, callForHelp() |
-| `include/ai/behaviors/AttackBehavior.hpp` | 7 attack modes, combo system |
-| `include/ai/behaviors/FleeBehavior.hpp` | Safe zone seeking |
-| `include/ai/behaviors/WanderBehavior.hpp` | Crowd awareness |
+| `src/ai/behaviors/GuardBehavior.cpp` | Alert cascade, alarm help call |
+| `src/ai/behaviors/AttackBehavior.cpp` | 7 attack modes, combo system |
+| `src/ai/behaviors/FleeBehavior.cpp` | Safe zone seeking |
+| `src/ai/behaviors/WanderBehavior.cpp` | Crowd awareness |
 | `include/ai/BehaviorConfig.hpp` | All behavior configurations |
 
 ### Environmental Systems

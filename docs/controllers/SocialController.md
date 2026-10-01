@@ -73,8 +73,8 @@ Settlement merchants are spawned at world load by `WorldPopulation` /
 `spawnNpc` (GeneralMerchant, factory Idle). `EventManager::spawnMerchant`
 remains event sugar over `NPCSpawnEvent` → `spawnNpc` for scripted/runtime
 spawns; GamePlayState does not bootstrap via `spawnMerchant`. During gameplay,
-`Interact` prioritizes merchant trading first, then inventory pickup, then
-harvesting.
+`Interact` prioritizes merchant trading first, then nearby container open,
+inventory pickup, then harvesting.
 
 While a trade session is open, trade input is modal:
 

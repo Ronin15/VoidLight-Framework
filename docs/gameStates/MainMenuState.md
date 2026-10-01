@@ -9,7 +9,8 @@
 callbacks to typed `GameStateId` transitions.
 
 Buttons: Start Game, AI Demo (load test), Event Demo (power bench), Settings,
-Exit. Debug shortcuts `A` / `E` jump to AI Demo / Event Demo.
+Exit. Debug-build shortcuts (`VOIDLIGHT_DEBUG_ONLY`) `A` / `E` / `S` jump to AI
+Demo / Event Demo / Settings.
 
 ## UI and Input
 

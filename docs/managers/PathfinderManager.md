@@ -25,100 +25,33 @@ PathfinderManager integrates with EntityDataManager (EDM) to store path results 
 
 ### EDM Path Storage
 
-Path results are stored directly in EDM's `PathData` structure:
-
-```cpp
-// PathData stored in EDM per entity
-struct PathData {
-    std::vector<Vector2D> pathPoints;  // Computed path waypoints
-    size_t currentWaypointIndex;       // Progress along path
-    Vector2D targetPosition;           // Final destination
-    PathfindingResult lastResult;      // Success/failure status
-    float pathAge;                     // Time since computation
-    bool needsRepath;                  // Repath requested flag
-};
-```
+Path state lives in EDM, not in the manager. `PathData`
+(`include/ai/BehaviorCommonState.hpp`) holds the per-entity navigation state
+(`pathLength`, `navIndex`, timers, `currentWaypoint`, `hasPath`, and the atomic
+`pathRequestPending` / `latestPathRequestId` request tokens). Waypoints are
+stored in a fixed per-entity slot (`EDM::getWaypointSlot(index)`,
+`FixedWaypointSlot::MAX_WAYPOINTS_PER_ENTITY`).
 
 ### EDM-Based Path Requests
 
-Request paths that store results directly in EDM:
-
 ```cpp
-// Request path with EDM storage (recommended)
-uint64_t requestPathToEDM(size_t edmIndex, const Vector2D& start, const Vector2D& goal, Priority priority = Priority::Normal);
-
-// Usage in AI behavior
-void ChaseBehavior::execute(BehaviorContext& ctx) {
-    PathData& pd = *ctx.pathData;  // Pre-fetched from EDM
-
-    if (pd.pathPoints.empty() || pd.needsRepath) {
-        PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, targetPos);
-    }
-
-    // Follow existing path
-    if (!pd.pathPoints.empty()) {
-        followPath(ctx, pd);
-    }
-}
+uint64_t requestPathToEDM(size_t edmIndex, const Vector2D& start,
+                          const Vector2D& goal,
+                          Priority priority = Priority::Normal);
 ```
+
+Behaviors call it from AI worker batches with the entity's EDM index. It
+returns 0 when the manager is not initialized, is shut down, or has no grid.
 
 ### Path Result Delivery
 
-When path computation completes, results are written directly to EDM:
+Workers compute the path and enqueue a completion payload. `AIManager::update()`
+calls `commitCompletedPaths()` on the main thread, which for each completion:
 
-```cpp
-// Internal: PathfinderManager writes results to EDM
-void PathfinderManager::deliverPathResult(uint32_t edmIndex,
-                                          const std::vector<Vector2D>& path,
-                                          PathfindingResult result) {
-    auto& edm = EntityDataManager::Instance();
-    PathData& pd = edm.getPathDataByIndex(edmIndex);
-
-    pd.pathPoints = path;
-    pd.currentWaypointIndex = 0;
-    pd.lastResult = result;
-    pd.pathAge = 0.0f;
-    pd.needsRepath = false;
-}
-```
-
-### Benefits of EDM Integration
-
-| Aspect | Old (Callback-Based) | New (EDM Storage) | Benefit |
-|--------|---------------------|-------------------|---------|
-| Path persistence | Behavior-local (lost) | EDM (persists) | No redundant recomputation |
-| Data access | Map lookup per frame | Index-based | Cache-optimal |
-| Memory location | Scattered | Contiguous in EDM | Better cache locality |
-| Thread safety | Callback dispatch | Direct write | Simpler synchronization |
-
-### Tier-Aware Pathfinding
-
-PathfinderManager respects simulation tiers:
-
-- **Active tier**: Full pathfinding with all features
-- **Background tier**: Simplified straight-line paths (no A*)
-- **Hibernated tier**: No pathfinding (entities inactive)
-
-```cpp
-// PathfinderManager checks tier before expensive computation
-void PathfinderManager::requestPathToEDM(size_t edmIndex, const Vector2D& start, const Vector2D& goal, Priority priority) {
-    auto& edm = EntityDataManager::Instance();
-    SimulationTier tier = edm.getHotDataByIndex(edmIndex).tier;
-
-    if (tier == SimulationTier::Hibernated) {
-        return;  // No pathfinding for hibernated entities
-    }
-
-    if (tier == SimulationTier::Background) {
-        // Simplified direct path for background entities
-        deliverSimplePath(edmIndex, goal);
-        return;
-    }
-
-    // Full A* pathfinding for active entities
-    submitPathRequest(edmIndex, goal, priority);
-}
-```
+- skips it if the target handle is no longer valid or no longer maps to that EDM index
+- skips it if its request token is not the entity's `latestPathRequestId` (stale)
+- clears `pathRequestPending` when no path was found
+- otherwise copies the waypoints into `EDM::getWaypointSlot()` and calls `EDM::finalizePath(index, length)`
 
 ## Public API Reference
 
@@ -169,37 +102,20 @@ PathfinderManager::Instance().requestPathToEDM(
 PathfinderManager::Instance().commitCompletedPaths();
 ```
 
-#### `PathfindingResult findPathSync(const Vector2D& start, const Vector2D& goal, std::vector<Vector2D>& outPath, Priority priority = Priority::Normal)`
-Synchronous pathfinding for immediate results.
-```cpp
-std::vector<Vector2D> path;
-PathfindingResult result = PathfinderManager::Instance().findPathSync(
-    startPos, goalPos, path, PathfinderManager::Priority::Critical
-);
+There is no public synchronous path API; `requestPath` (callback form) is private and used only for cache pre-warm.
 
-if (result == PathfindingResult::Success) {
-    // Use path immediately
-    entity.followPath(path);
-}
-```
+### Configuration
 
-### Grid Configuration
-
-#### `void setCellSize(float cellSize)`
-Sets the pathfinding grid resolution.
-```cpp
-// Higher resolution for precision (slower)
-PathfinderManager::Instance().setCellSize(32.0f);
-
-// Lower resolution for performance (faster)
-PathfinderManager::Instance().setCellSize(128.0f);
-```
-
-#### `void setDiagonalMovement(bool enabled)`
+#### `void setAllowDiagonal(bool allow)`
 Enables or disables diagonal movement in pathfinding.
 
 #### `void setMaxIterations(int maxIterations)`
-Sets the maximum A* iterations to prevent infinite loops.
+Sets the maximum A* iterations to prevent runaway searches.
+
+#### `void setMaxPathsPerFrame(int maxPaths)` / `void setCacheExpirationTime(float seconds)`
+Request throttle and cached-path lifetime.
+
+The grid cell size is fixed at 64 px (`m_cellSize`); there is no public setter.
 
 ### Performance Monitoring
 
@@ -213,12 +129,14 @@ Main-thread frame slot (`GameEngine` step 5, before `CollisionManager::update()`
   grid copy plus the dirty rows.
 - **Thread Safety**: main thread only. Skipped while globally paused.
 
-#### `PathfindingStats getStatistics() const`
-Gets performance statistics.
+#### `PathfinderStats getStats() const` / `void resetStats()`
+Snapshot of request, cache, and memory counters (`totalRequests`,
+`completedRequests`, `failedRequests`, `cacheHits`, `cacheMisses`,
+`requestsPerSecond`, `cacheHitRate`, `cacheSize`, `memoryUsageKB`, ...).
 ```cpp
-auto stats = PathfinderManager::Instance().getStatistics();
-GAMEENGINE_INFO("Pathfinding: " + std::to_string(stats.requestsPerSecond) + " req/sec, " +
-               std::to_string(stats.cacheHitRate * 100.0f) + "% cache hit rate");
+auto stats = PathfinderManager::Instance().getStats();
+PATHFIND_INFO(std::format("Pathfinding: {:.1f} req/sec, {:.1f}% cache hit rate",
+    stats.requestsPerSecond, stats.cacheHitRate * 100.0f));
 ```
 
 ## Integration Examples
@@ -234,16 +152,14 @@ PathfinderManager receives `CollisionObstacleChanged` / `TileChanged`, invalidat
 ### Player Movement Integration
 
 Player click-to-move is not a PathfinderManager callback. NPC/AI movement uses `requestPathToEDM` as above.
-}
-```
 
 ## Performance Considerations
 
 ### Threading Model
-- **Request Thread**: Any thread can submit pathfinding requests
-- **Worker Threads**: ThreadSystem processes requests in background
-- **Callback Thread**: Results delivered on ThreadSystem worker threads
-- **Update Thread**: Statistics and cache management on main update thread
+- **Request Thread**: AI worker batches (or the main thread) submit `requestPathToEDM`
+- **Worker Threads**: ThreadSystem computes paths in the background
+- **Result Delivery**: `commitCompletedPaths()` writes EDM on the main thread (no callbacks)
+- **Update Thread**: path commits and dirty-row grid updates in `update()` on the main thread
 
 ### Cache System
 - **Automatic Invalidation**: Cache entries invalidated when collision obstacles change
@@ -262,12 +178,7 @@ Player click-to-move is not a PathfinderManager callback. NPC/AI movement uses `
 ### Optimization Guidelines
 
 #### Grid Resolution
-```cpp
-// For different game types:
-PathfinderManager::Instance().setCellSize(32.0f);  // High precision (RTS, tactical)
-PathfinderManager::Instance().setCellSize(64.0f);  // Balanced (most games) - DEFAULT
-PathfinderManager::Instance().setCellSize(128.0f); // Fast performance (action games)
-```
+The grid uses a fixed 64 px cell size; there is no runtime resolution setter.
 
 #### Request Prioritization
 ```cpp
@@ -278,20 +189,9 @@ Priority::Normal    // General AI movement (60-80% of requests)
 Priority::Low       // Background AI, decorative NPCs (10-30% of requests)
 ```
 
-#### Batch Processing
-```cpp
-// Avoid submitting many requests in single frame
-void schedulePathfindingRequests() {
-    // Spread requests across multiple frames
-    static int frameCounter = 0;
-    int requestsThisFrame = std::min(5, m_pendingPathRequests.size());
-
-    for (int i = 0; i < requestsThisFrame; ++i) {
-        submitPathRequest(m_pendingPathRequests.front());
-        m_pendingPathRequests.pop();
-    }
-}
-```
+#### Request Throttling
+Behaviors gate re-requests with `PathData::pathRequestCooldown` and
+`pathRequestPending`; `setMaxPathsPerFrame()` bounds per-frame processing.
 
 ## Grid Rebuild Architecture
 
@@ -308,9 +208,9 @@ Grid rebuilds execute on ThreadSystem workers using WorkerBudget allocation, ena
 void rebuildGrid();
 ```
 
-The system determines optimal rebuild strategy:
-- **Small Grids** (<64 rows): Sequential rebuild on single ThreadSystem worker
-- **Large Grids** (≥64 rows): Parallel row batches using WorkerBudget allocation
+The system determines the rebuild strategy from `WorkerBudgetManager::getBatchStrategy(SystemType::Pathfinding, gridHeight, ...)`:
+- **One batch** (small grid or high queue pressure): sequential rebuild on a single ThreadSystem task
+- **Multiple batches**: a coordinator task submits parallel row batches, waits for them, then publishes the grid
 
 ```cpp
 // Example: 200x200 grid with 12-worker system
@@ -322,11 +222,9 @@ The system determines optimal rebuild strategy:
 
 #### State Transition Coordination
 ```cpp
-// Called before game state changes (e.g., PlayState → MenuState)
+// Called before game state changes (e.g., PlayState → MenuState).
+// Internally waits for in-flight rebuild tasks (private waitForGridRebuildCompletion()).
 void prepareForStateTransition();
-
-// Blocks until all grid rebuild tasks complete
-void waitForGridRebuildCompletion();
 ```
 
 ### Dirty-Cell Updates
@@ -388,50 +286,19 @@ The LoadingState uses PathfinderManager's synchronization to ensure grid availab
 ## Error Handling
 
 ### Pathfinding Results
+`PathfindingGrid` (`include/ai/pathfinding/PathfindingGrid.hpp`) reports:
 ```cpp
-enum class PathfindingResult {
-    Success,           // Path found successfully
-    NoPathFound,       // No valid path exists
-    StartBlocked,      // Starting position is blocked
-    GoalBlocked,       // Goal position is blocked
-    GridNotReady,      // Pathfinding grid not initialized
-    MaxIterationsHit,  // A* hit iteration limit
-    InvalidInput,      // Invalid start/goal coordinates
-    SystemShutdown     // PathfinderManager is shutting down
+enum class PathfindingResult : uint8_t {
+    SUCCESS,
+    NO_PATH_FOUND,
+    INVALID_START,
+    INVALID_GOAL,
+    TIMEOUT
 };
 ```
-
-### Error Recovery Strategies
-```cpp
-void handlePathfindingError(EntityID entityId, PathfindingResult result) {
-    switch (result) {
-        case PathfindingResult::NoPathFound:
-            // Try finding nearest reachable position
-            requestPathToNearestReachable(entityId);
-            break;
-
-        case PathfindingResult::StartBlocked:
-            // Move entity to nearest open cell
-            moveToNearestOpenPosition(entityId);
-            break;
-
-        case PathfindingResult::GoalBlocked:
-            // Find alternative goal nearby
-            findAlternativeGoal(entityId);
-            break;
-
-        case PathfindingResult::MaxIterationsHit:
-            // Reduce path distance or increase iteration limit
-            requestShorterPath(entityId);
-            break;
-
-        default:
-            // Fallback: use simple direct movement
-            useDirectMovement(entityId);
-            break;
-    }
-}
-```
+`requestPathToEDM` does not surface the result; a failed request clears
+`PathData::pathRequestPending` without writing waypoints, and the behavior
+decides whether to retry after its cooldown.
 
 ## Testing
 
@@ -453,7 +320,7 @@ void handlePathfindingError(EntityID entityId, PathfindingResult result) {
 
 # Collision system benchmarks (separate)
 ./tests/test_scripts/run_collision_benchmark.sh
-./bin/debug/collision_benchmark
+./bin/debug/collision_scaling_benchmark
 ```
 
 ### Integration Tests
@@ -472,19 +339,9 @@ void handlePathfindingError(EntityID entityId, PathfindingResult result) {
 ### Memory Management
 - **Pool Allocation**: Internal path storage uses object pools
 - **Cache Management**: Automatic cache size management prevents memory leaks
-- **Grid Reuse**: Pathfinding grid reused across state transitions
+- **Grid Lifetime**: `prepareForStateTransition()` and `WorldUnloaded` drop the grid; each world load rebuilds it
 
 ### Debug Features
-```cpp
-// Enable detailed pathfinding logging
-PathfinderManager::Instance().setVerboseLogging(true);
-
-// Get detailed statistics
-auto stats = PathfinderManager::Instance().getDetailedStatistics();
-for (const auto& [priority, count] : stats.requestsByPriority) {
-    GAMEENGINE_DEBUG("Priority " + std::to_string(static_cast<int>(priority)) +
-                    ": " + std::to_string(count) + " requests");
-}
-```
+Use `getStats()` for counters; `PATHFIND_DEBUG` / `PATHFIND_INFO` log rebuild and cache events.
 
 For more information on pathfinding algorithms and grid implementation, see [PathfindingSystem.md](../ai/PathfindingSystem.md).

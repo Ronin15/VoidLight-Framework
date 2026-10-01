@@ -6,6 +6,7 @@
 # Spatial Query Optimization Plan
 
 **Status:** Design Phase — Future Implementation. Not current architecture. Do not implement from this document unless a numbered slice adopts it.
+**Premise outdated:** CollisionManager storage now holds only static bodies and triggers, and AI crowd/nearby-entity queries use `AIManager::scanActiveIndicesInRadius` (see [AIManager](../ai/AIManager.md)), so the duplicate-structure problem described below no longer exists in that form.
 **Created:** 2025-11-16
 **Expected Benefit:** 15-25% reduction in spatial query overhead
 **Risk Level:** Medium (requires refactoring AIManager and CollisionManager)

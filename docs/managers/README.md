@@ -5,10 +5,12 @@ This directory indexes manager-focused documentation. Some major systems live in
 ## Core Manager Pages
 
 - [BackgroundSimulationManager](BackgroundSimulationManager.md)
+- [CollisionManager](CollisionManager.md)
 - [EntityDataManager](EntityDataManager.md)
 - [EntityStateManager](EntityStateManager.md)
 - [FontManager](FontManager.md)
 - [GameStateManager](GameStateManager.md)
+- [GameTimeManager](GameTimeManager.md)
 - [InputManager](InputManager.md)
 - [ProjectileManager](ProjectileManager.md)
 - [PathfinderManager](PathfinderManager.md)

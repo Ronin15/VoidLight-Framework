@@ -36,7 +36,7 @@ clean();
 prepareForStateTransition();
 ```
 
-`prepareForStateTransition()` clears registries and spatial fast paths so AI/gameplay states can shut down cleanly before world teardown.
+`prepareForStateTransition()` clears registries, spatial indices, reverse lookups, and the active world (stale EDM indices from the previous state), then re-creates the `"default"` world entries. AI-heavy states call it after `WorldManager::unloadWorld()` (see State Transition Notes).
 
 ### World Tracking
 

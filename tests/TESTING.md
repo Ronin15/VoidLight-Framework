@@ -617,7 +617,7 @@ Located in `particle/` directory, these tests provide comprehensive validation o
 #### Test Suites Overview
 
 **1. Core Tests (`ParticleManagerCoreTest.cpp`)**
-**14 test cases** covering basic ParticleManager functionality:
+**43 test cases** covering basic ParticleManager functionality:
 - Initialization and cleanup
 - Effect registration and management  
 - Particle creation and lifecycle
@@ -626,16 +626,16 @@ Located in `particle/` directory, these tests provide comprehensive validation o
 - State transition handling
 
 **2. Weather Integration Tests (`ParticleManagerWeatherTest.cpp`)**
-**9 test cases** covering weather system integration:
+**13 test cases** covering weather system integration:
 - Weather effect triggering (Rain, Snow, Fog, Cloudy, Stormy, Clear)
 - Weather transitions and timing
 - Weather-specific particle behavior
-- Intensity scaling
+- Variant selection from `WeatherType` (intensity does not pick the variant; HeavyRain/Windy variants)
 - Weather effect cleanup
 - Multiple weather effect handling
 
 **3. Performance Tests (`ParticleManagerPerformanceTest.cpp`)**
-**8 test cases** covering performance characteristics:
+**11 test cases** covering performance characteristics:
 - Large-scale particle simulation (1000+ particles)
 - Update performance scaling
 - Memory usage efficiency
@@ -1309,7 +1309,7 @@ struct MemoryEntry {
     float value;            // Context-dependent (damage, etc.)
     MemoryType type;        // Type of memory (AttackedBy, Interaction, etc.)
     uint8_t importance;     // 0-255 importance score
-    uint8_t flags;          // State flags (FLAG_VALID, FLAG_FADING)
+    uint8_t flags;          // State flags (FLAG_VALID)
 };
 
 // Emotional state affecting NPC behavior (16 bytes)
@@ -1320,12 +1320,13 @@ struct EmotionalState {
     float suspicion;    // Alertness to threats
 };
 
-// Per-entity memory data (cache-line aligned, ≤512 bytes)
+// Per-entity memory data (cache-line aligned, 448 bytes)
 struct alignas(64) NPCMemoryData {
+    EmotionalState emotions;        // Hot first cache line
+    PersonalityTraits personality;
+    EntityHandle lastAttacker, lastTarget;
     MemoryEntry memories[6];        // Inline storage
     Vector2D locationHistory[4];    // Recent locations
-    EmotionalState emotions;
-    EntityHandle lastAttacker, lastTarget;
     float totalDamageReceived, totalDamageDealt;
     // ... additional tracking fields
 };
@@ -1336,9 +1337,10 @@ struct alignas(64) NPCMemoryData {
 Memory data is accessible in AI behaviors via `BehaviorContext`:
 
 ```cpp
-void AttackBehavior::executeLogic(BehaviorContext& ctx) {
-    if (ctx.memoryData && ctx.memoryData->isValid()) {
-        auto& memory = *ctx.memoryData;
+// Inside a Behaviors::execute*() function (e.g. executeAttack in src/ai/behaviors/AttackBehavior.cpp)
+void executeAttack(BehaviorContext& ctx, const AttackBehaviorConfig& config, AttackStateData& state) {
+    if (ctx.memoryData.isValid()) {  // NPCMemoryData& - guaranteed bound for NPCs
+        auto& memory = ctx.memoryData;
 
         // Check grudge against attacker
         if (memory.lastAttacker == ctx.playerHandle) {

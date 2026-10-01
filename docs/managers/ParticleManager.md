@@ -343,7 +343,7 @@ pm.stopWeatherEffects(1.5f); // 1.5s fade out
 #### Independent Effect Management
 ```cpp
 // Play a fire effect that persists
-uint32_t fireId = pm.playIndependentEffect("Fire", Vector2D(400, 300), 
+uint32_t fireId = pm.playIndependentEffect(ParticleEffectType::Fire, Vector2D(400, 300),
                                           1.0f, -1.0f, "campfire", "fire_crackle");
 
 // Control the effect
@@ -351,39 +351,32 @@ pm.pauseIndependentEffect(fireId, true);  // Pause
 pm.stopIndependentEffect(fireId);  // Stop
 ```
 
-#### Custom Effect Creation
-```cpp
-// Register a custom effect
-ParticleEffectDefinition customEffect("MagicSparkles", ParticleEffectType::Magic);
-customEffect.emitterConfig.emissionRate = 50.0f;
-customEffect.emitterConfig.minLife = 2.0f;
-customEffect.emitterConfig.maxLife = 4.0f;
-customEffect.emitterConfig.minColor = 0xFF00FFFF; // Magenta
-customEffect.emitterConfig.maxColor = 0x00FFFFFF; // Cyan
-
-pm.registerEffect(customEffect);
-uint32_t effectId = pm.playEffect("MagicSparkles", Vector2D(100, 100), 1.0f);
-```
+#### Custom Effects
+Effect definitions are keyed by `ParticleEffectType` (one definition per type)
+and are installed by `registerBuiltInEffects()` during `init()`. To add an
+effect, add a `ParticleEffectType` value and its definition there, then play it
+by type with `playEffect()` or `playIndependentEffect()`.
 
 ### Effect Management
 
 ```cpp
 // Basic effect control
-uint32_t playEffect(const std::string& effectName, 
-                   const Vector2D& position, 
+uint32_t playEffect(ParticleEffectType effectType,
+                   const Vector2D& position,
                    float intensity = 1.0f);
 
 void stopEffect(uint32_t effectId);
 bool isEffectPlaying(uint32_t effectId) const;
 
 // Independent effects (persist beyond weather changes)
-uint32_t playIndependentEffect(const std::string& effectName,
+uint32_t playIndependentEffect(ParticleEffectType effectType,
                               const Vector2D& position,
                               float intensity = 1.0f,
                               float duration = -1.0f,
                               const std::string& groupTag = "",
                               const std::string& soundEffect = "");
 
+void stopIndependentEffect(uint32_t effectId);
 void stopAllIndependentEffects();
 void stopIndependentEffectsByGroup(const std::string& groupTag);
 void pauseIndependentEffect(uint32_t effectId, bool paused);
@@ -470,21 +463,18 @@ There is no public compaction or cleanup call. `update()` deactivates expired pa
 ### Game Loop Integration
 
 ```cpp
-class GameEngine {
-private:
-    void update(float deltaTime) {
-        // WorkerBudget threading decision happens inside update()
-        ParticleManager::Instance().update(deltaTime);
+// GameEngine::update() — manager slot (main thread)
+// WorkerBudget threading decision happens inside update()
+mp_particleManager->update(deltaTime);
 
-        // Other system updates...
+// A state's renderGPUScene() draws particles into the engine-owned scene pass
+void GamePlayState::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
+                                   SDL_GPURenderPass* scenePass, ...) {
+    auto& particleMgr = ParticleManager::Instance();
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+        particleMgr.renderGPU(gpuRenderer, scenePass);
     }
-    
-    void renderGPUScene(SDL_GPURenderPass* scenePass) {
-        // Render all particles during the GPU scene pass
-        auto& gpuRenderer = GPURenderer::Instance();
-        ParticleManager::Instance().renderGPU(gpuRenderer, scenePass);
-    }
-};
+}
 ```
 
 ### EventManager Weather Integration
@@ -512,18 +502,19 @@ per-type defaults, so they select the same variant.
 
 ### State Transition Handling
 
+`GameStateManager` does not call `ParticleManager::prepareForStateTransition()`.
+The exiting state calls it during its manager cleanup (last in the AI-heavy
+cleanup order):
+
 ```cpp
-class GameStateManager {
-private:
-    void transitionToState(std::unique_ptr<GameState> newState) {
-        // Clean preparation for state transition
-        ParticleManager::Instance().prepareForStateTransition();
-        
-        // Continue with state transition
-        currentState = std::move(newState);
-        currentState->enter();
+bool GamePlayState::exit() {
+    // ... AIManager, ProjectileManager, ... WorkerBudgetManager first
+    auto& particleMgr = ParticleManager::Instance();
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+        particleMgr.prepareForStateTransition();
     }
-};
+    // ...
+}
 ```
 
 ## Performance Optimization
@@ -574,45 +565,15 @@ if (stats.particlesPerSecond < 1000) {
 
 ## Advanced Usage
 
-### Custom Effect Creation
-
-```cpp
-ParticleEffectDefinition createLightningEffect() {
-    ParticleEffectDefinition lightning("Lightning", ParticleEffectType::Sparks);
-    
-    // Emitter configuration
-    lightning.emitterConfig.position = Vector2D(0, 0);  // Set when played
-    lightning.emitterConfig.direction = Vector2D(0, 1);  // Downward
-    lightning.emitterConfig.spread = 5.0f;  // Narrow spread
-    lightning.emitterConfig.emissionRate = 500.0f;  // High burst
-    lightning.emitterConfig.minSpeed = 200.0f;  // Fast
-    lightning.emitterConfig.maxSpeed = 400.0f;
-    lightning.emitterConfig.minLife = 0.1f;  // Very short
-    lightning.emitterConfig.maxLife = 0.3f;
-    lightning.emitterConfig.minSize = 1.0f;
-    lightning.emitterConfig.maxSize = 2.0f;
-    lightning.emitterConfig.minColor = 0xFFFFFFFF;  // White
-    lightning.emitterConfig.maxColor = 0xCCCCFFFF;  // Light blue
-    lightning.emitterConfig.blendMode = ParticleBlendMode::Additive;
-    lightning.emitterConfig.duration = 0.2f;  // Short burst
-    
-    return lightning;
-}
-
-// Register and use
-pm.registerEffect(createLightningEffect());
-uint32_t lightningId = pm.playEffect("Lightning", Vector2D(500, 100));
-```
-
 ### Grouped Effect Management
 
 ```cpp
 // Create a campfire scene with grouped effects
-uint32_t fireId = pm.playIndependentEffect("Fire", Vector2D(400, 350), 
+uint32_t fireId = pm.playIndependentEffect(ParticleEffectType::Fire, Vector2D(400, 350),
                                           1.0f, -1.0f, "campfire");
-uint32_t smokeId = pm.playIndependentEffect("Smoke", Vector2D(400, 320), 
+uint32_t smokeId = pm.playIndependentEffect(ParticleEffectType::Smoke, Vector2D(400, 320),
                                            0.8f, -1.0f, "campfire");
-uint32_t sparksId = pm.playIndependentEffect("Sparks", Vector2D(400, 340), 
+uint32_t sparksId = pm.playIndependentEffect(ParticleEffectType::Sparks, Vector2D(400, 340),
                                             0.3f, 5.0f, "campfire");
 
 // Control all campfire effects together
@@ -655,8 +616,8 @@ pm.triggerWeatherEffect("Rain", 1.0f);   // Light rain (Custom name)
 pm.triggerWeatherEffect("Rainy", 1.0f);  // Heavy rain (Rainy -> HeavyRain)
 
 // ✅ Group related effects
-pm.playIndependentEffect("Fire", pos, 1.0f, -1.0f, "torch_group");
-pm.playIndependentEffect("Smoke", pos, 0.6f, -1.0f, "torch_group");
+pm.playIndependentEffect(ParticleEffectType::Fire, pos, 1.0f, -1.0f, "torch_group");
+pm.playIndependentEffect(ParticleEffectType::Smoke, pos, 0.6f, -1.0f, "torch_group");
 
 // ✅ Use proper cleanup
 pm.prepareForStateTransition();  // Between game states
@@ -720,10 +681,10 @@ if (!pm.isInitialized()) {
 auto activeEffects = pm.getActiveIndependentEffects();
 std::cout << "Active independent effects: " << activeEffects.size() << "\n";
 
-// Verify effect registration
-uint32_t testId = pm.playEffect("TestEffect", Vector2D(0, 0));
+// Verify an effect type has a definition
+uint32_t testId = pm.playEffect(ParticleEffectType::Fire, Vector2D(0, 0));
 if (testId == 0) {
-    std::cout << "Error: Effect 'TestEffect' not registered\n";
+    std::cout << "Error: no definition for ParticleEffectType::Fire\n";
 }
 ```
 

@@ -41,9 +41,9 @@ Callers: `WorldPopulation` (wilderness Warriors pass faction 1 and empty
 behavior override so `classes.json` Chase is home role; settlement merchants,
 guards, and villagers pass `settlement.faction` — `0xFF` remains the
 class-default sentinel on `spawnNpc`), GamePlayState debug `R` (faction 1, no
-Attack override, then `setStance` mutual Hostile; not in the populate registry),
-`NPCSpawnEvent::execute`, and demo village setup that previously created then
-assigned.
+Attack override, then `AIManager::adjustPlayerStanding` drops player standing
+with faction 1 to the minimum; the stance table is untouched; not in the
+populate registry), and `NPCSpawnEvent::execute`.
 
 `EventManager::spawnMerchant` stays event sugar; populate does not go through
 deferred MerchantSpawn.

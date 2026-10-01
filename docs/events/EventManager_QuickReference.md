@@ -60,7 +60,7 @@ Scarcity
 
 ## Current Usage Rules
 
-- Do not use removed APIs such as `registerEvent`, `createSceneChangeEvent`, `getEventsByType`, or compaction helpers.
+- Do not use removed `EventManager` APIs such as `registerEvent`, `createSceneChangeEvent`, `getEventsByType`, or compaction helpers (`EventFactory::createSceneChangeEvent` still exists).
 - Use deferred dispatch for worker-thread producers and cross-system frame coordination.
 - Use immediate dispatch only when the caller owns timing and thread-safety.
 - `EventTypeId::Combat` / `DamageEvent` applies damage results inside `EventManager` before subscribed handlers run.

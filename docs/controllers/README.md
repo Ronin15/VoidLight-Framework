@@ -23,6 +23,7 @@ Current controller families:
 | [DayNightController](DayNightController.md) | Time-of-day visuals and GPU lighting | Requires `update(dt)` each frame |
 | [HarvestController](HarvestController.md) | Progress-based harvesting of WRM/EDM harvestables | Cancels on movement, emits resource/harvest events |
 | [SocialController](SocialController.md) | Merchant trading, gifts, theft, relationship/memory updates | Builds trade UI through `UIManager` |
+| `ResourceRenderController`, `NPCRenderController`, `ProjectileRenderController` (`controllers/render/`) | GPU vertex recording for resources, NPCs, and projectiles | No dedicated doc; `ResourceRenderController` is registry-managed, NPC/Projectile render controllers are state members |
 
 ## Ownership Pattern
 

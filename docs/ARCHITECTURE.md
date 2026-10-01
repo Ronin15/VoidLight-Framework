@@ -56,7 +56,8 @@ limited to:
 
 - `PathfinderManager::requestPathToEDM()` path tasks. Each reads the grid
   snapshot it captured; results are committed on the main thread by
-  `PathfinderManager::update()`.
+  `commitCompletedPaths()` (called from `AIManager::update()` and
+  `PathfinderManager::update()`).
 - The `LoadingState` load task and the load-time pathfinding grid rebuild
   (`StaticCollidersReady` → `PathfinderManager::rebuildGrid()`), both inside
   LoadingState's global-pause window; Loading waits on `isGridReady()`.

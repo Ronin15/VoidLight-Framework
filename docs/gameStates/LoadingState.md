@@ -95,7 +95,9 @@ bool GamePlayState::enter()
         return true;
     }
 
-    return initializeGameplay();
+    GameEngine::Instance().setGlobalPause(false);
+    // ... normal gameplay initialization inline in enter()
+    return true;
 }
 
 void GamePlayState::update(float)

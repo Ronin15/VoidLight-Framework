@@ -1,6 +1,10 @@
 # VoidLight-Framework
 
-A modern, production-ready C++20 SDL3 game engine template for 2D games. Built for rapid prototyping and scalable game development, it features Data-Oriented Design with EntityDataManager as the central data authority, robust multi-threading, high-performance AI supporting 10K+ entities, a professional UI system, and comprehensive resource, world, and event systems. Designed for cross-platform deployment (Windows, macOS, Linux) with a focus on performance, safety, and extensibility.
+A C++20 SDL3 game engine template for building 2D games on Windows, macOS, and Linux.
+
+VoidLight is designed for games with large, busy worlds. Its data-oriented core and adaptive multi-threading keep thousands of AI-driven entities running smoothly, and a simulated world gives them settlements, factions, a day/night cycle, seasons, and weather to live in.
+
+The template ships with the systems a game needs already working together (GPU rendering, UI, input, resources and inventories, combat, trading, and events), so you can start on gameplay instead of plumbing.
 
 ## Key Features
 
@@ -14,19 +18,23 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Adaptive Multi-Threading System**
 
-   Hardware-adaptive thread pool with intelligent WorkerBudget batch optimization. Automatically detects logical cores (including SMT/hyperthreading) and reserves one to reduce OS contention. Sequential manager execution gives each system ALL workers during its update window. Priority-based scheduling and adaptive batch sizing help the engine scale cleanly across hardware.
+    Thread pool that sizes itself to the hardware and spreads each system's work across the available cores, scaling from handheld PCs to many-core desktops without manual tuning.
 
 - **High-Performance AI System**
 
-    Data-Oriented Design with EntityDataManager as single source of truth. Cache-friendly, lock-free, batch-processed AI supports 10K+ entities at 60+ FPS with simulation tiers (Active/Background/Hibernated), rich behaviors, dense per-behavior state pools, sparse transient sidecars, and scalable pathfinding and combat integration.
+    Data-Oriented Design with EntityDataManager as single source of truth. Cache-friendly, batch-processed AI supports 10K+ entities at 60+ FPS with simulation tiers (Active/Background/Hibernated), dense per-behavior state pools, sparse transient sidecars, and pathfinding and combat integration.
 
-- **Robust Event & State Management**  
-    
+- **Living World Simulation**
+
+    Procedurally generated worlds populated with settlements and NPCs. Factions keep relationships with each other and with the player, NPCs pursue their own needs, and AI responds to the time of day and the weather.
+
+- **Event & State Management**
+
     Event-driven architecture centered on `EventManager` as the dispatch hub, with immediate/deferred dispatch modes, persistent and transient handler lifetimes, pooled hot-path events, merchant/NPC spawn helpers, entity/game state machines, and thread-safe manager updates.
 
 - **Flexible UI System**
 
-    Content-aware auto-sizing, professional theming (light/dark plus programmatic custom themes), and rich component library (buttons, labels, input fields, lists, modals, etc.). Responsive layouts with DPI-aware rendering and animation support. Centralized UI constants with resolution-aware scaling (1920×1080 baseline) and event-driven resize handling. Optimized for PC handheld devices (Steam Deck, ROG Ally, OneXPlayer) with automatic baseline resolution scaling down to 1280×720.
+    Content-aware auto-sizing, theming (light/dark plus programmatic custom themes), and rich component library (buttons, labels, input fields, lists, modals, etc.). Responsive layouts with DPI-aware rendering. Centralized UI constants with resolution-aware scaling (1920×1080 baseline) and event-driven resize handling. Optimized for PC handheld devices (Steam Deck, ROG Ally, OneXPlayer) with automatic baseline resolution scaling down to 1280×720.
 
 - **Action-Mapped Input & Menu Navigation**
 
@@ -42,11 +50,11 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Fast, Safe Serialization**
   
-    Header-only binary serialization system with smart pointer memory management. Used by SaveGameManager for robust, versioned save/load across platforms.
+    Header-only binary serialization with smart pointer memory management, used by SaveGameManager for versioned save/load across platforms.
 
-- **Comprehensive Testing & Analysis**
+- **Testing & Analysis**
 
-    80 core source-controlled Boost.Test executables plus 8 GPU-specific test targets covering unit, integration, and performance testing. Includes AI+Collision integration tests, GPU rendering tests, SIMD correctness validation, NPC memory coverage, and comprehensive thread safety verification with documented TSAN suppressions. Static analysis (cppcheck, clang-tidy), AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind integration support production-ready quality assurance.
+    84 core Boost.Test executables plus 8 GPU-specific test targets covering unit, integration, and performance testing, including AI+Collision integration, GPU rendering, SIMD correctness, and thread-safety tests with documented TSAN suppressions. Static analysis (cppcheck, clang-tidy), AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind are wired into the test scripts.
 
 - **Debug Profiling Tools**
 
@@ -62,13 +70,13 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **GameTime & World Simulation**
 
-    Fantasy calendar system with day/night cycles, four seasons, dynamic weather, and temperature simulation. Chunk-based world support includes procedural generation, streaming, and resource interactions.
+    Fantasy calendar system with day/night cycles, four seasons, dynamic weather, and temperature simulation.
 
 - **Chunk-Based World System**
 
-    Efficient tile-based world rendering with chunk culling for off-screen optimization. Supports procedural generation, seamless streaming, and automatic seasonal tile switching.
+    Procedurally generated tile worlds with chunk culling for off-screen tiles, harvestable resource nodes, and automatic seasonal tile switching.
 
-- **Robust Combat System**
+- **Gameplay Controllers**
 
     Dedicated combat, harvesting, projectile, inventory, and social/trading controllers support hit detection, knockback, resource gathering, theft/gift flows, and gameplay-specific state transitions without bloating core engine systems.
 
@@ -76,9 +84,9 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
     Optimized for battery-powered devices. Completes frame work quickly then sleeps until vsync, achieving 80%+ CPU idle residency during active gameplay. See [Power Efficiency](docs/performance/PowerEfficiency.md) for detailed benchmarks.
 
-- **Extensive Documentation**  
-    
-    Full guides, API references, best practices, and troubleshooting for all major systems.
+- **Documentation**
+
+    Guides, API references, and troubleshooting for the major systems.
 
 ### Design Priorities
 
@@ -216,6 +224,7 @@ For the full workflow, command reference, file locations, and seasonal texture g
 - **Core:** [GameEngine](docs/core/GameEngine.md), [GameTimeManager](docs/managers/GameTimeManager.md), [ThreadSystem](docs/core/ThreadSystem.md), [WorkerBudget](docs/core/WorkerBudget.md), [TimestepManager](docs/core/TimestepManager.md)
 - **AI System:** [Overview](docs/ai/AIManager.md), [Behavior Execution Pipeline](docs/ai/BehaviorExecutionPipeline.md), [Behaviors](docs/ai/BehaviorModes.md), [Quick Reference](docs/ai/BehaviorQuickReference.md), [NPC Memory](docs/ai/NPCMemory.md), [Pathfinding System](docs/ai/PathfindingSystem.md)
 - **Collision & Physics:** [CollisionManager](docs/managers/CollisionManager.md)
+- **World:** [WorldManager](docs/managers/WorldManager.md), [World Population](docs/world/WorldPopulation.md), [WorldResourceManager](docs/managers/WorldResourceManager.md)
 - **Entity System:** [Overview](docs/entities/README.md), [EntityHandle](docs/entities/EntityHandle.md), [EntityDataManager](docs/managers/EntityDataManager.md), [BackgroundSimulationManager](docs/managers/BackgroundSimulationManager.md)
 - **Event System:** [Overview](docs/events/EventManager.md), [Quick Reference](docs/events/EventManager_QuickReference.md), [Advanced](docs/events/EventManager_Advanced.md), [TimeEvents](docs/events/TimeEvents.md)
 - **Controllers:** [Overview](docs/controllers/README.md), [ControllerRegistry](docs/controllers/ControllerRegistry.md), [WeatherController](docs/controllers/WeatherController.md), [DayNightController](docs/controllers/DayNightController.md), [CombatController](docs/controllers/CombatController.md), [HudController](docs/controllers/HudController.md), [InventoryController](docs/controllers/InventoryController.md), [HarvestController](docs/controllers/HarvestController.md), [SocialController](docs/controllers/SocialController.md)

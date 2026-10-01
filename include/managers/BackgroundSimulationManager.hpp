@@ -275,9 +275,6 @@ private:
 
     // Performance tracking
     PerfStats m_perf;
-
-    // Minimum batch size for threading (threading threshold is adaptive via WorkerBudget)
-    static constexpr size_t MIN_BATCH_SIZE = 64;
 };
 
 #endif // BACKGROUND_SIMULATION_MANAGER_HPP

@@ -68,7 +68,10 @@ public:
     static WorkerBudgetManager& Instance();
 
     // Get cached worker count
-    const WorkerBudget& getBudget() const;
+    const WorkerBudget& getBudget();
+
+    // Authoritative threading decision (learned threshold + hysteresis)
+    ThreadingDecision shouldUseThreading(SystemType system, size_t workloadSize);
 
     // Get optimal workers for a system (returns all workers if workload > 0)
     size_t getOptimalWorkers(SystemType system, size_t workloadSize);
@@ -77,7 +80,7 @@ public:
     std::pair<size_t, size_t> getBatchStrategy(
         SystemType system,
         size_t workloadSize,
-        size_t availableWorkers) const;
+        size_t optimalWorkers);
 
     // Report execution result for adaptive tuning
     void reportExecution(
@@ -85,10 +88,13 @@ public:
         size_t workloadSize,
         bool wasThreaded,
         size_t batchCount,
-        double elapsedMs);
+        double totalTimeMs);
+
+    void prepareForStateTransition();
+    void markFrameStart();  // GameEngine::update() calls this once per frame
 };
 
-enum class SystemType {
+enum class SystemType : uint8_t {
     AI,
     Particle,
     Pathfinding,
@@ -142,36 +148,37 @@ void AIManager::update(float deltaTime) {
     size_t entityCount = getActiveEntityCount();
     if (entityCount == 0) return;
 
-    // Get optimal batch configuration from WorkerBudget
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
-    size_t optimalWorkers = budgetMgr.getOptimalWorkers(
-        VoidLight::SystemType::AI, entityCount);
-
-    auto [batchCount, batchSize] = budgetMgr.getBatchStrategy(
-        VoidLight::SystemType::AI,
-        entityCount,
-        optimalWorkers);
-
-    // Submit batches
+    auto decision = budgetMgr.shouldUseThreading(VoidLight::SystemType::AI, entityCount);
     auto startTime = std::chrono::steady_clock::now();
+    size_t batchCount = 1;
 
-    for (size_t i = 0; i < batchCount; ++i) {
-        size_t start = i * batchSize;
-        size_t end = std::min(start + batchSize, entityCount);
+    if (!decision.shouldThread) {
+        processBatch(0, entityCount, deltaTime);  // single-threaded sample
+    } else {
+        size_t optimalWorkers = budgetMgr.getOptimalWorkers(
+            VoidLight::SystemType::AI, entityCount);
+        auto [count, batchSize] = budgetMgr.getBatchStrategy(
+            VoidLight::SystemType::AI, entityCount, optimalWorkers);
+        batchCount = count;
 
-        ThreadSystem::Instance().enqueueTask([this, start, end, deltaTime]() {
-            processBatch(start, end, deltaTime);
-        }, TaskPriority::High, "AI_Batch");
+        m_batchFutures.clear();  // reused member buffer
+        for (size_t i = 0; i < batchCount; ++i) {
+            size_t start = i * batchSize;
+            size_t end = std::min(start + batchSize, entityCount);
+            m_batchFutures.push_back(ThreadSystem::Instance().enqueueTaskWithResult(
+                [this, start, end, deltaTime]() { processBatch(start, end, deltaTime); },
+                TaskPriority::High, "AI_Batch"));
+        }
+        // Batches join before update() returns (sequential manager model)
+        for (auto& f : m_batchFutures) f.wait();
     }
-
-    // Wait for completion and report metrics
-    // ... wait for futures ...
 
     auto elapsed = std::chrono::steady_clock::now() - startTime;
     budgetMgr.reportExecution(
         VoidLight::SystemType::AI,
         entityCount,
-        true,
+        decision.shouldThread,
         batchCount,
         std::chrono::duration<double, std::milli>(elapsed).count());
 }
@@ -221,7 +228,7 @@ if (!ThreadSystem::Instance().init()) {
 
 // Verify initialization
 unsigned int threads = ThreadSystem::Instance().getThreadCount();
-THREADSYSTEM_INFO("ThreadSystem initialized with " + std::to_string(threads) + " threads");
+THREADSYSTEM_INFO(std::format("ThreadSystem initialized with {} threads", threads));
 ```
 
 ### Basic Task Submission
@@ -252,16 +259,22 @@ void processEntitiesWithBudget(std::vector<Entity*>& entities, float deltaTime) 
         entities.size(),
         budgetMgr.getOptimalWorkers(VoidLight::SystemType::AI, entities.size()));
 
+    std::vector<std::future<void>> futures;
+    futures.reserve(batchCount);
     for (size_t i = 0; i < batchCount; ++i) {
         size_t start = i * batchSize;
         size_t end = std::min(start + batchSize, entities.size());
 
-        ThreadSystem::Instance().enqueueTask([&entities, start, end, deltaTime]() {
-            for (size_t j = start; j < end; ++j) {
-                entities[j]->update(deltaTime);
-            }
-        }, TaskPriority::Normal, "Entity Batch");
+        futures.push_back(ThreadSystem::Instance().enqueueTaskWithResult(
+            [&entities, start, end, deltaTime]() {
+                for (size_t j = start; j < end; ++j) {
+                    entities[j]->update(deltaTime);
+                }
+            }, TaskPriority::Normal, "Entity Batch"));
     }
+
+    // Futures must complete before dependent work (and before `entities` goes out of scope)
+    for (auto& f : futures) f.wait();
 }
 ```
 
@@ -373,14 +386,17 @@ void Manager::update(float deltaTime) {
 
 ### Current Manager Integrations
 
-| Manager | SystemType | Threading Threshold |
-|---------|------------|---------------------|
-| AIManager | AI | 100+ entities |
-| CollisionManager | Collision | 500+ bodies (broadphase), 100+ pairs (narrowphase) |
-| ParticleManager | Particle | 500+ particles |
-| EventManager | Event | Deferred-queue workload dependent |
-| PathfinderManager | Pathfinding | 10+ requests |
-| BackgroundSimulationManager | BackgroundSim | Tier workload dependent |
+Thresholds are learned per system by `shouldUseThreading()` (see [WorkerBudget](WorkerBudget.md)); there are no fixed cutoffs. Managers run sequentially on the main thread and join their worker batches before their `update()` returns.
+
+| Manager | SystemType | Workload unit |
+|---------|------------|---------------|
+| AIManager | AI | active AI entities |
+| CollisionManager | Collision | movable bodies |
+| ParticleManager | Particle | active particles |
+| EventManager | Event | combat events in the dispatch buffer |
+| PathfinderManager | Pathfinding | grid rows (dirty-row rebuild in `update()`, full rebuild on load) |
+| BackgroundSimulationManager | BackgroundSim | background-tier entities |
+| ProjectileManager | ProjectileSim | active projectiles |
 
 ---
 
@@ -495,7 +511,7 @@ ThreadSystem has documented benign race patterns (lock-free statistics, performa
 ### Graceful Shutdown
 
 ```cpp
-void GameEngine::cleanup() {
+void GameEngine::clean() {
     // Wait for critical tasks to complete
     while (ThreadSystem::Instance().isBusy()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
