@@ -269,6 +269,46 @@ BOOST_AUTO_TEST_CASE(TestRequestPathWithInvalidIndex) {
     BOOST_CHECK_EQUAL(stats.completedRequests, 0U);
 }
 
+// Behaviors clear path data on retarget while the old target's request is still
+// in flight; the re-request must not reuse its token, or the stale completion
+// is accepted as the new path.
+BOOST_AUTO_TEST_CASE(CompletionRequestedBeforeClearIsRejected) {
+    auto& edm = EntityDataManager::Instance();
+    auto& pm = PathfinderManager::Instance();
+
+    CollisionManager::Instance().setWorldBounds(0.0f, 0.0f, 2048.0f, 2048.0f);
+    pm.rebuildGrid();
+    BOOST_REQUIRE(waitForGridReady(pm));
+
+    auto npc = PathfindingTestNPC::create(Vector2D(96.0f, 96.0f));
+    const size_t index = npc->getEdmIndex();
+    BOOST_REQUIRE(index != SIZE_MAX);
+
+    const Vector2D start(96.0f, 96.0f);
+    const Vector2D oldGoal(1900.0f, 1900.0f);
+    const Vector2D newGoal(160.0f, 160.0f);
+    auto& pd = edm.getPathData(index);
+
+    BOOST_REQUIRE(pm.requestPathToEDM(index, start, oldGoal, PathfinderManager::Priority::Normal) > 0);
+    const uint32_t staleToken = pd.latestPathRequestId.load(std::memory_order_acquire);
+    pd.clear();
+    BOOST_REQUIRE(pm.requestPathToEDM(index, start, newGoal, PathfinderManager::Priority::High) > 0);
+    BOOST_CHECK_NE(pd.latestPathRequestId.load(std::memory_order_acquire), staleToken);
+
+    // Both completions are queued before a single commit pass.
+    auto& threadSystem = ThreadSystem::Instance();
+    for (int i = 0; i < 500 && threadSystem.isBusy(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    BOOST_REQUIRE(!threadSystem.isBusy());
+    pm.update();
+
+    BOOST_REQUIRE(pd.hasPath);
+    BOOST_REQUIRE(pd.pathLength > 0);
+    const Vector2D finalWaypoint = edm.getWaypointSlot(index)[pd.pathLength - 1];
+    BOOST_CHECK_LT((finalWaypoint - newGoal).length(), (finalWaypoint - oldGoal).length());
+}
+
 BOOST_AUTO_TEST_SUITE_END()
 
 // ============================================================================
@@ -356,8 +396,8 @@ BOOST_AUTO_TEST_CASE(StaleCompletionFromReusedSlotDoesNotOverwriteNewEntityPath)
     edm.processDestructionQueue();
     BOOST_REQUIRE(edm.getIndex(staleHandle) == SIZE_MAX);
 
-    // Reuse same slot for new entity and issue a new request (token resets and
-    // starts at 1 again on slot reuse, so handle-generation validation matters).
+    // Reuse same slot for new entity and issue a new request (handle-generation
+    // validation rejects the old occupant's completion).
     std::vector<std::shared_ptr<PathfindingTestNPC>> keepAlive;
     keepAlive.reserve(12);
     EntityHandle currentHandle{};

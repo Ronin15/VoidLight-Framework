@@ -73,7 +73,9 @@ struct PathData {
         currentWaypoint = Vector2D{0, 0};
         hasPath = false;
         pathRequestPending.store(0, std::memory_order_relaxed);
-        latestPathRequestId.store(0, std::memory_order_relaxed);
+        // Advance, never reset: a request still in flight keeps an older token,
+        // so its completion is rejected and the next request cannot reuse it.
+        latestPathRequestId.fetch_add(1, std::memory_order_acq_rel);
     }
 
     [[nodiscard]] bool isFollowingPath() const noexcept {

@@ -193,8 +193,11 @@ BOOST_AUTO_TEST_CASE(TestTasksWithExceptions) {
         VoidLight::TaskPriority::Normal,
         "Exception-throwing task");
 
-    // Check that the exception is properly propagated
-    BOOST_CHECK_THROW(future.get(), std::runtime_error);
+    // Check that the exception is properly propagated and no result is produced
+    constexpr int NO_RESULT = -1;
+    int result = NO_RESULT;
+    BOOST_CHECK_THROW(result = future.get(), std::runtime_error);
+    BOOST_CHECK_EQUAL(result, NO_RESULT);
 }
 
 BOOST_AUTO_TEST_CASE(TestConcurrencyIsolation) {

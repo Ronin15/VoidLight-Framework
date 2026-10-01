@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <limits>
 #include <random>
 
 namespace {
@@ -201,6 +202,8 @@ void moveTowardTarget(BehaviorContext& ctx, const VoidLight::ForageBehaviorConfi
             float dist = toWaypoint.length();
             if (dist < FORAGE_WAYPOINT_RADIUS) {
                 EntityDataManager::Instance().advanceWaypointWithCache(ctx.edmIndex);
+                // New waypoint: rebaseline the stall progress metric.
+                pathData.lastNodeDistance = std::numeric_limits<float>::max();
                 if (pathData.isFollowingPath()) {
                     toWaypoint = pathData.currentWaypoint - currentPos;
                     dist = toWaypoint.length();
@@ -394,11 +397,20 @@ void executeForage(BehaviorContext& ctx, const VoidLight::ForageBehaviorConfig& 
                 return;
             }
 
-            // Stall detection on actual progress toward the node (collision
-            // push-back against an obstacle tile leaves velocity non-zero).
+            // Stall detection on actual progress (collision push-back against an
+            // obstacle tile leaves velocity non-zero). While following a path,
+            // progress is toward the current waypoint: a detour around obstacles
+            // legitimately moves away from the node.
             const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;
             const float minProgress = envSpeed * ctx.deltaTime * FORAGE_PROGRESS_FRACTION;
-            if (state.lastTargetDistance - dist < minProgress) {
+            float progress = state.lastTargetDistance - dist;
+            if (ctx.pathData && ctx.pathData->isFollowingPath()) {
+                auto& pathData = *ctx.pathData;
+                const float waypointDist = (pathData.currentWaypoint - position).length();
+                progress = pathData.lastNodeDistance - waypointDist;
+                pathData.lastNodeDistance = waypointDist;
+            }
+            if (progress < minProgress) {
                 shared.separationTimer += ctx.deltaTime;
             } else {
                 shared.separationTimer = 0.0f;

@@ -1384,6 +1384,87 @@ BOOST_AUTO_TEST_CASE(ForageMoveSpeedScalesWithEnvironment) {
     BOOST_CHECK_CLOSE(stormSpeed, clearSpeed * 0.75f, 1.0);
 }
 
+// A nav path that detours around obstacles first leads away from the node. Stall
+// detection measures progress toward the current waypoint, so following the
+// detour is not a stall, while a forager stuck on its path still fails the attempt.
+BOOST_AUTO_TEST_CASE(ForageDetourPathIsNotAStall) {
+    auto& edm = EntityDataManager::Instance();
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const Vector2D targetPos = start + Vector2D(-200.0f, 0.0f);
+    const EntityHandle target = createNode(targetPos);
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    AIManager::Instance().assignBehavior(villager, "Forage");
+    const size_t idx = indexOf(villager);
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Forage);
+    const VoidLight::ForageBehaviorConfig config = edm.getForageConfig(ref.index);
+    auto& state = edm.getForageState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    BOOST_REQUIRE(edm.hasPathData(idx));
+    auto& pathData = edm.getPathData(idx);
+    BOOST_REQUIRE(edm.getBehaviorData(idx).moveSpeed > 0.0f);
+
+    const std::array<HarvestableSnapshotEntry, 1> entries = {
+        HarvestableSnapshotEntry{targetPos, target, static_cast<uint32_t>(indexOf(target))}};
+    const std::array<uint32_t, 2> cellStarts = {0, 1};
+    HarvestableSnapshotView view;
+    view.entries = entries;
+    view.cellStarts = cellStarts;
+    view.origin = targetPos;
+    view.cols = 1;
+    view.rows = 1;
+
+    // The first leg heads away from the node and is longer than the frames run.
+    const Vector2D detour = start + Vector2D(0.0f, 600.0f);
+    // 3 s: past the 2 s Forage stall window.
+    constexpr int FRAMES = 30;
+    const EnvironmentSnapshot env{};
+
+    auto runDetour = [&](bool moves) {
+        state.phase = VoidLight::ForagePhase::Moving;
+        state.targetHandle = target;
+        state.targetStaticIndex = entries[0].staticIndex;
+        state.targetPos = targetPos;
+        state.lastTargetDistance = (targetPos - start).length();
+        state.failedAttempts = 0;
+        edm.getBehaviorData(idx).separationTimer = 0.0f;
+        hotData.transform.position = start;
+        hotData.transform.velocity = Vector2D(0, 0);
+        pathData.clear();
+        auto waypoints = edm.getWaypointSlot(idx);
+        waypoints[0] = detour;
+        waypoints[1] = targetPos;
+        edm.finalizePath(idx, 2);
+
+        for (int i = 0; i < FRAMES && state.phase == VoidLight::ForagePhase::Moving; ++i) {
+            BehaviorContext ctx(hotData.transform, hotData, villager.getId(), idx, DT,
+                EntityHandle{}, Vector2D(0, 0), Vector2D(0, 0), false, edm.getBehaviorData(idx),
+                &pathData, memoryData, edm.getCharacterDataByIndex(idx), 0.0f, 0.0f, 1280.0f,
+                1280.0f, true, 0.0f, kNeutralFactionStanceRow, false, false,
+                edm.knockbackSidecar(), edm.npcNeedSidecar(), env, view);
+            Behaviors::executeForage(ctx, config, state);
+            if (moves) {
+                hotData.transform.position =
+                    hotData.transform.position + hotData.transform.velocity * DT;
+            }
+        }
+    };
+
+    runDetour(true);
+    BOOST_CHECK(state.phase == VoidLight::ForagePhase::Moving);
+    BOOST_CHECK_EQUAL(state.failedAttempts, 0u);
+    BOOST_CHECK(state.targetHandle == target);
+    BOOST_CHECK_GT((targetPos - hotData.transform.position).length(), (targetPos - start).length());
+
+    // Pushed back every frame (no displacement): no waypoint progress is a stall.
+    runDetour(false);
+    BOOST_CHECK(state.phase == VoidLight::ForagePhase::Searching);
+    BOOST_CHECK_EQUAL(state.failedAttempts, 1u);
+}
+
 BOOST_AUTO_TEST_CASE(ForageReengageRespectsDetectionScale) {
     auto& edm = EntityDataManager::Instance();
     const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Moving);
