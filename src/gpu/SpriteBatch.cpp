@@ -5,6 +5,7 @@
 #include "gpu/GPUTypes.hpp"
 #include "gpu/GPUTransferBuffer.hpp"
 #include "core/Logger.hpp"
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -292,22 +293,21 @@ void SpriteBatch::addQuadRotated(float cx, float cy, float halfW, float halfH,
     //   1: top-right    (+halfW, +halfH)
     //   2: bottom-right (+halfW, -halfH)
     //   3: bottom-left  (-halfW, -halfH)
-    struct {
-        float dx, dy;
-    } corners[4] = {
-        {-halfW, +halfH},
-        {+halfW, +halfH},
-        {+halfW, -halfH},
-        {-halfW, -halfH},
+    struct CornerUV {
+        float dx, dy, u, v;
     };
+    const std::array<CornerUV, 4> corners{{
+        {-halfW, +halfH, u0, v0},
+        {+halfW, +halfH, u1, v0},
+        {+halfW, -halfH, u1, v1},
+        {-halfW, -halfH, u0, v1},
+    }};
 
-    float uvs[4][2] = {
-        {u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}};
-
-    for (int i = 0; i < 4; ++i) {
-        float rx = corners[i].dx * cosA - corners[i].dy * sinA;
-        float ry = corners[i].dx * sinA + corners[i].dy * cosA;
-        v[i] = {cx + rx, cy + ry, uvs[i][0], uvs[i][1], r, g, b, a};
+    for (size_t i = 0; i < corners.size(); ++i) {
+        const CornerUV& c = corners[i];
+        float rx = c.dx * cosA - c.dy * sinA;
+        float ry = c.dx * sinA + c.dy * cosA;
+        v[i] = {cx + rx, cy + ry, c.u, c.v, r, g, b, a};
     }
 
     m_vertexCount += VERTICES_PER_SPRITE;

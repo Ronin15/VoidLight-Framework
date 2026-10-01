@@ -22,7 +22,7 @@ The template ships with the systems a game needs already working together (GPU r
 
 - **High-Performance AI System**
 
-    Data-Oriented Design with EntityDataManager as single source of truth. Cache-friendly, batch-processed AI supports 10K+ entities at 60+ FPS with simulation tiers (Active/Background/Hibernated), dense per-behavior state pools, sparse transient sidecars, and pathfinding and combat integration.
+    Batch-processed AI that keeps 10K+ entities running at 60+ FPS. Entities near the player get full simulation while distant ones run at reduced cost, and a library of behaviors (idle, wander, patrol, guard, follow, chase, flee, attack, and forage) comes with pathfinding and combat built in.
 
 - **Living World Simulation**
 
@@ -50,7 +50,7 @@ The template ships with the systems a game needs already working together (GPU r
 
 - **Fast, Safe Serialization**
   
-    Header-only binary serialization with smart pointer memory management, used by SaveGameManager for versioned save/load across platforms.
+    Header-only binary serialization with smart pointer memory management. It is the foundation for SaveGameManager's versioned, cross-platform save files; full save/load is still in progress.
 
 - **Testing & Analysis**
 
@@ -242,26 +242,15 @@ For the full, up-to-date documentation map, see [docs/README.md](docs/README.md)
 
 ---
 
-## Core Design Principles
+## Engineering Practices
 
-VoidLight-Framework is built around three commitments held simultaneously, not traded off against each other: **performance**, **correctness**, and **safety**. The build tooling, data layout, and test infrastructure exist specifically to hold all three at once.
+Beyond the [design priorities](#design-priorities) above, a few practices keep the engine fast and dependable across platforms and build types:
 
-**Performance**
-- Data-oriented design: EntityDataManager as the single source of truth, Structure-of-Arrays (SoA) storage for cache locality.
-- SIMD-accelerated hot paths (SSE2/NEON/AVX2 — see [SIMDMath](docs/utils/SIMDMath.md)) and adaptive threading via [WorkerBudget](docs/core/WorkerBudget.md) that scales from single-core to many-core with no manual tuning.
-- No per-frame allocations — reused buffers, `reserve()`d containers.
-- Race-to-idle scheduling for battery efficiency — see [Power Efficiency](docs/performance/PowerEfficiency.md).
-
-**Correctness**
-- Deterministic update ordering: managers run sequentially on the main thread; `EventManager` dispatch and deferred draining are main-thread-only and sequence-preserved.
-- Strong typing, `[[nodiscard]]` on critical fallible calls (`init()`, `load()`, `create()`), compile-time validation over runtime guessing.
-- Boost.Test coverage across managers, controllers, and cross-manager integration; ASan/TSan sanitizer builds catch memory errors and data races before they reach a shipped build.
-
-**Safety**
-- Memory safety by default: smart pointers and RAII throughout. Raw pointers are never stored for ownership or long-lived state — only materialized momentarily at a final API boundary (GPU submission, SIMD intrinsics).
-- Four build types (`Debug`/`ReleaseSafe`/`Release`/`Profile`) make safety-check-versus-optimization tradeoffs explicit and deliberate rather than an accident of one flag — see [Build Safety Controls](docs/performance/BuildSafetyControls.md) for exactly what's checked in which build.
-- Explicit contracts instead of silent assumptions: the little-endian save format is enforced with a compile-time `static_assert`, and hot-path SIMD reads against variable-length buffers carry explicit bounds assertions rather than relying on optimization flags to catch a mistake.
-- Cross-platform by construction, not by accident: unified codebase with platform-specific optimizations isolated behind the same abstractions (SIMDMath, GPU shader backends) everywhere else.
+- **SIMD on hot paths**: math-heavy loops use SSE2/AVX2 on x86-64 and NEON on ARM64 through one shared interface (see [SIMDMath](docs/utils/SIMDMath.md)).
+- **Battery-friendly frame pacing**: each frame finishes its work quickly and then idles until the next one (see [Power Efficiency](docs/performance/PowerEfficiency.md)).
+- **Build types with clear tradeoffs**: `Debug`, `ReleaseSafe`, `Release`, and `Profile` each make an explicit choice between safety checks and optimization (see [Build Safety Controls](docs/performance/BuildSafetyControls.md)).
+- **Mistakes caught early**: important fallible calls must have their results checked, and assumptions such as the save format's byte order are verified at compile time.
+- **Cross-platform by design**: one codebase, with platform-specific code kept behind shared abstractions such as SIMDMath and the GPU shader backends.
 
 ---
 
@@ -277,7 +266,6 @@ Contributions welcome!
 
 - Window icon support for all platforms (see `res/img/`)
 - Player and NPC controls: mouse, keyboard, controller (see `InputManager`)
-- Template can be adapted for 3D (see `GameEngine.cpp` and `TextureManager`)
 - For advanced usage, see [docs/README.md](docs/README.md)
 - This is a work in progress, and the bundled art is placeholder content credited below.
 

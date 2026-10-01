@@ -355,14 +355,14 @@ void InputManager::captureRebind() {
             SDL_GamepadAxis axis;
             bool supportsNegative;
         };
-        AxisEntry axes[] = {
+        constexpr std::array<AxisEntry, 6> axes{{
             {0, 0, SDL_GAMEPAD_AXIS_LEFTX, true},
             {1, 1, SDL_GAMEPAD_AXIS_LEFTY, true},
             {2, 2, SDL_GAMEPAD_AXIS_RIGHTX, true},
             {3, 3, SDL_GAMEPAD_AXIS_RIGHTY, true},
             {4, 0, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, false},
             {5, 0, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, false},
-        };
+        }};
         for (auto [positiveIdx, negativeIdx, axis, supportsNegative] : axes) {
             const float val = getGamepadAxisValue(0, axis);
             if (val > 0.5f) {
