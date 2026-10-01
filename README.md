@@ -80,13 +80,13 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
     
     Full guides, API references, best practices, and troubleshooting for all major systems.
 
-### Why Choose VoidLight-Framework?
+### Design Priorities
 
-- **Performance**: Engineered for cache efficiency, lock-free concurrency, and minimal CPU overhead—even with thousands of entities.
-- **Safety**: Smart pointers, RAII, strong typing, and robust error handling throughout.
-- **Extensibility**: Modular managers, clear APIs, and easy resource and UI customization.
-- **Developer Experience**: Clean code, strict style, automated testing, and comprehensive docs.
-- **Production-Ready Design**: Architecture and tooling designed for serious game development, with comprehensive testing infrastructure and performance validation.
+- **Data layout first**: entity state lives in `EntityDataManager` as structure-of-arrays, so hot loops walk contiguous memory instead of chasing pointers.
+- **Hardware-adaptive threading**: `WorkerBudget` decides for each system whether work is worth splitting across cores and how large each batch should be, so small workloads stay single-threaded and large ones use every available core, from a handheld to a desktop.
+- **No per-frame allocations on hot paths**: buffers are reserved up front and reused every frame.
+- **Explicit ownership**: RAII, smart pointers, and handles; no raw-pointer ownership.
+- **Tested and measured**: Boost.Test suites per system, ASan/TSan builds, static analysis, and benchmarks compared against stored baselines.
 
 ---
 
