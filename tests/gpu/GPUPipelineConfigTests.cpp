@@ -117,7 +117,7 @@ BOOST_AUTO_TEST_CASE(SpriteOpaqueConfigStructure) {
     auto config = GPUPipeline::createSpriteConfig(
         nullptr, nullptr,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        false  // opaque
+        false // opaque
     );
 
     // Opaque should have no blending
@@ -125,7 +125,7 @@ BOOST_AUTO_TEST_CASE(SpriteOpaqueConfigStructure) {
 
     // Should have correct vertex format
     BOOST_CHECK_EQUAL(config.vertexBufferCount, 1u);
-    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 3u);  // position, texcoord, color
+    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 3u); // position, texcoord, color
 
     // Verify color format
     BOOST_CHECK(config.colorFormat == SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
@@ -135,7 +135,7 @@ BOOST_AUTO_TEST_CASE(SpriteAlphaConfigStructure) {
     auto config = GPUPipeline::createSpriteConfig(
         nullptr, nullptr,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        true  // alpha blend
+        true // alpha blend
     );
 
     // Alpha should have blending enabled (premultiplied alpha)
@@ -149,8 +149,7 @@ BOOST_AUTO_TEST_CASE(SpriteConfigVertexStride) {
     auto config = GPUPipeline::createSpriteConfig(
         nullptr, nullptr,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        true
-    );
+        true);
 
     // Vertex stride should match SpriteVertex size (20 bytes)
     BOOST_CHECK_EQUAL(config.vertexBuffers[0].pitch, sizeof(SpriteVertex));
@@ -167,8 +166,7 @@ BOOST_AUTO_TEST_SUITE(ParticleConfigFactoryTests)
 BOOST_AUTO_TEST_CASE(ParticleConfigStructure) {
     auto config = GPUPipeline::createParticleConfig(
         nullptr, nullptr,
-        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
-    );
+        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 
     // Particles use the standard alpha blend state for the GPU pipeline
     BOOST_CHECK_EQUAL(config.enableBlend, true);
@@ -177,14 +175,13 @@ BOOST_AUTO_TEST_CASE(ParticleConfigStructure) {
 
     // Should have ColorVertex format
     BOOST_CHECK_EQUAL(config.vertexBufferCount, 1u);
-    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 2u);  // position, color
+    BOOST_CHECK_EQUAL(config.vertexAttributeCount, 2u); // position, color
 }
 
 BOOST_AUTO_TEST_CASE(ParticleConfigVertexStride) {
     auto config = GPUPipeline::createParticleConfig(
         nullptr, nullptr,
-        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
-    );
+        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 
     // Vertex stride should match ColorVertex size (12 bytes)
     BOOST_CHECK_EQUAL(config.vertexBuffers[0].pitch, sizeof(ColorVertex));
@@ -201,8 +198,7 @@ BOOST_AUTO_TEST_SUITE(PrimitiveConfigFactoryTests)
 BOOST_AUTO_TEST_CASE(PrimitiveConfigStructure) {
     auto config = GPUPipeline::createPrimitiveConfig(
         nullptr, nullptr,
-        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
-    );
+        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 
     // Primitives use standard alpha blending
     BOOST_CHECK_EQUAL(config.enableBlend, true);
@@ -225,8 +221,7 @@ BOOST_AUTO_TEST_SUITE(CompositeConfigFactoryTests)
 BOOST_AUTO_TEST_CASE(CompositeConfigStructure) {
     auto config = GPUPipeline::createCompositeConfig(
         nullptr, nullptr,
-        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
-    );
+        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 
     // Composite should have no blending (fullscreen quad)
     BOOST_CHECK_EQUAL(config.enableBlend, false);
@@ -239,8 +234,7 @@ BOOST_AUTO_TEST_CASE(CompositeConfigStructure) {
 BOOST_AUTO_TEST_CASE(CompositeConfigNoDepth) {
     auto config = GPUPipeline::createCompositeConfig(
         nullptr, nullptr,
-        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM
-    );
+        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
 
     // Composite pass doesn't need depth testing
     BOOST_CHECK_EQUAL(config.enableDepthTest, false);

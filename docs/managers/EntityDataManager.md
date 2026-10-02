@@ -30,10 +30,16 @@ Processing systems read from and write to EntityDataManager:
 
 ## Threading Contract
 
-**CRITICAL:**
-- **Structural operations** (create/destroy/register/getIndex) MUST be called from the main thread only
-- **Index-based accessors** (`getHotDataByIndex`, `getTransformByIndex`) are lock-free and safe for parallel batch processing
-- GameEngine::update() sequential order guarantees no concurrent structural changes
+One structural owner at a time (create, drain, register, getIndex, slot reuse):
+
+- **Gameplay:** the main thread is the owner.
+- **Load:** the load worker is the owner only inside LoadingState's exclusive window (`GameEngine::setGlobalPause(true)`). EventManager remains the gameplay and lifecycle bus; deferred drain stays on for `WorldLoaded`. Gameplay producers are paused so they do not enqueue onto that bus.
+- **Tests** that call `WorldManager::loadNewWorld` on the test thread are the owner.
+- **Workers during gameplay:** index-based hot data, non-overlapping batches, and `destroyEntity` enqueue only. Do not create, drain, or compact.
+- `create*` and `processDestructionQueue` share `m_structuralMutex` so a missed pause is a lock, not a data race.
+- Index-based accessors (`getHotDataByIndex`, `getTransformByIndex`) are lock-free for parallel batches with non-overlapping ranges.
+
+Legal `processDestructionQueue` callers: `GameEngine::processBackgroundTasks` (skipped when globally paused), public `WorldManager::unloadWorld`, and `prepareForStateTransition`. `unloadWorldLocked` does not drain.
 
 ## Data Structures
 
@@ -61,7 +67,7 @@ struct EntityHotData {
 static_assert(sizeof(EntityHotData) == 64, "One cache line");
 ```
 
-Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state.
+Handle generation is tracked in `m_generations`, not in the hot cache line. Transient knockback is stored in `SparseSidecar<KnockbackData>` so only entities currently under knockback occupy dense state. Player-only faction standing is `SparseSidecar<PlayerFactionStanding>` (16 B, 16 int8 scores). `NPCMemoryData` stays 448 B. Standing dies with the player slot and is not cleared by `AIManager::resetFactionStances()`.
 
 ### TransformData (32 bytes)
 
@@ -128,13 +134,13 @@ struct BehaviorConfigRef {
     uint32_t index;                 // slot index in that pool
 };
 
-// EDM holds one pair per variant (Idle, Wander, Chase, Patrol, Flee, Follow, Guard, Attack).
-// Config and state pools share the same index by invariant (managed lockstep by
-// reassignBehaviorConfig / clearBehaviorConfig).
+// EDM holds one pair per variant (Idle, Wander, Chase, Patrol, Flee, Follow, Guard, Attack, Forage).
+// Config and state pools share the same index by invariant (AIManager commit
+// uses reassignBehaviorConfig / clearBehaviorConfig as storage primitives).
 std::vector<WanderBehaviorConfig> m_wanderConfigs;
 std::vector<WanderStateData>      m_wanderStates;
 std::vector<size_t>               m_wanderOwners;   // owner edmIndex per slot
-// ... repeated for each of the 8 variants.
+// ... repeated for each of the 9 variants.
 ```
 
 Access:
@@ -179,9 +185,11 @@ void prepareForStateTransition();
 
 ```cpp
 // Create new entities (returns handle)
-EntityHandle createNPC(const Vector2D& position, float halfWidth = 16.0f, float halfHeight = 16.0f);
-EntityHandle createPlayer(const Vector2D& position);
-EntityHandle createDroppedItem(const Vector2D& position, ResourceHandle handle, int quantity = 1);
+// NPC factories (createNPC() is private; these auto-register JSON suggestedBehavior)
+EntityHandle createNPCWithRaceClass(const Vector2D& position, const std::string& race, const std::string& charClass, Sex sex = Sex::Unknown, uint8_t factionOverride = 0xFF);
+EntityHandle createMonster(const Vector2D& position, const std::string& monsterType, const std::string& variant, Sex sex = Sex::Unknown, uint8_t factionOverride = 0xFF);
+EntityHandle createAnimal(const Vector2D& position, const std::string& species, const std::string& role, Sex sex = Sex::Unknown, uint8_t factionOverride = 0xFF);
+EntityHandle createDroppedItem(const Vector2D& position, ResourceHandle handle, int quantity = 1, const std::string& worldId = "");
 EntityHandle createContainer(const Vector2D& position, ContainerType type, uint16_t maxSlots = 20, uint8_t lockLevel = 0, const std::string& worldId = "");
 EntityHandle createHarvestable(const Vector2D& position, ResourceHandle yieldResource, int yieldMin = 1, int yieldMax = 3, float respawnTime = 60.0f, const std::string& worldId = "", HarvestType harvestType = HarvestType::Gathering);
 EntityHandle createProjectile(const Vector2D& position, const Vector2D& velocity, EntityHandle owner, float damage, float lifetime = 5.0f);
@@ -191,7 +199,7 @@ EntityHandle createTrigger(const Vector2D& position, float halfWidth, float half
 
 // Entity destruction
 void destroyEntity(EntityHandle handle);
-void processDestructionQueue();  // Call at end of frame
+void processDestructionQueue();  // GameEngine frame-end, public unloadWorld, prepareForStateTransition
 ```
 
 ### Entity Registration (Legacy Support)
@@ -199,9 +207,8 @@ void processDestructionQueue();  // Call at end of frame
 For entities created via legacy `Entity` subclass constructors:
 
 ```cpp
-EntityHandle registerNPC(EntityID entityId, const Vector2D& position, float halfWidth, float halfHeight, float health, float maxHealth);
-EntityHandle registerPlayer(EntityID entityId, const Vector2D& position, float halfWidth, float halfHeight);
-EntityHandle registerDroppedItem(EntityID entityId, const Vector2D& position, ResourceHandle handle, int quantity);
+EntityHandle registerPlayer(EntityID entityId, const Vector2D& position, float halfWidth = 32.0f, float halfHeight = 32.0f);
+EntityHandle registerDroppedItem(EntityID entityId, const Vector2D& position, ResourceHandle handle, int quantity = 1);
 void unregisterEntity(EntityID entityId);
 ```
 
@@ -252,7 +259,15 @@ AreaEffectData& getAreaEffectData(EntityHandle handle);
 
 // By index (for batch processing)
 CharacterData& getCharacterDataByIndex(size_t index);
+
+// Storage write: isDepleted = true, currentRespawn = respawnTime.
+// Main thread only; HarvestCommit owns validation, WRM version bump, and events.
+void markHarvestableDepleted(uint32_t typeLocalIndex);
 ```
+
+Harvestable depletion goes through `HarvestCommit::commit` (world layer) for
+both the player and AI foragers; do not write `isDepleted` from controllers or
+behaviors. Respawn ticking is not implemented yet (Slice 6.1).
 
 ### Path Data Access
 
@@ -281,7 +296,7 @@ void initBehaviorData(size_t index, BehaviorType type);
 void clearBehaviorData(size_t index);
 ```
 
-Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index, and `reassignBehaviorConfig(...)` / `clearBehaviorConfig(...)` for structural changes. `BehaviorData` is shared cross-behavior state only.
+Variant-specific behavior config and state live in per-type dense pools. Use `getBehaviorConfigRef(index)` to read the active `BehaviorType` and pool index. Gameplay assignment is `AIManager::assignBehavior` / `Behaviors::switchBehavior`; `reassignBehaviorConfig` / `clearBehaviorConfig` are EDM storage primitives used on the AIManager commit path, not a public switch API. `BehaviorData` is shared cross-behavior state only.
 
 ### Knockback Sidecar
 
@@ -296,6 +311,53 @@ SparseSidecar<KnockbackData>& knockbackSidecar() noexcept;
 
 `EventManager` applies knockback when processing `DamageEvent`. `AIManager` and player movement consume and decay it during update. Expired entries are cleared on the main thread after worker batches join.
 
+### NPC Need Sidecar
+
+```cpp
+NpcNeedData& ensureNpcNeed(size_t edmIndex);          // main thread; lazy apply()
+void removeNpcNeed(size_t edmIndex);                  // main thread, outside AI batches
+bool hasNpcNeed(size_t edmIndex) const noexcept;
+float getNpcNeedPressure(size_t edmIndex) const noexcept;  // 0 when absent
+void setNpcNeedPressure(size_t edmIndex, float pressure);  // clamps to [0, 1]
+SparseSidecar<NpcNeedData>& npcNeedSidecar() noexcept;
+```
+
+`NpcNeedData` (24 bytes: `pressure`, `retryCooldown`, `home`, `leashRadius`,
+`failCount`, `returnBehavior`) is survival-need storage for civilian NPCs.
+Storage only: growth rate, forage threshold, backoff, and the merchant leash
+value are `Behaviors::` policy (`seedNeed` writes `home`/`leashRadius` once when
+the entry is created). Entries are
+created on the main thread by `AIManager` (civilian Idle/Wander default-config
+role assignment) and `initForage`, and removed on the main thread only when
+`AIManager` reassigns the entity to a role that has no need (preset, explicit
+config, or non-civilian role). Workers never create or remove entries.
+A worker may mutate only its own entity's entry via `SparseSidecar::get()`
+(passed as `BehaviorContext::needs`). The sidecar's reset hooks clear it on
+slot reuse, destroy, `prepareForStateTransition()`, and `clean()`.
+
+### Player Faction Standing Sidecar
+
+```cpp
+int8_t getPlayerFactionStanding(size_t edmIndex, uint8_t faction) const; // 0 if missing/oob
+void addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta); // clamp; lazy apply()
+```
+
+Storage only; the single source of truth for NPC-faction relations toward the player. Incident deltas, clamp, and the derived Hostile/Neutral/Allied relation live on `AIManager` (main thread). Types header does not include AIManager. Cleared on slot destroy, reuse, `prepareForStateTransition()`, and `clean()`.
+
+The player has no faction: `registerPlayer` sets `CharacterData::faction = CharacterData::NO_FACTION` (0xFF), and `setFaction` rejects `EntityKind::Player` with a warning. (The factory `factionOverride = 0xFF` "no override" parameter is unrelated.)
+
+### Behavior Role Fields (Slice 7 scaffolding)
+
+`CharacterData::behaviorType` and `CharacterData::homeRole` are written by `AIManager` only: both on behavior assignment, and `behaviorType` again on each transition commit. No production code reads either field yet; production AI reads `BehaviorConfig.type`. They are scaffolding for the Slice 7 selector (`homeRole` is the role to restore to, not the current type) and are checked only by tests today.
+
+### NPC Collision Grouping
+
+```cpp
+void setNpcCollisionAsEnemy(size_t index, bool asEnemy);
+```
+
+Storage setter. Does not consult faction id. `asEnemy` uses the existing Enemy vs Default layer/mask branches. Out-of-range index is a no-op. Create NPC/monster/animal defaults to not-Enemy. `setFaction` writes the id only; `AIManager` syncs collision from the faction's standing-derived relation toward the player (`Layer_Enemy` ⇔ Hostile).
+
 ### Inventory Data
 
 ```cpp
@@ -303,6 +365,7 @@ uint32_t createInventory(uint16_t maxSlots, bool worldTracked = false);
 bool initNPCAsMerchant(EntityHandle handle, uint16_t maxSlots = 20);
 uint32_t getNPCInventoryIndex(EntityHandle handle) const;
 bool addToInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity);
+bool canAddToInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity) const;
 bool removeFromInventory(uint32_t inventoryIndex, ResourceHandle handle, int quantity);
 int getInventoryQuantity(uint32_t inventoryIndex, ResourceHandle handle) const;
 std::unordered_map<ResourceHandle, int> getInventoryResources(uint32_t inventoryIndex) const;
@@ -317,6 +380,7 @@ Inventory APIs are split by use case:
 
 - `getInventoryResources(...)` returns aggregate quantities by `ResourceHandle` for world/resource/social systems that do not care about layout.
 - `getInventorySlot(...)` and `getInventorySlots(...)` expose ordered physical slot contents. Prefer the span-based bulk read for UI refreshes so callers take one inventory lock and reuse caller-owned storage.
+- `canAddToInventory(...)` is a non-mutating query that returns exactly what `addToInventory(...)` would return now. Both share the private `inventoryAddCapacityLocked` capacity rule: all inline slots count regardless of `maxSlots` (see `docs/review-non-issues.md`), overflow slots are read with `find()`. AI harvest commits use it to reject a yield before depleting the node.
 - `swapInventorySlots(...)` is a storage primitive only. It validates the inventory and slot indices, works across inline and overflow slots, preserves `usedSlots`, and marks the inventory dirty only when slot contents actually change.
 
 Drag/drop, player policy, hotbar assignment, and UI feedback belong in `InventoryController`, not EDM.
@@ -374,8 +438,8 @@ for (size_t edmIndex : edm.getActiveIndices()) {
 Tier assignments are recalculated periodically (not every frame) for performance:
 
 ```cpp
-// In GameEngine or BackgroundSimulationManager
-// Called every ~60 frames (~1 second at 60Hz)
+// In BackgroundSimulationManager::update() (the only production caller)
+// TIER_UPDATE_INTERVAL = 120 frames (~2 seconds at 60Hz), or sooner when invalidateTiers() marks tiers dirty
 if (m_framesSinceTierUpdate++ >= TIER_UPDATE_INTERVAL) {
     edm.updateSimulationTiers(playerPosition, activeRadius, backgroundRadius);
     m_framesSinceTierUpdate = 0;
@@ -436,8 +500,8 @@ EntityHandle getHandle(size_t index) const;
 ```cpp
 auto& edm = EntityDataManager::Instance();
 
-// Create NPC
-EntityHandle npc = edm.createNPC(Vector2D(100, 200), 16.0f, 16.0f);
+// Create NPC (race/class factory; auto-registers JSON suggestedBehavior)
+EntityHandle npc = edm.createNPCWithRaceClass(Vector2D(100, 200), "Human", "Guard");
 
 // Access data
 auto& transform = edm.getTransform(npc);
@@ -445,7 +509,7 @@ transform.velocity = Vector2D(50, 0);
 
 auto& character = edm.getCharacterData(npc);
 character.health = 80.0f;
-character.faction = 1;  // Enemy
+character.faction = 1;  // Faction id; agro is AIManager stance; collision grouping is stance vs player
 ```
 
 ### Batch Processing (AI/Collision)
@@ -482,21 +546,14 @@ void AIManager::processBatch(float dt, size_t start, size_t end)
 ### Tier-Based Processing
 
 ```cpp
-void GameEngine::update(float dt) {
-    auto& edm = EntityDataManager::Instance();
+// GameEngine::update() manager slots (main thread, sequential)
+mp_aiManager->update(deltaTime);         // Active tier
+mp_collisionManager->update(deltaTime);  // Active tier with collision
 
-    // Update tiers periodically
-    edm.updateSimulationTiers(playerPosition);
-
-    // AIManager processes Active tier
-    AIManager::Instance().update(dt);
-
-    // CollisionManager processes Active tier with collision
-    CollisionManager::Instance().update(dt);
-
-    // BackgroundSimManager processes Background tier at 10Hz
-    BackgroundSimulationManager::Instance().update(playerPosition, dt);
-}
+// BackgroundSimulationManager processes Background tier at 10Hz and owns the
+// periodic tier recalculation: it calls
+// edm.updateSimulationTiers(referencePoint, activeRadius, backgroundRadius)
+mp_backgroundSimManager->update(mp_aiManager->getPlayerPosition(), deltaTime);
 ```
 
 ## Performance Characteristics
@@ -506,7 +563,7 @@ void GameEngine::update(float dt) {
 | `getHotDataByIndex()` | O(1) | Inlined, zero overhead |
 | `getTransformByIndex()` | O(1) | Inlined, zero overhead |
 | `getIndex(handle)` | O(1) | Map lookup (main thread only) |
-| `createNPC()` | O(1) amortized | May grow vectors |
+| `createNPCWithRaceClass()` | O(1) amortized | May grow vectors |
 | `destroyEntity()` | O(1) | Queued, processed end of frame |
 | `updateSimulationTiers()` | O(n) | Called periodically, not every frame |
 

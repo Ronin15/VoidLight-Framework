@@ -21,6 +21,8 @@
 #include <iostream>
 #include <map>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 // Simple test fixture for WeatherEvent
 struct WeatherEventFixture {
@@ -59,6 +61,51 @@ BOOST_FIXTURE_TEST_CASE(BasicProperties, WeatherEventFixture) {
     BOOST_CHECK_EQUAL(customWeather->getWeatherTypeString(), "AcidRain");
 }
 
+// The string constructor parses canonical names (the EventFactory path) and
+// carries the same type and per-type defaults as the enum constructor.
+BOOST_FIXTURE_TEST_CASE(StringConstructorParsesNamedTypes, WeatherEventFixture) {
+    const std::vector<std::pair<std::string, WeatherType>> names = {
+        {"Clear", WeatherType::Clear}, {"Cloudy", WeatherType::Cloudy},
+        {"Rainy", WeatherType::Rainy}, {"Stormy", WeatherType::Stormy},
+        {"Foggy", WeatherType::Foggy}, {"Snowy", WeatherType::Snowy},
+        {"Windy", WeatherType::Windy}};
+
+    for (const auto& [name, type] : names) {
+        BOOST_TEST_CONTEXT("weather " << name) {
+            const WeatherEvent fromName("byName", name);
+            const WeatherEvent fromEnum("byEnum", type);
+            BOOST_CHECK_EQUAL(fromName.getWeatherType(), type);
+            BOOST_CHECK_EQUAL(fromName.getWeatherTypeString(), name);
+            const auto& got = fromName.getWeatherParams();
+            const auto& want = fromEnum.getWeatherParams();
+            BOOST_CHECK_EQUAL(got.intensity, want.intensity);
+            BOOST_CHECK_EQUAL(got.visibility, want.visibility);
+            BOOST_CHECK_EQUAL(got.windSpeed, want.windSpeed);
+            BOOST_CHECK_EQUAL(got.windDirection, want.windDirection);
+            BOOST_CHECK_EQUAL(got.transitionTime, want.transitionTime);
+            BOOST_CHECK_EQUAL(got.soundEffect, want.soundEffect);
+
+            BOOST_CHECK_EQUAL(WeatherEvent::weatherTypeFromName(name), type);
+        }
+    }
+
+    const WeatherEvent acid("acid", "AcidRain");
+    BOOST_CHECK_EQUAL(acid.getWeatherType(), WeatherType::Custom);
+    BOOST_CHECK_EQUAL(acid.getWeatherTypeString(), "AcidRain");
+    const WeatherEvent customEnum("customEnum", WeatherType::Custom);
+    BOOST_CHECK_EQUAL(acid.getWeatherParams().intensity,
+        customEnum.getWeatherParams().intensity);
+    BOOST_CHECK_EQUAL(acid.getWeatherParams().visibility,
+        customEnum.getWeatherParams().visibility);
+
+    // Names are case-sensitive.
+    const WeatherEvent lower("lower", "rainy");
+    BOOST_CHECK_EQUAL(lower.getWeatherType(), WeatherType::Custom);
+    BOOST_CHECK_EQUAL(lower.getWeatherTypeString(), "rainy");
+
+    BOOST_CHECK_EQUAL(WeatherEvent::weatherTypeFromName(""), WeatherType::Custom);
+}
+
 // Test weather parameters
 BOOST_FIXTURE_TEST_CASE(WeatherParameters, WeatherEventFixture) {
     auto weatherEvent = std::make_shared<WeatherEvent>("Test", WeatherType::Cloudy);
@@ -68,7 +115,6 @@ BOOST_FIXTURE_TEST_CASE(WeatherParameters, WeatherEventFixture) {
     params.intensity = 0.8f;
     params.visibility = 0.5f;
     params.transitionTime = 3.0f;
-    params.particleEffect = "clouds";
     params.soundEffect = "wind_sound";
 
     weatherEvent->setWeatherParams(params);
@@ -77,7 +123,6 @@ BOOST_FIXTURE_TEST_CASE(WeatherParameters, WeatherEventFixture) {
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().intensity, 0.8f);
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().visibility, 0.5f);
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().transitionTime, 3.0f);
-    BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().particleEffect, "clouds");
     BOOST_CHECK_EQUAL(weatherEvent->getWeatherParams().soundEffect, "wind_sound");
 }
 
@@ -156,7 +201,6 @@ BOOST_FIXTURE_TEST_CASE(EventExecution, WeatherEventFixture) {
     // Set some parameters
     WeatherParams params;
     params.intensity = 1.0f;
-    params.particleEffect = "lightning";
     params.soundEffect = "thunder";
     event->setWeatherParams(params);
 
@@ -171,7 +215,13 @@ BOOST_FIXTURE_TEST_CASE(EventExecution, WeatherEventFixture) {
 BOOST_FIXTURE_TEST_CASE(RegionNameOnly_MismatchFails_MatchPasses, WeatherEventFixture) {
     // Generate world (must be >= 26x26 to satisfy VILLAGE_RADIUS in WorldGenerator)
     VoidLight::WorldGenerationConfig cfg{};
-    cfg.width = 30; cfg.height = 30; cfg.seed = 1234; cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f; cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+    cfg.width = 30;
+    cfg.height = 30;
+    cfg.seed = 1234;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
 
     // Force tile (0,0) biome to FOREST deterministically
@@ -195,7 +245,13 @@ BOOST_FIXTURE_TEST_CASE(RegionNameOnly_MismatchFails_MatchPasses, WeatherEventFi
 BOOST_FIXTURE_TEST_CASE(RegionAndBounds_BothMustPass, WeatherEventFixture) {
     // Generate world (must be >= 26x26 to satisfy VILLAGE_RADIUS in WorldGenerator)
     VoidLight::WorldGenerationConfig cfg{};
-    cfg.width = 30; cfg.height = 30; cfg.seed = 5678; cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f; cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+    cfg.width = 30;
+    cfg.height = 30;
+    cfg.seed = 5678;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
     auto tile = WorldManager::Instance().getTileCopyAt(0, 0);
     BOOST_REQUIRE(tile.has_value());
@@ -263,7 +319,7 @@ BOOST_FIXTURE_TEST_CASE(AutoWeatherToggle, GameTimeWeatherFixture) {
 
     // Toggle multiple times
     gameTime->enableAutoWeather(true);
-    gameTime->enableAutoWeather(true);  // Enabling when already enabled
+    gameTime->enableAutoWeather(true); // Enabling when already enabled
     BOOST_CHECK(gameTime->isAutoWeatherEnabled());
 }
 
@@ -314,7 +370,7 @@ BOOST_FIXTURE_TEST_CASE(RollWeatherForCurrentSeason, GameTimeWeatherFixture) {
         // Verify it's a valid weather type (enum range check)
         int weatherVal = static_cast<int>(weather);
         BOOST_CHECK_GE(weatherVal, 0);
-        BOOST_CHECK_LE(weatherVal, 7);  // WeatherType enum has 8 values (0-7)
+        BOOST_CHECK_LE(weatherVal, 7); // WeatherType enum has 8 values (0-7)
     }
 }
 
@@ -362,8 +418,8 @@ BOOST_FIXTURE_TEST_CASE(WeatherProbabilityDistribution, GameTimeWeatherFixture) 
     BOOST_CHECK_GT(counts[WeatherType::Clear], counts[WeatherType::Rainy]);
 
     // Check that non-summer weather types have zero or near-zero
-    BOOST_CHECK_EQUAL(counts[WeatherType::Foggy], 0);  // Summer has 0% foggy
-    BOOST_CHECK_EQUAL(counts[WeatherType::Snowy], 0);  // Summer has 0% snowy
+    BOOST_CHECK_EQUAL(counts[WeatherType::Foggy], 0); // Summer has 0% foggy
+    BOOST_CHECK_EQUAL(counts[WeatherType::Snowy], 0); // Summer has 0% snowy
 
     // Cloudy should be more common than rainy (20% vs 15%)
     // Allow some variance due to randomness
@@ -394,8 +450,8 @@ BOOST_FIXTURE_TEST_CASE(SeasonWeatherProbabilitiesSumToOne, GameTimeWeatherFixtu
         const auto& probs = config.weatherProbs;
 
         float sum = probs.clear + probs.cloudy + probs.rainy +
-                    probs.stormy + probs.foggy + probs.snowy + probs.windy;
+            probs.stormy + probs.foggy + probs.snowy + probs.windy;
 
-        BOOST_CHECK_CLOSE(sum, 1.0f, 1.0f);  // Allow 1% tolerance
+        BOOST_CHECK_CLOSE(sum, 1.0f, 1.0f); // Allow 1% tolerance
     }
 }

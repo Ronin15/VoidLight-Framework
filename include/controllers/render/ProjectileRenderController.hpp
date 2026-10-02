@@ -24,8 +24,7 @@ namespace VoidLight {
 struct GPUSceneContext;
 }
 
-class ProjectileRenderController : public ControllerBase
-{
+class ProjectileRenderController : public ControllerBase {
 public:
     ProjectileRenderController() = default;
     ~ProjectileRenderController() override = default;

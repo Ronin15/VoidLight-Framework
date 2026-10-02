@@ -22,10 +22,11 @@ EDM should remain a storage and aggregation layer.
 
 AI-layer behavior code owns interpretation:
 
-- personality-scaled emotion changes
 - witnessed-combat falloff and alert/flee decision policy
 - alert/fear/aggression responses
-- emotional contagion pre-pass in `AIManager::update()`
+- emotional **decay** in the AI batch fused loop (`edm.updateEmotionalDecay`)
+
+Personality-scaled emotion deltas and an emotional contagion pre-pass are **not** implemented. `recordCombatEvent()` is personality-agnostic. Social emotion writes in `AIManager::applySocialInteraction` use fixed deltas.
 
 ## Common Flows
 

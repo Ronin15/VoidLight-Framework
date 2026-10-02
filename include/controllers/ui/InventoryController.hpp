@@ -98,7 +98,7 @@ private:
     bool finishContainerToInventoryTransfer();
     bool finishInventoryToContainerTransfer();
     bool finishContainerToHotbarTransfer(HudController& hudController,
-                                         size_t hotbarSlot);
+        size_t hotbarSlot);
     bool lootAllFromOpenContainer();
     bool transferContainerItemToPlayer(const InventoryGridEntry& entry);
     bool transferPlayerItemToContainer(const InventoryGridEntry& entry);
@@ -106,7 +106,7 @@ private:
     void setContainerComponentsVisible(bool visible);
     [[nodiscard]] bool hasOpenContainer() const;
     void dispatchPlayerResourceChange(const InventoryResourceChange& change,
-                                      const std::string& reason) const;
+        const std::string& reason) const;
     [[nodiscard]] int findInventorySlotAtMouse() const;
     [[nodiscard]] int findContainerSlotAtMouse() const;
     [[nodiscard]] int findHotbarSlotAtMouse() const;

@@ -23,4 +23,4 @@ private:
     std::reference_wrapper<Player> m_player;
 };
 
-#endif  // PLAYER_DYING_STATE_HPP
+#endif // PLAYER_DYING_STATE_HPP

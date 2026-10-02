@@ -19,38 +19,30 @@
  * - Scales to 10K+ entities while maintaining 60+ FPS
  * - Lock-free request queuing with minimal contention
  *
- * ARCHITECTURE: Strict Event-Driven Grid Rebuilding
- * ===================================================
- * Grid rebuilds happen ONLY via event system (no synchronous fallbacks):
- *
- * 1. StaticCollidersReadyEvent → PathfinderManager::onStaticCollidersReady() → rebuildGrid() (async)
- * 2. CollisionObstacleChanged → PathfinderManager::onCollisionObstacleChanged() → rebuildGrid() (async)
- * 3. TileChanged → PathfinderManager::onTileChanged() → rebuildGrid() (async)
+ * ARCHITECTURE: Event-Driven Grid Rebuilding
+ * ===========================================
+ * 1. StaticCollidersReadyEvent → onStaticCollidersReady() → rebuildGrid(): full
+ *    rebuild on ThreadSystem, detached from the frame. This is the load-time
+ *    exception: LoadingState holds the global pause and waits on isGridReady(),
+ *    so no main-thread static mutation overlaps it.
+ * 2. CollisionObstacleChanged / TileChanged → mark dirty cells on the current
+ *    grid and invalidate cached paths through the area. Nothing is rebuilt in
+ *    the handler.
+ * 3. update() applies dirty cells: copies the published grid, rebuilds the
+ *    dirty rows on the copy (WorkerBudget batches, joined before update()
+ *    returns), then publishes the copy. Published grids are never mutated in
+ *    place; in-flight path requests keep the snapshot they captured.
  *
  * Event Flow for World Loading:
  * - WorldManager fires WorldLoadedEvent after world data is ready
  * - CollisionManager receives WorldLoadedEvent, creates static collision bodies
+ *   (no per-body CollisionObstacleChanged during that rebuild)
  * - CollisionManager fires StaticCollidersReadyEvent when bodies are complete
  * - PathfinderManager receives StaticCollidersReadyEvent, builds navigation grid
  *
- * This ordering ensures PathfinderManager can query CollisionManager for obstacle
- * data during grid construction without race conditions.
- *
- * Integration Requirements:
- * - GameEngine MUST call EventManager::update() each frame to process events
- * - CollisionManager MUST fire StaticCollidersReadyEvent after rebuilding static bodies
- * - CollisionManager MUST fire CollisionObstacleChanged when individual obstacles change
- *
  * Entity Behavior When Grid Not Ready:
- * - PathfindingResult::NO_PATH_FOUND returned if grid doesn't exist
- * - Entities should continue current path or use fallback behavior
- * - Retry path request next frame (grid rebuild completes asynchronously)
- *
- * This ensures:
- * - No blocking operations on main thread (grid rebuilds on worker threads)
- * - Clean separation between pathfinding and world systems
- * - Testable event-driven architecture
- * - Entities handle gracefully degraded service during rebuilds
+ * - requestPathToEDM() returns 0 if no grid exists
+ * - Entities should continue current path or use fallback behavior and retry
  */
 
 #include "utils/Vector2D.hpp"
@@ -68,8 +60,8 @@
 
 // Forward declarations
 namespace VoidLight {
-    class PathfindingGrid;
-    enum class PathfindingResult : uint8_t;
+class PathfindingGrid;
+enum class PathfindingResult : uint8_t;
 }
 
 // Do not include internal AI headers here; keep public API stable and minimal.
@@ -87,9 +79,9 @@ public:
     // Public request priority (stable API)
     enum class Priority : int {
         Critical = 0,
-        High     = 1,
-        Normal   = 2,
-        Low      = 3
+        High = 1,
+        Normal = 2,
+        Low = 3
     };
 
     /**
@@ -111,7 +103,11 @@ public:
     bool isInitialized() const;
 
     /**
-     * @brief Updates pathfinding systems and processes pending requests
+     * @brief Commits completed paths and applies dirty grid cells
+     *
+     * Main thread. Dirty rows are rebuilt on a copy of the published grid in
+     * WorkerBudget batches that join before this returns; the copy is then
+     * published. No allocation when nothing is dirty.
      */
     void update();
 
@@ -122,7 +118,9 @@ public:
 
     /**
      * @brief Prepares PathfinderManager for state transition
-     * Clears transient data while keeping the manager initialized
+     * Clears transient data and drops the pathfinding grid while keeping
+     * the manager initialized. Loading waits for the new world's
+     * StaticCollidersReady rebuild before isGridReady() is true again.
      */
     void prepareForStateTransition();
 
@@ -146,35 +144,12 @@ public:
 
     /**
      * @brief Checks if the pathfinding grid is ready for use
-     * @return true if grid exists and no pending rebuilds, false otherwise
+     * @return true if a current-world grid exists and rebuild futures are done.
+     *         False after unload/transition until StaticCollidersReady rebuild.
      */
     bool isGridReady() const;
 
     // ===== Pathfinding Request Interface =====
-
-    /**
-     * @brief Request a path asynchronously (ULTRA-HIGH-PERFORMANCE)
-     * @param entityId The entity requesting the path
-     * @param start Starting position in world coordinates
-     * @param goal Goal position in world coordinates
-     * @param priority PathPriority level for request scheduling
-     * @param callback Callback when path is ready (called from background thread)
-     * @return Request ID for tracking (0 if failed)
-     *
-     * This method completes in <0.001ms with zero blocking operations:
-     * - Lock-free request queue enqueue only
-     * - No mutex locks, no hash operations, no complex math
-     * - All pathfinding computation happens on background thread
-     * - Cache lookups and A* computation fully asynchronous
-     * - Designed for 10K+ requests per second throughput
-     */
-    uint64_t requestPath(
-        EntityID entityId,
-        const Vector2D& start,
-        const Vector2D& goal,
-        Priority priority = Priority::Normal,
-        std::function<void(EntityID, const std::vector<Vector2D>&)> callback = nullptr
-    );
 
     /**
      * @brief Gets the current size of the request queue
@@ -193,9 +168,9 @@ public:
     /**
      * @brief Request a path asynchronously with result written to EDM
      *
-     * Same async performance as requestPath() but writes result directly to
-     * EntityDataManager::PathData instead of invoking a callback.
-     * Eliminates shared_from_this() and lambda allocation overhead.
+     * Production pathfinding API. Worker threads compute the path and enqueue a
+     * completion payload; call commitCompletedPaths() on the main thread to apply
+     * the result to EntityDataManager::PathData.
      *
      * @param edmIndex Entity's EDM index (result written to EDM::getPathData(edmIndex))
      * @param start Starting position in world coordinates
@@ -204,8 +179,8 @@ public:
      * @return Request ID for tracking (0 if failed)
      */
     uint64_t requestPathToEDM(size_t edmIndex, const Vector2D& start,
-                              const Vector2D& goal,
-                              Priority priority = Priority::Normal);
+        const Vector2D& goal,
+        Priority priority = Priority::Normal);
 
     /**
      * @brief Commit worker-computed EDM path results on main thread.
@@ -219,23 +194,13 @@ public:
     // ===== Grid Management =====
 
     /**
-     * @brief Rebuild the pathfinding grid from world data
-     * @param allowIncremental If true, allow incremental rebuild if grid has dirty regions (default: true)
+     * @brief Full rebuild of the pathfinding grid from world data
+     *
+     * Runs detached on ThreadSystem and publishes a new grid when done
+     * (isGridReady() tracks it). Production calls it only from
+     * StaticCollidersReady during a load; dirty cells are applied by update().
      */
-    void rebuildGrid(bool allowIncremental = true);
-
-    /**
-     * @brief Add a temporary weight field (for avoidance)
-     * @param center Center of the weight field in world coordinates
-     * @param radius Radius of the weight field
-     * @param weight Weight multiplier (higher = more expensive to traverse)
-     */
-    void addTemporaryWeightField(const Vector2D& center, float radius, float weight);
-
-    /**
-     * @brief Clear all temporary weight fields
-     */
-    void clearWeightFields();
+    void rebuildGrid();
 
     // ===== Configuration =====
 
@@ -288,15 +253,15 @@ public:
     Vector2D adjustSpawnToNavigable(const Vector2D& desired, float halfW = 16.0f, float halfH = 16.0f, float interiorMargin = 150.0f) const;
     // Area-constrained spawn adjustment
     Vector2D adjustSpawnToNavigableInRect(const Vector2D& desired,
-                                          float halfW, float halfH,
-                                          float interiorMargin,
-                                          float minX, float minY,
-                                          float maxX, float maxY) const;
+        float halfW, float halfH,
+        float interiorMargin,
+        float minX, float minY,
+        float maxX, float maxY) const;
     Vector2D adjustSpawnToNavigableInCircle(const Vector2D& desired,
-                                            float halfW, float halfH,
-                                            float interiorMargin,
-                                            const Vector2D& center,
-                                            float radius) const;
+        float halfW, float halfH,
+        float interiorMargin,
+        const Vector2D& center,
+        float radius) const;
 
     /**
      * @brief Follow a path step for entity movement
@@ -309,8 +274,8 @@ public:
      * @return true if successfully following path, false if path complete
      */
     bool followPathStep(const EntityPtr& entity, const Vector2D& currentPos,
-                       std::vector<Vector2D>& path, size_t& pathIndex,
-                       float speed, float nodeRadius = 64.0f) const;
+        std::vector<Vector2D>& path, size_t& pathIndex,
+        float speed, float nodeRadius = 64.0f) const;
 
     /**
      * @brief Get dynamic hierarchical threshold for current world
@@ -361,6 +326,16 @@ public:
 
 private:
     using PathCallback = std::function<void(EntityID, const std::vector<Vector2D>&)>;
+
+    // Internal cache-fill request used by pre-warm. Not the production AI API —
+    // callers must use requestPathToEDM() + commitCompletedPaths().
+    uint64_t requestPath(
+        EntityID entityId,
+        const Vector2D& start,
+        const Vector2D& goal,
+        Priority priority = Priority::Normal,
+        PathCallback callback = nullptr);
+
     // Singleton implementation
     PathfinderManager() = default;
     ~PathfinderManager();
@@ -371,13 +346,13 @@ private:
     // Mutex-protected shared_ptr with snapshot semantics for thread-safe grid access
     // Note: std::atomic<std::shared_ptr<T>> requires C++20 library support not available on all platforms
     std::shared_ptr<VoidLight::PathfindingGrid> m_grid;
-    mutable std::shared_mutex m_gridMutex;  // Read-write lock for concurrent read access
+    mutable std::shared_mutex m_gridMutex; // Read-write lock for concurrent read access
     // Direct ThreadSystem processing - no queue needed
 
     // Thread-safe grid access helpers
     std::shared_ptr<VoidLight::PathfindingGrid> getGridSnapshot() const {
         std::shared_lock<std::shared_mutex> lock(m_gridMutex);
-        return m_grid;  // Copy increments refcount, safe to use after lock release
+        return m_grid; // Copy increments refcount, safe to use after lock release
     }
 
     void setGrid(std::shared_ptr<VoidLight::PathfindingGrid> newGrid) {
@@ -388,18 +363,17 @@ private:
     // Helpers - grid-passing overloads to avoid repeated getGridSnapshot() calls in hot path
     void normalizeEndpoints(Vector2D& start, Vector2D& goal) const;
     void normalizeEndpoints(Vector2D& start, Vector2D& goal,
-                           const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
+        const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
     Vector2D clampToWorldBounds(const Vector2D& position, float margin,
-                                const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
+        const std::shared_ptr<VoidLight::PathfindingGrid>& grid) const;
 
     // INTERNAL ONLY: Synchronous pathfinding computation (used by async system)
-    // DO NOT use directly - use requestPath() instead
+    // DO NOT use directly - use requestPathToEDM() instead
     VoidLight::PathfindingResult findPathImmediate(
         const Vector2D& start,
         const Vector2D& goal,
         std::vector<Vector2D>& outPath,
-        bool skipNormalization = false
-    );
+        bool skipNormalization = false);
 
     // Grid-passing overload for hot path optimization
     VoidLight::PathfindingResult findPathImmediate(
@@ -407,8 +381,7 @@ private:
         const Vector2D& goal,
         std::vector<Vector2D>& outPath,
         const std::shared_ptr<VoidLight::PathfindingGrid>& grid,
-        bool skipNormalization = false
-    );
+        bool skipNormalization = false);
 
     // Request management - simplified
     std::atomic<uint64_t> m_nextRequestId{1};
@@ -421,12 +394,12 @@ private:
     float m_cacheExpirationTime{5.0f}; // Cache expiration time in seconds
 
     // Auto-calculated cache parameters (computed per world for optimal scaling)
-    float m_endpointQuantization{128.0f};      // Dynamic: ~1% world size
-    float m_cacheKeyQuantization{256.0f};      // Dynamic: worldSize / sqrt(cache)
-    float m_hierarchicalThreshold{2048.0f};    // Dynamic: 5% of diagonal
-    float m_connectivityThreshold{16000.0f};   // Dynamic: 25% of width
-    int m_prewarmSectorCount{8};               // Dynamic: 4-16 based on size
-    int m_prewarmPathCount{168};               // Dynamic: sectors² × 2.5
+    float m_endpointQuantization{128.0f}; // Dynamic: ~1% world size
+    float m_cacheKeyQuantization{256.0f}; // Dynamic: worldSize / sqrt(cache)
+    float m_hierarchicalThreshold{2048.0f}; // Dynamic: 5% of diagonal
+    float m_connectivityThreshold{16000.0f}; // Dynamic: 25% of width
+    int m_prewarmSectorCount{8}; // Dynamic: 4-16 based on size
+    int m_prewarmPathCount{168}; // Dynamic: sectors² × 2.5
 
     // State management
     std::atomic<bool> m_initialized{false};
@@ -439,7 +412,7 @@ private:
     // tasks (cacheHits/Misses, completed/failedRequests, processedCount,
     // totalProcessingTimeMs). Cache-line isolated to avoid false sharing with the
     // read-mostly state flags above (m_initialized/m_isShutdown/m_globallyPaused),
-    // which are read every frame in update()/requestPath(). The 7 uint64 atomics
+    // which are read every frame in update()/requestPathToEDM(). The 7 uint64 atomics
     // (56B) + the double atomic (8B) fill exactly one 64B line, so the trailing
     // main-thread bookkeeping below naturally starts on the next line.
     alignas(64) mutable std::atomic<uint64_t> m_enqueuedRequests{0};
@@ -464,13 +437,12 @@ private:
     };
 
     mutable std::unordered_map<uint64_t, PathCacheEntry> m_pathCache;
-    mutable std::shared_mutex m_cacheMutex;  // shared_mutex for concurrent reads
+    mutable std::shared_mutex m_cacheMutex; // shared_mutex for concurrent reads
 
     // Optimized for high entity counts (2000-10K+ entities in demo states)
     // At 32K entries: ~3.5MB memory (acceptable overhead for large-scale scenarios)
     // Combined with coarser quantization (512px+), provides 70-85% cache hit rates
     static constexpr size_t MAX_CACHE_ENTRIES = 32768;
-
 
 
     // Collision version tracking for cache invalidation
@@ -484,7 +456,7 @@ private:
 
     // Async task synchronization (mirroring AIManager pattern)
     std::vector<std::future<void>> m_gridRebuildFutures;
-    std::vector<std::future<void>> m_reusableGridRebuildFutures;  // Swap target to preserve capacity
+    std::vector<std::future<void>> m_reusableGridRebuildFutures; // Swap target to preserve capacity
     std::mutex m_gridRebuildFuturesMutex;
 
 
@@ -502,11 +474,12 @@ private:
     std::vector<PathCompletion> m_pendingPathCompletions;
     std::vector<PathCompletion> m_reusablePathCompletions;
 
-    // Incremental update configuration
-    static constexpr float DIRTY_THRESHOLD_PERCENT = 0.25f; // Full rebuild if >25% of grid is dirty
+    // Dirty-cell apply scratch (main thread only, used by rebuildDirtyRows()).
+    std::vector<int> m_dirtyRows;
+    std::vector<std::future<void>> m_dirtyRowFutures;
 
     // DIRECT THREADSYSTEM SUBMISSION (no intermediate buffer needed)
-    // Requests are submitted directly to ThreadSystem in requestPath()
+    // Requests are submitted directly to ThreadSystem in requestPathToEDM()
     // This eliminates the mutex contention that was serializing AI batch threads
 
     // Internal methods - simplified
@@ -517,6 +490,7 @@ private:
     void clearOldestCacheEntries(float percentage); // Smart cache clearing (partial LRU eviction)
     void clearAllCache(); // Complete cache clear for world load/unload
     void waitForGridRebuildCompletion(); // Wait for pending async grid rebuild tasks
+    void rebuildDirtyRows(); // update(): rebuild dirty rows on a copy, publish it
     void subscribeToEvents(); // Subscribe to collision and world events
     void unsubscribeFromEvents(); // Unsubscribe from events
 
@@ -526,7 +500,7 @@ private:
 
     // Event handlers
     void onCollisionObstacleChanged(const Vector2D& position, float radius, const std::string& description);
-    void onStaticCollidersReady();  // Called when CollisionManager finishes building static bodies
+    void onStaticCollidersReady(); // Called when CollisionManager finishes building static bodies
     void onWorldUnloaded();
     void onTileChanged(int x, int y);
 };

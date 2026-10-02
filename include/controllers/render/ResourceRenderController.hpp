@@ -40,7 +40,7 @@ public:
     ResourceRenderController& operator=(ResourceRenderController&&) = delete;
 
     // ControllerBase interface
-    void subscribe() override {}  // No events needed
+    void subscribe() override {} // No events needed
     [[nodiscard]] std::string_view getName() const override { return "ResourceRenderController"; }
 
     /**
@@ -56,7 +56,7 @@ public:
      * @param camera Camera for spatial queries
      */
     void recordGPUDroppedItems(const VoidLight::GPUSceneContext& ctx,
-                               const VoidLight::Camera& camera);
+        const VoidLight::Camera& camera);
 
     /**
      * @brief Record containers to GPU sprite batch
@@ -64,7 +64,7 @@ public:
      * @param camera Camera for spatial queries
      */
     void recordGPUContainers(const VoidLight::GPUSceneContext& ctx,
-                             const VoidLight::Camera& camera);
+        const VoidLight::Camera& camera);
 
 private:
     // Update helpers - use camera-based queries for efficiency
@@ -75,9 +75,9 @@ private:
     std::vector<size_t> m_visibleContainerIndices;
 
     // Animation constants
-    static constexpr float BOB_SPEED = 3.0f;           // Radians per second for bobbing
-    static constexpr float TWO_PI = 6.28318530718f;    // 2 * PI for wrapping
-    static constexpr float ANIMATION_BUFFER = 128.0f;  // Extra radius beyond viewport for animation
+    static constexpr float BOB_SPEED = 3.0f; // Radians per second for bobbing
+    static constexpr float TWO_PI = 6.28318530718f; // 2 * PI for wrapping
+    static constexpr float ANIMATION_BUFFER = 128.0f; // Extra radius beyond viewport for animation
 };
 
 #endif // RESOURCE_RENDER_CONTROLLER_HPP

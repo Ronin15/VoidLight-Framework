@@ -15,12 +15,18 @@ eventMgr.clean();
 ## Handler API
 
 ```cpp
-uint64_t registerHandlerWithToken(EventTypeId, FastEventHandler);
-void registerHandler(EventTypeId, FastEventHandler);
-void removeHandler(EventTypeId, uint64_t token);
+struct HandlerToken { EventTypeId typeId; uint64_t id; };
+
+HandlerToken registerHandlerWithToken(EventTypeId, FastEventHandler);           // transient
+HandlerToken registerPersistentHandlerWithToken(EventTypeId, FastEventHandler); // init()
+void registerHandler(EventTypeId, FastEventHandler);                            // fire-and-forget
+void registerPersistentHandler(EventTypeId, FastEventHandler);
+bool removeHandler(const HandlerToken& token);
+void clearTransientHandlers();   // state transition
+void clearAllHandlers();         // shutdown only
 ```
 
-Use tokens for GameStates, controllers, and any subscription with explicit teardown.
+Use tokens for GameStates, controllers, and any subscription with explicit teardown. Managers that must survive transitions use the persistent APIs in `init()`.
 
 ## Deferred Queue API
 
@@ -48,12 +54,13 @@ Runtime notes:
 Weather, SceneChange, NPCSpawn, ParticleEffect,
 ResourceChange, World, Camera, Harvest, Collision,
 WorldTrigger, CollisionObstacleChanged, Custom,
-Time, Combat, Entity, BehaviorMessage, MerchantSpawn
+Time, Combat, Entity, BehaviorMessage, MerchantSpawn, StanceChanged,
+Scarcity
 ```
 
 ## Current Usage Rules
 
-- Do not use removed APIs such as `registerEvent`, `createSceneChangeEvent`, `getEventsByType`, or compaction helpers.
+- Do not use removed `EventManager` APIs such as `registerEvent`, `createSceneChangeEvent`, `getEventsByType`, or compaction helpers (`EventFactory::createSceneChangeEvent` still exists).
 - Use deferred dispatch for worker-thread producers and cross-system frame coordination.
 - Use immediate dispatch only when the caller owns timing and thread-safety.
 - `EventTypeId::Combat` / `DamageEvent` applies damage results inside `EventManager` before subscribed handlers run.
@@ -61,4 +68,6 @@ Time, Combat, Entity, BehaviorMessage, MerchantSpawn
 - Use `CollisionObstacleChanged` for world obstacle changes and the projectile
   hit sink for projectile collisions.
 - Use `EventManager::spawnMerchant(...)` for merchant-focused NPC spawning; it dispatches `EventTypeId::MerchantSpawn`.
+- `EventTypeId::StanceChanged` / `StanceChangedEvent` is produced by `AIManager` (Immediate) after a real NPC-faction stance-cell mutation, or with `isTowardPlayer()` when an NPC faction's standing-derived relation toward the player changes. `GamePlayState` logs only the toward-player form.
+- `EventTypeId::Scarcity` / `ScarcityEvent` is produced by `HarvestCommit::commit` (main thread, Deferred) when a player or NPC depletion leaves fewer than 2 available harvestables (any kind) within 512 px. `GamePlayState` logs it when the harvester is the player or the center is within `radius` of the player.
 - Use `drainAllDeferredEvents()` only in tests or controlled synchronization points.

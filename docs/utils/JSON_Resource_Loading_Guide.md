@@ -13,7 +13,9 @@ Use `ResourceTemplateManager` for loading and fast handle lookup, then use handl
 
 ```cpp
 auto& templates = ResourceTemplateManager::Instance();
-templates.init();
+if (!templates.init()) {  // [[nodiscard]]
+    return false;
+}
 
 auto wood = templates.getHandleById("wood");
 auto ironOre = templates.getHandleById("iron_ore");

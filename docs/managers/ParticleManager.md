@@ -38,8 +38,8 @@ ParticleManager (Singleton)
 │   │   ├── Separate arrays for SIMD processing
 │   │   └── Cache-aligned memory layout
 │   └── Automatic Memory Management
-│       ├── Cleanup every 100 particles
-│       └── Compaction every 300 frames
+│       ├── Free-index slot reuse
+│       └── Freed indices recycled after 2 frames
 ├── Effect Management System
 │   ├── Effect Definitions
 │   │   ├── Built-in Weather Effects
@@ -50,7 +50,6 @@ ParticleManager (Singleton)
 │   │   ├── Independent Effects
 │   │   └── Grouped Effects
 │   └── Emission Control
-│       ├── Intensity Scaling
 │       ├── Duration Management
 │       └── Transition System
 ├── Threading & Performance
@@ -73,7 +72,7 @@ ParticleManager (Singleton)
 - **Vector Processing**: Position, velocity, and acceleration updates leverage SIMD instructions (SSE/AVX)
 - **Lock-Free Worker Threads**: Shared_mutex with try-lock mechanisms prevent deadlocks
 - **WorkerBudget Threading**: Queue pressure management with graceful degradation
-- **Automatic Memory Management**: Intelligent cleanup and compaction prevent memory leaks
+- **Automatic Memory Management**: Inactive slots are recycled through a free-index pool (no compaction pass)
 - **Performance Statistics**: Instantaneous rate calculation prevents metric overflow issues
 
 ### 🌦️ Weather System Integration
@@ -91,7 +90,6 @@ ParticleManager (Singleton)
 ### 🔧 Advanced Management
 - **Independent Effects**: Effects that persist beyond weather changes
 - **Effect Grouping**: Bulk operations on related effects
-- **Intensity Control**: Real-time intensity adjustment and scaling
 - **Generation System**: Batch clearing of particle generations
 
 ### 📊 Performance Monitoring
@@ -263,12 +261,42 @@ struct ParticleEffectDefinition {
 
 | Effect Type | Description | Performance | Visual Characteristics |
 |-------------|-------------|-------------|----------------------|
-| **Rain** | Realistic rainfall with wind | 100-200 particles/sec | Blue droplets, downward motion with drift |
-| **Heavy Rain** | Intense rainfall | 200-400 particles/sec | Denser, faster droplets |
-| **Snow** | Gentle snowfall | 50-100 particles/sec | White flakes, slow descent with wind |
-| **Heavy Snow** | Blizzard conditions | 100-200 particles/sec | Dense, varied snowflake sizes |
-| **Fog** | Atmospheric fog effect | 200-300 particles/sec | Large, semi-transparent gray particles |
-| **Cloudy** | Moving cloud wisps | 20-50 particles/sec | Large, light particles with horizontal motion |
+| **Rain** | Realistic rainfall with wind | 300 particles/sec | Blue droplets, downward motion with drift |
+| **Heavy Rain** | Intense rainfall | 500 particles/sec | Denser, faster droplets |
+| **Snow** | Gentle snowfall | 180 particles/sec | White flakes, slow descent with wind |
+| **Heavy Snow** | Blizzard conditions | 350 particles/sec | Dense, varied snowflake sizes |
+| **Fog** | Atmospheric fog effect | 38 particles/sec | Large, semi-transparent gray particles |
+| **Cloudy** | Moving cloud wisps | 1.2 particles/sec | Large, light particles with horizontal motion |
+| **Windy** | Wind streaks | 80 particles/sec | Thin horizontal streaks (API/test only; no weather maps to it) |
+| **WindyDust** | Dust clouds | 150 particles/sec | Brown dust blown horizontally |
+| **WindyStorm** | Storm debris | 100 particles/sec | Leaves and debris in strong wind |
+
+### Weather Variant Selection
+
+`ParticleManager::weatherEffectFor(WeatherType, std::string_view customName)` is
+the only weather-to-variant mapping. The variant is keyed by `WeatherType`;
+intensity never selects it.
+
+| WeatherType | Variant |
+|-------------|---------|
+| Clear | none (`stopWeatherEffects`) |
+| Cloudy | Cloudy |
+| Rainy, Stormy | HeavyRain |
+| Foggy | Fog |
+| Snowy | HeavySnow |
+| Windy | WindyStorm |
+| Custom named `Rain` / `HeavyRain` / `Snow` / `HeavySnow` / `Fog` / `WindyDust` / `WindyStorm` | same-name variant |
+| Custom, any other name | none; logs a warning and current weather particles stop |
+
+- Weather intensity is stored on the effect instance but does not scale
+  emission yet, so Rainy and Stormy both render HeavyRain. Emission scaling
+  (or deleting the unused intensity plumbing) is a scheduled follow-up in
+  `docs/framework-implementation-slices.md`.
+- The light Rain, Snow, and WindyDust variants are reachable through Custom
+  weather names (EventDemo cycles them). The streak `Windy` variant is only
+  reachable through `triggerWeatherEffect(ParticleEffectType::Windy, ...)`.
+- `getActiveWeatherEffect()` returns the running weather variant, or
+  `std::nullopt` (diagnostics and tests).
 
 ### Built-in Visual Effects
 
@@ -306,7 +334,7 @@ public:
 ```cpp
 // Trigger rain effect
 auto& pm = ParticleManager::Instance();
-pm.triggerWeatherEffect("Rainy", 0.8f, 2.0f); // 80% intensity, 2s transition
+pm.triggerWeatherEffect("Rainy", 0.8f, 2.0f); // HeavyRain variant, 2s transition
 
 // Stop all weather
 pm.stopWeatherEffects(1.5f); // 1.5s fade out
@@ -315,49 +343,40 @@ pm.stopWeatherEffects(1.5f); // 1.5s fade out
 #### Independent Effect Management
 ```cpp
 // Play a fire effect that persists
-uint32_t fireId = pm.playIndependentEffect("Fire", Vector2D(400, 300), 
+uint32_t fireId = pm.playIndependentEffect(ParticleEffectType::Fire, Vector2D(400, 300),
                                           1.0f, -1.0f, "campfire", "fire_crackle");
 
 // Control the effect
-pm.setEffectIntensity(fireId, 0.5f);  // Reduce intensity
 pm.pauseIndependentEffect(fireId, true);  // Pause
 pm.stopIndependentEffect(fireId);  // Stop
 ```
 
-#### Custom Effect Creation
-```cpp
-// Register a custom effect
-ParticleEffectDefinition customEffect("MagicSparkles", ParticleEffectType::Magic);
-customEffect.emitterConfig.emissionRate = 50.0f;
-customEffect.emitterConfig.minLife = 2.0f;
-customEffect.emitterConfig.maxLife = 4.0f;
-customEffect.emitterConfig.minColor = 0xFF00FFFF; // Magenta
-customEffect.emitterConfig.maxColor = 0x00FFFFFF; // Cyan
-
-pm.registerEffect(customEffect);
-uint32_t effectId = pm.playEffect("MagicSparkles", Vector2D(100, 100), 1.0f);
-```
+#### Custom Effects
+Effect definitions are keyed by `ParticleEffectType` (one definition per type)
+and are installed by `registerBuiltInEffects()` during `init()`. To add an
+effect, add a `ParticleEffectType` value and its definition there, then play it
+by type with `playEffect()` or `playIndependentEffect()`.
 
 ### Effect Management
 
 ```cpp
 // Basic effect control
-uint32_t playEffect(const std::string& effectName, 
-                   const Vector2D& position, 
+uint32_t playEffect(ParticleEffectType effectType,
+                   const Vector2D& position,
                    float intensity = 1.0f);
 
 void stopEffect(uint32_t effectId);
-void setEffectIntensity(uint32_t effectId, float intensity);
 bool isEffectPlaying(uint32_t effectId) const;
 
 // Independent effects (persist beyond weather changes)
-uint32_t playIndependentEffect(const std::string& effectName,
+uint32_t playIndependentEffect(ParticleEffectType effectType,
                               const Vector2D& position,
                               float intensity = 1.0f,
                               float duration = -1.0f,
                               const std::string& groupTag = "",
                               const std::string& soundEffect = "");
 
+void stopIndependentEffect(uint32_t effectId);
 void stopAllIndependentEffects();
 void stopIndependentEffectsByGroup(const std::string& groupTag);
 void pauseIndependentEffect(uint32_t effectId, bool paused);
@@ -366,9 +385,21 @@ void pauseIndependentEffect(uint32_t effectId, bool paused);
 ### Weather Integration
 
 ```cpp
-// Weather system integration (called by EventManager)
-void triggerWeatherEffect(const std::string& weatherType, 
-                         float intensity, 
+// Production path: a state's EventTypeId::Weather handler forwards here
+void handleWeatherEvent(const EventData& data);
+
+// Weather -> variant mapping (pure, any thread) and diagnostics
+static std::optional<ParticleEffectType>
+weatherEffectFor(WeatherType type, std::string_view customName = {});
+std::optional<ParticleEffectType> getActiveWeatherEffect() const;
+
+// Name overload: resolves via WeatherEvent::weatherTypeFromName + weatherEffectFor
+void triggerWeatherEffect(const std::string& weatherType,
+                         float intensity,
+                         float transitionTime = 2.0f);
+// Enum overload: runs exactly this variant
+void triggerWeatherEffect(ParticleEffectType effectType,
+                         float intensity,
                          float transitionTime = 2.0f);
 
 void stopWeatherEffects(float transitionTime = 2.0f);
@@ -402,13 +433,9 @@ void setCameraViewport(float x, float y, float width, float height);
 ### Performance and Threading
 
 ```cpp
-// Threading configuration
-void enableThreading(bool enable);
-void setThreadingThreshold(size_t threshold);
-void enableWorkerBudgetThreading(bool enable);
-
-// WorkerBudget-optimized update with queue pressure management
-void updateWithWorkerBudget(float deltaTime, size_t particleCount);
+// Debug-only benchmarking toggle (compiles out in release). When disabled,
+// update() forces the single-threaded path even if WorkerBudget would thread.
+VOIDLIGHT_DEBUG_ONLY(void enableThreading(bool enable);)
 
 // Performance monitoring
 ParticlePerformanceStats getPerformanceStats() const;
@@ -417,87 +444,77 @@ size_t getActiveParticleCount() const;
 size_t getMaxParticleCapacity() const;
 ```
 
+`update()` asks `WorkerBudgetManager::shouldUseThreading(SystemType::Particle, activeCount)` once per frame and either calls the threaded batch path (`getOptimalWorkers` / `getBatchStrategy`, `ThreadSystem` batches) or the single-threaded path. Batch futures are joined before the buffer swap and deactivation scan, and `reportExecution()` runs after that join. There is no public threading threshold; WorkerBudget owns the decision.
+
 ### Memory Management
 
 ```cpp
 // Capacity management
 void setMaxParticles(size_t maxParticles);
-void compactParticleStorage();
-
-// Cleanup
-void cleanupInactiveParticles();
+size_t getMaxParticleCapacity() const;
+size_t getActiveParticleCount() const;
+size_t countActiveParticles() const; // scans storage
 ```
+
+There is no public compaction or cleanup call. `update()` deactivates expired particles and returns their indices to a free-index pool; indices become reusable after two frames, once worker batches that could still read them have completed.
 
 ## Integration Examples
 
 ### Game Loop Integration
 
 ```cpp
-class GameEngine {
-private:
-    void update(float deltaTime) {
-        // Option 1: Standard update
-        ParticleManager::Instance().update(deltaTime);
-        
-        // Option 2: WorkerBudget-optimized update
-        auto& pm = ParticleManager::Instance();
-        size_t particleCount = pm.getActiveParticleCount();
-        pm.updateWithWorkerBudget(deltaTime, particleCount);
-        
-        // Other system updates...
+// GameEngine::update() — manager slot (main thread)
+// WorkerBudget threading decision happens inside update()
+mp_particleManager->update(deltaTime);
+
+// A state's renderGPUScene() draws particles into the engine-owned scene pass
+void GamePlayState::renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
+                                   SDL_GPURenderPass* scenePass, ...) {
+    auto& particleMgr = ParticleManager::Instance();
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+        particleMgr.renderGPU(gpuRenderer, scenePass);
     }
-    
-    void renderGPUScene(SDL_GPURenderPass* scenePass) {
-        // Render all particles during the GPU scene pass
-        auto& gpuRenderer = GPURenderer::Instance();
-        ParticleManager::Instance().renderGPU(gpuRenderer, scenePass);
-    }
-};
+}
 ```
 
 ### EventManager Weather Integration
 
+EventManager only dispatches weather events. The state that owns the screen
+registers a transient `EventTypeId::Weather` handler in `enter()` that forwards
+to ParticleManager (see `GamePlayState::registerEventHandlers()`):
+
 ```cpp
-class EventManager {
-private:
-    void processWeatherEvent(const WeatherEvent& event) {
-        auto& pm = ParticleManager::Instance();
-        
-        switch (event.getWeatherType()) {
-            case WeatherType::Clear:
-                pm.stopWeatherEffects(2.0f);
-                break;
-                
-            case WeatherType::Rainy:
-                pm.triggerWeatherEffect("Rainy", event.getIntensity(), 3.0f);
-                break;
-                
-            case WeatherType::Snowy:
-                pm.triggerWeatherEffect("Snowy", event.getIntensity(), 4.0f);
-                break;
-                
-            case WeatherType::Foggy:
-                pm.triggerWeatherEffect("Foggy", event.getIntensity(), 5.0f);
-                break;
-        }
-    }
-};
+m_weatherEventToken = eventMgr.registerHandlerWithToken(
+    EventTypeId::Weather,
+    [this](const EventData& data) {
+        ParticleManager::Instance().handleWeatherEvent(data);
+        onWeatherChanged(data);
+    });
+
+// Anywhere: dispatch a weather change
+EventManager::Instance().changeWeather("Rainy", 3.0f);
 ```
+
+`handleWeatherEvent()` reads the event's `WeatherType` (and custom name) and
+applies `weatherEffectFor()`, passing the event's intensity and transition
+time. Events from `changeWeather()` and `EventFactory` carry the same type and
+per-type defaults, so they select the same variant.
 
 ### State Transition Handling
 
+`GameStateManager` does not call `ParticleManager::prepareForStateTransition()`.
+The exiting state calls it during its manager cleanup (last in the AI-heavy
+cleanup order):
+
 ```cpp
-class GameStateManager {
-private:
-    void transitionToState(std::unique_ptr<GameState> newState) {
-        // Clean preparation for state transition
-        ParticleManager::Instance().prepareForStateTransition();
-        
-        // Continue with state transition
-        currentState = std::move(newState);
-        currentState->enter();
+bool GamePlayState::exit() {
+    // ... AIManager, ProjectileManager, ... WorkerBudgetManager first
+    auto& particleMgr = ParticleManager::Instance();
+    if (particleMgr.isInitialized() && !particleMgr.isShutdown()) {
+        particleMgr.prepareForStateTransition();
     }
-};
+    // ...
+}
 ```
 
 ## Performance Optimization
@@ -508,14 +525,7 @@ The ParticleManager integrates with the engine's WorkerBudget system for optimal
 
 ```cpp
 void optimizeParticleProcessing() {
-    auto& pm = ParticleManager::Instance();
-    
-    // Enable WorkerBudget threading
-    pm.enableWorkerBudgetThreading(true);
-    
-    // Set threading threshold (minimum particles for threading)
-    pm.setThreadingThreshold(1000);
-    
+    // No manager-side threshold: update() asks WorkerBudget each frame.
     // The system automatically:
     // - Monitors queue pressure (90% capacity threshold)
     // - Uses optimal worker count based on WorkerBudget
@@ -543,13 +553,8 @@ void optimizeParticleProcessing() {
 ### Memory Optimization Tips
 
 ```cpp
-// Pre-allocate for known particle loads
-pm.setMaxParticles(5000);  // Reserve capacity
-
-// Periodic cleanup for long-running games
-if (gameTime % 300 == 0) {  // Every 5 seconds
-    pm.compactParticleStorage();
-}
+// Cap particle storage for known particle loads
+pm.setMaxParticles(5000);
 
 // Monitor performance
 auto stats = pm.getPerformanceStats();
@@ -560,45 +565,15 @@ if (stats.particlesPerSecond < 1000) {
 
 ## Advanced Usage
 
-### Custom Effect Creation
-
-```cpp
-ParticleEffectDefinition createLightningEffect() {
-    ParticleEffectDefinition lightning("Lightning", ParticleEffectType::Sparks);
-    
-    // Emitter configuration
-    lightning.emitterConfig.position = Vector2D(0, 0);  // Set when played
-    lightning.emitterConfig.direction = Vector2D(0, 1);  // Downward
-    lightning.emitterConfig.spread = 5.0f;  // Narrow spread
-    lightning.emitterConfig.emissionRate = 500.0f;  // High burst
-    lightning.emitterConfig.minSpeed = 200.0f;  // Fast
-    lightning.emitterConfig.maxSpeed = 400.0f;
-    lightning.emitterConfig.minLife = 0.1f;  // Very short
-    lightning.emitterConfig.maxLife = 0.3f;
-    lightning.emitterConfig.minSize = 1.0f;
-    lightning.emitterConfig.maxSize = 2.0f;
-    lightning.emitterConfig.minColor = 0xFFFFFFFF;  // White
-    lightning.emitterConfig.maxColor = 0xCCCCFFFF;  // Light blue
-    lightning.emitterConfig.blendMode = ParticleBlendMode::Additive;
-    lightning.emitterConfig.duration = 0.2f;  // Short burst
-    
-    return lightning;
-}
-
-// Register and use
-pm.registerEffect(createLightningEffect());
-uint32_t lightningId = pm.playEffect("Lightning", Vector2D(500, 100));
-```
-
 ### Grouped Effect Management
 
 ```cpp
 // Create a campfire scene with grouped effects
-uint32_t fireId = pm.playIndependentEffect("Fire", Vector2D(400, 350), 
+uint32_t fireId = pm.playIndependentEffect(ParticleEffectType::Fire, Vector2D(400, 350),
                                           1.0f, -1.0f, "campfire");
-uint32_t smokeId = pm.playIndependentEffect("Smoke", Vector2D(400, 320), 
+uint32_t smokeId = pm.playIndependentEffect(ParticleEffectType::Smoke, Vector2D(400, 320),
                                            0.8f, -1.0f, "campfire");
-uint32_t sparksId = pm.playIndependentEffect("Sparks", Vector2D(400, 340), 
+uint32_t sparksId = pm.playIndependentEffect(ParticleEffectType::Sparks, Vector2D(400, 340),
                                             0.3f, 5.0f, "campfire");
 
 // Control all campfire effects together
@@ -636,13 +611,13 @@ void monitorParticlePerformance() {
 ### ✅ Optimal Usage Patterns
 
 ```cpp
-// ✅ Use appropriate effect intensities
-pm.triggerWeatherEffect("Rainy", 0.3f);  // Light rain
-pm.triggerWeatherEffect("Rainy", 0.8f);  // Heavy rain
+// ✅ Pick the variant by weather type or custom name
+pm.triggerWeatherEffect("Rain", 1.0f);   // Light rain (Custom name)
+pm.triggerWeatherEffect("Rainy", 1.0f);  // Heavy rain (Rainy -> HeavyRain)
 
 // ✅ Group related effects
-pm.playIndependentEffect("Fire", pos, 1.0f, -1.0f, "torch_group");
-pm.playIndependentEffect("Smoke", pos, 0.6f, -1.0f, "torch_group");
+pm.playIndependentEffect(ParticleEffectType::Fire, pos, 1.0f, -1.0f, "torch_group");
+pm.playIndependentEffect(ParticleEffectType::Smoke, pos, 0.6f, -1.0f, "torch_group");
 
 // ✅ Use proper cleanup
 pm.prepareForStateTransition();  // Between game states
@@ -687,7 +662,7 @@ config.emissionRate = 10000.0f;  // Will overwhelm system
 | Issue | Symptoms | Solution |
 |-------|----------|----------|
 | **Low Performance** | Frame drops, high CPU | Reduce emission rates, enable threading |
-| **Memory Growth** | Increasing RAM usage | Call compactParticleStorage() periodically |
+| **Memory Growth** | Increasing RAM usage | Lower `setMaxParticles()` or emission rates; slots are reused, not compacted |
 | **Visual Artifacts** | Particles not rendering | Check global visibility and camera viewport |
 | **Effect Not Playing** | No particles visible | Verify effect registration and position |
 
@@ -706,10 +681,10 @@ if (!pm.isInitialized()) {
 auto activeEffects = pm.getActiveIndependentEffects();
 std::cout << "Active independent effects: " << activeEffects.size() << "\n";
 
-// Verify effect registration
-uint32_t testId = pm.playEffect("TestEffect", Vector2D(0, 0));
+// Verify an effect type has a definition
+uint32_t testId = pm.playEffect(ParticleEffectType::Fire, Vector2D(0, 0));
 if (testId == 0) {
-    std::cout << "Error: Effect 'TestEffect' not registered\n";
+    std::cout << "Error: no definition for ParticleEffectType::Fire\n";
 }
 ```
 
@@ -730,13 +705,11 @@ if (testId == 0) {
 // Mobile optimization
 #ifdef MOBILE_PLATFORM
     pm.setMaxParticles(3000);  // Lower capacity
-    pm.setThreadingThreshold(1500);  // Higher threshold
 #endif
 
 // High-end PC optimization
 #ifdef HIGH_END_PC
     pm.setMaxParticles(15000);  // Higher capacity
-    pm.enableWorkerBudgetThreading(true);  // Full threading
 #endif
 ```
 

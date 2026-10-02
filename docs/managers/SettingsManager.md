@@ -250,34 +250,21 @@ for (const auto& key : keys) {
 
 ### GameEngine Integration
 ```cpp
-// In GameEngine::init()
-auto& settings = SettingsManager::Instance();
-
-// Load settings on startup
-if (!settings.loadFromFile("res/settings.json")) {
-    GAMEENGINE_WARNING("Failed to load settings, using defaults");
-
-    // Create default settings
-    settings.set("graphics", "resolution_width", 1920);
-    settings.set("graphics", "resolution_height", 1080);
-    settings.set("graphics", "vsync", true);
-    settings.set("audio", "master_volume", 0.8f);
-
-    // Save defaults
-    settings.saveToFile("res/settings.json");
+// In GameEngine::init() (after SDL_Init / ResourcePath::init())
+const std::string settingsPath = VoidLight::ResourcePath::resolve("res/settings.json");
+auto& settingsManager = VoidLight::SettingsManager::Instance();
+if (!settingsManager.loadFromFile(settingsPath)) {
+    GAMEENGINE_WARN("Failed to load settings.json - using defaults");
 }
 
-// Register listener for graphics changes
-m_settingsListenerId = settings.registerChangeListener("graphics",
-    [this](const std::string& cat, const std::string& key, const auto& value) {
-        if (key == "vsync") {
-            applyVSyncSetting();
-        } else if (key == "resolution_width" || key == "resolution_height") {
-            applyResolution();
-        }
-    }
-);
+// Read window configuration with defaults (no defaults are written back)
+const int width = settingsManager.get<int>("graphics", "resolution_width", 1280);
+const int height = settingsManager.get<int>("graphics", "resolution_height", 720);
+bool fullscreen = settingsManager.get<bool>("graphics", "fullscreen", false);
 ```
+
+`GameEngine` registers no change listener; settings are read at init and
+applied explicitly by `SettingsMenuState` on apply.
 
 ### Settings Menu Integration
 ```cpp
@@ -316,30 +303,19 @@ private:
 
 ### Audio System Integration
 ```cpp
-// In SoundManager::init()
-auto& settings = SettingsManager::Instance();
+// In GameEngine::init(), after SoundManager loads audio (SoundManager does not
+// read SettingsManager itself and has no master volume)
+auto& settingsMgr = SettingsManager::Instance();
+bool const muted = settingsMgr.get<bool>("audio", "muted", false);
+float const masterVolume = settingsMgr.get<float>("audio", "master_volume", 1.0f);
+float const musicVolume = settingsMgr.get<float>("audio", "music_volume", 0.7f);
+float const sfxVolume = settingsMgr.get<float>("audio", "sfx_volume", 0.8f);
 
-// Apply initial volume settings
-float masterVolume = settings.get<float>("audio", "master_volume", 1.0f);
-float musicVolume = settings.get<float>("audio", "music_volume", 0.7f);
-float sfxVolume = settings.get<float>("audio", "sfx_volume", 0.8f);
+soundMgr.setMusicVolume(muted ? 0.0f : masterVolume * musicVolume);
+soundMgr.setSFXVolume(muted ? 0.0f : masterVolume * sfxVolume);
 
-setMasterVolume(masterVolume);
-setMusicVolume(musicVolume);
-setSFXVolume(sfxVolume);
-
-// Listen for audio setting changes
-m_audioListenerId = settings.registerChangeListener("audio",
-    [this](const std::string& cat, const std::string& key, const auto& value) {
-        if (key == "master_volume") {
-            setMasterVolume(std::get<float>(value));
-        } else if (key == "music_volume") {
-            setMusicVolume(std::get<float>(value));
-        } else if (key == "sfx_volume") {
-            setSFXVolume(std::get<float>(value));
-        }
-    }
-);
+// A change listener could re-apply these on edit (no production caller registers one):
+// settingsMgr.registerChangeListener("audio", callback);
 ```
 
 ## Performance Considerations

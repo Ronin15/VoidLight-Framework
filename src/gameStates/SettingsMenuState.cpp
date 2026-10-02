@@ -38,7 +38,7 @@ bool SettingsMenuState::enter() {
 
     // Get manager references at function start
     auto& ui = UIManager::Instance();
-    auto& fontMgr = FontManager::Instance();
+    const auto& fontMgr = FontManager::Instance();
 
     // Wait for fonts to load
     constexpr int kMaxWaitMs = 1500;
@@ -74,7 +74,7 @@ bool SettingsMenuState::enter() {
 
 void SettingsMenuState::update(float deltaTime) {
     auto& ui = UIManager::Instance();
-    auto& inputMgr = InputManager::Instance();
+    const auto& inputMgr = InputManager::Instance();
 
     // Skip UIManager input processing while a rebind is in flight AND on the
     // frame it completes. Otherwise the mouse-button press that finalizes the
@@ -163,7 +163,7 @@ constexpr std::array<InputManager::Command, 17> kControlsTabCommands{
 
 bool isSliderId(std::string_view id) {
     return std::any_of(kSliderIds.begin(), kSliderIds.end(),
-                       [&](std::string_view s) { return s == id; });
+        [&](std::string_view s) { return s == id; });
 }
 } // namespace
 
@@ -172,7 +172,7 @@ void SettingsMenuState::handleSliderAdjust() {
     const std::string_view selected = m_navOrder[m_selectedIndex];
     if (!isSliderId(selected)) return;
 
-    const bool left  = VoidLight::MenuNavigation::leftPressed();
+    const bool left = VoidLight::MenuNavigation::leftPressed();
     const bool right = VoidLight::MenuNavigation::rightPressed();
     if (!left && !right) return;
 
@@ -209,8 +209,8 @@ void SettingsMenuState::rebuildNavOrder() {
             m_navBacking.push_back(bindingButtonId(cmd, DC::Controller));
         }
         assert(m_navBacking.size() == kBackingCapacity &&
-               "m_navBacking overran its reserved capacity — string_views "
-               "in m_navOrder may have been invalidated");
+            "m_navBacking overran its reserved capacity — string_views "
+            "in m_navOrder may have been invalidated");
     }
 
     // Tab row is always reachable.
@@ -221,24 +221,24 @@ void SettingsMenuState::rebuildNavOrder() {
 
     // Body of the current tab.
     switch (m_currentTab) {
-    case SettingsTab::Graphics:
-        m_navOrder.emplace_back("settings_vsync_checkbox");
-        m_navOrder.emplace_back("settings_fullscreen_checkbox");
-        m_navOrder.emplace_back("settings_showfps_checkbox");
-        break;
-    case SettingsTab::Audio:
-        m_navOrder.emplace_back("settings_master_volume_slider");
-        m_navOrder.emplace_back("settings_music_volume_slider");
-        m_navOrder.emplace_back("settings_sfx_volume_slider");
-        m_navOrder.emplace_back("settings_mute_checkbox");
-        break;
-    case SettingsTab::Gameplay:
-        m_navOrder.emplace_back("settings_autosave_checkbox");
-        break;
-    case SettingsTab::Controls:
-        m_navOrder.insert(m_navOrder.end(), m_navBacking.begin(), m_navBacking.end());
-        m_navOrder.emplace_back("settings_ctrl_reset_btn");
-        break;
+        case SettingsTab::Graphics:
+            m_navOrder.emplace_back("settings_vsync_checkbox");
+            m_navOrder.emplace_back("settings_fullscreen_checkbox");
+            m_navOrder.emplace_back("settings_showfps_checkbox");
+            break;
+        case SettingsTab::Audio:
+            m_navOrder.emplace_back("settings_master_volume_slider");
+            m_navOrder.emplace_back("settings_music_volume_slider");
+            m_navOrder.emplace_back("settings_sfx_volume_slider");
+            m_navOrder.emplace_back("settings_mute_checkbox");
+            break;
+        case SettingsTab::Gameplay:
+            m_navOrder.emplace_back("settings_autosave_checkbox");
+            break;
+        case SettingsTab::Controls:
+            m_navOrder.insert(m_navOrder.end(), m_navBacking.begin(), m_navBacking.end());
+            m_navOrder.emplace_back("settings_ctrl_reset_btn");
+            break;
     }
 
     m_navOrder.emplace_back("settings_apply_btn");
@@ -282,13 +282,11 @@ void SettingsMenuState::applySettings() {
     settings.set("graphics", "fps_limit", m_tempSettings.fpsLimit);
     settings.set("graphics", "show_fps", m_tempSettings.showFps);
 
-    // Apply fullscreen setting immediately
-    // SDL will automatically fire SDL_EVENT_WINDOW_RESIZED which triggers
-    // InputManager::onWindowResize() → UIManager::onWindowResize()
-    // This ensures clean, single-path UI repositioning
+    // Apply fullscreen immediately. GameEngine::setFullscreen refreshes
+    // window metrics (UI + GPU viewport) without waiting on WINDOW_RESIZED.
     if (gameEngine.isFullscreen() != m_tempSettings.fullscreen) {
         gameEngine.setFullscreen(m_tempSettings.fullscreen);
-        GAMESTATE_INFO("Fullscreen setting applied - UI will update via SDL resize event");
+        GAMESTATE_INFO("Fullscreen setting applied via GameEngine::setFullscreen");
     }
 
     // Audio
@@ -298,7 +296,7 @@ void SettingsMenuState::applySettings() {
     settings.set("audio", "muted", m_tempSettings.muted);
 
     // Apply audio settings immediately so the change is audible without a restart
-    auto &soundMgr = SoundManager::Instance();
+    auto& soundMgr = SoundManager::Instance();
     float const effectiveMusicVolume =
         m_tempSettings.muted ? 0.0f
                              : m_tempSettings.masterVolume * m_tempSettings.musicVolume;
@@ -345,8 +343,8 @@ void SettingsMenuState::createTabButtons() {
     // Centre of 4 tabs: [-3/2 * step, -1/2 * step, +1/2 * step, +3/2 * step]
     const int offset0 = -(3 * step / 2);
     const int offset1 = -(step / 2);
-    const int offset2 =  (step / 2);
-    const int offset3 =  (3 * step / 2);
+    const int offset2 = (step / 2);
+    const int offset3 = (3 * step / 2);
 
     ui.createButton("settings_tab_graphics",
         {ui.getWidthInPixels() / 2 + offset0, tabY, tabWidth, tabHeight}, "Graphics (1)");
@@ -424,7 +422,7 @@ void SettingsMenuState::createGraphicsUI() {
 
     // Resolution label (informational)
     ui.createLabel("settings_resolution_label", {leftColumnX, startY + 3 * rowHeight, labelWidth + controlWidth, 40},
-                   std::format("Resolution: {}x{}", m_tempSettings.resolutionWidth, m_tempSettings.resolutionHeight));
+        std::format("Resolution: {}x{}", m_tempSettings.resolutionWidth, m_tempSettings.resolutionHeight));
     ui.setComponentPositioning("settings_resolution_label", {UIPositionMode::TOP_ALIGNED, leftColumnX, startY + 3 * rowHeight, labelWidth + controlWidth, 40});
 }
 
@@ -449,7 +447,7 @@ void SettingsMenuState::createAudioUI() {
         UIManager::Instance().setText("settings_master_volume_value", std::format("{}%", static_cast<int>(value * 100)));
     });
     ui.createLabel("settings_master_volume_value", {sliderX + sliderWidth + 10, startY, 80, 40},
-                   std::format("{}%", static_cast<int>(m_tempSettings.masterVolume * 100)));
+        std::format("{}%", static_cast<int>(m_tempSettings.masterVolume * 100)));
     ui.setComponentPositioning("settings_master_volume_value", {UIPositionMode::TOP_ALIGNED, sliderX + sliderWidth + 10, startY, 80, 40});
     // Fixed 80px width fits any "nnn%" — skip per-setText font metrics during slider drag.
     ui.enableAutoSizing("settings_master_volume_value", false);
@@ -465,7 +463,7 @@ void SettingsMenuState::createAudioUI() {
         UIManager::Instance().setText("settings_music_volume_value", std::format("{}%", static_cast<int>(value * 100)));
     });
     ui.createLabel("settings_music_volume_value", {sliderX + sliderWidth + 10, startY + rowHeight, 80, 40},
-                   std::format("{}%", static_cast<int>(m_tempSettings.musicVolume * 100)));
+        std::format("{}%", static_cast<int>(m_tempSettings.musicVolume * 100)));
     ui.setComponentPositioning("settings_music_volume_value", {UIPositionMode::TOP_ALIGNED, sliderX + sliderWidth + 10, startY + rowHeight, 80, 40});
     ui.enableAutoSizing("settings_music_volume_value", false);
 
@@ -480,7 +478,7 @@ void SettingsMenuState::createAudioUI() {
         UIManager::Instance().setText("settings_sfx_volume_value", std::format("{}%", static_cast<int>(value * 100)));
     });
     ui.createLabel("settings_sfx_volume_value", {sliderX + sliderWidth + 10, startY + 2 * rowHeight, 80, 40},
-                   std::format("{}%", static_cast<int>(m_tempSettings.sfxVolume * 100)));
+        std::format("{}%", static_cast<int>(m_tempSettings.sfxVolume * 100)));
     ui.setComponentPositioning("settings_sfx_volume_value", {UIPositionMode::TOP_ALIGNED, sliderX + sliderWidth + 10, startY + 2 * rowHeight, 80, 40});
     ui.enableAutoSizing("settings_sfx_volume_value", false);
 
@@ -519,7 +517,7 @@ void SettingsMenuState::createGameplayUI() {
 
     // Difficulty label
     ui.createLabel("settings_difficulty_label", {leftColumnX, startY, labelWidth + 200, 40},
-                   std::format("Difficulty: {}", m_tempSettings.difficulty));
+        std::format("Difficulty: {}", m_tempSettings.difficulty));
     ui.setComponentPositioning("settings_difficulty_label", {UIPositionMode::TOP_ALIGNED, leftColumnX, startY, labelWidth + 200, 40});
 
     // Autosave checkbox
@@ -534,7 +532,7 @@ void SettingsMenuState::createGameplayUI() {
 
     // Autosave interval label
     ui.createLabel("settings_autosave_interval_label", {leftColumnX, startY + 2 * rowHeight, labelWidth + 200, 40},
-                   std::format("Autosave Interval: {} seconds", m_tempSettings.autosaveInterval));
+        std::format("Autosave Interval: {} seconds", m_tempSettings.autosaveInterval));
     ui.setComponentPositioning("settings_autosave_interval_label", {UIPositionMode::TOP_ALIGNED, leftColumnX, startY + 2 * rowHeight, labelWidth + 200, 40});
 
     // Hide gameplay UI by default
@@ -555,21 +553,21 @@ void SettingsMenuState::createActionButtons() {
     int bottomY = ui.getHeightInPixels() - bottomOffset;
 
     // Apply button (Success green) - left of center, bottom centered
-    int applyX = centerX - buttonWidth - buttonSpacing/2;
+    int applyX = centerX - buttonWidth - buttonSpacing / 2;
     ui.createButtonSuccess("settings_apply_btn",
         {applyX, bottomY, buttonWidth, buttonHeight},
         "Apply");
-    ui.setComponentPositioning("settings_apply_btn", {UIPositionMode::BOTTOM_CENTERED, -(buttonWidth/2 + buttonSpacing/2), bottomOffset, buttonWidth, buttonHeight});
+    ui.setComponentPositioning("settings_apply_btn", {UIPositionMode::BOTTOM_CENTERED, -(buttonWidth / 2 + buttonSpacing / 2), bottomOffset, buttonWidth, buttonHeight});
     ui.setOnClick("settings_apply_btn", [this]() {
         applySettings();
     });
 
     // Back button (goes back without saving) - right of center, bottom centered
-    int backX = centerX + buttonSpacing/2;
+    int backX = centerX + buttonSpacing / 2;
     ui.createButtonDanger("settings_back_btn",
         {backX, bottomY, buttonWidth, buttonHeight},
         "Back");
-    ui.setComponentPositioning("settings_back_btn", {UIPositionMode::BOTTOM_CENTERED, buttonWidth/2 + buttonSpacing/2, bottomOffset, buttonWidth, buttonHeight});
+    ui.setComponentPositioning("settings_back_btn", {UIPositionMode::BOTTOM_CENTERED, buttonWidth / 2 + buttonSpacing / 2, bottomOffset, buttonWidth, buttonHeight});
     ui.setOnClick("settings_back_btn", [this]() {
         mp_stateManager->changeState(m_returnState);
     });
@@ -701,41 +699,42 @@ void SettingsMenuState::updateTabVisibility() {
 
 // static helper — stable component ID for a binding slot button
 std::string SettingsMenuState::bindingButtonId(InputManager::Command c,
-                                               InputManager::DeviceCategory cat)
-{
+    InputManager::DeviceCategory cat) {
     using C = InputManager::Command;
     using DC = InputManager::DeviceCategory;
-    struct Entry { C cmd; const char* key; };
+    struct Entry {
+        C cmd;
+        const char* key;
+    };
     static constexpr Entry kTable[] = {
-        {C::MoveUp,        "move_up"},
-        {C::MoveDown,      "move_down"},
-        {C::MoveLeft,      "move_left"},
-        {C::MoveRight,     "move_right"},
-        {C::AttackLight,   "attack_light"},
-        {C::Interact,      "interact"},
+        {C::MoveUp, "move_up"},
+        {C::MoveDown, "move_down"},
+        {C::MoveLeft, "move_left"},
+        {C::MoveRight, "move_right"},
+        {C::AttackLight, "attack_light"},
+        {C::Interact, "interact"},
         {C::OpenInventory, "open_inventory"},
-        {C::Pause,         "pause"},
+        {C::Pause, "pause"},
         {C::WorldInteract, "world_interact"},
-        {C::ZoomIn,        "zoom_in"},
-        {C::ZoomOut,       "zoom_out"},
-        {C::MenuConfirm,   "menu_confirm"},
-        {C::MenuCancel,    "menu_cancel"},
-        {C::MenuUp,        "menu_up"},
-        {C::MenuDown,      "menu_down"},
-        {C::MenuLeft,      "menu_left"},
-        {C::MenuRight,     "menu_right"},
+        {C::ZoomIn, "zoom_in"},
+        {C::ZoomOut, "zoom_out"},
+        {C::MenuConfirm, "menu_confirm"},
+        {C::MenuCancel, "menu_cancel"},
+        {C::MenuUp, "menu_up"},
+        {C::MenuDown, "menu_down"},
+        {C::MenuLeft, "menu_left"},
+        {C::MenuRight, "menu_right"},
     };
     const char* catSuffix = (cat == DC::KeyboardMouse) ? "kbd" : "ctrl";
     const auto* entry = std::find_if(std::begin(kTable), std::end(kTable),
-                                     [c](const Entry& e) { return e.cmd == c; });
+        [c](const Entry& e) { return e.cmd == c; });
     if (entry != std::end(kTable)) {
         return std::format("settings_ctrl_{}_{}", entry->key, catSuffix);
     }
     return std::format("settings_ctrl_unknown_{}", catSuffix);
 }
 
-void SettingsMenuState::refreshBindingLabels(InputManager::Command c)
-{
+void SettingsMenuState::refreshBindingLabels(InputManager::Command c) {
     using DC = InputManager::DeviceCategory;
     auto& ui = UIManager::Instance();
     auto& inputMgr = InputManager::Instance();
@@ -747,8 +746,7 @@ void SettingsMenuState::refreshBindingLabels(InputManager::Command c)
     }
 }
 
-void SettingsMenuState::createControlsUI()
-{
+void SettingsMenuState::createControlsUI() {
     using DC = InputManager::DeviceCategory;
     auto& ui = UIManager::Instance();
     auto& inputMgr = InputManager::Instance();
@@ -792,10 +790,13 @@ void SettingsMenuState::createControlsUI()
         ui.setComponentPositioning(labelId, {UIPositionMode::TOP_ALIGNED, leftX, y, labelW, btnH});
 
         // One binding button per category, in column order
-        struct ColumnSpec { DC cat{DC::KeyboardMouse}; int x{0}; };
+        struct ColumnSpec {
+            DC cat{DC::KeyboardMouse};
+            int x{0};
+        };
         const ColumnSpec cols[] = {
             {DC::KeyboardMouse, colKbdX},
-            {DC::Controller,    colCtrlX},
+            {DC::Controller, colCtrlX},
         };
         for (const auto& col : cols) {
             const std::string btnId = bindingButtonId(cmd, col.cat);
@@ -836,8 +837,7 @@ void SettingsMenuState::createControlsUI()
     ui.setComponentVisible("settings_ctrl_reset_btn", false);
 }
 
-void SettingsMenuState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                                           float) {
+void SettingsMenuState::recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) {
     auto& ui = UIManager::Instance();
     if (!ui.isShutdown()) {
         ui.recordGPUVertices(gpuRenderer);
@@ -845,7 +845,7 @@ void SettingsMenuState::recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
 }
 
 void SettingsMenuState::renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                                     SDL_GPURenderPass* swapchainPass) {
+    SDL_GPURenderPass* swapchainPass) {
     auto& ui = UIManager::Instance();
     if (!ui.isShutdown()) {
         ui.renderGPU(gpuRenderer, swapchainPass);

@@ -26,7 +26,7 @@
 
 // Forward declarations
 namespace VoidLight {
-    class Camera;
+class Camera;
 }
 
 using VoidLight::AABB;
@@ -42,7 +42,8 @@ private:
 
 public:
     static CollisionManager& Instance() {
-        static CollisionManager s_instance; return s_instance;
+        static CollisionManager s_instance;
+        return s_instance;
     }
 
     [[nodiscard]] bool init();
@@ -58,25 +59,10 @@ public:
      * State transition cleanup can discard or outrun deferred WorldUnloadedEvent delivery.
      * Collision storage must not depend on later world-event timing.
      *
-     * Previous "smart" logic tried to keep static bodies when a world was active, expecting
-     * WorldUnloadedEvent to clean them up. This was BROKEN because:
-     * 1. WorldUnloadedEvent is deferred
-     * 2. State cleanup can clear pending deferred events before delivery
-     * 3. Static bodies from old world persist into new world
-     *
-     * CONSEQUENCES OF NOT CLEARING ALL BODIES:
-     * - Duplicate/stale collision bodies across state transitions
-     * - Spatial hash corruption (bodies from multiple worlds in same hash)
-     * - Collision detection failures (entities colliding with phantom geometry)
-     * - Memory leaks (bodies never cleaned up)
-     *
-     * CORRECT BEHAVIOR:
-     * Always clear ALL bodies. The world will be unloaded immediately after state transition,
-     * and the new state will rebuild static bodies when it loads its world via WorldLoadedEvent.
-     *
-     * @note This is called automatically by GameStateManager before state transitions
-     * @note Persistent manager event handlers stay registered across transitions
-     * @see GameStateManager::changeState()
+     * Always clear ALL bodies on transition. WorldUnloaded is Immediate, but
+     * bodies are owned by this prepare call, not by the unload handler.
+     * AI-heavy states call this from exit(); GameStateManager does not.
+     * Persistent world handlers stay registered.
      */
     void prepareForStateTransition();
 
@@ -100,47 +86,28 @@ public:
      * @param enable true to enable threading, false for single-threaded
      */
     VOIDLIGHT_DEBUG_ONLY(
-    void enableThreading(bool enable) {
-        m_useThreading.store(enable, std::memory_order_release);
-    }
-    bool isThreadingEnabled() const {
-        return m_useThreading.load(std::memory_order_acquire);
-    }
-    )
+        void enableThreading(bool enable) {
+            m_useThreading.store(enable, std::memory_order_release);
+        }
+        bool isThreadingEnabled() const {
+            return m_useThreading.load(std::memory_order_acquire);
+        })
 
     // Tick: run collision detection/resolution only (no movement integration)
     void update(float dt);
 
-
-    // Batch updates for performance optimization (AI entities)
-    struct KinematicUpdate {
-        EntityID id;
-        Vector2D position;
-        Vector2D velocity;
-
-        KinematicUpdate(EntityID entityId, const Vector2D& pos, const Vector2D& vel = Vector2D(0, 0))
-            : id(entityId), position(pos), velocity(vel) {}
-    };
-    void updateKinematicBatch(const std::vector<KinematicUpdate>& updates);
-
-    // Per-batch collision updates (zero contention - each AI batch has its own buffer)
-    void applyBatchedKinematicUpdates(const std::vector<std::vector<KinematicUpdate>>& batchUpdates);
-
-    // Single-vector overload for non-batched updates (convenience wrapper)
-    void applyKinematicUpdates(const std::vector<KinematicUpdate>& updates);
-
     // Convenience methods for triggers
     // Routes through EDM::createTrigger() for single source of truth
     EntityID createTriggerArea(const AABB& aabb,
-                               VoidLight::TriggerTag tag,
-                               VoidLight::TriggerType type,
-                               uint32_t layerMask = CollisionLayer::Layer_Environment,
-                               uint32_t collideMask = 0xFFFFFFFFu);
+        VoidLight::TriggerTag tag,
+        VoidLight::TriggerType type,
+        uint32_t layerMask = CollisionLayer::Layer_Environment,
+        uint32_t collideMask = 0xFFFFFFFFu);
     EntityID createTriggerAreaAt(float cx, float cy, float halfW, float halfH,
-                                 VoidLight::TriggerTag tag,
-                                 VoidLight::TriggerType type,
-                                 uint32_t layerMask = CollisionLayer::Layer_Environment,
-                                 uint32_t collideMask = 0xFFFFFFFFu);
+        VoidLight::TriggerTag tag,
+        VoidLight::TriggerType type,
+        uint32_t layerMask = CollisionLayer::Layer_Environment,
+        uint32_t collideMask = 0xFFFFFFFFu);
     void setTriggerCooldown(EntityID triggerId, float seconds);
     void setDefaultTriggerCooldown(float seconds) { m_defaultTriggerCooldownSec = seconds; }
 
@@ -151,7 +118,12 @@ public:
 
     // Queries
     bool overlaps(EntityID a, EntityID b) const;
+    // Every active body (statics and triggers, EventOnly included) whose AABB
+    // intersects area. Hash path and dirty linear fallback agree.
     void queryArea(const AABB& area, std::vector<EntityID>& out) const;
+    // Any active STATIC body intersecting area, EventOnly triggers included
+    // (hash path and dirty linear fallback agree). Read by pathfinding grid
+    // rebuild workers while the main thread waits on them.
     bool queryAreaHasStaticOverlap(const AABB& area) const;
     // Query a body's center by id; returns true if found
     bool getBodyCenter(EntityID id, Vector2D& outCenter) const;
@@ -162,8 +134,8 @@ public:
     bool isTrigger(EntityID id) const;
 
     // World coupling
-    void rebuildStaticFromWorld();                // build colliders from WorldManager grid
-    void onTileChanged(int x, int y);             // update a specific cell
+    void rebuildStaticFromWorld(); // build colliders from WorldManager grid
+    void onTileChanged(int x, int y); // update a specific cell
     void setWorldBounds(float minX, float minY, float maxX, float maxY);
 
     // Projectile hit sink: registered by ProjectileManager::init(), cleared in clean().
@@ -184,9 +156,9 @@ public:
     // EDM-CENTRIC: Only static bodies (buildings, triggers, obstacles) go in m_storage
     // Movables (players, NPCs) are managed entirely by EDM - no m_storage entry
     size_t addStaticBody(EntityID id, const Vector2D& position, const Vector2D& halfSize,
-                         uint32_t layer, uint32_t collidesWith,
-                         bool asTrigger, uint8_t triggerTag,
-                         uint8_t triggerType, size_t edmIndex);
+        uint32_t layer, uint32_t collidesWith,
+        bool asTrigger, uint8_t triggerTag,
+        uint8_t triggerType, size_t edmIndex);
     void removeCollisionBody(EntityID id);
     bool getCollisionBody(EntityID id, size_t& outIndex) const;
     void updateCollisionBodyPosition(EntityID id, const Vector2D& newPosition);
@@ -231,7 +203,7 @@ public:
     void testTriggerOverlapAndRecord(size_t edmIdx, size_t storageIdx);
     [[nodiscard]] size_t findPoolIndex(size_t edmIdx) const;
     [[nodiscard]] bool isEventOnlyTriggerOverlap(size_t storageIdx, float px, float py,
-                                                  float hw, float hh, uint16_t mask) const;
+        float hw, float hh, uint16_t mask) const;
 
     /* Body Type Distinctions:
      * - STATIC: World obstacles, buildings, triggers (never move, handled separately)
@@ -269,7 +241,9 @@ public:
 
 private:
     CollisionManager() = default;
-    ~CollisionManager() { if (!m_isShutdown) clean(); }
+    ~CollisionManager() {
+        if (!m_isShutdown) clean();
+    }
     CollisionManager(const CollisionManager&) = delete;
     CollisionManager& operator=(const CollisionManager&) = delete;
 
@@ -284,17 +258,11 @@ private:
     void broadphaseSingleThreaded();
     void broadphaseMultiThreaded(size_t batchCount, size_t batchSize);
     void broadphaseBatch(size_t startIdx, size_t endIdx,
-                         std::vector<std::pair<size_t, size_t>>& outMovableMovable,
-                         std::vector<std::pair<size_t, size_t>>& outMovableStatic);
+        std::vector<std::pair<size_t, size_t>>& outMovableMovable,
+        std::vector<std::pair<size_t, size_t>>& outMovableStatic);
 
     // Internal helper methods for SOA buffer management
     void prepareCollisionPools(size_t bodyCount, size_t threadCount);
-
-    // Apply pending kinematic updates from async AI threads (called at start of update)
-    void applyPendingKinematicUpdates();
-
-    // Helper: Apply a single kinematic update to EDM and cached AABB
-    void applyKinematicUpdate(const KinematicUpdate& kinematicUpdate);
 
     // Spatial hash optimization methods
     void rebuildStaticSpatialHash();
@@ -305,8 +273,8 @@ private:
     void subscribeWorldEvents(); // hook to world events
 
     // Collision culling configuration
-    static constexpr float COLLISION_CULLING_BUFFER = 1000.0f;      // Buffer around culling area (1200x1200 total area)
-    static constexpr float SPATIAL_QUERY_EPSILON = 0.5f;            // AABB expansion for cell boundary overlap protection
+    static constexpr float COLLISION_CULLING_BUFFER = 1000.0f; // Buffer around culling area (1200x1200 total area)
+    static constexpr float SPATIAL_QUERY_EPSILON = 0.5f; // AABB expansion for cell boundary overlap protection
 
     // Spatial culling support (area-based, not camera-based)
     struct CullingArea {
@@ -331,8 +299,9 @@ private:
     bool m_initialized{false};
     bool m_isShutdown{false};
     std::atomic<bool> m_globallyPaused{false}; // Global pause state for update() early exit
-    VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)    // Threading control for benchmarking
-    AABB m_worldBounds{0,0, 100000.0f, 100000.0f}; // large default box (centered at 0,0)
+    // Threading control for benchmarking
+    VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
+    AABB m_worldBounds{0, 0, 100000.0f, 100000.0f}; // large default box (centered at 0,0)
 
     // NEW SOA STORAGE SYSTEM: Following AIManager pattern for better cache performance
     // REFACTORED: Position/velocity/halfSize removed - accessed via EntityDataManager
@@ -350,21 +319,21 @@ private:
             // SIZE_MAX = not linked; 0 is a valid EDM index and must not be the empty default.
             size_t edmIndex{SIZE_MAX};
 
-            uint16_t layers{0};          // Layer mask (supports 16 layers, 7 currently defined)
-            uint16_t collidesWith{0};    // Collision mask
-            uint8_t bodyType{0};         // BodyType enum (STATIC, KINEMATIC, DYNAMIC)
-            uint8_t triggerTag{0};       // TriggerTag enum for triggers
-            uint8_t triggerType{0};      // TriggerType (EventOnly, Physical)
-            uint8_t active{0};           // Whether this body participates in collision detection
-            uint8_t isTrigger{0};        // Whether this is a trigger body
+            uint16_t layers{0}; // Layer mask (supports 16 layers, 7 currently defined)
+            uint16_t collidesWith{0}; // Collision mask
+            uint8_t bodyType{0}; // BodyType enum (STATIC, KINEMATIC, DYNAMIC)
+            uint8_t triggerTag{0}; // TriggerTag enum for triggers
+            uint8_t triggerType{0}; // TriggerType (EventOnly, Physical)
+            uint8_t active{0}; // Whether this body participates in collision detection
+            uint8_t isTrigger{0}; // Whether this is a trigger body
 
             // OPTIMIZATION: Cached coarse grid coords (eliminates m_bodyCoarseCell map lookup)
-            int16_t coarseCellX{0};      // Cached coarse grid X coordinate
-            int16_t coarseCellY{0};      // Cached coarse grid Y coordinate
+            int16_t coarseCellX{0}; // Cached coarse grid X coordinate
+            int16_t coarseCellY{0}; // Cached coarse grid Y coordinate
 
             // Padding to 64 bytes (one cache line)
             // Layout: 16 (floats) + 8 (size_t) + 4 (uint16_t) + 5 (uint8_t) + 1 (implicit) + 4 (int16_t) = 38
-            uint8_t _reserved[26]{};     // Future expansion (38 + 26 = 64)
+            uint8_t _reserved[26]{}; // Future expansion (38 + 26 = 64)
         };
         static_assert(sizeof(HotData) == 64, "HotData should be exactly 64 bytes for cache alignment");
 
@@ -372,10 +341,10 @@ private:
         // NOTE: Position/velocity/halfSize owned by EntityDataManager
         // All collision bodies must have valid EDM entries (statics via createStaticBody)
         struct ColdData {
-            EntityWeakPtr entityWeak{};  // Back-reference to entity
-            float restitution{0.0f};     // Bounce coefficient (0.0-1.0)
-            float friction{0.0f};        // Surface friction (0.0-1.0)
-            float mass{0.0f};            // Mass (kg) - for future physics
+            EntityWeakPtr entityWeak{}; // Back-reference to entity
+            float restitution{0.0f}; // Bounce coefficient (0.0-1.0)
+            float friction{0.0f}; // Surface friction (0.0-1.0)
+            float mass{0.0f}; // Mass (kg) - for future physics
             // NOTE: edmIndex moved to HotData for cache locality during AABB updates
         };
 
@@ -470,8 +439,8 @@ private:
      * 4. Narrowphase filters pairs and computes collision details
      * 5. EventOnly detection queries m_eventOnlySpatialHash separately
      * ===================================================== */
-    VoidLight::HierarchicalSpatialHash m_staticSpatialHash;     // Static world geometry
-    VoidLight::HierarchicalSpatialHash m_eventOnlySpatialHash;  // EventOnly triggers (water, etc.)
+    VoidLight::HierarchicalSpatialHash m_staticSpatialHash; // Static world geometry
+    VoidLight::HierarchicalSpatialHash m_eventOnlySpatialHash; // EventOnly triggers (water, etc.)
 
     // Current culling area for spatial queries
     mutable CullingArea m_currentCullingArea{0.0f, 0.0f, 0.0f, 0.0f};
@@ -482,7 +451,7 @@ private:
 
     ProjectileHitSink m_projectileHitSink;
     std::vector<EventManager::HandlerToken> m_handlerTokens;
-    std::unordered_map<uint64_t, std::pair<EntityID,EntityID>> m_activeTriggerPairs; // OnEnter/Exit filtering
+    std::unordered_map<uint64_t, std::pair<EntityID, EntityID>> m_activeTriggerPairs; // OnEnter/Exit filtering
     std::unordered_map<EntityID, std::chrono::steady_clock::time_point> m_triggerCooldownUntil;
     float m_defaultTriggerCooldownSec{0.0f};
 
@@ -492,14 +461,14 @@ private:
         std::vector<std::pair<EntityID, EntityID>> pairBuffer;
         std::vector<EntityID> candidateBuffer;
         std::vector<CollisionInfo> collisionBuffer;
-        std::vector<EntityID> dynamicCandidates;  // For broadphase dynamic queries
-        std::vector<EntityID> staticCandidates;   // For broadphase static queries
+        std::vector<EntityID> dynamicCandidates; // For broadphase dynamic queries
+        std::vector<EntityID> staticCandidates; // For broadphase static queries
 
         // EDM-CENTRIC: Active tier indices and cached collision data
-        std::vector<size_t> movableIndices;       // EDM indices of Active tier entities with collision
-        std::vector<size_t> staticIndices;        // m_storage indices of static bodies in culling area
+        std::vector<size_t> movableIndices; // EDM indices of Active tier entities with collision
+        std::vector<size_t> staticIndices; // m_storage indices of static bodies in culling area
         std::vector<size_t> sortedMovableIndices; // Pool indices sorted by X for Sweep-and-Prune
-        std::vector<size_t> sortedStaticIndices;  // Pool indices into staticAABBs sorted by X for SAP
+        std::vector<size_t> sortedStaticIndices; // Pool indices into staticAABBs sorted by X for SAP
 
         // EDM-CENTRIC: Cached AABBs for movables, computed from EDM each frame
         // Parallel to movableIndices: movableAABBs[i] corresponds to movableIndices[i]
@@ -508,9 +477,9 @@ private:
             float minX, minY, maxX, maxY;
             uint32_t layers;
             uint32_t collidesWith;
-            EntityID entityId;      // Cached to avoid edm.getEntityId() in narrowphase
-            bool isTrigger;         // Cached to avoid edm.getHotDataByIndex() in narrowphase
-            bool isProjectile;      // Cached so narrowphase can stamp CollisionInfo::projectileInvolved
+            EntityID entityId; // Cached to avoid edm.getEntityId() in narrowphase
+            bool isTrigger; // Cached to avoid edm.getHotDataByIndex() in narrowphase
+            bool isProjectile; // Cached so narrowphase can stamp CollisionInfo::projectileInvolved
         };
         std::vector<MovableAABB> movableAABBs;
 
@@ -530,7 +499,7 @@ private:
 
         // EventOnly trigger overlaps detected via per-entity spatial query
         struct EventOnlyTriggerOverlap {
-            size_t movablePoolIdx;   // Index into movableIndices/movableAABBs
+            size_t movablePoolIdx; // Index into movableIndices/movableAABBs
             size_t triggerStorageIdx; // Index into m_storage.hotData
         };
         std::vector<EventOnlyTriggerOverlap> eventOnlyOverlaps;
@@ -566,11 +535,11 @@ private:
                 staticCandidates.reserve(std::min(static_cast<size_t>(256), bodyCount / 5));
 
                 // EDM-centric capacity
-                movableIndices.reserve(bodyCount / 4);  // Estimate 25% Active tier with collision
-                movableAABBs.reserve(bodyCount / 4);    // Parallel to movableIndices
+                movableIndices.reserve(bodyCount / 4); // Estimate 25% Active tier with collision
+                movableAABBs.reserve(bodyCount / 4); // Parallel to movableIndices
                 staticIndices.reserve(bodyCount);
                 sortedMovableIndices.reserve(bodyCount / 4);
-                sortedStaticIndices.reserve(bodyCount);  // For SAP on statics
+                sortedStaticIndices.reserve(bodyCount); // For SAP on statics
                 movableMovablePairs.reserve(expectedPairs / 4);
                 movableStaticPairs.reserve(expectedPairs);
 
@@ -597,27 +566,35 @@ private:
             eventOnlyOverlaps.clear();
             // Vectors retain capacity
         }
+
+        // Drop the cached static broadphase set. It holds m_storage indices,
+        // so it must be cleared whenever m_storage is cleared.
+        void clearStaticCache() {
+            staticIndices.clear();
+            staticAABBs.clear();
+            sortedStaticIndices.clear();
+        }
     };
 
     mutable CollisionPool m_collisionPool;
 
     // Adaptive sort helpers for SAP - uses insertion sort for nearly-sorted data
     bool isNearlySorted(const std::vector<size_t>& indices,
-                        const std::vector<CollisionPool::MovableAABB>& aabbs,
-                        size_t sampleSize = 100) const;
+        const std::vector<CollisionPool::MovableAABB>& aabbs,
+        size_t sampleSize = 100) const;
     void insertionSortByMinX(std::vector<size_t>& indices,
-                             const std::vector<CollisionPool::MovableAABB>& aabbs) const;
+        const std::vector<CollisionPool::MovableAABB>& aabbs) const;
 
     // PERFORMANCE: Reusable containers to avoid per-frame allocations
     // These are cleared each frame but capacity is retained to eliminate heap churn
-    mutable std::unordered_set<uint64_t> m_currentTriggerPairsBuffer;   // For processTriggerEvents()
-    mutable std::vector<size_t> m_triggerCandidates;  // For detectEventOnlyTriggers() spatial queries
+    mutable std::unordered_set<uint64_t> m_currentTriggerPairsBuffer; // For processTriggerEvents()
+    mutable std::vector<size_t> m_triggerCandidates; // For detectEventOnlyTriggers() spatial queries
     // Note: buildActiveIndices() uses pools.staticIndices directly (already a reusable buffer)
 
     // Trigger sweep edge buffer (avoids per-frame allocation in detectEventOnlyTriggersSweep)
     struct TriggerSweepEdge {
         float x;
-        size_t idx;     // edmIdx for entities, storageIdx for triggers
+        size_t idx; // edmIdx for entities, storageIdx for triggers
         bool isStart;
         bool isTrigger;
     };
@@ -635,22 +612,23 @@ private:
         double lastTotalMs{0.0};
         double avgTotalMs{0.0};
         uint64_t frames{0};
+        uint64_t staticHashRebuilds{0}; // Static + EventOnly hash rebuilds
         size_t lastPairs{0};
         size_t lastCollisions{0};
         size_t bodyCount{0};
 
         // PERFORMANCE OPTIMIZATION METRICS: Track optimization effectiveness
-        size_t lastActiveBodies{0};           // Bodies after culling optimizations
-        size_t lastDynamicBodiesCulled{0};    // Dynamic bodies culled by distance
-        size_t lastStaticBodiesCulled{0};     // Static bodies culled by area
-        size_t totalStaticBodies{0};          // Total static bodies before culling
-        size_t totalMovableBodies{0};         // Total dynamic+kinematic bodies before culling
-        double lastCullingMs{0.0};            // Time spent on culling operations
-        double avgBroadphaseMs{0.0};          // Average broadphase time
+        size_t lastActiveBodies{0}; // Bodies after culling optimizations
+        size_t lastDynamicBodiesCulled{0}; // Dynamic bodies culled by distance
+        size_t lastStaticBodiesCulled{0}; // Static bodies culled by area
+        size_t totalStaticBodies{0}; // Total static bodies before culling
+        size_t totalMovableBodies{0}; // Total dynamic+kinematic bodies before culling
+        double lastCullingMs{0.0}; // Time spent on culling operations
+        double avgBroadphaseMs{0.0}; // Average broadphase time
 
         // TRIGGER DETECTION METRICS: Track EventOnly trigger detection
-        size_t lastTriggerDetectors{0};       // Entities with NEEDS_TRIGGER_DETECTION flag
-        size_t lastTriggerOverlaps{0};        // EventOnly trigger overlaps detected
+        size_t lastTriggerDetectors{0}; // Entities with NEEDS_TRIGGER_DETECTION flag
+        size_t lastTriggerOverlaps{0}; // EventOnly trigger overlaps detected
 
         // High-performance exponential moving average (no loops, O(1))
         static constexpr double ALPHA = 0.01; // ~100 frame average, much faster than windowing
@@ -698,6 +676,10 @@ private:
     // Optimization: Track when static spatial hash needs rebuilding
     bool m_staticHashDirty{false};
 
+    // True inside rebuildStaticFromWorld(): addStaticBody/removeCollisionBody
+    // skip per-body CollisionObstacleChanged (StaticCollidersReady covers it).
+    bool m_rebuildingStaticsFromWorld{false};
+
     // Optimization: Track when collision statistics need recalculation
     mutable bool m_statisticsDirty{true};
 
@@ -716,7 +698,10 @@ private:
     struct BroadphaseBatchBuffer {
         std::vector<std::pair<size_t, size_t>> movableMovable;
         std::vector<std::pair<size_t, size_t>> movableStatic;
-        void clear() { movableMovable.clear(); movableStatic.clear(); }
+        void clear() {
+            movableMovable.clear();
+            movableStatic.clear();
+        }
     };
     mutable std::vector<BroadphaseBatchBuffer> m_broadphaseBatchBuffers;
 

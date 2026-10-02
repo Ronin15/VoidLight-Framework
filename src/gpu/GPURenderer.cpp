@@ -9,6 +9,7 @@
 #include "managers/TextureManager.hpp"
 #include "core/Logger.hpp"
 #include "utils/FrameProfiler.hpp"
+#include <algorithm>
 #include <cstring>
 #include <format>
 
@@ -36,11 +37,13 @@ bool GPURenderer::init() {
     m_device = gpuDevice.get();
     m_window = gpuDevice.getWindow();
 
-    // Get window size for viewport (logical size - matches swapchain)
+    // Viewport/scene texture must match swapchain pixels, not logical window size.
     int w = 0, h = 0;
-    SDL_GetWindowSize(m_window, &w, &h);
-    m_viewportWidth = static_cast<uint32_t>(w);
-    m_viewportHeight = static_cast<uint32_t>(h);
+    if (!SDL_GetWindowSizeInPixels(m_window, &w, &h) || w <= 0 || h <= 0) {
+        SDL_GetWindowSize(m_window, &w, &h);
+    }
+    m_viewportWidth = static_cast<uint32_t>(std::max(w, 1));
+    m_viewportHeight = static_cast<uint32_t>(std::max(h, 1));
 
     // Initialize shader manager
     if (!GPUShaderManager::Instance().init(m_device)) {
@@ -301,17 +304,14 @@ bool GPURenderer::acquireSwapchainTexture() {
         return false;
     }
 
-    // Sync the viewport/scene-texture to the swapchain dimensions. NOTE: this
-    // runs from beginScenePass(), which is AFTER GameStateManager::recordGPUVertices()
-    // in GameEngine::render(). On a resize frame the scene was therefore recorded
-    // against the previous viewport size while renderRecordedScene builds its ortho
-    // from the new scene-texture size, producing a one-frame shift. This is accepted:
-    // moving the swapchain acquisition before recording would restructure the frame
-    // lifecycle (acquisition must run on the active command buffer).
+    // Swapchain is authoritative at pass time. GameEngine::refreshWindowMetrics
+    // pre-sizes the scene texture before record so a fullscreen toggle is not
+    // stuck on the previous windowed size. If SDL pixels and the swapchain still
+    // disagree this frame, sync here (after record, before BeginGPURenderPass).
     if (m_swapchainWidth != m_viewportWidth || m_swapchainHeight != m_viewportHeight) {
         GAMEENGINE_INFO(std::format("Swapchain size changed: {}x{} -> {}x{}",
-                                    m_viewportWidth, m_viewportHeight,
-                                    m_swapchainWidth, m_swapchainHeight));
+            m_viewportWidth, m_viewportHeight,
+            m_swapchainWidth, m_swapchainHeight));
         updateViewport(m_swapchainWidth, m_swapchainHeight);
     }
 
@@ -377,7 +377,7 @@ SDL_GPURenderPass* GPURenderer::beginScenePass() {
     // Begin scene render pass
     SDL_GPUColorTargetInfo colorTarget = m_sceneTexture->asColorTarget(
         SDL_GPU_LOADOP_CLEAR,
-        {0.122f, 0.125f, 0.133f, 1.0f}  // HammerGray slate gray (31, 32, 34)
+        {0.122f, 0.125f, 0.133f, 1.0f} // HammerGray slate gray (31, 32, 34)
     );
 
     profiler.beginRender(RenderPhase::GPUScenePass);
@@ -396,7 +396,7 @@ SDL_GPURenderPass* GPURenderer::beginScenePass() {
     // Debug: Log scene texture dimensions (only once or on change)
     if (sceneW != m_lastLoggedSceneW || sceneH != m_lastLoggedSceneH) {
         GAMEENGINE_DEBUG(std::format("Scene pass: texture={}x{}, viewport={}x{}",
-                                     sceneW, sceneH, m_viewportWidth, m_viewportHeight));
+            sceneW, sceneH, m_viewportWidth, m_viewportHeight));
         m_lastLoggedSceneW = sceneW;
         m_lastLoggedSceneH = sceneH;
     }
@@ -433,7 +433,7 @@ SDL_GPURenderPass* GPURenderer::beginSwapchainPass() {
     colorTarget.texture = m_swapchainTexture;
     colorTarget.load_op = SDL_GPU_LOADOP_CLEAR;
     colorTarget.store_op = SDL_GPU_STOREOP_STORE;
-    colorTarget.clear_color = {.r=0.0f, .g=0.0f, .b=0.0f, .a=1.0f};
+    colorTarget.clear_color = {.r = 0.0f, .g = 0.0f, .b = 0.0f, .a = 1.0f};
 
     auto& profiler = FrameProfiler::Instance();
     profiler.beginRender(RenderPhase::GPUSwapPass);
@@ -510,6 +510,10 @@ SDL_GPUGraphicsPipeline* GPURenderer::getCompositePipeline() const {
 }
 
 void GPURenderer::updateViewport(uint32_t width, uint32_t height) {
+    if (!m_initialized) {
+        return;
+    }
+
     if (width == 0 || height == 0) {
         GAMEENGINE_WARN(std::format("GPURenderer::updateViewport ignored invalid size: {}x{}", width, height));
         return;
@@ -528,7 +532,7 @@ void GPURenderer::updateViewport(uint32_t width, uint32_t height) {
     // Recreate scene texture with new size
     if (!createSceneTexture()) {
         GAMEENGINE_ERROR(std::format("GPURenderer::updateViewport failed to recreate scene texture for {}x{}",
-                                      width, height));
+            width, height));
         // Revert to old dimensions to maintain consistency
         m_viewportWidth = oldWidth;
         m_viewportHeight = oldHeight;
@@ -536,8 +540,8 @@ void GPURenderer::updateViewport(uint32_t width, uint32_t height) {
     }
 
     GAMEENGINE_INFO(std::format("GPURenderer viewport updated: {}x{} -> {}x{} (scene: {}x{})",
-                                 oldWidth, oldHeight, width, height,
-                                 width, height));
+        oldWidth, oldHeight, width, height,
+        width, height));
 }
 
 void GPURenderer::pushViewProjection(const SDL_GPURenderPass* pass, const float* viewProjection) {
@@ -549,17 +553,17 @@ void GPURenderer::pushViewProjection(const SDL_GPURenderPass* pass, const float*
 }
 
 void GPURenderer::renderUIBatches(SDL_GPURenderPass* pass,
-                                  uint32_t primitiveVertexCount,
-                                  std::span<const UITextureDrawBatch> imageBatches,
-                                  std::span<const UITextDrawBatch> textBatches) {
+    uint32_t primitiveVertexCount,
+    std::span<const UITextureDrawBatch> imageBatches,
+    std::span<const UITextDrawBatch> textBatches) {
     if (!pass || (primitiveVertexCount == 0 && imageBatches.empty() && textBatches.empty())) {
         return;
     }
 
     float orthoMatrix[16];
     createOrthoMatrix(0.0f, static_cast<float>(m_viewportWidth),
-                      0.0f, static_cast<float>(m_viewportHeight),
-                      orthoMatrix);
+        0.0f, static_cast<float>(m_viewportHeight),
+        orthoMatrix);
 
     SDL_GPUGraphicsPipeline* currentPipeline = nullptr;
     SDL_GPUBuffer* currentVertexBuffer = nullptr;
@@ -649,7 +653,7 @@ void GPURenderer::renderUIBatches(SDL_GPURenderPass* pass,
 }
 
 void GPURenderer::pushCompositeUniforms(const SDL_GPURenderPass* pass,
-                                         float subPixelX, float subPixelY, float zoom) {
+    float subPixelX, float subPixelY, float zoom) {
     if (!pass) {
         return;
     }
@@ -705,13 +709,13 @@ void GPURenderer::renderComposite(SDL_GPURenderPass* pass) {
 }
 
 void GPURenderer::createOrthoMatrix(float left, float right, float bottom, float top,
-                                     float* out) {
+    float* out) {
     // Standard orthographic projection (OpenGL-style, but works with Vulkan clip space)
     std::memset(out, 0, sizeof(float) * 16);
 
     out[0] = 2.0f / (right - left);
     out[5] = 2.0f / (top - bottom);
-    out[10] = -1.0f;  // Near = 0, Far = 1 for Vulkan
+    out[10] = -1.0f; // Near = 0, Far = 1 for Vulkan
     out[12] = -(right + left) / (right - left);
     out[13] = -(top + bottom) / (top - bottom);
     out[15] = 1.0f;
@@ -721,10 +725,10 @@ bool GPURenderer::loadShaders() {
     auto& shaderMgr = GPUShaderManager::Instance();
 
     ShaderInfo spriteVertInfo{};
-    spriteVertInfo.numUniformBuffers = 1;  // View-projection matrix
+    spriteVertInfo.numUniformBuffers = 1; // View-projection matrix
 
     ShaderInfo spriteFragInfo{};
-    spriteFragInfo.numSamplers = 1;  // Texture sampler
+    spriteFragInfo.numSamplers = 1; // Texture sampler
 
     ShaderInfo textFragInfo{};
     textFragInfo.numSamplers = 1;
@@ -741,7 +745,7 @@ bool GPURenderer::loadShaders() {
 
     ShaderInfo compositeFragInfo{};
     compositeFragInfo.numSamplers = 1;
-    compositeFragInfo.numUniformBuffers = 1;  // CompositeUBO
+    compositeFragInfo.numUniformBuffers = 1; // CompositeUBO
 
     // Shader manager owns resource resolution for platform-specific shader binaries.
     if (!shaderMgr.loadShader("res/shaders/sprite.vert", SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo)) {
@@ -813,7 +817,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(spriteFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, spriteFragInfo),
             sceneFormat,
-            false  // opaque
+            false // opaque
         );
         if (!m_spriteOpaquePipeline.create(m_device, config)) {
             return false;
@@ -826,7 +830,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(spriteFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, spriteFragInfo),
             sceneFormat,
-            true  // alpha
+            true // alpha
         );
         if (!m_spriteAlphaPipeline.create(m_device, config)) {
             return false;
@@ -839,7 +843,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
             sceneFormat,
-            false  // alpha
+            false // alpha
         );
         if (!m_particlePipeline.create(m_device, config)) {
             return false;
@@ -852,7 +856,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
             sceneFormat,
-            true  // additive
+            true // additive
         );
         if (!m_particlePipelineAdditive.create(m_device, config)) {
             return false;
@@ -864,8 +868,7 @@ bool GPURenderer::createPipelines() {
         auto config = GPUPipeline::createPrimitiveConfig(
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
-            sceneFormat
-        );
+            sceneFormat);
         if (!m_primitivePipeline.create(m_device, config)) {
             return false;
         }
@@ -877,8 +880,7 @@ bool GPURenderer::createPipelines() {
         auto config = GPUPipeline::createCompositeConfig(
             shaderMgr.getShader(compositeVert, SDL_GPU_SHADERSTAGE_VERTEX, compositeVertInfo),
             shaderMgr.getShader(compositeFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, compositeFragInfo),
-            swapchainFormat
-        );
+            swapchainFormat);
         if (!m_compositePipeline.create(m_device, config)) {
             return false;
         }
@@ -890,7 +892,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(spriteFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, spriteFragInfo),
             swapchainFormat,
-            true  // alpha blending for text
+            true // alpha blending for text
         );
         if (!m_uiSpritePipeline.create(m_device, config)) {
             return false;
@@ -902,8 +904,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(textAlphaFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, textFragInfo),
             swapchainFormat,
-            true
-        );
+            true);
         if (!m_uiTextAlphaPipeline.create(m_device, config)) {
             return false;
         }
@@ -914,8 +915,7 @@ bool GPURenderer::createPipelines() {
             shaderMgr.getShader(spriteVert, SDL_GPU_SHADERSTAGE_VERTEX, spriteVertInfo),
             shaderMgr.getShader(textSDFFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, textFragInfo),
             swapchainFormat,
-            true
-        );
+            true);
         if (!m_uiTextSDFPipeline.create(m_device, config)) {
             return false;
         }
@@ -926,8 +926,7 @@ bool GPURenderer::createPipelines() {
         auto config = GPUPipeline::createPrimitiveConfig(
             shaderMgr.getShader(colorVert, SDL_GPU_SHADERSTAGE_VERTEX, colorVertInfo),
             shaderMgr.getShader(colorFrag, SDL_GPU_SHADERSTAGE_FRAGMENT, colorFragInfo),
-            swapchainFormat
-        );
+            swapchainFormat);
         if (!m_uiPrimitivePipeline.create(m_device, config)) {
             return false;
         }
@@ -936,8 +935,7 @@ bool GPURenderer::createPipelines() {
     return true;
 }
 
-bool GPURenderer::createSceneTexture()
-{
+bool GPURenderer::createSceneTexture() {
     // Create the scene texture at viewport size.
     // Zoom is handled in the composite shader, not by rendering at larger scale
     uint32_t sceneWidth = m_viewportWidth;
@@ -948,11 +946,9 @@ bool GPURenderer::createSceneTexture()
         m_device,
         sceneWidth, sceneHeight,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER
-    );
+        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
 
-    if (!newTexture->isValid())
-    {
+    if (!newTexture->isValid()) {
         GAMEENGINE_ERROR(std::format("Failed to create scene texture {}x{}", sceneWidth, sceneHeight));
         // Old m_sceneTexture remains valid if it existed
         return false;

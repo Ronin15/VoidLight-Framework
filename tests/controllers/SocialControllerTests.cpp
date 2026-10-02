@@ -19,6 +19,7 @@
 #include "managers/CollisionManager.hpp"
 #include "events/EntityEvents.hpp"
 #include "events/ResourceChangeEvent.hpp"
+#include "events/StanceChangedEvent.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameTimeManager.hpp"
@@ -89,7 +90,7 @@ protected:
     }
 
     EntityHandle spawnNPC(const std::string& charClass,
-                          const Vector2D& position = Vector2D(100.0f, 100.0f)) {
+        const Vector2D& position = Vector2D(100.0f, 100.0f)) {
         EntityHandle npc = EntityDataManager::Instance().createNPCWithRaceClass(
             position, "Human", charClass);
         BOOST_REQUIRE(npc.isValid());
@@ -97,8 +98,8 @@ protected:
     }
 
     static int resourceDeltaFor(const std::vector<ResourceEventRecord>& events,
-                                EntityHandle owner,
-                                VoidLight::ResourceHandle handle) {
+        EntityHandle owner,
+        VoidLight::ResourceHandle handle) {
         int total = 0;
         for (const auto& event : events) {
             if (event.owner == owner && event.handle == handle) {
@@ -171,13 +172,13 @@ BOOST_AUTO_TEST_CASE(TestDoubleSubscribe) {
     SocialController controller(nullptr);
 
     controller.subscribe();
-    controller.subscribe();  // Should be no-op
+    controller.subscribe(); // Should be no-op
     BOOST_CHECK(controller.isSubscribed());
 }
 
 BOOST_AUTO_TEST_CASE(TestConstants) {
     // Verify price multipliers are reasonable
-    BOOST_CHECK_GT(SocialController::BUY_PRICE_MULTIPLIER, 1.0f);  // Markup
+    BOOST_CHECK_GT(SocialController::BUY_PRICE_MULTIPLIER, 1.0f); // Markup
     BOOST_CHECK_LT(SocialController::SELL_PRICE_MULTIPLIER, 1.0f); // Markdown
 
     // Verify relationship thresholds are ordered
@@ -350,7 +351,7 @@ BOOST_AUTO_TEST_CASE(TestRecordInteractionAppliesMemoryAndEmotionState) {
     const auto initialEmotions = edm.getMemoryData(idx).emotions;
 
     controller.recordInteraction(npcHandle, InteractionType::Theft,
-                                 SocialController::THEFT_RELATIONSHIP_LOSS);
+        SocialController::THEFT_RELATIONSHIP_LOSS);
 
     const auto& memoryData = edm.getMemoryData(idx);
     BOOST_CHECK_EQUAL(memoryData.memoryCount, initialMemory + 1);
@@ -364,7 +365,7 @@ BOOST_AUTO_TEST_CASE(TestReportTheftWithInvalidVictim) {
     SocialController controller(nullptr);
 
     EntityHandle thief;
-    EntityHandle victim;  // Invalid
+    EntityHandle victim; // Invalid
     VoidLight::ResourceHandle stolenItem(1, 1);
     std::atomic<int> theftEvents{0};
 
@@ -380,6 +381,135 @@ BOOST_AUTO_TEST_CASE(TestReportTheftWithInvalidVictim) {
 
     BOOST_CHECK_EQUAL(theftEvents.load(std::memory_order_relaxed), 0);
     BOOST_CHECK_EQUAL(controller.getRelationshipLevel(victim), SocialController::RELATIONSHIP_NEUTRAL);
+}
+
+BOOST_AUTO_TEST_CASE(TestPlayerTheftLowersStandingNotStance) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle victim = spawnNPC("Warrior");
+    BOOST_REQUIRE(player->getHandle().isValid());
+    edm.setFaction(victim, 1);
+
+    int stanceEvents = 0;
+    EventManager::Instance().registerHandler(
+        EventTypeId::StanceChanged, [&stanceEvents](const EventData& data) {
+            if (data.isActive() && data.event) {
+                ++stanceEvents;
+            }
+        });
+
+    const float relationshipBefore = controller.getRelationshipLevel(victim);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
+
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        BOOST_CHECK(!aiMgr.factionRowHasHostile(faction));
+    }
+    BOOST_CHECK_LT(controller.getRelationshipLevel(victim), relationshipBefore);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
+        AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(player->getHandle(), 1),
+        AIManager::PLAYER_STANDING_THEFT_DELTA);
+    // One theft does not cross the Hostile threshold: no relation event.
+    BOOST_CHECK_EQUAL(stanceEvents, 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestRepeatedTheftCrossesHostileAndEmitsPlayerRelationEvent) {
+    auto& edm = EntityDataManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle victim = spawnNPC("Warrior");
+    edm.setFaction(victim, 1);
+
+    int towardPlayerEvents = 0;
+    int factionEvents = 0;
+    uint8_t fromFaction = 255;
+    uint8_t towardFaction = 0;
+    FactionStance newStance = FactionStance::Neutral;
+    EventManager::Instance().registerHandler(
+        EventTypeId::StanceChanged, [&](const EventData& data) {
+            const auto* event = dynamic_cast<const StanceChangedEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            if (!event->isTowardPlayer()) {
+                ++factionEvents;
+                return;
+            }
+            ++towardPlayerEvents;
+            fromFaction = event->getFromFaction();
+            towardFaction = event->getTowardFaction();
+            newStance = event->getNewStance();
+        });
+
+    // -25, -50: the second theft reaches the Hostile threshold.
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 0);
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
+        2 * AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
+    BOOST_CHECK_EQUAL(fromFaction, 1);
+    BOOST_CHECK_EQUAL(towardFaction, CharacterData::NO_FACTION);
+    BOOST_CHECK(newStance == FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(factionEvents, 0);
+
+    // Further theft stays Hostile: no additional relation event.
+    controller.reportTheft(player->getHandle(), victim, breadHandle, 1);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
+}
+
+BOOST_AUTO_TEST_CASE(TestGiftRaisesStandingNotStance) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle npc = spawnNPC("Warrior");
+    edm.setFaction(npc, 1);
+    BOOST_REQUIRE(player->addToInventory(breadHandle, 2));
+
+    const float relationshipBefore = controller.getRelationshipLevel(npc);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
+    BOOST_REQUIRE(controller.tryGift(npc, breadHandle, 1));
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        for (uint8_t toward = 0; toward < AIManager::MAX_FACTIONS; ++toward) {
+            const FactionStance expected =
+                faction == toward ? FactionStance::Allied : FactionStance::Neutral;
+            BOOST_CHECK(aiMgr.getStance(faction, toward) == expected);
+        }
+    }
+    BOOST_CHECK_GT(controller.getRelationshipLevel(npc), relationshipBefore);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1),
+        AIManager::PLAYER_STANDING_GIFT_DELTA);
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(0), 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestNpcTheftWorsensNpcFactionStance) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    SocialController controller(player);
+
+    EntityHandle victim = spawnNPC("Warrior");
+    EntityHandle thief = spawnNPC("Warrior", Vector2D(140.0f, 100.0f));
+    EntityHandle sameFactionThief = spawnNPC("Warrior", Vector2D(180.0f, 100.0f));
+    edm.setFaction(victim, 1);
+    edm.setFaction(thief, 2);
+    edm.setFaction(sameFactionThief, 1);
+
+    controller.reportTheft(thief, victim, breadHandle, 1);
+    BOOST_CHECK(aiMgr.getStance(1, 2) == FactionStance::Hostile);
+    BOOST_CHECK(aiMgr.getStance(2, 1) == FactionStance::Neutral);
+
+    // Same-faction or invalid thieves write no stance; no NPC theft touches standing.
+    controller.reportTheft(sameFactionThief, victim, breadHandle, 1);
+    BOOST_CHECK(aiMgr.getStance(1, 1) == FactionStance::Allied);
+    controller.reportTheft(EntityHandle{}, victim, breadHandle, 1);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(0));
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(2));
+    BOOST_CHECK_EQUAL(controller.getPlayerFactionStanding(1), 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -564,8 +694,8 @@ BOOST_AUTO_TEST_CASE(TestExecuteBuyUsesGoldCoinsCurrency) {
                 return;
             }
             resourceEvents.push_back({event->getOwnerHandle(),
-                                      event->getResourceHandle(),
-                                      event->getQuantityChange()});
+                event->getResourceHandle(),
+                event->getQuantityChange()});
         });
 
     BOOST_REQUIRE(controller.openTrade(merchant));
@@ -591,9 +721,9 @@ BOOST_AUTO_TEST_CASE(TestExecuteBuyUsesGoldCoinsCurrency) {
     BOOST_CHECK_EQUAL(player->getGold(), initialPlayerGold - expectedCost);
     BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread + 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, breadHandle),
-                      initialMerchantBread - 2);
+        initialMerchantBread - 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, goldHandle),
-                      initialMerchantGold + expectedCost);
+        initialMerchantGold + expectedCost);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), 2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), goldHandle), -expectedCost);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, breadHandle), -2);
@@ -623,8 +753,8 @@ BOOST_AUTO_TEST_CASE(TestExecuteSellUsesGoldCoinsCurrency) {
                 return;
             }
             resourceEvents.push_back({event->getOwnerHandle(),
-                                      event->getResourceHandle(),
-                                      event->getQuantityChange()});
+                event->getResourceHandle(),
+                event->getQuantityChange()});
         });
 
     BOOST_REQUIRE(controller.openTrade(merchant));
@@ -650,9 +780,9 @@ BOOST_AUTO_TEST_CASE(TestExecuteSellUsesGoldCoinsCurrency) {
     BOOST_CHECK_EQUAL(player->getGold(), initialPlayerGold + expectedPayout);
     BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread - 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, breadHandle),
-                      initialMerchantBread + 2);
+        initialMerchantBread + 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(merchantInvIdx, goldHandle),
-                      initialMerchantGold - expectedPayout);
+        initialMerchantGold - expectedPayout);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), -2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), goldHandle), expectedPayout);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, merchant, breadHandle), 2);
@@ -680,8 +810,8 @@ BOOST_AUTO_TEST_CASE(TestGiftTransfersItemToNPCInventoryAndDispatchesResourceCha
                 return;
             }
             resourceEvents.push_back({event->getOwnerHandle(),
-                                      event->getResourceHandle(),
-                                      event->getQuantityChange()});
+                event->getResourceHandle(),
+                event->getQuantityChange()});
         });
 
     BOOST_CHECK(!edm.isNPCMerchant(villager));
@@ -690,7 +820,7 @@ BOOST_AUTO_TEST_CASE(TestGiftTransfersItemToNPCInventoryAndDispatchesResourceCha
 
     BOOST_CHECK_EQUAL(player->getInventoryQuantity(breadHandle), initialPlayerBread - 2);
     BOOST_CHECK_EQUAL(edm.getInventoryQuantity(villagerInvIdx, breadHandle),
-                      initialVillagerBread + 2);
+        initialVillagerBread + 2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, player->getHandle(), breadHandle), -2);
     BOOST_CHECK_EQUAL(resourceDeltaFor(resourceEvents, villager, breadHandle), 2);
 }

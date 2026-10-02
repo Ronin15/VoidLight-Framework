@@ -27,7 +27,7 @@ class GPUSceneRecorder;
 
 class AIDemoState : public GameState {
 public:
-    AIDemoState();  // Defined in .cpp for unique_ptr with forward-declared types
+    AIDemoState(); // Defined in .cpp for unique_ptr with forward-declared types
     ~AIDemoState() override;
 
     void update(float deltaTime) override;
@@ -38,15 +38,15 @@ public:
 
     GameStateId getStateId() const override { return GameStateId::AI_DEMO; }
 
-    // GPU rendering support
-    void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                           float interpolationAlpha) override;
+    bool hasGPUScene() const override { return true; }
+    void recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
+        float interpolationAlpha) override;
+    void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
     void renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
-                        SDL_GPURenderPass* scenePass,
-                        float interpolationAlpha) override;
+        SDL_GPURenderPass* scenePass,
+        float interpolationAlpha) override;
     void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                     SDL_GPURenderPass* swapchainPass) override;
-    bool supportsGPURendering() const override { return true; }
+        SDL_GPURenderPass* swapchainPass) override;
 
     // Get the player entity for AI behaviors to access
     EntityPtr getPlayer() const { return m_player; }

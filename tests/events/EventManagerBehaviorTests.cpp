@@ -9,22 +9,26 @@
 #include <vector>
 
 #include "EventManagerTestAccess.hpp"
+#include "ai/BehaviorConfig.hpp"
 #include "core/ThreadSystem.hpp"
 #include "events/CameraEvent.hpp"
 #include "events/Event.hpp"
 #include "events/WeatherEvent.hpp"
+#include "managers/AIManager.hpp"
+#include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
+#include "managers/PathfinderManager.hpp"
 
 struct ThreadSystemFixture {
-  ThreadSystemFixture() {
-    if (!VoidLight::ThreadSystem::Instance().init()) {
-      throw std::runtime_error("Failed to initialize ThreadSystem for EventManagerBehaviorTests");
+    ThreadSystemFixture() {
+        if (!VoidLight::ThreadSystem::Instance().init()) {
+            throw std::runtime_error("Failed to initialize ThreadSystem for EventManagerBehaviorTests");
+        }
     }
-  }
-  ~ThreadSystemFixture() {
-    VoidLight::ThreadSystem::Instance().clean();
-  }
+    ~ThreadSystemFixture() {
+        VoidLight::ThreadSystem::Instance().clean();
+    }
 };
 BOOST_GLOBAL_FIXTURE(ThreadSystemFixture);
 
@@ -32,34 +36,34 @@ namespace {
 
 class TestEvent : public Event {
 public:
-  explicit TestEvent(const std::string &name) : m_name(name) {}
-  void update() override {}
-  void execute() override { ++m_executeCount; }
-  void reset() override { m_executeCount = 0; }
-  void clean() override {}
-  std::string getName() const override { return m_name; }
-  std::string getType() const override { return "Custom"; }
-  std::string getTypeName() const override { return "TestEvent"; }
-  EventTypeId getTypeId() const override { return EventTypeId::Custom; }
-  bool checkConditions() override { return true; }
+    explicit TestEvent(const std::string& name) : m_name(name) {}
+    void update() override {}
+    void execute() override { ++m_executeCount; }
+    void reset() override { m_executeCount = 0; }
+    void clean() override {}
+    std::string getName() const override { return m_name; }
+    std::string getType() const override { return "Custom"; }
+    std::string getTypeName() const override { return "TestEvent"; }
+    EventTypeId getTypeId() const override { return EventTypeId::Custom; }
+    bool checkConditions() override { return true; }
 
-  int getExecuteCount() const { return m_executeCount; }
+    int getExecuteCount() const { return m_executeCount; }
 
 private:
-  std::string m_name;
-  int m_executeCount{0};
+    std::string m_name;
+    int m_executeCount{0};
 };
 
 struct EventFixture {
-  EventFixture() {
-    EventManagerTestAccess::reset();
-    BOOST_REQUIRE(EntityDataManager::Instance().init());
-  }
-  ~EventFixture() {
-    // Clean after each test
-    EventManager::Instance().clean();
-    EntityDataManager::Instance().clean();
-  }
+    EventFixture() {
+        EventManagerTestAccess::reset();
+        BOOST_REQUIRE(EntityDataManager::Instance().init());
+    }
+    ~EventFixture() {
+        // Clean after each test
+        EventManager::Instance().clean();
+        EntityDataManager::Instance().clean();
+    }
 };
 
 } // namespace
@@ -68,239 +72,302 @@ BOOST_FIXTURE_TEST_SUITE(EventBehaviorSuite, EventFixture)
 
 // Test dispatch-only architecture: events dispatched to handlers
 BOOST_AUTO_TEST_CASE(DispatchEvent_WithHandlers_CallsHandlers) {
-  auto e = std::make_shared<TestEvent>("TestA");
+    auto e = std::make_shared<TestEvent>("TestA");
 
-  std::atomic<int> handlerCallCount{0};
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Custom, [&handlerCallCount](const EventData &data) {
-        if (data.isActive()) ++handlerCallCount;
-      });
+    std::atomic<int> handlerCallCount{0};
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Custom, [&handlerCallCount](const EventData& data) {
+            if (data.isActive()) ++handlerCallCount;
+        });
 
-  // Dispatch directly (dispatch-only architecture)
-  EventManager::Instance().dispatchEvent(e);
-  EventManager::Instance().update(); // Process deferred events
+    // Dispatch directly (dispatch-only architecture)
+    EventManager::Instance().dispatchEvent(e);
+    EventManager::Instance().update(); // Process deferred events
 
-  BOOST_CHECK_EQUAL(handlerCallCount.load(), 1);
-  EventManager::Instance().removeHandler(tok);
+    BOOST_CHECK_EQUAL(handlerCallCount.load(), 1);
+    EventManager::Instance().removeHandler(tok);
 }
 
 // Test dispatch without handlers still succeeds
 BOOST_AUTO_TEST_CASE(DispatchEvent_NoHandlers_Succeeds) {
-  auto e = std::make_shared<TestEvent>("TestB");
+    auto e = std::make_shared<TestEvent>("TestB");
 
-  // No handlers registered for Custom type
-  bool ok = EventManager::Instance().dispatchEvent(e);
-  BOOST_CHECK(ok);
+    // No handlers registered for Custom type
+    bool ok = EventManager::Instance().dispatchEvent(e);
+    BOOST_CHECK(ok);
 
-  // Update to process deferred events (should not crash)
-  EventManager::Instance().update();
+    // Update to process deferred events (should not crash)
+    EventManager::Instance().update();
 }
 
 BOOST_AUTO_TEST_CASE(ChangeWeather_DispatchesToHandlers) {
-  std::atomic<bool> weatherHandlerCalled{false};
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Weather, [&weatherHandlerCalled](const EventData &data) {
-        if (data.event) weatherHandlerCalled.store(true);
-      });
+    std::atomic<bool> weatherHandlerCalled{false};
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Weather, [&weatherHandlerCalled](const EventData& data) {
+            if (data.event) weatherHandlerCalled.store(true);
+        });
 
-  bool ok = EventManager::Instance().changeWeather("Rainy", 1.0f);
-  BOOST_CHECK(ok);
+    bool ok = EventManager::Instance().changeWeather("Rainy", 1.0f);
+    BOOST_CHECK(ok);
 
-  EventManager::Instance().update(); // Process deferred events
-  BOOST_CHECK(weatherHandlerCalled.load());
+    EventManager::Instance().update(); // Process deferred events
+    BOOST_CHECK(weatherHandlerCalled.load());
 
-  EventManager::Instance().removeHandler(tok);
+    EventManager::Instance().removeHandler(tok);
+}
+
+BOOST_AUTO_TEST_CASE(ChangeWeather_ReusedPoolEventCarriesTypeDefaults) {
+    std::vector<WeatherType> types;
+    std::vector<float> intensities;
+    std::vector<float> visibilities;
+    std::vector<const Event*> events;
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Weather, [&](const EventData& data) {
+            const auto* weather = static_cast<const WeatherEvent*>(data.event.get());
+            events.push_back(data.event.get());
+            types.push_back(weather->getWeatherType());
+            intensities.push_back(weather->getWeatherParams().intensity);
+            visibilities.push_back(weather->getWeatherParams().visibility);
+        });
+
+    // Fixture reset cleared the weather pool: the first dispatch creates a
+    // fresh event, which Immediate dispatch releases for the second to reuse.
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Foggy", 1.0f, EventManager::DispatchMode::Immediate));
+    BOOST_REQUIRE(EventManager::Instance().changeWeather(
+        "Foggy", 1.0f, EventManager::DispatchMode::Immediate));
+
+    BOOST_REQUIRE_EQUAL(types.size(), 2u);
+    BOOST_REQUIRE_EQUAL(events.size(), 2u);
+    BOOST_CHECK_EQUAL(events[0], events[1]); // second dispatch reused the pooled event
+    for (size_t i = 0; i < types.size(); ++i) {
+        BOOST_CHECK(types[i] == WeatherType::Foggy);
+        BOOST_CHECK_CLOSE(intensities[i], 0.6f, 0.01);
+        BOOST_CHECK_CLOSE(visibilities[i], 0.2f, 0.01);
+    }
+
+    EventManager::Instance().removeHandler(tok);
 }
 
 BOOST_AUTO_TEST_CASE(SpawnNPC_DispatchesToHandlers) {
-  std::atomic<bool> npcHandlerCalled{false};
-  auto& edm = EntityDataManager::Instance();
-  const size_t npcCountBefore = edm.getEntityCount(EntityKind::NPC);
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::NPCSpawn, [&npcHandlerCalled](const EventData &data) {
-        if (data.event) npcHandlerCalled.store(true);
-      });
+    std::atomic<bool> npcHandlerCalled{false};
+    auto& edm = EntityDataManager::Instance();
+    const size_t npcCountBefore = edm.getEntityCount(EntityKind::NPC);
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::NPCSpawn, [&npcHandlerCalled](const EventData& data) {
+            if (data.event) npcHandlerCalled.store(true);
+        });
 
-  bool ok = EventManager::Instance().spawnNPC("Guard", 10.0f, 20.0f);
-  BOOST_CHECK(ok);
+    bool ok = EventManager::Instance().spawnNPC("Guard", 10.0f, 20.0f);
+    BOOST_CHECK(ok);
 
-  EventManager::Instance().update(); // Process deferred events
-  BOOST_CHECK(npcHandlerCalled.load());
-  BOOST_CHECK_GT(edm.getEntityCount(EntityKind::NPC), npcCountBefore);
+    EventManager::Instance().update(); // Process deferred events
+    BOOST_CHECK(npcHandlerCalled.load());
+    BOOST_CHECK_GT(edm.getEntityCount(EntityKind::NPC), npcCountBefore);
 
-  EventManager::Instance().removeHandler(tok);
+    EventManager::Instance().removeHandler(tok);
+}
+
+BOOST_AUTO_TEST_CASE(SpawnMerchant_CreatesMerchantEntity) {
+    auto& edm = EntityDataManager::Instance();
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+    BOOST_REQUIRE(PathfinderManager::Instance().init());
+    BOOST_REQUIRE(AIManager::Instance().init());
+    const size_t npcCountBefore = edm.getEntityCount(EntityKind::NPC);
+
+    BOOST_REQUIRE(EventManager::Instance().spawnMerchant(
+        "GeneralMerchant", 10.0f, 20.0f, "Human", 1, 0.0f, false));
+    EventManager::Instance().update();
+
+    BOOST_CHECK_GT(edm.getEntityCount(EntityKind::NPC), npcCountBefore);
+
+    bool foundMerchant = false;
+    for (size_t idx : edm.getIndicesByKind(EntityKind::NPC)) {
+        const auto& charData = edm.getCharacterDataByIndex(idx);
+        if (charData.isMerchant()) {
+            foundMerchant = true;
+            BOOST_CHECK_EQUAL(charData.homeRole, static_cast<uint8_t>(BehaviorType::Idle));
+            BOOST_CHECK_EQUAL(charData.behaviorType, static_cast<uint8_t>(BehaviorType::Idle));
+            break;
+        }
+    }
+    BOOST_CHECK(foundMerchant);
+
+    AIManager::Instance().clean();
+    PathfinderManager::Instance().clean();
+    CollisionManager::Instance().clean();
 }
 
 BOOST_AUTO_TEST_CASE(TriggerParticleEffect_DispatchesToHandlers) {
-  std::atomic<bool> particleHandlerCalled{false};
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::ParticleEffect, [&particleHandlerCalled](const EventData &data) {
-        if (data.event) particleHandlerCalled.store(true);
-      });
+    std::atomic<bool> particleHandlerCalled{false};
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::ParticleEffect, [&particleHandlerCalled](const EventData& data) {
+            if (data.event) particleHandlerCalled.store(true);
+        });
 
-  bool ok = EventManager::Instance().triggerParticleEffect("Fire", 100.0f, 200.0f);
-  BOOST_CHECK(ok);
+    bool ok = EventManager::Instance().triggerParticleEffect("Fire", 100.0f, 200.0f);
+    BOOST_CHECK(ok);
 
-  EventManager::Instance().update(); // Process deferred events
-  BOOST_CHECK(particleHandlerCalled.load());
+    EventManager::Instance().update(); // Process deferred events
+    BOOST_CHECK(particleHandlerCalled.load());
 
-  EventManager::Instance().removeHandler(tok);
+    EventManager::Instance().removeHandler(tok);
 }
 
 BOOST_AUTO_TEST_CASE(TriggerCameraMoved_DispatchesToHandlers) {
-  std::atomic<bool> cameraHandlerCalled{false};
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Camera, [&cameraHandlerCalled](const EventData &data) {
-        if (data.event) cameraHandlerCalled.store(true);
-      });
+    std::atomic<bool> cameraHandlerCalled{false};
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Camera, [&cameraHandlerCalled](const EventData& data) {
+            if (data.event) cameraHandlerCalled.store(true);
+        });
 
-  bool ok = EventManager::Instance().triggerCameraMoved(
-      Vector2D(100, 100), Vector2D(0, 0));
-  BOOST_CHECK(ok);
+    bool ok = EventManager::Instance().triggerCameraMoved(
+        Vector2D(100, 100), Vector2D(0, 0));
+    BOOST_CHECK(ok);
 
-  EventManager::Instance().update();
-  BOOST_CHECK(cameraHandlerCalled.load());
+    EventManager::Instance().update();
+    BOOST_CHECK(cameraHandlerCalled.load());
 
-  EventManager::Instance().removeHandler(tok);
+    EventManager::Instance().removeHandler(tok);
 }
 
 BOOST_AUTO_TEST_CASE(RegisterHandlerWithToken_CanBeRemoved) {
-  std::atomic<int> callCount{0};
+    std::atomic<int> callCount{0};
 
-  auto token = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Custom,
-      [&callCount](const EventData &data) {
-        if (data.isActive()) ++callCount;
-      });
+    auto token = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Custom,
+        [&callCount](const EventData& data) {
+            if (data.isActive()) ++callCount;
+        });
 
-  // Dispatch once - handler should be called
-  auto e1 = std::make_shared<TestEvent>("Test1");
-  EventManager::Instance().dispatchEvent(e1);
-  EventManager::Instance().update();
-  BOOST_CHECK_EQUAL(callCount.load(), 1);
+    // Dispatch once - handler should be called
+    auto e1 = std::make_shared<TestEvent>("Test1");
+    EventManager::Instance().dispatchEvent(e1);
+    EventManager::Instance().update();
+    BOOST_CHECK_EQUAL(callCount.load(), 1);
 
-  // Remove handler
-  EventManager::Instance().removeHandler(token);
+    // Remove handler
+    EventManager::Instance().removeHandler(token);
 
-  // Dispatch again - handler should NOT be called
-  auto e2 = std::make_shared<TestEvent>("Test2");
-  EventManager::Instance().dispatchEvent(e2);
-  EventManager::Instance().update();
-  BOOST_CHECK_EQUAL(callCount.load(), 1); // Still 1, not incremented
+    // Dispatch again - handler should NOT be called
+    auto e2 = std::make_shared<TestEvent>("Test2");
+    EventManager::Instance().dispatchEvent(e2);
+    EventManager::Instance().update();
+    BOOST_CHECK_EQUAL(callCount.load(), 1); // Still 1, not incremented
 }
 
 BOOST_AUTO_TEST_CASE(ImmediateDispatch_CallsHandlersSynchronously) {
-  std::atomic<bool> handlerCalled{false};
+    std::atomic<bool> handlerCalled{false};
 
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Custom, [&handlerCalled](const EventData &data) {
-        if (data.isActive()) handlerCalled.store(true);
-      });
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Custom, [&handlerCalled](const EventData& data) {
+            if (data.isActive()) handlerCalled.store(true);
+        });
 
-  auto e = std::make_shared<TestEvent>("ImmediateTest");
+    auto e = std::make_shared<TestEvent>("ImmediateTest");
 
-  // Dispatch with Immediate mode - should call handler before returning
-  EventManager::Instance().dispatchEvent(e, EventManager::DispatchMode::Immediate);
+    // Dispatch with Immediate mode - should call handler before returning
+    EventManager::Instance().dispatchEvent(e, EventManager::DispatchMode::Immediate);
 
-  // Handler should already be called (no update() needed)
-  BOOST_CHECK(handlerCalled.load());
+    // Handler should already be called (no update() needed)
+    BOOST_CHECK(handlerCalled.load());
 
-  EventManager::Instance().removeHandler(tok);
+    EventManager::Instance().removeHandler(tok);
 }
 
 BOOST_AUTO_TEST_CASE(DeferredDispatch_RequiresUpdate) {
-  std::atomic<bool> handlerCalled{false};
+    std::atomic<bool> handlerCalled{false};
 
-  auto tok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Custom, [&handlerCalled](const EventData &data) {
-        if (data.isActive()) handlerCalled.store(true);
-      });
+    auto tok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Custom, [&handlerCalled](const EventData& data) {
+            if (data.isActive()) handlerCalled.store(true);
+        });
 
-  auto e = std::make_shared<TestEvent>("DeferredTest");
+    auto e = std::make_shared<TestEvent>("DeferredTest");
 
-  // Dispatch with Deferred mode (default)
-  EventManager::Instance().dispatchEvent(e, EventManager::DispatchMode::Deferred);
+    // Dispatch with Deferred mode (default)
+    EventManager::Instance().dispatchEvent(e, EventManager::DispatchMode::Deferred);
 
-  // Handler should NOT be called yet
-  BOOST_CHECK(!handlerCalled.load());
+    // Handler should NOT be called yet
+    BOOST_CHECK(!handlerCalled.load());
 
-  // Now process deferred events
-  EventManager::Instance().update();
+    // Now process deferred events
+    EventManager::Instance().update();
 
-  // Handler should now be called
-  BOOST_CHECK(handlerCalled.load());
+    // Handler should now be called
+    BOOST_CHECK(handlerCalled.load());
 
-  EventManager::Instance().removeHandler(tok);
+    EventManager::Instance().removeHandler(tok);
 }
 
 BOOST_AUTO_TEST_CASE(DeferredDispatch_PreservesFIFOOrderAcrossTypes) {
-  std::vector<int> callOrder;
+    std::vector<int> callOrder;
 
-  auto customTok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Custom, [&callOrder](const EventData &) { callOrder.push_back(1); });
-  auto weatherTok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Weather, [&callOrder](const EventData &) { callOrder.push_back(2); });
-  auto particleTok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::ParticleEffect, [&callOrder](const EventData &) { callOrder.push_back(3); });
+    auto customTok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Custom, [&callOrder](const EventData&) { callOrder.push_back(1); });
+    auto weatherTok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Weather, [&callOrder](const EventData&) { callOrder.push_back(2); });
+    auto particleTok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::ParticleEffect, [&callOrder](const EventData&) { callOrder.push_back(3); });
 
-  EventManager::Instance().dispatchEvent(
-      std::make_shared<TestEvent>("First"), EventManager::DispatchMode::Deferred);
-  EventManager::Instance().changeWeather(
-      "Rainy", 1.0f, EventManager::DispatchMode::Deferred);
-  EventManager::Instance().triggerParticleEffect(
-      "Fire", 0, 0, 1.0f, 1.0f, "", EventManager::DispatchMode::Deferred);
+    EventManager::Instance().dispatchEvent(
+        std::make_shared<TestEvent>("First"), EventManager::DispatchMode::Deferred);
+    EventManager::Instance().changeWeather(
+        "Rainy", 1.0f, EventManager::DispatchMode::Deferred);
+    EventManager::Instance().triggerParticleEffect(
+        "Fire", 0, 0, 1.0f, 1.0f, "", EventManager::DispatchMode::Deferred);
 
-  EventManager::Instance().update();
+    EventManager::Instance().update();
 
-  BOOST_REQUIRE_EQUAL(callOrder.size(), 3);
-  BOOST_CHECK_EQUAL(callOrder[0], 1);
-  BOOST_CHECK_EQUAL(callOrder[1], 2);
-  BOOST_CHECK_EQUAL(callOrder[2], 3);
+    BOOST_REQUIRE_EQUAL(callOrder.size(), 3);
+    BOOST_CHECK_EQUAL(callOrder[0], 1);
+    BOOST_CHECK_EQUAL(callOrder[1], 2);
+    BOOST_CHECK_EQUAL(callOrder[2], 3);
 
-  EventManager::Instance().removeHandler(customTok);
-  EventManager::Instance().removeHandler(weatherTok);
-  EventManager::Instance().removeHandler(particleTok);
+    EventManager::Instance().removeHandler(customTok);
+    EventManager::Instance().removeHandler(weatherTok);
+    EventManager::Instance().removeHandler(particleTok);
 }
 
 BOOST_AUTO_TEST_CASE(PrepareForStateTransition_ClearsCustomHandlersButKeepsBuiltIns) {
-  auto customTok = EventManager::Instance().registerHandlerWithToken(
-      EventTypeId::Custom, [](const EventData &) {});
+    auto customTok = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::Custom, [](const EventData&) {});
 
-  BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Custom), 1);
-  BOOST_CHECK_GE(EventManager::Instance().getHandlerCount(EventTypeId::NPCSpawn), 1);
+    BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Custom), 1);
+    BOOST_CHECK_GE(EventManager::Instance().getHandlerCount(EventTypeId::NPCSpawn), 1);
 
-  EventManager::Instance().prepareForStateTransition();
+    EventManager::Instance().prepareForStateTransition();
 
-  BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Custom), 0);
-  BOOST_CHECK_GE(EventManager::Instance().getHandlerCount(EventTypeId::NPCSpawn), 1);
+    BOOST_CHECK_EQUAL(EventManager::Instance().getHandlerCount(EventTypeId::Custom), 0);
+    BOOST_CHECK_GE(EventManager::Instance().getHandlerCount(EventTypeId::NPCSpawn), 1);
 
-  // Removing the stale token should be harmless after transition cleanup.
-  BOOST_CHECK(!EventManager::Instance().removeHandler(customTok));
+    // Removing the stale token should be harmless after transition cleanup.
+    BOOST_CHECK(!EventManager::Instance().removeHandler(customTok));
 }
 
 BOOST_AUTO_TEST_CASE(PrepareForStateTransition_KeepsPersistentHandlersFunctional) {
-  std::atomic<int> transientCalls{0};
-  std::atomic<int> persistentCalls{0};
+    std::atomic<int> transientCalls{0};
+    std::atomic<int> persistentCalls{0};
 
-  EventManager::Instance().registerHandler(
-      EventTypeId::Custom, [&transientCalls](const EventData &) {
-        transientCalls.fetch_add(1, std::memory_order_release);
-      });
-  auto persistentToken = EventManager::Instance().registerPersistentHandlerWithToken(
-      EventTypeId::Custom, [&persistentCalls](const EventData &) {
-        persistentCalls.fetch_add(1, std::memory_order_release);
-      });
+    EventManager::Instance().registerHandler(
+        EventTypeId::Custom, [&transientCalls](const EventData&) {
+            transientCalls.fetch_add(1, std::memory_order_release);
+        });
+    auto persistentToken = EventManager::Instance().registerPersistentHandlerWithToken(
+        EventTypeId::Custom, [&persistentCalls](const EventData&) {
+            persistentCalls.fetch_add(1, std::memory_order_release);
+        });
 
-  EventManager::Instance().prepareForStateTransition();
+    EventManager::Instance().prepareForStateTransition();
 
-  EventManager::Instance().dispatchEvent(
-      std::make_shared<TestEvent>("PersistentAfterTransition"),
-      EventManager::DispatchMode::Deferred);
-  EventManager::Instance().update();
+    EventManager::Instance().dispatchEvent(
+        std::make_shared<TestEvent>("PersistentAfterTransition"),
+        EventManager::DispatchMode::Deferred);
+    EventManager::Instance().update();
 
-  BOOST_CHECK_EQUAL(transientCalls.load(std::memory_order_acquire), 0);
-  BOOST_CHECK_EQUAL(persistentCalls.load(std::memory_order_acquire), 1);
-  BOOST_CHECK(EventManager::Instance().removeHandler(persistentToken));
+    BOOST_CHECK_EQUAL(transientCalls.load(std::memory_order_acquire), 0);
+    BOOST_CHECK_EQUAL(persistentCalls.load(std::memory_order_acquire), 1);
+    BOOST_CHECK(EventManager::Instance().removeHandler(persistentToken));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

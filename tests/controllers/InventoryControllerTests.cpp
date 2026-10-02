@@ -72,7 +72,7 @@ bool sameRect(const UIRect& lhs, const UIRect& rhs) {
 }
 
 size_t findInventorySlotFor(const std::shared_ptr<Player>& player,
-                            const VoidLight::ResourceHandle& handle) {
+    const VoidLight::ResourceHandle& handle) {
     const uint32_t invIdx = player ? player->getInventoryIndex() : INVALID_INVENTORY_INDEX;
     if (invIdx == INVALID_INVENTORY_INDEX) {
         return SIZE_MAX;
@@ -138,7 +138,7 @@ public:
 
     ~InventoryControllerTestFixture() {
         WorldResourceManager::Instance().clean();
-        UIManager::Instance().cleanupForStateTransition();
+        UIManager::Instance().prepareForStateTransition();
         EntityDataManager::Instance().clean();
         ResourceTemplateManager::Instance().clean();
         EventManager::Instance().clean();
@@ -572,7 +572,7 @@ BOOST_AUTO_TEST_CASE(TestAmmunitionIsNotConsumableOrManuallyConsumed) {
         ResourceTemplateManager::Instance().getResourceTemplate(arrowsHandle);
     BOOST_REQUIRE(arrowsTemplate);
     BOOST_CHECK_EQUAL(static_cast<int>(arrowsTemplate->getType()),
-                      static_cast<int>(ResourceType::Ammunition));
+        static_cast<int>(ResourceType::Ammunition));
     BOOST_CHECK(!arrowsTemplate->isConsumable());
     BOOST_CHECK(!player->consumeItem(arrowsHandle));
     BOOST_CHECK_EQUAL(

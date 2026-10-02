@@ -19,7 +19,7 @@ Current tabs:
 2. `update(dt)` runs `UIManager::update(dt)` unless a rebind capture is active or has just finished, then applies the current `MenuNavigation` selection.
 3. `handleInput()` reads action-mapped menu navigation, slider left/right adjustments, and cancel/back behavior. It suppresses menu input while rebinding.
 4. `renderGPUUI()` renders the UI through `UIManager`; state render code should not update UI state.
-5. `exit()` calls `UIManager::prepareForStateTransition()`.
+5. `exit()` removes only `settings_*` widgets (`removeComponentsWithPrefix`). It does **not** call `UIManager::prepareForStateTransition()`. Pause → Settings leaves GamePlay underneath; a full UI wipe would destroy the HUD. Full-screen leave (Settings from MainMenu) is cleared by `GameStateManager` after `exit()`.
 
 ## Controls Tab
 
@@ -36,7 +36,7 @@ The tab intentionally shows gameplay and menu commands, but omits hotbar slot co
 
 ## Settings Persistence
 
-`applySettings()` writes staged graphics/audio/gameplay values to `SettingsManager`, applies fullscreen/VSync through `GameEngine`, saves `res/settings.json`, saves current input bindings to `res/input_bindings.json`, and returns to the main menu.
+`applySettings()` writes staged graphics/audio/gameplay values to `SettingsManager`, applies fullscreen/VSync through `GameEngine`, saves `res/settings.json` and `res/input_bindings.json`, and **stays in Settings**. Back/Cancel uses `changeState(m_returnState)` (Pause or MainMenu).
 
 Back/cancel exits without applying staged settings. Rebind changes are saved when Apply is clicked or when the Controls reset button writes defaults.
 

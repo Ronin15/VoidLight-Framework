@@ -10,18 +10,15 @@
 #include "utils/GPUSceneRecorder.hpp"
 #include <cmath>
 
-void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx)
-{
-    if (!ctx.spriteBatch)
-    {
+void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx) {
+    if (!ctx.spriteBatch) {
         return;
     }
 
     auto& edm = EntityDataManager::Instance();
     const float alpha = ctx.interpolationAlpha;
 
-    for (size_t idx : edm.getIndicesByKind(EntityKind::Projectile))
-    {
+    for (size_t idx : edm.getIndicesByKind(EntityKind::Projectile)) {
         const auto& hot = edm.getHotDataByIndex(idx);
         if (!hot.isAlive()) { continue; }
         const auto& projectile = edm.getProjectileData(hot.typeLocalIndex);
@@ -32,10 +29,8 @@ void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx
         float interpY = hot.transform.previousPosition.getY() +
             (hot.transform.position.getY() - hot.transform.previousPosition.getY()) * alpha;
 
-        if (projectile.isEmbedded())
-        {
-            if (edm.isValidHandle(projectile.embeddedTarget))
-            {
+        if (projectile.isEmbedded()) {
+            if (edm.isValidHandle(projectile.embeddedTarget)) {
                 // Target still alive — track its interpolated position and apply stored offset.
                 const auto& targetTransform = edm.getTransform(projectile.embeddedTarget);
                 interpX = targetTransform.previousPosition.getX() +
@@ -44,9 +39,7 @@ void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx
                     (targetTransform.position.getY() - targetTransform.previousPosition.getY()) * alpha;
                 interpX += projectile.embeddedOffsetX;
                 interpY += projectile.embeddedOffsetY;
-            }
-            else if (!projectile.embeddedTarget.isValid())
-            {
+            } else if (!projectile.embeddedTarget.isValid()) {
                 // Embedded in world geometry (no target) — use fixed world offset.
                 interpX += projectile.embeddedOffsetX;
                 interpY += projectile.embeddedOffsetY;
@@ -62,8 +55,7 @@ void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx
 
         uint8_t alphaByte = 255;
         if (projectile.isEmbedded() &&
-            projectile.lifetime < ProjectileData::EMBEDDED_FADE_SECONDS)
-        {
+            projectile.lifetime < ProjectileData::EMBEDDED_FADE_SECONDS) {
             const float fadeRatio = std::clamp(
                 projectile.lifetime / ProjectileData::EMBEDDED_FADE_SECONDS, 0.0f, 1.0f);
             alphaByte = static_cast<uint8_t>(255.0f * fadeRatio);
@@ -71,16 +63,12 @@ void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx
 
         // Compute rotation angle from velocity (or stored angle for embedded)
         float angle = 0.0f;
-        if (projectile.isEmbedded())
-        {
+        if (projectile.isEmbedded()) {
             angle = projectile.embeddedAngle;
-        }
-        else
-        {
+        } else {
             float vx = hot.transform.velocity.getX();
             float vy = hot.transform.velocity.getY();
-            if (vx != 0.0f || vy != 0.0f)
-            {
+            if (vx != 0.0f || vy != 0.0f) {
                 angle = std::atan2(vy, vx);
             }
         }
@@ -88,8 +76,8 @@ void ProjectileRenderController::recordGPU(const VoidLight::GPUSceneContext& ctx
         // Solid green placeholder: sample atlas center (guaranteed opaque in packed atlas)
         // using degenerate UV (single texel) so tint dominates the output color
         ctx.spriteBatch->drawUVRotated(0.5f, 0.5f, 0.5f, 0.5f,
-                                       dstX, dstY, PROJECTILE_WIDTH, PROJECTILE_HEIGHT,
-                                       angle,
-                                       0, 255, 0, alphaByte);
+            dstX, dstY, PROJECTILE_WIDTH, PROJECTILE_HEIGHT,
+            angle,
+            0, 255, 0, alphaByte);
     }
 }

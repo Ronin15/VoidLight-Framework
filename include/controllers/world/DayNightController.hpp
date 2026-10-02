@@ -28,8 +28,7 @@
 #include "events/TimeEvent.hpp"
 #include <string_view>
 
-class DayNightController : public ControllerBase
-{
+class DayNightController : public ControllerBase {
 public:
     DayNightController() = default;
     ~DayNightController() override = default;
@@ -95,13 +94,6 @@ private:
     void transitionToPeriod(TimePeriod newPeriod);
 
     /**
-     * @brief Determine time period from hour
-     * @param hour Current game hour (0-23.999)
-     * @return Corresponding TimePeriod
-     */
-    static TimePeriod hourToTimePeriod(float hour);
-
-    /**
      * @brief Update GPU renderer with current lighting values
      */
     void updateGPULighting();
@@ -121,7 +113,7 @@ private:
     float m_targetA{0.0f};
 
     // Transition timing
-    static constexpr float TRANSITION_DURATION{30.0f};  // seconds for full transition
+    static constexpr float TRANSITION_DURATION{30.0f}; // seconds for full transition
 
     // True once subscribe() has run at least once. Distinct from
     // ControllerBase's m_subscribed: that flag also flips on every

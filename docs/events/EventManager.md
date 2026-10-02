@@ -39,6 +39,8 @@
 
 Combat-side emotion logic and behavior-message policy remain outside `EventManager`. Those stay in AI/behavior code; `EventManager` only applies the core damage result and then dispatches handlers.
 
+`setGlobalPause(true)` skips deferred drain (`update()`); Immediate dispatch still runs. EventManager is one bus for **gameplay** (combat, weather, spawn, resource) and **engine/lifecycle** (world loaded/unloaded, static colliders ready). LoadingState pauses gameplay producers, then turns deferred drain back on so WorldManager's Deferred `WorldLoaded` can complete. GamePlayState unpause restores the gameplay bus.
+
 ## Core API
 
 ### Lifecycle
@@ -54,17 +56,33 @@ eventMgr.clean();
 
 ### Handler Registration
 
+Two lifetimes. Token overloads are the real teardown API (`HandlerToken { typeId, id }`). `removeHandler` takes the token only — not `(EventTypeId, uint64_t)`.
+
 ```cpp
+// Manager infrastructure — register in init(), survives transitions.
+auto persistent = eventMgr.registerPersistentHandlerWithToken(
+    EventTypeId::World,
+    [](const EventData& data) { /* ... */ });
+
+// State / controller subscriptions — register in enter(), cleared on transition.
 auto token = eventMgr.registerHandlerWithToken(
     EventTypeId::ResourceChange,
     [](const EventData& data) {
         // Inspect data.event here
     });
 
-eventMgr.removeHandler(EventTypeId::ResourceChange, token);
+eventMgr.removeHandler(token);   // works for persistent and transient
 ```
 
-Use `registerHandlerWithToken()` for state-owned subscriptions. `ControllerBase` and GameStates should store and remove tokens during teardown.
+| API | Lifetime | Who |
+|-----|----------|-----|
+| `registerPersistentHandler[WithToken]` | Survives `prepareForStateTransition()` / `clearTransientHandlers()` | Managers in `init()` (Collision/Pathfinder world events, AI combat, TileRenderer season, …) |
+| `registerHandler[WithToken]` | Transient — `clearTransientHandlers()` | GameStates and controllers in `enter()` |
+| `clearTransientHandlers()` | Called from `EventManager::prepareForStateTransition()` | State teardown |
+| `clearAllHandlers()` | Persistent **and** transient | Shutdown only (`clean()`). Do not use on transitions. |
+| `removeHandlers(EventTypeId)` | Wipes **both** lifetimes for that type | Shutdown-grade; not a transition API |
+
+Do **not** unsubscribe and re-subscribe persistent manager handlers across transitions. Non-token `registerHandler` is fire-and-forget (tests/benchmarks).
 
 ### Deferred Batch Enqueue
 
@@ -106,13 +124,16 @@ Current `EventTypeId` values:
 Weather, SceneChange, NPCSpawn, ParticleEffect,
 ResourceChange, World, Camera, Harvest, Collision,
 WorldTrigger, CollisionObstacleChanged, Custom,
-Time, Combat, Entity, BehaviorMessage, MerchantSpawn
+Time, Combat, Entity, BehaviorMessage, MerchantSpawn, StanceChanged,
+Scarcity
 ```
 
 Key event types:
 
 - `BehaviorMessage` covers inter-entity AI signaling such as `RAISE_ALERT`
 - `MerchantSpawn` covers merchant-focused NPC spawning through `MerchantSpawnEvent`
+- `StanceChanged` (`StanceChangedEvent`) is produced by `AIManager` on the main thread, Immediate dispatch, in two forms. Faction ↔ faction (`isTowardPlayer() == false`): a real directed NPC-faction stance-cell mutation (`setStance` / `worsenStance` / NPC-vs-NPC combat); fromFaction, towardFaction, old/new cell. Toward player (`isTowardPlayer() == true`): an NPC faction's standing-derived relation toward the player crossed a threshold; fromFaction is the NPC faction, towardFaction is `CharacterData::NO_FACTION`, old/new relation. settlementId is supplied by the emitter (the incident's territory settlement, 0 for wilderness, `setStance`-family calls, and `adjustPlayerStanding`). `reset()` clears every field including `towardPlayer`. `resetFactionStances()` emits nothing. `GamePlayState` owns the transient event-log handler and logs only toward-player events.
+- `Scarcity` (`ScarcityEvent`, header-only, not pooled) is produced by `HarvestCommit::commit` on the main thread (Deferred) for every depletion that leaves fewer than `HarvestCommit::SCARCITY_THRESHOLD` (2) available harvestables within `SCARCITY_RADIUS` (512 px), from both the player and NPC foragers. Payload: center (depleted node position), radius, availableCount, resource (the depleted node's resource), harvester. `availableCount` covers harvestables of **any** resource kind, not only `resource`. Emission is stateless (one event per qualifying depletion, no area cache); the event itself is unfiltered. `GamePlayState` owns the transient event-log handler and logs only when the harvester is the player or the center is within `radius` of the player.
 - `DamageEvent` under `EventTypeId::Combat` is the hot path for gameplay damage
 - `Collision` is a reserved legacy ID. There is no `CollisionEvent` payload in
   the current event path.
@@ -120,6 +141,8 @@ Key event types:
   event. Projectile hits use the persistent projectile hit sink.
 - theft/social flows emit normal event traffic instead of bespoke controller-only state
 - `ResourceChangeEvent` is reused heavily by inventory, harvesting, and UI sync paths
+
+`changeWeather(name)` always constructs or acquires a `WeatherEvent` then calls `setWeatherType(name)`. Pool-miss no longer uses the custom-string constructor, so `"Stormy"` hits `WeatherType::Stormy` rather than `Custom`. It then calls `applyDefaultParamsForType()`, which replaces the params with that type's defaults (the same values the constructors use; unknown names get the `Custom` defaults 0.5 intensity / 0.8 visibility), and finally overrides `transitionTime`. A fresh pooled event and a reused one (reset to `WeatherParams{}`) therefore dispatch identical params. `setWeatherType()` itself only sets the type. The `WeatherEvent(name, weatherTypeName)` string constructor parses canonical names the same way (`WeatherEvent::weatherTypeFromName()`), so `EventFactory` weather matches `changeWeather`. The weather particle variant is chosen by `ParticleManager::weatherEffectFor()` from the `WeatherType` (custom name for `Custom`), not from intensity.
 
 Merchant spawning should use the event helper:
 
@@ -143,6 +166,8 @@ EventManager::Instance().spawnMerchant(
 
 Immediate combat events follow the same processing order synchronously. Deferred combat events may use WorkerBudget-guided parallel preparation before their main-thread commit step.
 
+Production combat traffic uses `acquireDamageEvent()`, then `configure(...)`, then `dispatchEvent(...)`. There is no no-arg `triggerDamage` stub.
+
 ## Common Patterns
 
 ### State-scoped subscription
@@ -157,7 +182,7 @@ void SomeState::registerEventHandlers() {
 
 void SomeState::unregisterEventHandlers() {
     auto& eventMgr = EventManager::Instance();
-    eventMgr.removeHandler(EventTypeId::ResourceChange, m_resourceToken);
+    eventMgr.removeHandler(m_resourceToken);
 }
 ```
 
@@ -193,5 +218,4 @@ This prevents stale handler callbacks from firing during shutdown.
 
 - [EventManager Quick Reference](EventManager_QuickReference.md)
 - [EventManager Advanced](EventManager_Advanced.md)
-- [EventFactory](EventFactory.md)
 - [AI Execution Pipeline](../ai/BehaviorExecutionPipeline.md)

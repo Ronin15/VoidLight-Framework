@@ -41,7 +41,11 @@ void SomeState::update(float dt) {
 }
 ```
 
-`render()` should draw only. Do not call `ui.update()` from `render()`.
+GPU hooks record/draw only. Do not call `ui.update()` from
+`recordGPUSceneVertices()`, `recordGPUUIVertices()`, `renderGPUScene()`, or
+`renderGPUUI()`. Scene recording belongs in `recordGPUSceneVertices()`;
+UIManager/FPS/status text updates that must precede UI vertex emission belong
+in `recordGPUUIVertices()`.
 
 ### Deferred transitions
 
@@ -69,7 +73,7 @@ Typical manager order when present:
 - `AIManager`
 - `ProjectileManager`
 - `BackgroundSimulationManager`
-- `WorldManager` (unload world before WRM/events)
+- `WorldManager` (`prepareForStateTransition()`, then explicit `unloadWorld()` — unload is not inside prepare)
 - `WorldResourceManager`
 - `EventManager`
 - `CollisionManager`
@@ -80,4 +84,4 @@ Typical manager order when present:
 
 ## GameOverState
 
-This branch adds a dedicated `GameOverState` so gameplay/demo states can route player death into a real state instead of handling game-over UI inline.
+This branch adds a dedicated `GameOverState` so GamePlayState can route player death into a real state instead of handling game-over UI inline. Only GamePlayState sets a return state (`setReturnState(GAME_PLAY)` before every transition); AIDemo and EventDemo do not route to `GameOverState`.

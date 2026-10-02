@@ -36,7 +36,7 @@ float getRandomTurnInterval(float turnFrequency) {
 }
 
 void initializeIdleState(const Vector2D& position, VoidLight::IdleStateData& idle,
-                         const VoidLight::IdleBehaviorConfig& config) {
+    const VoidLight::IdleBehaviorConfig& config) {
     idle.originalPosition = position;
     idle.currentOffset = Vector2D(0, 0);
     idle.movementTimer = 0.0f;
@@ -52,7 +52,7 @@ void updateStationary(BehaviorContext& ctx) {
 }
 
 void updateIdleBurstMotion(BehaviorContext& ctx, VoidLight::IdleStateData& idle,
-                           float movementFrequency, float idleRadius, float moveSpeed) {
+    float movementFrequency, float idleRadius, float moveSpeed) {
     // Drive toward a random offset inside idleRadius, then stop until the next interval.
     // Uses IdleStateData::currentOffset as the active target relative to originalPosition.
     constexpr float kArrivalRadius = 2.0f;
@@ -96,12 +96,12 @@ void updateIdleBurstMotion(BehaviorContext& ctx, VoidLight::IdleStateData& idle,
 }
 
 void updateSubtleSway(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
-                      VoidLight::IdleStateData& idle) {
+    VoidLight::IdleStateData& idle) {
     updateIdleBurstMotion(ctx, idle, config.movementFrequency, config.idleRadius, config.swaySpeed);
 }
 
 void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
-                          VoidLight::IdleStateData& idle) {
+    VoidLight::IdleStateData& idle) {
     idle.turnTimer += ctx.deltaTime;
 
     if (config.turnFrequency > 0.0f && idle.turnTimer >= idle.turnInterval) {
@@ -114,7 +114,7 @@ void updateOccasionalTurn(BehaviorContext& ctx, const VoidLight::IdleBehaviorCon
 }
 
 void updateLightFidget(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
-                       VoidLight::IdleStateData& idle) {
+    VoidLight::IdleStateData& idle) {
     updateIdleBurstMotion(ctx, idle, config.movementFrequency, config.idleRadius, config.fidgetSpeed);
 
     idle.turnTimer += ctx.deltaTime;
@@ -133,7 +133,7 @@ void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config, Void
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Idle);
     auto& sharedState = edm.getBehaviorData(edmIndex);
-    auto& hotData = edm.getHotDataByIndex(edmIndex);
+    const auto& hotData = edm.getHotDataByIndex(edmIndex);
 
     // Cache moveSpeed from CharacterData (one-time cost)
     sharedState.moveSpeed = edm.getCharacterDataByIndex(edmIndex).moveSpeed;
@@ -143,7 +143,7 @@ void initIdle(size_t edmIndex, const VoidLight::IdleBehaviorConfig& config, Void
 }
 
 void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& config,
-                 VoidLight::IdleStateData& state) {
+    VoidLight::IdleStateData& state) {
     auto& shared = ctx.sharedState;
     if (!shared.isValid()) return;
 
@@ -191,21 +191,27 @@ void executeIdle(BehaviorContext& ctx, const VoidLight::IdleBehaviorConfig& conf
         switchBehavior(ctx.edmIndex, BehaviorType::Flee);
         return;
     }
+    if (tryEngageHostileInRange(ctx)) {
+        return;
+    }
+    if (shouldStartForage(ctx, BehaviorType::Idle)) {
+        return;
+    }
 
     // Execute behavior based on current mode
     switch (static_cast<VoidLight::IdleBehaviorConfig::IdleMode>(config.mode)) {
-    case VoidLight::IdleBehaviorConfig::IdleMode::STATIONARY:
-        updateStationary(ctx);
-        break;
-    case VoidLight::IdleBehaviorConfig::IdleMode::SUBTLE_SWAY:
-        updateSubtleSway(ctx, config, state);
-        break;
-    case VoidLight::IdleBehaviorConfig::IdleMode::OCCASIONAL_TURN:
-        updateOccasionalTurn(ctx, config, state);
-        break;
-    case VoidLight::IdleBehaviorConfig::IdleMode::LIGHT_FIDGET:
-        updateLightFidget(ctx, config, state);
-        break;
+        case VoidLight::IdleBehaviorConfig::IdleMode::STATIONARY:
+            updateStationary(ctx);
+            break;
+        case VoidLight::IdleBehaviorConfig::IdleMode::SUBTLE_SWAY:
+            updateSubtleSway(ctx, config, state);
+            break;
+        case VoidLight::IdleBehaviorConfig::IdleMode::OCCASIONAL_TURN:
+            updateOccasionalTurn(ctx, config, state);
+            break;
+        case VoidLight::IdleBehaviorConfig::IdleMode::LIGHT_FIDGET:
+            updateLightFidget(ctx, config, state);
+            break;
     }
 }
 

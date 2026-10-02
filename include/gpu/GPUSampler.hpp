@@ -24,7 +24,7 @@ public:
      * @param addressMode Address mode for U/V coordinates
      */
     GPUSampler(SDL_GPUDevice* device, SDL_GPUFilter minMagFilter,
-               SDL_GPUSamplerAddressMode addressMode = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
+        SDL_GPUSamplerAddressMode addressMode = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE);
 
     /**
      * Create sampler with full control over all parameters.

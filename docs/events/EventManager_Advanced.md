@@ -36,13 +36,12 @@ If a batch would overflow the queue cap, the manager drops the oldest pending ev
 
 ## Handler Lifecycle
 
-Handlers are usually state scoped, not global. Typical ownership:
+Two lifetimes, not “everything is state-scoped”:
 
-- `ControllerBase` stores tokens and removes them automatically
-- GameStates register tokens in `enter()` and remove them in `exit()`
-- managers remove or reset handlers during `prepareForStateTransition()`
+- **Persistent** — `registerPersistentHandler[WithToken]` in manager `init()`. Collision, Pathfinder, AI combat, EventManager built-in spawn, and TileRenderer season handlers **must** survive transitions. `prepareForStateTransition()` calls `clearTransientHandlers()` only; it does not drop manager infrastructure.
+- **Transient** — `registerHandler[WithToken]` in state `enter()` / controller `subscribe()`. `ControllerBase` stores tokens and removes them on unsubscribe. GameStates remove remaining tokens in `exit()`.
 
-Avoid leaving handlers registered across state teardown unless the subscriber has true process-wide lifetime.
+`clearAllHandlers()` is shutdown-only. Do not tell managers to remove or reset persistent handlers during `prepareForStateTransition()`.
 
 ## Threading Notes
 

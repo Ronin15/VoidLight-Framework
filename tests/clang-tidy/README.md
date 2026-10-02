@@ -46,7 +46,7 @@ cd tests/clang-tidy
 Main configuration file with:
 - Enabled check categories (bugprone, performance, modernize, etc.)
 - Disabled checks that conflict with project style
-- Naming conventions matching `AGENTS.md` standards
+- Naming conventions matching `CLAUDE.md` standards
 
 ### Check Categories
 | Category | Purpose |
@@ -70,7 +70,7 @@ Main configuration file with:
 | `bugprone-easily-swappable-parameters` | Too many false positives |
 
 ### Naming Convention Enforcement
-Configured to match `AGENTS.md` standards:
+Configured to match `CLAUDE.md` standards:
 - **Classes/Structs/Enums**: `CamelCase`
 - **Functions/Methods**: `camelBack`
 - **Variables/Parameters**: `camelBack`

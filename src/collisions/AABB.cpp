@@ -17,7 +17,7 @@ bool AABB::intersects(const AABB& other) const {
 
 bool AABB::contains(const Vector2D& p) const {
     return p.getX() >= left() && p.getX() <= right() &&
-           p.getY() >= top()  && p.getY() <= bottom();
+        p.getY() >= top() && p.getY() <= bottom();
 }
 
 Vector2D AABB::closestPoint(const Vector2D& p) const {

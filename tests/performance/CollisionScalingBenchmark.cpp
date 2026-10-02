@@ -26,11 +26,11 @@
 
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "managers/BackgroundSimulationManager.hpp"
 #include "core/ThreadSystem.hpp"
 #include "core/WorkerBudget.hpp"
-#include "core/Logger.hpp"  // For benchmark mode
+#include "core/Logger.hpp" // For benchmark mode
 #include "world/WorldData.hpp"
 
 namespace {
@@ -77,13 +77,13 @@ public:
                 float angle = static_cast<float>(i) / static_cast<float>(count) * 6.28318f;
                 float r = posDist(m_rng) * clusterRadius / spread;
                 pos = Vector2D(spread * 0.5f + std::cos(angle) * r,
-                              spread * 0.5f + std::sin(angle) * r);
+                    spread * 0.5f + std::sin(angle) * r);
             } else {
                 // Uniform distribution
                 pos = Vector2D(posDist(m_rng) + spread, posDist(m_rng) + spread);
             }
 
-            EntityHandle handle = edm.createNPCWithRaceClass( pos, "Human", "Guard");
+            EntityHandle handle = edm.createNPCWithRaceClass(pos, "Human", "Guard");
             size_t idx = edm.getIndex(handle);
             if (idx != SIZE_MAX) {
                 auto& hot = edm.getHotDataByIndex(idx);
@@ -110,7 +110,7 @@ public:
                 float angle = static_cast<float>(i) / static_cast<float>(count) * 6.28318f;
                 float r = posDist(m_rng) * clusterRadius / spread;
                 pos = Vector2D(spread * 0.5f + std::cos(angle) * r,
-                              spread * 0.5f + std::sin(angle) * r);
+                    spread * 0.5f + std::sin(angle) * r);
             } else {
                 // Uniform distribution
                 pos = Vector2D(posDist(m_rng) + spread, posDist(m_rng) + spread);
@@ -122,8 +122,8 @@ public:
             size_t edmIndex = edm.getStaticIndex(handle);
 
             cm.addStaticBody(id, pos, Vector2D(16.0f, 16.0f),
-                            CollisionLayer::Layer_Environment, 0xFFFFFFFF,
-                            false, 0, 1, edmIndex);
+                CollisionLayer::Layer_Environment, 0xFFFFFFFF,
+                false, 0, 1, edmIndex);
             m_staticIds.push_back(id);
         }
     }
@@ -142,8 +142,7 @@ public:
                 VoidLight::TriggerTag::Water,
                 VoidLight::TriggerType::EventOnly,
                 CollisionLayer::Layer_Environment,
-                CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy
-            );
+                CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy);
             m_triggerIds.push_back(id);
         }
     }
@@ -266,8 +265,7 @@ BOOST_GLOBAL_FIXTURE(CollisionScalingModuleCleanup);
 BOOST_FIXTURE_TEST_SUITE(CollisionScalingTests, CollisionScalingFixture)
 
 // Print header with system info
-BOOST_AUTO_TEST_CASE(PrintHeader)
-{
+BOOST_AUTO_TEST_CASE(PrintHeader) {
     const auto& budget = VoidLight::WorkerBudgetManager::Instance().getBudget();
 
     std::cout << "\n=== Collision Scaling Benchmark ===\n";
@@ -280,8 +278,7 @@ BOOST_AUTO_TEST_CASE(PrintHeader)
 // ---------------------------------------------------------------------------
 // MM Scaling (Sweep-and-Prune)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(MMScaling)
-{
+BOOST_AUTO_TEST_CASE(MMScaling) {
     std::cout << "--- MM Scaling (SAP) ---\n";
     std::cout << std::setw(10) << "Movables"
               << std::setw(12) << "Time (ms)"
@@ -320,8 +317,7 @@ BOOST_AUTO_TEST_CASE(MMScaling)
 // Uses tighter spacing so MM pairs grow proportionally with movable count
 // instead of staying near-constant. This is where SIMD narrowphase matters.
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(DenseMMScaling)
-{
+BOOST_AUTO_TEST_CASE(DenseMMScaling) {
     std::cout << "--- Dense MM Scaling (narrowphase-heavy) ---\n";
     std::cout << std::setw(10) << "Movables"
               << std::setw(12) << "Time (ms)"
@@ -361,8 +357,7 @@ BOOST_AUTO_TEST_CASE(DenseMMScaling)
 // ---------------------------------------------------------------------------
 // MS Scaling (Spatial Hash)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(MSScaling)
-{
+BOOST_AUTO_TEST_CASE(MSScaling) {
     std::cout << "--- MS Scaling (Spatial Hash) ---\n";
     std::cout << std::setw(10) << "Statics"
               << std::setw(12) << "Movables"
@@ -402,8 +397,7 @@ BOOST_AUTO_TEST_CASE(MSScaling)
 // ---------------------------------------------------------------------------
 // Combined Scaling (Real-world ratios)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(CombinedScaling)
-{
+BOOST_AUTO_TEST_CASE(CombinedScaling) {
     std::cout << "--- Combined Scaling ---\n";
     std::cout << std::setw(15) << "Scenario"
               << std::setw(12) << "Time (ms)"
@@ -422,8 +416,7 @@ BOOST_AUTO_TEST_CASE(CombinedScaling)
         {"Medium (1500)", 500, 1000},
         {"Large (3000)", 1000, 2000},
         {"XL (6000)", 2000, 4000},
-        {"XXL (12000)", 4000, 8000}
-    };
+        {"XXL (12000)", 4000, 8000}};
 
     for (const auto& scenario : scenarios) {
         prepareForTest();
@@ -441,7 +434,7 @@ BOOST_AUTO_TEST_CASE(CombinedScaling)
 
         // Approximate MM/MS split (pairs from movable-movable vs movable-static)
         // This is a rough estimate based on entity counts
-        size_t estimatedMM = pairs / 2;  // Rough split
+        size_t estimatedMM = pairs / 2; // Rough split
         size_t estimatedMS = pairs - estimatedMM;
 
         std::cout << std::setw(15) << scenario.name
@@ -458,8 +451,7 @@ BOOST_AUTO_TEST_CASE(CombinedScaling)
 // ---------------------------------------------------------------------------
 // Entity Density Test
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(EntityDensityTest)
-{
+BOOST_AUTO_TEST_CASE(EntityDensityTest) {
     std::cout << "--- Entity Density Test (2000 movables, 2000 statics) ---\n";
     std::cout << std::setw(15) << "Distribution"
               << std::setw(12) << "Time (ms)"
@@ -472,14 +464,13 @@ BOOST_AUTO_TEST_CASE(EntityDensityTest)
     // Test different distributions
     struct DensityTest {
         const char* name;
-        float clusterRadius;  // 0 = spread, >0 = clustered
+        float clusterRadius; // 0 = spread, >0 = clustered
     };
 
     std::vector<DensityTest> tests = {
         {"Spread", 0.0f},
         {"Clustered", 500.0f},
-        {"Mixed", 1000.0f}
-    };
+        {"Mixed", 1000.0f}};
 
     for (const auto& test : tests) {
         prepareForTest();
@@ -504,8 +495,7 @@ BOOST_AUTO_TEST_CASE(EntityDensityTest)
 // ---------------------------------------------------------------------------
 // Trigger Detection Scaling (Spatial Query vs Sweep-and-Prune)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(TriggerDetectionScaling)
-{
+BOOST_AUTO_TEST_CASE(TriggerDetectionScaling) {
     std::cout << "--- Trigger Detection Scaling ---\n";
     std::cout << std::setw(12) << "Detectors"
               << std::setw(12) << "Triggers"
@@ -516,23 +506,23 @@ BOOST_AUTO_TEST_CASE(TriggerDetectionScaling)
     // Test cases: varying number of entities with NEEDS_TRIGGER_DETECTION flag
     // Threshold is 50: < 50 uses spatial queries, >= 50 uses sweep-and-prune
     struct TriggerTest {
-        size_t detectors;   // Entities with NEEDS_TRIGGER_DETECTION
-        size_t triggers;    // EventOnly triggers
+        size_t detectors; // Entities with NEEDS_TRIGGER_DETECTION
+        size_t triggers; // EventOnly triggers
         const char* method; // Expected method
     };
 
     std::vector<TriggerTest> tests = {
-        {1, 100, "spatial"},      // Player only - spatial query
-        {1, 400, "spatial"},      // Player only, many triggers
-        {10, 200, "spatial"},     // Few NPCs - spatial query
-        {25, 200, "spatial"},     // More NPCs - still spatial
-        {50, 200, "sweep"},       // At threshold - sweep-and-prune
-        {100, 200, "sweep"},      // Many NPCs - sweep-and-prune
-        {200, 400, "sweep"},      // Large scale - sweep-and-prune
+        {1, 100, "spatial"}, // Player only - spatial query
+        {1, 400, "spatial"}, // Player only, many triggers
+        {10, 200, "spatial"}, // Few NPCs - spatial query
+        {25, 200, "spatial"}, // More NPCs - still spatial
+        {50, 200, "sweep"}, // At threshold - sweep-and-prune
+        {100, 200, "sweep"}, // Many NPCs - sweep-and-prune
+        {200, 400, "sweep"}, // Large scale - sweep-and-prune
     };
 
     constexpr float WORLD_SIZE = 2000.0f;
-    constexpr size_t TOTAL_MOVABLES = 500;  // Background NPCs without trigger detection
+    constexpr size_t TOTAL_MOVABLES = 500; // Background NPCs without trigger detection
 
     for (const auto& test : tests) {
         prepareForTest();
@@ -576,8 +566,7 @@ BOOST_AUTO_TEST_CASE(TriggerDetectionScaling)
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(PrintSummary)
-{
+BOOST_AUTO_TEST_CASE(PrintSummary) {
     std::cout << "SUMMARY:\n";
     std::cout << "  MM SAP: O(n log n) scaling - early termination reduces comparisons\n";
     std::cout << "  MS Hash: O(n) scaling - spatial hash queries nearby statics only\n";

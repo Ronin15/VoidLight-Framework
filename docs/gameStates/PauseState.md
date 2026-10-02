@@ -8,6 +8,12 @@
 gameplay managers, displays a dimmed overlay and menu buttons, and resumes or
 returns to the main menu through typed `GameStateId` calls.
 
+Resume is the same `GamePlayState` instance: `pushState(PAUSE)` pauses GamePlay
+and enters Pause; `popState()` exits Pause and resumes that GamePlay (world
+intact). The picture is a re-recorded frozen world (`hasGPUScene()` underlayer
+at interpolation alpha 1) plus Pause UI on top — not a dropped scene clear to
+HammerGray.
+
 ## Lifecycle
 
 - `enter()` calls `GameEngine::setGlobalPause(true)`, creates overlay/title/buttons,

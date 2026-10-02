@@ -29,7 +29,7 @@ Vector2D Entity::getAcceleration() const {
 
 bool Entity::isInActiveTier() const {
     if (!m_handle.isValid()) {
-        return true;  // No handle = legacy entity, assume active for safety
+        return true; // No handle = legacy entity, assume active for safety
     }
     const auto& hot = EntityDataManager::Instance().getHotData(m_handle);
     return hot.tier == SimulationTier::Active;
@@ -54,7 +54,7 @@ void Entity::updatePositionFromMovement(const Vector2D& position) {
 void Entity::setPosition(const Vector2D& position) {
     auto& transform = EntityDataManager::Instance().getTransform(m_handle);
     transform.position = position;
-    transform.previousPosition = position;  // Prevents interpolation sliding
+    transform.previousPosition = position; // Prevents interpolation sliding
 }
 
 void Entity::setVelocity(const Vector2D& velocity) {
@@ -70,10 +70,10 @@ void Entity::setAcceleration(const Vector2D& acceleration) {
 // ============================================================================
 
 void Entity::registerWithDataManager(const Vector2D& position, float halfWidth,
-                                      float halfHeight, EntityKind kind) {
+    float halfHeight, EntityKind kind) {
     auto& edm = EntityDataManager::Instance();
     if (!edm.isInitialized()) {
-        return;  // EDM not ready, skip registration
+        return; // EDM not ready, skip registration
     }
 
     // Only Player uses Entity class - NPCs are data-driven
@@ -91,7 +91,7 @@ void Entity::playAnimation(const std::string& animName) {
     auto it = m_animationMap.find(animName);
     if (it != m_animationMap.end()) {
         const auto& config = it->second;
-        m_currentRow = config.row + 1;  // TextureManager uses 1-based rows
+        m_currentRow = config.row + 1; // TextureManager uses 1-based rows
         m_numFrames = config.frameCount;
         m_animSpeed = config.speed;
         m_animationLoops = config.loop;

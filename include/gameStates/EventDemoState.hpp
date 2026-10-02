@@ -33,153 +33,153 @@ class GPUSceneRecorder;
 
 class EventDemoState : public GameState {
 public:
-  EventDemoState();
-  ~EventDemoState() override;
+    EventDemoState();
+    ~EventDemoState() override;
 
-  void update(float deltaTime) override;
-  void handleInput() override;
+    void update(float deltaTime) override;
+    void handleInput() override;
 
-  bool enter() override;
-  bool exit() override;
+    bool enter() override;
+    bool exit() override;
 
-  GameStateId getStateId() const override { return GameStateId::EVENT_DEMO; }
+    GameStateId getStateId() const override { return GameStateId::EVENT_DEMO; }
 
-  // GPU rendering support
-  void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                         float interpolationAlpha) override;
-  void renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
-                      SDL_GPURenderPass* scenePass,
-                      float interpolationAlpha) override;
-  void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                   SDL_GPURenderPass* swapchainPass) override;
-  bool supportsGPURendering() const override { return true; }
+    bool hasGPUScene() const override { return true; }
+    void recordGPUSceneVertices(VoidLight::GPURenderer& gpuRenderer,
+        float interpolationAlpha) override;
+    void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
+    void renderGPUScene(VoidLight::GPURenderer& gpuRenderer,
+        SDL_GPURenderPass* scenePass,
+        float interpolationAlpha) override;
+    void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
+        SDL_GPURenderPass* swapchainPass) override;
 
 private:
-  // Demo management methods
-  void registerEventHandlers();
-  void unregisterEventHandlers();
+    // Demo management methods
+    void registerEventHandlers();
+    void unregisterEventHandlers();
 
-  // Event demonstration methods (manual triggers only)
-  void triggerWeatherDemo();
-  void triggerNPCSpawnDemo();
-  void triggerResourceDemo();
-  void triggerMassNPCSpawnDemo();
-  void triggerConvenienceMethodsDemo();
-  void resetAllEvents();
+    // Event demonstration methods (manual triggers only)
+    void triggerWeatherDemo();
+    void triggerNPCSpawnDemo();
+    void triggerResourceDemo();
+    void triggerMassNPCSpawnDemo();
+    void triggerConvenienceMethodsDemo();
+    void resetAllEvents();
 
-  // Event handler methods
-  void onNPCSpawned(const EventData &data);
-  void onResourceChanged(const EventData &data);
+    // Event handler methods
+    void onNPCSpawned(const EventData& data);
+    void onResourceChanged(const EventData& data);
 
-  // Controllers (owned by ControllerRegistry, following GamePlayState pattern)
-  ControllerRegistry m_controllers{};
+    // Controllers (owned by ControllerRegistry, following GamePlayState pattern)
+    ControllerRegistry m_controllers{};
 
-  // Data-driven NPC rendering (velocity-based animation)
-  NPCRenderController m_npcRenderCtrl{};
-  ProjectileRenderController m_projectileRenderCtrl{};
+    // Data-driven NPC rendering (velocity-based animation)
+    NPCRenderController m_npcRenderCtrl{};
+    ProjectileRenderController m_projectileRenderCtrl{};
 
-  // Player entity
-  PlayerPtr m_player{};
-  
-  // Camera for world navigation
-  std::unique_ptr<VoidLight::Camera> m_camera{nullptr};
+    // Player entity
+    PlayerPtr m_player{};
 
-  // GPU scene recorder for coordinated scene-data recording
-  std::unique_ptr<VoidLight::GPUSceneRecorder> m_gpuSceneRecorder{nullptr};
+    // Camera for world navigation
+    std::unique_ptr<VoidLight::Camera> m_camera{nullptr};
 
-  // Demo settings
-  float m_worldWidth{800.0f};
-  float m_worldHeight{600.0f};
+    // GPU scene recorder for coordinated scene-data recording
+    std::unique_ptr<VoidLight::GPUSceneRecorder> m_gpuSceneRecorder{nullptr};
 
-  // Track whether world has been loaded (prevents re-entering LoadingState)
-  bool m_worldLoaded{false};
+    // Demo settings
+    float m_worldWidth{800.0f};
+    float m_worldHeight{600.0f};
 
-  // Track if we need to transition to loading screen on first update
-  bool m_needsLoading{false};
+    // Track whether world has been loaded (prevents re-entering LoadingState)
+    bool m_worldLoaded{false};
 
-  // Track if we're transitioning to LoadingState (prevents infinite loop)
-  bool m_transitioningToLoading{false};
+    // Track if we need to transition to loading screen on first update
+    bool m_needsLoading{false};
 
-  // Track if state is fully initialized (after returning from LoadingState)
-  bool m_initialized{false};
+    // Track if we're transitioning to LoadingState (prevents infinite loop)
+    bool m_transitioningToLoading{false};
 
-  // Weather demo variables (for manual cycling through weather types)
-  WeatherType m_currentWeather{WeatherType::Clear};
-  float m_weatherTransitionTime{3.0f};
-  std::vector<WeatherType> m_weatherSequence{
-      WeatherType::Clear,  WeatherType::Cloudy, WeatherType::Rainy,
-      WeatherType::Stormy, WeatherType::Foggy,  WeatherType::Snowy,
-      WeatherType::Windy,  WeatherType::Custom, WeatherType::Custom,
-      WeatherType::Custom, WeatherType::Custom}; // Custom for HeavyRain,
-                                                 // HeavySnow, WindyDust, WindyStorm
-  std::vector<std::string> m_customWeatherTypes{
-      "", "", "", "", "", "", "", "HeavyRain", "HeavySnow", "WindyDust", "WindyStorm"};
-  size_t m_currentWeatherIndex{0};
+    // Track if state is fully initialized (after returning from LoadingState)
+    bool m_initialized{false};
 
-  // NPC spawn demo variables
-  std::vector<std::string> m_npcTypes{"Guard", "Farmer", "GeneralMerchant",
-                                      "Warrior"};
-  size_t m_currentNPCTypeIndex{0};
+    // Weather demo variables (for manual cycling through weather types)
+    WeatherType m_currentWeather{WeatherType::Clear};
+    float m_weatherTransitionTime{3.0f};
+    // Named types already run the heavy variants (Rainy/Stormy HeavyRain,
+    // Snowy HeavySnow, Windy WindyStorm); the Custom entries reach the light
+    // Rain, Snow and WindyDust variants.
+    std::vector<WeatherType> m_weatherSequence{WeatherType::Clear,
+        WeatherType::Cloudy, WeatherType::Rainy, WeatherType::Stormy,
+        WeatherType::Foggy, WeatherType::Snowy, WeatherType::Windy,
+        WeatherType::Custom, WeatherType::Custom, WeatherType::Custom};
+    std::vector<std::string> m_customWeatherTypes{
+        "", "", "", "", "", "", "", "Rain", "Snow", "WindyDust"};
+    size_t m_currentWeatherIndex{0};
 
-  // Event trigger debouncing
-  float m_totalDemoTime{0.0f};
-  float m_lastEventTriggerTime{0.0f};
+    // NPC spawn demo variables
+    std::vector<std::string> m_npcTypes{"Guard", "Farmer", "GeneralMerchant",
+        "Warrior"};
+    size_t m_currentNPCTypeIndex{0};
 
-  // Inventory UI
-  bool m_showInventory{false}; // Hide inventory panel by default like GamePlayState
+    // Event trigger debouncing
+    float m_totalDemoTime{0.0f};
+    float m_lastEventTriggerTime{0.0f};
 
-  // Resource change tracking for demonstrations
-  std::unordered_map<VoidLight::ResourceHandle, int>
-      m_achievementThresholds{};
-  std::unordered_map<VoidLight::ResourceHandle, bool>
-      m_achievementsUnlocked{};
-  std::vector<std::string> m_resourceLog{}; // Detailed resource change log
+    // Inventory UI
+    bool m_showInventory{false}; // Hide inventory panel by default like GamePlayState
 
-  // Event manager accessed via singleton - no raw pointer needed
+    // Resource change tracking for demonstrations
+    std::unordered_map<VoidLight::ResourceHandle, int>
+        m_achievementThresholds{};
+    std::unordered_map<VoidLight::ResourceHandle, bool>
+        m_achievementsUnlocked{};
+    std::vector<std::string> m_resourceLog{}; // Detailed resource change log
 
-  // Helper methods
-  void addLogEntry(const std::string &entry);
-  std::string getCurrentWeatherString() const;
-  void cleanupSpawnedNPCs();
-  void setupResourceAchievements(); // Setup achievement demonstration
+    // Event manager accessed via singleton - no raw pointer needed
 
-  // Inventory UI methods
-  void toggleInventoryDisplay(); // Toggle inventory visibility like GamePlayState
+    // Helper methods
+    void addLogEntry(const std::string& entry);
+    std::string getCurrentWeatherString() const;
+    void cleanupSpawnedNPCs();
+    void setupResourceAchievements(); // Setup achievement demonstration
 
-  // Resource change event demonstration methods
-  void processResourceAchievements(VoidLight::ResourceHandle handle,
-                                   int oldQty, int newQty);
-  void checkResourceWarnings(VoidLight::ResourceHandle handle, int newQty);
-  void logResourceAnalytics(VoidLight::ResourceHandle handle, int oldQty,
-                            int newQty, const std::string &source);
+    // Inventory UI methods
+    void toggleInventoryDisplay(); // Toggle inventory visibility like GamePlayState
 
-  // Camera management methods
-  void initializeCamera();
-  void updateCamera(float deltaTime);
-  // Camera auto-manages world bounds; no state-level setup needed
-  // Camera render offset computed in render() via unified single-read pattern
-  
-  // Resource demo state
-  size_t m_resourceDemonstrationStep{0};
-  bool m_resourceIsAdding{true};
-  int m_convenienceDemoCounter{0};
+    // Resource change event demonstration methods
+    void processResourceAchievements(VoidLight::ResourceHandle handle,
+        int oldQty, int newQty);
+    void checkResourceWarnings(VoidLight::ResourceHandle handle, int newQty);
+    void logResourceAnalytics(VoidLight::ResourceHandle handle, int oldQty,
+        int newQty, const std::string& source);
 
-  // Registered handler tokens for cleanup
-  std::vector<EventManager::HandlerToken> m_handlerTokens{};
+    // Camera management methods
+    void initializeCamera();
+    void updateCamera(float deltaTime);
+    // Camera auto-manages world bounds; no state-level setup needed
+    // Camera render offset computed in render() via unified single-read pattern
 
-  // Status display optimization - zero per-frame allocations (C++20 type-safe)
-  std::string m_statusBuffer{};
-  float m_lastDisplayedFPS{-1.0f};  // Float for decimal precision
-  size_t m_lastDisplayedNPCCount{0};
-  std::string m_lastDisplayedWeather{};
+    // Resource demo state
+    size_t m_resourceDemonstrationStep{0};
+    bool m_resourceIsAdding{true};
+    int m_convenienceDemoCounter{0};
 
-  // Lazy weather string caching — only recomputed when m_currentWeather changes
-  std::string m_cachedWeatherStr{"Clear"};
-  WeatherType m_lastCachedWeatherType{WeatherType::Clear};
+    // Registered handler tokens for cleanup
+    std::vector<EventManager::HandlerToken> m_handlerTokens{};
 
-  // Cached NPC count (updated in update(), used in render())
-  size_t m_cachedNPCCount{0};
+    // Status display optimization - zero per-frame allocations (C++20 type-safe)
+    std::string m_statusBuffer{};
+    float m_lastDisplayedFPS{-1.0f}; // Float for decimal precision
+    size_t m_lastDisplayedNPCCount{0};
+    std::string m_lastDisplayedWeather{};
 
+    // Lazy weather string caching — only recomputed when m_currentWeather changes
+    std::string m_cachedWeatherStr{"Clear"};
+    WeatherType m_lastCachedWeatherType{WeatherType::Clear};
+
+    // Cached NPC count (updated in update(), used in render())
+    size_t m_cachedNPCCount{0};
 };
 
 #endif // EVENT_DEMO_STATE_HPP

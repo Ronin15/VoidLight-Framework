@@ -21,3 +21,6 @@ bin/
 *.txt
 *.log
 res/*.json
+
+# Claude Code personal settings
+.claude/settings.local.json

@@ -243,7 +243,7 @@ Key changes:
 - `lastCombatTime` delta semantics with per-frame emotional decay
 - Guard behavior: multi-tier alert system with calm-rate polling
 - Flee behavior: crowd analysis with threat re-evaluation
-- Emotional contagion pre-pass in `AIManager::update()`
+- Emotional decay in the AI fused loop (`edm.updateEmotionalDecay`; no contagion pre-pass)
 - Behavior message queues (deferred + immediate thread paths)
 - Fully deterministic AI manager and attack system
 

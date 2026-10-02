@@ -23,13 +23,71 @@
  * All config is stored in EDM's BehaviorConfigData union.
  */
 
-#include "ai/BehaviorCommonState.hpp"       // For BehaviorData, PathData
+#include "ai/AICommandBus.hpp"
+#include "ai/BehaviorCommonState.hpp" // For BehaviorData, PathData
 #include "ai/BehaviorConfig.hpp"
 #include "ai/BehaviorStateData.hpp"
-#include "managers/EntityDataTypes.hpp"     // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
-#include "managers/EventManager.hpp"        // For EventManager::DeferredEvent
-#include "managers/SparseSidecar.hpp"       // For SparseSidecar<KnockbackData>
+#include "ai/EnvironmentModifiers.hpp"
+#include "ai/FactionStance.hpp"
+#include "managers/EntityDataTypes.hpp" // For TransformData, EntityHotData, CharacterData, KnockbackData, NPCMemoryData
+#include "managers/EventManager.hpp" // For EventManager::DeferredEvent
+#include "managers/SparseSidecar.hpp" // For SparseSidecar<KnockbackData>, SparseSidecar<NpcNeedData>
+#include "world/HarvestCommit.hpp" // For HARVEST_RANGE (shared forage reach)
+#include "world/WorldData.hpp" // For VILLAGE_RADIUS, TILE_SIZE (merchant forage leash)
+#include <array>
+#include <span>
 #include <vector>
+
+/**
+ * @brief One available harvestable in AIManager's frame snapshot
+ *
+ * Built on the main thread by AIManager (only when the WRM harvestable version
+ * changes) and handed to workers through HarvestableSnapshotView. Workers never
+ * query WorldResourceManager.
+ */
+struct HarvestableSnapshotEntry {
+    Vector2D position{0.0f, 0.0f};
+    EntityHandle handle{};
+    uint32_t staticIndex{UINT32_MAX};
+};
+
+/**
+ * @brief Read-only, grid-bucketed view of AIManager's harvestable snapshot
+ *
+ * Entries are grouped by CELL_SIZE cell (row-major from origin) and sorted by
+ * ascending staticIndex inside each cell; cellStarts holds cols * rows + 1
+ * offsets into entries. A SCARCITY_RADIUS query touches at most 3x3 cells, and
+ * a target is validated by binary search inside its own cell. Positions outside
+ * the grid clamp to the edge cells, so builder and readers agree on every cell.
+ */
+struct HarvestableSnapshotView {
+    static constexpr float CELL_SIZE = VoidLight::HarvestCommit::SCARCITY_RADIUS;
+
+    std::span<const HarvestableSnapshotEntry> entries{};
+    std::span<const uint32_t> cellStarts{};
+    Vector2D origin{0.0f, 0.0f};
+    uint32_t cols{0};
+    uint32_t rows{0};
+
+    [[nodiscard]] bool empty() const noexcept { return entries.empty(); }
+
+    // Requires !empty().
+    [[nodiscard]] uint32_t cellColumn(float x) const noexcept {
+        return clampCell((x - origin.getX()) / CELL_SIZE, cols);
+    }
+    [[nodiscard]] uint32_t cellRow(float y) const noexcept {
+        return clampCell((y - origin.getY()) / CELL_SIZE, rows);
+    }
+
+private:
+    [[nodiscard]] static uint32_t clampCell(float cell, uint32_t count) noexcept {
+        if (!(cell > 0.0f)) {
+            return 0;
+        }
+        const float last = static_cast<float>(count - 1);
+        return cell >= last ? count - 1 : static_cast<uint32_t>(cell);
+    }
+};
 
 /**
  * @brief Context passed to behavior execution functions
@@ -38,55 +96,78 @@
  * Pre-populated by AIManager before each behavior update.
  */
 struct BehaviorContext {
-    TransformData& transform;      // Direct read/write access (lock-free)
-    EntityHotData& hotData;        // Entity metadata (halfWidth, halfHeight, etc.)
+    TransformData& transform; // Direct read/write access (lock-free)
+    EntityHotData& hotData; // Entity metadata (halfWidth, halfHeight, etc.)
     EntityHandle::IDType entityId; // For staggering calculations
-    size_t edmIndex;               // EDM index for vector-based state storage (contention-free)
+    size_t edmIndex; // EDM index for vector-based state storage (contention-free)
     float deltaTime;
 
     // Player info cached once per update batch - avoids lock contention in behaviors
-    EntityHandle playerHandle;     // Cached player handle (no lock needed)
-    Vector2D playerPosition;       // Cached player position (no lock needed)
-    Vector2D playerVelocity;       // Cached player velocity (for movement detection)
-    bool playerValid{false};       // Whether player is valid this frame
+    EntityHandle playerHandle; // Cached player handle (no lock needed)
+    Vector2D playerPosition; // Cached player position (no lock needed)
+    Vector2D playerVelocity; // Cached player velocity (for movement detection)
+    bool playerValid{false}; // Whether player is valid this frame
 
     // Pre-fetched EDM data - avoids repeated Instance() calls in behaviors
-    BehaviorData& sharedState;       // Slimmed shared header (flags, moveSpeed, crowd cache, message queue)
-    PathData* pathData{nullptr};     // Optional: some behaviors support direct movement fallback
-    NPCMemoryData& memoryData;       // Guaranteed valid for NPC behavior execution
-    const CharacterData& characterData;  // Guaranteed valid for behavior execution
+    BehaviorData& sharedState; // Slimmed shared header (flags, moveSpeed, crowd cache, message queue)
+    PathData* pathData{nullptr}; // Optional: some behaviors support direct movement fallback
+    NPCMemoryData& memoryData; // Guaranteed valid for NPC behavior execution
+    const CharacterData& characterData; // Guaranteed valid for behavior execution
 
     // World bounds cached once per frame - avoids WorldManager::Instance() calls in behaviors
     float worldMinX{0.0f};
     float worldMinY{0.0f};
     float worldMaxX{0.0f};
     float worldMaxY{0.0f};
-    bool worldBoundsValid{false};         // Whether world bounds are available
+    bool worldBoundsValid{false}; // Whether world bounds are available
 
     // Game time cached once per frame - absolute time for memory timestamps, encounter logging,
     // and future combat timing comparisons. Not currently consumed by behaviors but available
     // for systems that need absolute time (e.g., MemoryEntry timestamps).
     float gameTime{0.0f};
 
+    // Const-ref to AIManager's directed stance row for this entity's faction, or
+    // kNeutralFactionStanceRow when the faction is out of range. FactionStance{}
+    // is Allied — never default-construct a local row and never pass a temporary.
+    const std::array<FactionStance, kFactionStanceRowSize>& factionStanceRow;
+    // True when this entity's faction is Hostile toward the player (standing-derived,
+    // filled by AIManager on the main thread before batches). The player has no
+    // faction; never look the player up in factionStanceRow.
+    bool hostileTowardPlayer{false};
+    bool hasHostileInRow{false};
+
     // Pre-fetched knockback sidecar — worker threads call knockback.get(edmIndex) for O(1)
     // presence check without touching EntityDataManager::Instance().
     // Reference (not pointer) because a BehaviorContext is always constructed with the
-    // process-wide sidecar — null has no meaning here and AGENTS.md forbids nullable accessors.
-    // Declared last so the initializer list order matches declaration order.
+    // process-wide sidecar — null has no meaning here and CLAUDE.md forbids nullable accessors.
     SparseSidecar<KnockbackData>& knockback;
 
+    // Pre-fetched survival need sidecar. Workers access only their own entry via
+    // needs.get(edmIndex); entries are created/removed on the main thread only.
+    SparseSidecar<NpcNeedData>& needs;
+
+    // Frame-cached environment scales from AIManager (main thread). Copied by
+    // value into processBatch; workers must not call GameTimeManager or WeatherController.
+    EnvironmentSnapshot envSnapshot{};
+
+    // Read-only harvestable snapshot (main-thread built, immutable while batches run).
+    HarvestableSnapshotView harvestables{};
+
     BehaviorContext(TransformData& t, EntityHotData& h, EntityHandle::IDType id, size_t idx, float dt,
-                    EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
-                    BehaviorData& bData, PathData* pData, NPCMemoryData& mData,
-                    const CharacterData& cData,
-                    float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
-                    float gTime,
-                    SparseSidecar<KnockbackData>& kbSidecar)
-        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt),
-          playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid),
-          sharedState(bData), pathData(pData), memoryData(mData), characterData(cData),
-          worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY),
-          worldBoundsValid(wBoundsValid), gameTime(gTime), knockback(kbSidecar) {}
+        EntityHandle pHandle, const Vector2D& pPos, const Vector2D& pVel, bool pValid,
+        BehaviorData& bData, PathData* pData, NPCMemoryData& mData,
+        const CharacterData& cData,
+        float wMinX, float wMinY, float wMaxX, float wMaxY, bool wBoundsValid,
+        float gTime,
+        const std::array<FactionStance, kFactionStanceRowSize>& stanceRow,
+        bool hostileTowardPlayerFlag,
+        bool hostileInRow,
+        SparseSidecar<KnockbackData>& kbSidecar,
+        SparseSidecar<NpcNeedData>& needSidecar,
+        EnvironmentSnapshot env = {},
+        const HarvestableSnapshotView& harvestableView = {})
+        : transform(t), hotData(h), entityId(id), edmIndex(idx), deltaTime(dt), playerHandle(pHandle), playerPosition(pPos), playerVelocity(pVel), playerValid(pValid), sharedState(bData), pathData(pData), memoryData(mData), characterData(cData), worldMinX(wMinX), worldMinY(wMinY), worldMaxX(wMaxX), worldMaxY(wMaxY), worldBoundsValid(wBoundsValid), gameTime(gTime), factionStanceRow(stanceRow), hostileTowardPlayer(hostileTowardPlayerFlag), hasHostileInRow(hostileInRow), knockback(kbSidecar), needs(needSidecar), envSnapshot(env), harvestables(harvestableView) {
+    }
 };
 
 // ============================================================================
@@ -96,24 +177,24 @@ struct BehaviorContext {
 /**
  * @brief Message IDs for behavior-specific commands
  *
- * These can be queued via queueBehaviorMessage() and processed at the start
- * of each behavior's execute function via processPendingMessages().
+ * Queue via queueBehaviorMessage() (main thread) or deferBehaviorMessage()
+ * (worker threads). AIManager commits them before behavior execute.
  */
 namespace BehaviorMessage {
-    // Attack messages
-    constexpr uint8_t ATTACK_TARGET = 1;     // Force attack on explicit target
-    constexpr uint8_t RETREAT = 2;           // Allies retreat when nearby attacker retreats
-    constexpr uint8_t RANGED_ATTACK_FAILED = 3;  // Re-evaluate positioning/equipment after ranged failure
+// Attack messages
+constexpr uint8_t ATTACK_TARGET = 1; // Force attack on explicit target
+constexpr uint8_t RETREAT = 2; // Allies retreat when nearby attacker retreats
+constexpr uint8_t RANGED_ATTACK_FAILED = 3; // Re-evaluate positioning/equipment after ranged failure
 
-    // Flee messages
-    constexpr uint8_t PANIC = 10;            // Witness lethal combat — force flee
-    constexpr uint8_t CALM_DOWN = 11;        // Guard all-clear — reduce fear
+// Flee messages
+constexpr uint8_t PANIC = 10; // Witness lethal combat — force flee
+constexpr uint8_t CALM_DOWN = 11; // Guard all-clear — reduce fear
 
-    // Distress messages
-    constexpr uint8_t DISTRESS = 20;         // Victim/fleeing entity calls nearby guards — force SUSPICIOUS
+// Distress messages
+constexpr uint8_t DISTRESS = 20; // Victim/fleeing entity calls nearby guards — force SUSPICIOUS
 
-    // Guard messages
-    constexpr uint8_t RAISE_ALERT = 22;      // Guard/civilian under attack — force HOSTILE
+// Guard messages
+constexpr uint8_t RAISE_ALERT = 22; // Guard/civilian under attack — force HOSTILE
 }
 
 // ============================================================================
@@ -121,11 +202,11 @@ namespace BehaviorMessage {
 // ============================================================================
 
 namespace Knockback {
-    // Number of fixed-timestep frames a knockback impulse is applied.
-    // This is a frame count, not seconds — see EntityHotData::knockbackFrames.
-    inline constexpr int FRAMES = 8;
-    // Per-frame decay factor applied to the knockback impulse components.
-    inline constexpr float DECAY = 0.7f;
+// Number of fixed-timestep frames a knockback impulse is applied.
+// This is a frame count, not seconds — see EntityHotData::knockbackFrames.
+inline constexpr int FRAMES = 8;
+// Per-frame decay factor applied to the knockback impulse components.
+inline constexpr float DECAY = 0.7f;
 }
 
 namespace Behaviors {
@@ -139,6 +220,84 @@ namespace Behaviors {
 // alertness, etc.). Lives here, not on NPCMemoryData: EDM holds state
 // (`lastCombatTime`), policy decisions live in the behavior layer.
 constexpr float COMBAT_TIMEOUT_SECONDS = 5.0f;
+
+// Re-engage radius for Idle/Wander/Patrol/Forage/Chase (tryEngageHostileInRange)
+// and the floor of Attack's acquisition range
+// (max(attackRange * TARGET_SCAN_RANGE_MULTIPLIER, this)). Both are multiplied
+// by ctx.envSnapshot.detectionScale; nothing acquires beyond that range.
+constexpr float HOSTILE_ENGAGE_RANGE = 250.0f;
+
+// Survival need policy (civilian Idle/Wander NPCs). EDM stores NpcNeedData only.
+// Need pressure growth per second; reaches the forage threshold after ~126 s.
+inline constexpr float NEED_PRESSURE_PER_SECOND = 1.0f / 180.0f;
+// Pressure at which Idle/Wander consider switching to Forage.
+inline constexpr float FORAGE_ENTER_THRESHOLD = 0.7f;
+// Base retry cooldown (s) after a failed forage attempt; doubles per failure.
+inline constexpr float FORAGE_RETRY_COOLDOWN = 15.0f;
+// Backoff cap: FORAGE_RETRY_COOLDOWN << 4 = 240 s.
+inline constexpr uint8_t FORAGE_MAX_BACKOFF_SHIFT = 4;
+// Arrival tolerance for a stalled forager and the main-thread commit reach check.
+inline constexpr float FORAGE_STALL_REACH = 1.5f * VoidLight::HarvestCommit::HARVEST_RANGE;
+// Rejected commits / far stalls one Forage episode tolerates before it backs off
+// and returns to its origin role.
+inline constexpr uint8_t FORAGE_MAX_FAILED_ATTEMPTS = 3;
+// New need entries start with up to this many seconds of pressure (deterministic
+// per entity) so NPCs created together do not reach the threshold on one frame.
+inline constexpr float NEED_ENTRY_STAGGER_SECONDS = 30.0f;
+// Merchants forage only within this distance of their need-entry home anchor
+// (px): one settlement radius (VILLAGE_RADIUS 12 tiles * TILE_SIZE 32 = 384).
+// Other roles are unleashed (0).
+inline constexpr float MERCHANT_FORAGE_LEASH_RADIUS =
+    static_cast<float>(VoidLight::VILLAGE_RADIUS) * VoidLight::TILE_SIZE;
+
+/**
+ * @brief Initialize a newly created need entry (main thread)
+ *
+ * Seeds pressure with a deterministic per-entity offset of up to
+ * NEED_ENTRY_STAGGER_SECONDS of growth, so a batch of NPCs created on the same
+ * frame crosses FORAGE_ENTER_THRESHOLD spread over that window. Stores `home`
+ * as the forage leash anchor and sets leashRadius to
+ * MERCHANT_FORAGE_LEASH_RADIUS for merchants (CharacterData::isMerchant()),
+ * 0 (unleashed) otherwise.
+ */
+void seedNeed(NpcNeedData& need, EntityHandle::IDType entityId, const Vector2D& home,
+    const CharacterData& charData);
+
+/**
+ * @brief Abandon a Forage episode whose yield cannot fit the inventory (main thread)
+ *
+ * Called by AIManager::commitQueuedHarvests() when the pre-commit capacity
+ * check fails, before any depletion. Sets the retry cooldown to the backoff cap
+ * (FORAGE_RETRY_COOLDOWN << FORAGE_MAX_BACKOFF_SHIFT), counts a failure, and
+ * switches the forager back to need.returnBehavior. Pressure is not reset.
+ */
+void abandonForageInventoryFull(size_t edmIndex, NpcNeedData& need);
+
+/**
+ * @brief Advance an NPC's survival need by one tick (worker-safe, own entry only)
+ *
+ * Grows pressure by NEED_PRESSURE_PER_SECOND * dt (clamped to 1) and counts the
+ * retry cooldown down. Never switches behavior; Forage entry is decided inside
+ * the Idle/Wander executors.
+ */
+void tickNeed(NpcNeedData& need, float deltaTime);
+
+/**
+ * @brief Decide whether an Idle/Wander civilian should start foraging (worker-safe)
+ *
+ * Requires a need entry with pressure >= FORAGE_ENTER_THRESHOLD and no active
+ * retry cooldown. Looks for a candidate in ctx.harvestables within
+ * HarvestCommit::SCARCITY_RADIUS that keeps at least NPC_HARVEST_RESERVE other
+ * nodes within SCARCITY_RADIUS of itself (the same rule HarvestCommit enforces)
+ * and, for a leashed need entry, lies within leashRadius of need.home.
+ * With a candidate it records currentType as the need's returnBehavior and
+ * enqueues a switch to Forage. Otherwise it applies the exponential retry
+ * backoff so an exhausted area does not cause Forage churn.
+ * @param ctx Behavior context of the executing NPC
+ * @param currentType Behavior to resume after foraging (Idle or Wander)
+ * @return true if a switch to Forage was enqueued (caller should return)
+ */
+bool shouldStartForage(BehaviorContext& ctx, BehaviorType currentType);
 
 // ============================================================================
 // EXECUTION FUNCTIONS (one per behavior type)
@@ -208,6 +367,14 @@ void executeFlee(BehaviorContext& ctx, const VoidLight::FleeBehaviorConfig& conf
  */
 void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config, VoidLight::FollowStateData& state);
 
+/**
+ * @brief Execute Forage behavior logic
+ * @param ctx Pre-populated BehaviorContext with EDM references
+ * @param config Forage behavior configuration
+ * @param state Mutable forage variant state from the dense state pool
+ */
+void executeForage(BehaviorContext& ctx, const VoidLight::ForageBehaviorConfig& config, VoidLight::ForageStateData& state);
+
 // ============================================================================
 // INITIALIZATION FUNCTIONS (called when behavior assigned)
 // ============================================================================
@@ -275,6 +442,14 @@ void initFlee(size_t edmIndex, const VoidLight::FleeBehaviorConfig& config, Void
  * @param state Mutable follow state slot from the dense pool
  */
 void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig& config, VoidLight::FollowStateData& state);
+
+/**
+ * @brief Initialize Forage behavior state in EDM (also ensures the NPC need entry exists)
+ * @param edmIndex Entity's index in EDM
+ * @param config Forage behavior configuration
+ * @param state Mutable forage state slot from the dense pool
+ */
+void initForage(size_t edmIndex, const VoidLight::ForageBehaviorConfig& config, VoidLight::ForageStateData& state);
 
 // ============================================================================
 // MAIN DISPATCHER
@@ -368,6 +543,30 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx);
  */
 [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle, EntityHandle subjectHandle);
 
+[[nodiscard]] bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction);
+[[nodiscard]] bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction);
+/**
+ * @brief Hostility toward a specific target. The cached player handle reads
+ *        ctx.hostileTowardPlayer; any other target reads its faction's cell in
+ *        ctx.factionStanceRow. targetIdx must be the target's current EDM index.
+ */
+[[nodiscard]] bool isHostileTowardTarget(const BehaviorContext& ctx, size_t targetIdx,
+    EntityHandle target);
+/**
+ * @brief Keep a remembered combat target only while it is this entity's last
+ *        attacker (retaliation is exempt) or still hostile per isHostileTowardTarget.
+ */
+[[nodiscard]] bool shouldKeepCombatTarget(const BehaviorContext& ctx, size_t targetIdx,
+    EntityHandle target);
+/**
+ * @brief Switch to Attack if the live player (when ctx.hostileTowardPlayer) or a
+ *        Hostile faction member is within
+ *        HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale.
+ *        Returns false immediately when neither can be hostile.
+ * @return true if a transition was queued
+ */
+bool tryEngageHostileInRange(BehaviorContext& ctx);
+
 /**
  * @brief Normalize a direction vector
  * @param vector Vector to normalize
@@ -419,14 +618,13 @@ bool getCachedWorldBounds(float& minX, float& minY, float& maxX, float& maxY);
 // ============================================================================
 
 /**
- * @brief Queue a message for an entity's behavior
+ * @brief Queue a message for an entity's behavior from the main thread
  * @param edmIndex Entity's index in EDM
  * @param messageId BehaviorMessage::* constant
  * @param param Optional parameter (behavior-specific)
  *
- * Enqueues a command for AIManager's main-thread pre-pass commit.
- *
- * @note THREAD SAFETY: Safe from any thread.
+ * Enqueues a command for AIManager's main-thread commit.
+ * Worker-thread code must use deferBehaviorMessage() instead.
  */
 void queueBehaviorMessage(size_t edmIndex, uint8_t messageId, uint8_t param = 0);
 
@@ -455,15 +653,26 @@ void collectDeferredDamageEvents(std::vector<EventManager::DeferredEvent>& out);
 // ============================================================================
 
 /**
- * @brief Defer a behavior message for thread-safe delivery via AICommandBus
+ * @brief Defer a behavior message from a worker thread
  * @param targetEdmIndex Target entity's EDM index
  * @param messageId BehaviorMessage::* constant
  * @param param Optional parameter
  *
- * Safe to call from worker threads during batch processing.
- * Enqueues directly to AICommandBus.
+ * Writes to a thread-local buffer. AIManager collects via
+ * collectDeferredBehaviorMessages() after each batch, then commits on the
+ * main thread. Do not call from the main thread — use queueBehaviorMessage().
  */
 void deferBehaviorMessage(size_t targetEdmIndex, uint8_t messageId, uint8_t param = 0);
+
+/**
+ * @brief Collect deferred behavior messages from the calling thread's TLS buffer
+ * @param[out] out Destination vector (appended, buffer cleared)
+ *
+ * Call after processBatch so worker-produced messages reach AICommandBus
+ * on the main thread.
+ */
+void collectDeferredBehaviorMessages(
+    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& out);
 
 } // namespace Behaviors
 

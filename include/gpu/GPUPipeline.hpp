@@ -14,12 +14,12 @@ namespace VoidLight {
  * Pipeline type identifiers for render sorting.
  */
 enum class PipelineType : uint8_t {
-    SpriteOpaque = 0,   // Depth write, no blend
-    SpriteAlpha,        // Depth test, alpha blend
-    Particle,           // No depth, additive/alpha blend
-    Composite,          // Fullscreen quad composite
-    Primitive,          // Colored primitives (UI backgrounds)
-    Text,               // Text rendering
+    SpriteOpaque = 0, // Depth write, no blend
+    SpriteAlpha, // Depth test, alpha blend
+    Particle, // No depth, additive/alpha blend
+    Composite, // Fullscreen quad composite
+    Primitive, // Colored primitives (UI backgrounds)
+    Text, // Text rendering
     COUNT
 };
 
@@ -102,9 +102,9 @@ public:
      * @param alpha If true, enables alpha blending; if false, opaque
      */
     static PipelineConfig createSpriteConfig(SDL_GPUShader* vertShader,
-                                              SDL_GPUShader* fragShader,
-                                              SDL_GPUTextureFormat colorFormat,
-                                              bool alpha);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat,
+        bool alpha);
 
     /**
      * Create a particle pipeline configuration.
@@ -113,23 +113,23 @@ public:
      *                 blending.
      */
     static PipelineConfig createParticleConfig(SDL_GPUShader* vertShader,
-                                                SDL_GPUShader* fragShader,
-                                                SDL_GPUTextureFormat colorFormat,
-                                                bool additive = false);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat,
+        bool additive = false);
 
     /**
      * Create a primitive (colored quad) pipeline configuration.
      */
     static PipelineConfig createPrimitiveConfig(SDL_GPUShader* vertShader,
-                                                 SDL_GPUShader* fragShader,
-                                                 SDL_GPUTextureFormat colorFormat);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat);
 
     /**
      * Create a fullscreen composite pipeline configuration.
      */
     static PipelineConfig createCompositeConfig(SDL_GPUShader* vertShader,
-                                                 SDL_GPUShader* fragShader,
-                                                 SDL_GPUTextureFormat colorFormat);
+        SDL_GPUShader* fragShader,
+        SDL_GPUTextureFormat colorFormat);
 
 private:
     SDL_GPUGraphicsPipeline* m_pipeline{nullptr};

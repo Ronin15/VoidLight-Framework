@@ -12,38 +12,37 @@
 #include <memory>
 
 #include "gameStates/LoadingState.hpp"
+#include "core/GameEngine.hpp"
 #include "core/ThreadSystem.hpp"
 #include "managers/CollisionManager.hpp"
+#include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/GameStateManager.hpp"
 #include "managers/GameTimeManager.hpp"
 #include "managers/PathfinderManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
 #include "managers/UIManager.hpp"
 #include "managers/WorldManager.hpp"
+#include "managers/WorldResourceManager.hpp"
 
 namespace {
 
-class TestMainMenuState final : public GameState
-{
+class TestMainMenuState final : public GameState {
 public:
-    static void reset()
-    {
+    static void reset() {
         s_entered.store(false, std::memory_order_release);
         s_exited.store(false, std::memory_order_release);
     }
 
-    static bool entered()
-    {
+    static bool entered() {
         return s_entered.load(std::memory_order_acquire);
     }
 
-    static bool exited()
-    {
+    static bool exited() {
         return s_exited.load(std::memory_order_acquire);
     }
 
-    bool enter() override
-    {
+    bool enter() override {
         s_entered.store(true, std::memory_order_release);
         return true;
     }
@@ -51,14 +50,12 @@ public:
     void update(float) override {}
     void handleInput() override {}
 
-    bool exit() override
-    {
+    bool exit() override {
         s_exited.store(true, std::memory_order_release);
         return true;
     }
 
-    GameStateId getStateId() const override
-    {
+    GameStateId getStateId() const override {
         return GameStateId::MAIN_MENU;
     }
 
@@ -73,7 +70,7 @@ private:
 // TEST SUITE: AsyncLoadingPatternTests
 // ============================================================================
 // Tests that validate LoadingState uses proper async patterns
-// From AGENTS.md: "Use LoadingState plus async ThreadSystem work for loading instead of blocking manual rendering"
+// From CLAUDE.md: "Use LoadingState plus async ThreadSystem work for loading instead of blocking manual rendering"
 
 BOOST_AUTO_TEST_SUITE(AsyncLoadingPatternTests)
 
@@ -178,6 +175,66 @@ BOOST_AUTO_TEST_CASE(TestEnterFailsWhenUnconfigured) {
     BOOST_CHECK(!loadingState.enter());
 }
 
+BOOST_AUTO_TEST_CASE(TestAbandonedExitUnloadsWorld) {
+    TestMainMenuState::reset();
+
+    BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
+    BOOST_REQUIRE(EventManager::Instance().init());
+    BOOST_REQUIRE(GameTimeManager::Instance().init());
+    BOOST_REQUIRE(UIManager::Instance().init());
+    BOOST_REQUIRE(EntityDataManager::Instance().init());
+    BOOST_REQUIRE(WorldResourceManager::Instance().init());
+    BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+    BOOST_REQUIRE(PathfinderManager::Instance().init());
+    BOOST_REQUIRE(WorldManager::Instance().init());
+
+    VoidLight::WorldGenerationConfig config{};
+    config.width = 4;
+    config.height = 4;
+    config.seed = 2026;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.3f;
+    config.mountainLevel = 0.7f;
+
+    GameStateManager stateManager;
+    auto loadingState = std::make_unique<LoadingState>();
+    auto* loadingStatePtr = loadingState.get();
+    stateManager.addState(std::move(loadingState));
+    stateManager.addState(std::make_unique<TestMainMenuState>());
+
+    loadingStatePtr->configure(GameStateId::MAIN_MENU, config);
+    stateManager.pushState(GameStateId::LOADING);
+
+    bool worldLoaded = false;
+    for (int i = 0; i < 200 && !worldLoaded; ++i) {
+        EventManager::Instance().update();
+        worldLoaded = WorldManager::Instance().hasActiveWorld();
+        if (!worldLoaded) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    BOOST_REQUIRE(worldLoaded);
+    BOOST_CHECK(!TestMainMenuState::entered());
+
+    stateManager.clearAllStates();
+    BOOST_CHECK(!WorldManager::Instance().hasActiveWorld());
+    BOOST_CHECK(!TestMainMenuState::entered());
+
+    WorldManager::Instance().clean();
+    PathfinderManager::Instance().clean();
+    CollisionManager::Instance().clean();
+    ResourceTemplateManager::Instance().clean();
+    WorldResourceManager::Instance().clean();
+    EntityDataManager::Instance().clean();
+    GameEngine::Instance().setGlobalPause(false);
+    GameTimeManager::Instance().setGlobalPause(false);
+    UIManager::Instance().prepareForStateTransition();
+    EventManager::Instance().clean();
+}
+
 BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {
     TestMainMenuState::reset();
 
@@ -207,6 +264,9 @@ BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {
     loadingStatePtr->configure(GameStateId::MAIN_MENU, config);
     stateManager.pushState(GameStateId::LOADING);
 
+    BOOST_CHECK(GameEngine::Instance().isGloballyPaused());
+    BOOST_CHECK(!EventManager::Instance().isGloballyPaused());
+
     auto& ui = UIManager::Instance();
     BOOST_CHECK(ui.hasComponent("loading_title"));
     BOOST_CHECK(ui.hasComponent("loading_progress"));
@@ -231,6 +291,7 @@ BOOST_AUTO_TEST_CASE(TestEnterStartsRuntimeLoadAndExitCleansUI) {
     WorldManager::Instance().clean();
     PathfinderManager::Instance().clean();
     CollisionManager::Instance().clean();
+    GameEngine::Instance().setGlobalPause(false);
     GameTimeManager::Instance().setGlobalPause(false);
     UIManager::Instance().prepareForStateTransition();
     EventManager::Instance().clean();

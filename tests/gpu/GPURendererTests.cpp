@@ -21,34 +21,51 @@ using namespace VoidLight::Test;
 BOOST_GLOBAL_FIXTURE(GPUGlobalFixture);
 
 /**
+ * Shuts the shared GPUDevice down once at the end of the run. Registered
+ * after GPUGlobalFixture so it tears down first (before the window and SDL).
+ */
+struct RendererDeviceTeardown {
+    ~RendererDeviceTeardown() {
+        GPURenderer::Instance().shutdown();
+        GPUShaderManager::Instance().shutdown();
+        if (GPUDevice::Instance().isInitialized()) {
+            GPUDevice::Instance().shutdown();
+        }
+    }
+};
+BOOST_GLOBAL_FIXTURE(RendererDeviceTeardown);
+
+/**
  * Test fixture that initializes full GPU stack for renderer testing.
  *
  * Window is shown BEFORE device init so the compositor has time to
- * composite the surface. Swapchain availability is probed once using
- * the same device the tests will use — no throwaway devices.
+ * composite the surface. The GPUDevice is shared across tests (device
+ * lifecycle is covered by GPUDeviceTests); the renderer and shader manager
+ * are initialized fresh per test, and swapchain availability is probed per
+ * test on an idle device — no throwaway devices.
  */
 struct RendererTestFixture : public GPUTestFixture {
     RendererTestFixture() {
         if (!isGPUAvailable()) return;
 
         device = &GPUDevice::Instance();
-        if (device->isInitialized()) {
-            GPURenderer::Instance().shutdown();
-            GPUShaderManager::Instance().shutdown();
-            device->shutdown();
-        }
+        GPURenderer::Instance().shutdown();
+        GPUShaderManager::Instance().shutdown();
 
         SDL_Window* window = getTestWindow();
         if (!window) return;
 
         // Show window BEFORE claiming for GPU — the compositor needs
-        // the window visible for swapchain acquisition to work.
-        SDL_ShowWindow(window);
-        SDL_Delay(100);
+        // the window visible for swapchain acquisition to work. The window
+        // is shared and stays shown, so only the first test pays the wait.
+        if (SDL_GetWindowFlags(window) & SDL_WINDOW_HIDDEN) {
+            SDL_ShowWindow(window);
+            SDL_Delay(100);
+        }
         SDL_Event event;
         while (SDL_PollEvent(&event)) {}
 
-        if (!device->init(window)) return;
+        if (!device->isInitialized() && !device->init(window)) return;
 
         renderer = &GPURenderer::Instance();
         rendererInitialized = renderer->init();
@@ -63,8 +80,10 @@ struct RendererTestFixture : public GPUTestFixture {
             renderer->shutdown();
         }
         GPUShaderManager::Instance().shutdown();
+        // Drain in-flight frames so the next test's swapchain probe starts
+        // with zero frames in flight, exactly as it would on a fresh device.
         if (device && device->isInitialized()) {
-            device->shutdown();
+            SDL_WaitForGPUIdle(device->get());
         }
     }
 
@@ -170,8 +189,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_AUTO_TEST_SUITE(FrameCycleTests)
 
 BOOST_FIXTURE_TEST_CASE(BeginFrameAcquiresCommandBuffer, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -189,8 +207,7 @@ BOOST_FIXTURE_TEST_CASE(BeginFrameAcquiresCommandBuffer, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(BeginScenePassEndsCopyPass, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -211,8 +228,7 @@ BOOST_FIXTURE_TEST_CASE(BeginScenePassEndsCopyPass, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(BeginSwapchainPassEndsScenePass, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -231,8 +247,7 @@ BOOST_FIXTURE_TEST_CASE(BeginSwapchainPassEndsScenePass, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(EndFrameSubmitsCommandBuffer, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -248,8 +263,7 @@ BOOST_FIXTURE_TEST_CASE(EndFrameSubmitsCommandBuffer, RendererTestFixture,
 }
 
 BOOST_FIXTURE_TEST_CASE(MultipleFrameCycles, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -446,8 +460,7 @@ BOOST_FIXTURE_TEST_CASE(SetDayNightParams, RendererTestFixture) {
 }
 
 BOOST_FIXTURE_TEST_CASE(RenderCompositeInSwapchainPass, RendererTestFixture,
-    *boost::unit_test::timeout(10))
-{
+    *boost::unit_test::timeout(10)) {
     SKIP_IF_NO_GPU();
     SKIP_IF_NO_SWAPCHAIN();
     BOOST_REQUIRE(rendererInitialized);
@@ -491,11 +504,23 @@ BOOST_FIXTURE_TEST_CASE(ViewportDimensionsValid, RendererTestFixture) {
 BOOST_FIXTURE_TEST_CASE(UpdateViewport, RendererTestFixture) {
     SKIP_IF_NO_GPU();
     BOOST_REQUIRE(rendererInitialized);
+    BOOST_CHECK(renderer->isInitialized());
 
     renderer->updateViewport(1920, 1080);
 
     BOOST_CHECK_EQUAL(renderer->getViewportWidth(), 1920u);
     BOOST_CHECK_EQUAL(renderer->getViewportHeight(), 1080u);
+}
+
+BOOST_FIXTURE_TEST_CASE(UpdateViewportAppliesWhileFrameActive, RendererTestFixture) {
+    SKIP_IF_NO_GPU();
+    BOOST_REQUIRE(rendererInitialized);
+
+    BOOST_REQUIRE(renderer->beginFrame());
+    renderer->updateViewport(1600, 900);
+    BOOST_CHECK_EQUAL(renderer->getViewportWidth(), 1600u);
+    BOOST_CHECK_EQUAL(renderer->getViewportHeight(), 900u);
+    renderer->endFrame();
 }
 
 BOOST_AUTO_TEST_SUITE_END()

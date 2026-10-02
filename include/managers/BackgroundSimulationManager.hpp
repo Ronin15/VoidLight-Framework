@@ -144,7 +144,7 @@ public:
      */
     [[nodiscard]] bool hasWork() const noexcept {
         return m_hasNonActiveEntities.load(std::memory_order_acquire) ||
-               m_tiersDirty.load(std::memory_order_acquire);
+            m_tiersDirty.load(std::memory_order_acquire);
     }
 
     // Configuration
@@ -200,7 +200,7 @@ public:
         uint64_t totalUpdates{0};
         bool lastWasThreaded{false};
 
-        static constexpr double ALPHA = 0.05;  // EMA smoothing
+        static constexpr double ALPHA = 0.05; // EMA smoothing
 
         void updateAverage(double newMs) {
             if (totalUpdates == 0) {
@@ -228,9 +228,9 @@ private:
     // Batch processing (follows AIManager pattern)
     void processSingleThreaded(float deltaTime, const std::vector<size_t>& indices);
     void processMultiThreaded(float deltaTime, const std::vector<size_t>& indices,
-                              size_t batchCount, size_t batchSize);
+        size_t batchCount, size_t batchSize);
     void processBatch(float deltaTime, const std::vector<size_t>& indices,
-                      size_t startIdx, size_t endIdx);
+        size_t startIdx, size_t endIdx);
 
     // Type-specific simplified simulation
     void simulateNPC(float deltaTime, size_t index);
@@ -242,8 +242,8 @@ private:
     // - Active: 1.5x half-diagonal = entities visible + small buffer
     // - Background: 2x half-diagonal = pre-loading area for smooth transitions
     // - Hibernated: beyond background radius (no processing)
-    float m_activeRadius{1650.0f};      // ~1.5x window half-diagonal (visible + buffer)
-    float m_backgroundRadius{2200.0f};  // ~2x window half-diagonal (pre-load zone)
+    float m_activeRadius{1650.0f}; // ~1.5x window half-diagonal (visible + buffer)
+    float m_backgroundRadius{2200.0f}; // ~2x window half-diagonal (pre-load zone)
 
     // Tier update interval - every 120 main loop frames (~2 seconds at 60Hz)
     // Power optimization: entities move ~300 units/sec, radius is 1650px = safe margin
@@ -252,19 +252,19 @@ private:
     // Timing (accumulator pattern like TimestepManager)
     // 10Hz is sufficient for off-screen entities - saves CPU while maintaining world consistency
     // When entities become Active, they immediately get 60Hz updates
-    float m_updateRate{10.0f};            // Target update rate in Hz
+    float m_updateRate{10.0f}; // Target update rate in Hz
     float m_updateInterval{1.0f / 10.0f}; // Time between updates (100ms at 10Hz)
-    double m_accumulator{0.0};            // Time accumulator for fixed timestep
+    double m_accumulator{0.0}; // Time accumulator for fixed timestep
 
     // State
     Vector2D m_referencePoint{0.0f, 0.0f};
-    bool m_referencePointSet{false};  // First setReferencePoint call always updates
+    bool m_referencePointSet{false}; // First setReferencePoint call always updates
     uint32_t m_framesSinceTierUpdate{0};
     std::atomic<bool> m_tiersDirty{true};
     std::atomic<bool> m_initialized{false};
     std::atomic<bool> m_isShutdown{false};
     std::atomic<bool> m_globallyPaused{false};
-    std::atomic<bool> m_hasNonActiveEntities{false};  // Track if work exists
+    std::atomic<bool> m_hasNonActiveEntities{false}; // Track if work exists
 
     // Async task tracking (follows AIManager pattern)
     std::vector<std::future<void>> m_batchFutures;
@@ -275,9 +275,6 @@ private:
 
     // Performance tracking
     PerfStats m_perf;
-
-    // Minimum batch size for threading (threading threshold is adaptive via WorkerBudget)
-    static constexpr size_t MIN_BATCH_SIZE = 64;
 };
 
 #endif // BACKGROUND_SIMULATION_MANAGER_HPP

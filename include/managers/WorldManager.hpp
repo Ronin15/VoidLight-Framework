@@ -9,6 +9,7 @@
 #include "world/WorldData.hpp"
 #include "world/WorldGenerator.hpp"
 #include "managers/Season.hpp"
+#include "entities/EntityHandle.hpp"
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -23,11 +24,11 @@
 #include "managers/EventManager.hpp"
 
 namespace VoidLight {
-class Camera;  // Forward declaration for camera pointer storage
+class Camera; // Forward declaration for camera pointer storage
 
-class GPURenderer;  // Forward declaration for GPU rendering
-class GPUTexture;   // Forward declaration for GPU texture
-class SpriteBatch;  // Forward declaration for sprite batch
+class GPURenderer; // Forward declaration for GPU rendering
+class GPUTexture; // Forward declaration for GPU texture
+class SpriteBatch; // Forward declaration for sprite batch
 
 // World object definition loaded from JSON
 struct WorldObjectDef {
@@ -37,7 +38,7 @@ struct WorldObjectDef {
     bool seasonal{false};
     bool blocking{false};
     bool harvestable{false};
-    int buildingSize{0};  // For buildings: 1=hut, 2=house, 3=large, 4=cityhall
+    int buildingSize{0}; // For buildings: 1=hut, 2=house, 3=large, 4=cityhall
 };
 
 // World objects data loaded from world_objects.json
@@ -52,12 +53,12 @@ struct WorldObjectsData {
 
 class TileRenderer {
 private:
-    static constexpr float TILE_SIZE = 32.0f;  // Use float for smooth movement
+    static constexpr float TILE_SIZE = 32.0f; // Use float for smooth movement
     static constexpr int VIEWPORT_PADDING = 2;
-    static constexpr int SPRITE_OVERHANG = 64;  // Padding for sprites extending beyond tile bounds (2 tiles)
+    static constexpr int SPRITE_OVERHANG = 64; // Padding for sprites extending beyond tile bounds (2 tiles)
 
     // Chunk-based rendering - smaller chunks = faster per-chunk render, more chunks total
-    static constexpr int CHUNK_SIZE = 16;  // 16x16 tiles per chunk (256 tiles vs 1024)
+    static constexpr int CHUNK_SIZE = 16; // 16x16 tiles per chunk (256 tiles vs 1024)
 
 public:
     TileRenderer();
@@ -86,8 +87,8 @@ public:
      * @param season Current season for seasonal textures
      */
     void recordGPUTiles(SpriteBatch& spriteBatch, float cameraX, float cameraY,
-                        float viewportWidth, float viewportHeight, float zoom,
-                        Season season);
+        float viewportWidth, float viewportHeight, float zoom,
+        Season season);
 
     /**
      * @brief Get the atlas GPU texture
@@ -174,20 +175,20 @@ private:
         AtlasCoords decoration_water_flower;
     };
 
-    SeasonalTileCoords m_seasonalCoords[4];  // Indexed by Season enum (Spring=0, Summer=1, Fall=2, Winter=3)
-    bool m_useAtlas{false};                  // True if atlas loaded successfully
+    SeasonalTileCoords m_seasonalCoords[4]; // Indexed by Season enum (Spring=0, Summer=1, Fall=2, Winter=3)
+    bool m_useAtlas{false}; // True if atlas loaded successfully
 
     std::shared_ptr<GPUTexture> m_atlasGPUOwner{};
-    GPUTexture* m_atlasGPUPtr{nullptr};  // GPU atlas texture pointer
+    GPUTexture* m_atlasGPUPtr{nullptr}; // GPU atlas texture pointer
 
     // GPU rendering buffers (member variables to avoid static in threaded code)
     struct GPUSprite {
-        float screenX, screenY;         // Destination position
-        float srcX, srcY, srcW, srcH;   // Atlas source rect
-        float dstW, dstH;               // Destination dimensions
+        float screenX, screenY; // Destination position
+        float srcX, srcY, srcW, srcH; // Atlas source rect
+        float dstW, dstH; // Destination dimensions
     };
     struct GPUYSortedSprite : GPUSprite {
-        float sortY;                    // Y value for sorting (bottom of sprite)
+        float sortY; // Y value for sorting (bottom of sprite)
     };
     std::vector<GPUSprite> m_gpuDecoBuffer;
     std::vector<GPUYSortedSprite> m_gpuObstacleBuffer;
@@ -216,8 +217,10 @@ public:
     void setupEventHandlers();
 
     [[nodiscard]] bool loadNewWorld(const VoidLight::WorldGenerationConfig& config,
-                     const VoidLight::WorldGenerationProgressCallback& progressCallback = nullptr);
+        const VoidLight::WorldGenerationProgressCallback& progressCallback = nullptr);
     [[nodiscard]] bool loadWorld(const std::string& worldId);
+    // Main/test-thread unload: locked unload then processDestructionQueue.
+    // Load worker uses unloadWorldLocked only (no drain).
     void unloadWorld();
 
     std::optional<VoidLight::Tile> getTileCopyAt(int x, int y) const;
@@ -251,7 +254,7 @@ public:
      * @param zoom Current zoom level
      */
     void recordGPU(VoidLight::SpriteBatch& spriteBatch, float cameraX, float cameraY,
-                   float viewWidth, float viewHeight, float zoom);
+        float viewWidth, float viewHeight, float zoom);
 
     bool handleHarvestResource(int entityId, int targetX, int targetY);
     bool modifyTile(int x, int y, const std::function<void(VoidLight::Tile&)>& mutator);
@@ -270,7 +273,10 @@ public:
     Season getCurrentSeason() const;
     void setCurrentSeason(Season season);
 
-    void setCamera(int x, int y) { m_cameraX = x; m_cameraY = y; }
+    void setCamera(int x, int y) {
+        m_cameraX = x;
+        m_cameraY = y;
+    }
     void setCameraViewport(int width, int height) {
         m_viewportWidth = width;
         m_viewportHeight = height;
@@ -280,9 +286,9 @@ public:
     decltype(auto) withWorldDataRead(Func&& func) const {
         using Result = std::invoke_result_t<Func, const VoidLight::WorldData*>;
         static_assert(!std::is_reference_v<Result>,
-                      "withWorldDataRead() callbacks must not return references");
+            "withWorldDataRead() callbacks must not return references");
         static_assert(!std::is_pointer_v<std::remove_cv_t<Result>>,
-                      "withWorldDataRead() callbacks must not return pointers");
+            "withWorldDataRead() callbacks must not return pointers");
 
         std::shared_lock<std::shared_mutex> lock(m_worldMutex);
         if constexpr (std::is_void_v<Result>) {
@@ -316,6 +322,21 @@ public:
      */
     bool getWorldBounds(float& minX, float& minY, float& maxX, float& maxY) const;
 
+    // Populate registry is keyed by worldId so unload/reload can prove
+    // the previous world's NPCs are gone. Settlement records live on the
+    // current WorldData, same as getTileCopyAt / getWorldBounds.
+    [[nodiscard]] bool isWorldPopulated(const std::string& worldId) const;
+    [[nodiscard]] size_t getPopulatedNpcCount(const std::string& worldId) const;
+    [[nodiscard]] std::vector<VoidLight::SettlementRecord> getSettlements() const;
+    [[nodiscard]] std::optional<VoidLight::SettlementRecord> findSettlementAtTile(
+        int tileX, int tileY) const;
+    [[nodiscard]] std::optional<VoidLight::SettlementRecord> findSettlementAtPixel(
+        float worldX, float worldY) const;
+    // Queues populated NPCs for destroy and drops the worldId registry entry.
+    // Does not unload tiles. Does not drain EDM's destruction queue (main thread
+    // only — see EntityDataManager::processDestructionQueue).
+    void clearPopulatedNpcs(const std::string& worldId);
+
 private:
     WorldManager() = default;
     ~WorldManager() {
@@ -330,10 +351,14 @@ private:
     void fireWorldLoadedEvent(const std::string& worldId);
     void fireWorldUnloadedEvent(const std::string& worldId);
     void initializeWorldResources();
-    std::optional<std::string> unloadWorldLocked();  // Assumes caller already holds lock
+    void populateWorldEntities();
+    void destroyHarvestablesForWorld(const std::string& worldId);
+    void clearPopulatedEntities(const std::string& worldId);
+    std::optional<std::string> unloadWorldLocked(); // Assumes caller already holds lock
     bool applyTileUpdateLocked(int x, int y, const VoidLight::Tile& newTile);
 
     std::unique_ptr<VoidLight::WorldData> m_currentWorld;
+    std::unordered_map<std::string, std::vector<EntityHandle>> m_populatedNpcsByWorldId;
     std::unique_ptr<VoidLight::TileRenderer> m_tileRenderer;
 
     mutable std::mutex m_loadMutex;

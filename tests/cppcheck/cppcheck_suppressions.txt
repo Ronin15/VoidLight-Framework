@@ -21,8 +21,6 @@ missingInclude:*/entities/playerStates/PlayerRunningState.hpp
 missingInclude:*/gameStates/EventDemoState.hpp
 missingInclude:*/gameStates/AIDemoState.hpp
 missingInclude:*/gameStates/MainMenuState.hpp
-missingInclude:*/gameStates/UIExampleState.hpp
-missingInclude:*/gameStates/OverlayDemoState.hpp
 missingInclude:*/utils/Vector2D.hpp
 missingInclude:*/utils/BinarySerializer.hpp
 
@@ -66,7 +64,6 @@ checkLibraryFunction:hasBehavior
 checkLibraryFunction:wasKeyPressed
 checkLibraryFunction:isKeyDown
 checkLibraryFunction:createLabel
-checkLibraryFunction:enableTextBackground
 checkLibraryFunction:drawRect
 checkLibraryFunction:drawBorder
 checkLibraryFunction:getComponent
@@ -253,7 +250,6 @@ unusedFunction:*/ResourceTemplateManager.cpp:717
 unusedFunction:*/ResourceFactory.cpp:180
 unusedFunction:*/UIManager.cpp:2627
 unusedFunction:*/GamePlayState.cpp:470
-unusedFunction:*/EventFactory.cpp:263
 
 # Performance suggestions that may be intentionally ignored for readability
 useStlAlgorithm:*/InventoryComponent.cpp:746

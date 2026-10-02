@@ -83,7 +83,7 @@ void initializeGamepadFromBackgroundThread() {
         if (gamepadIds) {
             SDL_free(gamepadIds);
         }
-        return;  // g_gamepadSubsystemInitialized stays false
+        return; // g_gamepadSubsystemInitialized stays false
     }
 
     std::cout << "[INFO]   [BG THREAD] Found " << numGamepads << " gamepad(s)" << std::endl;
@@ -123,8 +123,7 @@ SDL_Window* createWindow() {
     SDL_Window* window = SDL_CreateWindow(
         "SDL3 Controller Crash Demo",
         640, 480,
-        0
-    );
+        0);
 
     if (!window) {
         printError("SDL_CreateWindow");

@@ -54,8 +54,8 @@ public:
      * @param newValue The new value of the setting
      */
     using ChangeCallback = std::function<void(const std::string& category,
-                                             const std::string& key,
-                                             const SettingValue& newValue)>;
+        const std::string& key,
+        const SettingValue& newValue)>;
 
     /**
      * @brief Loads settings from a JSON file
@@ -81,7 +81,7 @@ public:
      *
      * Thread-safe for concurrent reads
      */
-    template<typename T>
+    template <typename T>
     T get(const std::string& category, const std::string& key, T defaultValue = T{}) const;
 
     /**
@@ -94,7 +94,7 @@ public:
      *
      * Thread-safe write operation. Triggers change callbacks if registered.
      */
-    template<typename T>
+    template <typename T>
     bool set(const std::string& category, const std::string& key, const T& value);
 
     /**
@@ -203,7 +203,7 @@ private:
 
 // Template implementations must be in header for linking
 
-template<typename T>
+template <typename T>
 T SettingsManager::get(const std::string& category, const std::string& key, T defaultValue) const {
     std::shared_lock<std::shared_mutex> lock(m_settingsMutex);
 
@@ -237,7 +237,7 @@ T SettingsManager::get(const std::string& category, const std::string& key, T de
     }
 }
 
-template<typename T>
+template <typename T>
 bool SettingsManager::set(const std::string& category, const std::string& key, const T& value) {
     SettingValue settingValue;
 

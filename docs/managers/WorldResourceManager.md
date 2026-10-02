@@ -9,7 +9,8 @@
 It tracks:
 
 - which inventories belong to which world
-- which harvestables belong to which world
+- which harvestables belong to which world (the harvestable spatial index is
+  the single world-membership + spatial index, EDM indices only)
 - spatial indices for dropped items, harvestables, and containers
 - the currently active world for proximity queries
 
@@ -19,6 +20,11 @@ Actual inventory quantities, dropped items, and harvestable state live in `Entit
 
 WRM behavior is query and registration focused. Quantity mutation belongs in EDM
 inventory/resource APIs, not in WRM transfer-style APIs.
+
+Harvest depletion is not WRM policy. `HarvestCommit::commit`
+(`include/world/HarvestCommit.hpp`, main thread) is the single depletion path
+for the player and AI; WRM only versions the registry and counts available
+nodes for it.
 
 ## Core API
 
@@ -30,7 +36,7 @@ clean();
 prepareForStateTransition();
 ```
 
-`prepareForStateTransition()` clears registries and spatial fast paths so AI/gameplay states can shut down cleanly before world teardown.
+`prepareForStateTransition()` clears registries, spatial indices, reverse lookups, and the active world (stale EDM indices from the previous state), then re-creates the `"default"` world entries. AI-heavy states call it after `WorldManager::unloadWorld()` (see State Transition Notes).
 
 ### World Tracking
 
@@ -50,18 +56,29 @@ clearSpatialDataForWorld(worldId);
 registerInventory(inventoryIndex, worldId);
 unregisterInventory(inventoryIndex);
 
-registerHarvestable(edmIndex, worldId);
+registerHarvestable(edmIndex, position, worldId);
 unregisterHarvestable(edmIndex);
+copyHarvestableIndices(worldId, out);  // snapshot static EDM indices; unordered; does not destroy
 
 registerDroppedItem(edmIndex, position, worldId);
 unregisterDroppedItem(edmIndex);
 
-registerHarvestableSpatial(edmIndex, position, worldId);
-unregisterHarvestableSpatial(edmIndex);
-
 registerContainerSpatial(edmIndex, position, worldId);
 unregisterContainerSpatial(edmIndex);
 ```
+
+Harvestables have one container per world: the harvestable `SpatialIndex`
+(world-membership + spatial index, EDM indices only) plus the
+`m_harvestableToWorld` reverse lookup. `getHarvestableCount`,
+`copyHarvestableIndices`, `queryHarvestableTotal`, `getWorldResources`, and the
+radius queries all read it, so `clearSpatialDataForWorld` and `removeWorld`
+empty the count and copy as well as the radius queries. The
+`harvestablesRegistered` stat tracks the same container (register, unregister,
+`clearSpatialDataForWorld`, `removeWorld`).
+
+`copyHarvestableIndices` order is unspecified. Callers needing a deterministic
+order sort the result (`AIManager::refreshHarvestableSnapshot` sorts by static
+index before building the worker snapshot).
 
 ### Spatial Queries
 
@@ -70,7 +87,32 @@ queryDroppedItemsInRadius(center, radius, outIndices);
 queryHarvestablesInRadius(center, radius, outIndices);
 queryContainersInRadius(center, radius, outIndices);
 findClosestDroppedItem(center, radius, outIndex);
+countAvailableHarvestablesInRadius(center, radius);  // live, non-depleted, any kind
 ```
+
+`countAvailableHarvestablesInRadius` walks the active world's harvestable grid
+cells directly under the shared registry lock (allocation-free) and counts live,
+non-depleted harvestables of any resource kind. `HarvestCommit` uses it for the
+NPC area reserve and the scarcity threshold.
+
+`getStats().queryCount` counts `queryHarvestablesInRadius`,
+`copyHarvestableIndices`, and `countAvailableHarvestablesInRadius` calls (and
+therefore also the player `HarvestController`'s nearest-node lookups). Tests use
+it to prove Forage workers do not query WRM per entity per frame.
+
+### Harvestable Version
+
+```cpp
+getHarvestableVersion();          // monotonic, never reset
+notifyHarvestableStateChanged();  // bump only; WRM stores no availability state
+```
+
+`m_harvestableVersion` is an atomic counter bumped by `registerHarvestable`,
+`unregisterHarvestable`, `setActiveWorld`, `clearSpatialDataForWorld`,
+`removeWorld`, `prepareForStateTransition`, `clean`, and
+`notifyHarvestableStateChanged` (called by `HarvestCommit` after the EDM
+depletion write). `AIManager` reads it before copying indices and rebuilds its
+worker harvestable snapshot only when it changes.
 
 ### Query-only Resource Totals
 
@@ -105,4 +147,4 @@ WRM should be described as a fast lookup/indexing layer:
 
 ## State Transition Notes
 
-Gameplay and AI-heavy states should call `prepareForStateTransition()` before destroying entities and world state. This aligns with the repository-wide teardown order documented in `AGENTS.md`.
+AI-heavy `exit()` unloads the world **before** WRM `prepareForStateTransition()` (GamePlay: destroy NPCs → AI/projectile/BSM/World prepare → `unloadWorld()` → then WRM prepare). WRM is an index; it is not cleared “before world teardown.” See `CLAUDE.md` and `GamePlayState::exit()`.

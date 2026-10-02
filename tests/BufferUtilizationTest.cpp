@@ -113,7 +113,7 @@ BOOST_AUTO_TEST_CASE(TestExecutionReporting) {
 
     // Report some executions (workload, wasThreaded, batchCount, timeMs)
     size_t workload = 1000;
-    budgetMgr.reportExecution(VoidLight::SystemType::AI, workload, true, 4, 0.5);  // 0.5ms total
+    budgetMgr.reportExecution(VoidLight::SystemType::AI, workload, true, 4, 0.5); // 0.5ms total
     budgetMgr.reportExecution(VoidLight::SystemType::AI, workload, true, 4, 0.5);
 
     // Get batch strategy after reporting
@@ -124,7 +124,7 @@ BOOST_AUTO_TEST_CASE(TestExecutionReporting) {
     std::cout << "After fast execution (0.5ms total): " << batchCount1 << " batches\n";
 
     // Report slow execution
-    budgetMgr.reportExecution(VoidLight::SystemType::AI, workload, true, 2, 10.0);  // 10ms total
+    budgetMgr.reportExecution(VoidLight::SystemType::AI, workload, true, 2, 10.0); // 10ms total
     budgetMgr.reportExecution(VoidLight::SystemType::AI, workload, true, 2, 10.0);
 
     auto [batchCount2, batchSize2] = budgetMgr.getBatchStrategy(
@@ -150,8 +150,7 @@ BOOST_AUTO_TEST_CASE(TestAllSystemTypes) {
         {VoidLight::SystemType::AI, "AI"},
         {VoidLight::SystemType::Particle, "Particle"},
         {VoidLight::SystemType::Pathfinding, "Pathfinding"},
-        {VoidLight::SystemType::Event, "Event"}
-    };
+        {VoidLight::SystemType::Event, "Event"}};
 
     for (const auto& [type, name] : systems) {
         size_t optimalWorkers = budgetMgr.getOptimalWorkers(type, workload);
@@ -240,8 +239,8 @@ BOOST_AUTO_TEST_CASE(TestBatchTuningStability) {
 
     // Use Particle system to avoid interference with AI state from other tests
     const auto systemType = VoidLight::SystemType::Particle;
-    const size_t workload = 14000;  // Simulate 14K entities like real game
-    const size_t numFrames = 200;   // Simulate 200 frames (~3.3 seconds at 60fps)
+    const size_t workload = 14000; // Simulate 14K entities like real game
+    const size_t numFrames = 200; // Simulate 200 frames (~3.3 seconds at 60fps)
 
     std::cout << "Workers: " << budget.totalWorkers << ", Workload: " << workload << "\n";
     std::cout << "Simulating " << numFrames << " frames...\n\n";
@@ -254,12 +253,12 @@ BOOST_AUTO_TEST_CASE(TestBatchTuningStability) {
     // Base time scales with batch count (fewer batches = less overhead but less parallelism)
     auto simulateFrameTime = [&](size_t batches) -> double {
         // Base work time per item (microseconds)
-        double baseTimePerItem = 0.15;  // ~0.15µs per entity
+        double baseTimePerItem = 0.15; // ~0.15µs per entity
 
         // Parallel speedup (not perfect - diminishing returns)
         double parallelism = std::min(static_cast<double>(batches),
-                                      static_cast<double>(budget.totalWorkers));
-        double speedup = 1.0 + (parallelism - 1.0) * 0.85;  // 85% parallel efficiency
+            static_cast<double>(budget.totalWorkers));
+        double speedup = 1.0 + (parallelism - 1.0) * 0.85; // 85% parallel efficiency
 
         // Work time
         double workTimeMs = (workload * baseTimePerItem / 1000.0) / speedup;
@@ -324,8 +323,8 @@ BOOST_AUTO_TEST_CASE(TestBatchTuningStability) {
     }
 
     // Check convergence - should stabilize within reasonable range
-    BOOST_CHECK_LE(range, 6);  // Allow up to 6 batch variance
-    BOOST_CHECK_GE(avgBatch, 5);  // Should find reasonable parallelism
+    BOOST_CHECK_LE(range, 6); // Allow up to 6 batch variance
+    BOOST_CHECK_GE(avgBatch, 5); // Should find reasonable parallelism
 }
 
 BOOST_AUTO_TEST_SUITE_END()

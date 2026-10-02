@@ -15,56 +15,74 @@
 #include <vector>
 #include "utils/Vector2D.hpp"
 
-enum mouse_buttons { LEFT = 0, MIDDLE = 1, RIGHT = 2 };
+enum mouse_buttons {
+    LEFT = 0,
+    MIDDLE = 1,
+    RIGHT = 2
+};
 
 class InputManager {
- public:
+public:
     // -------------------------------------------------------------------------
     // Command-pattern types
     // -------------------------------------------------------------------------
 
-    enum class Command : uint32_t
-    {
+    enum class Command : uint32_t {
         // Movement — composed into direction vector at call site
-        MoveUp, MoveDown, MoveLeft, MoveRight,
+        MoveUp,
+        MoveDown,
+        MoveLeft,
+        MoveRight,
         // Gameplay
-        AttackLight, Interact, OpenInventory, Pause,
-        WorldInteract,   // LMB world click (mouse pos read from getMousePosition())
-        ZoomIn, ZoomOut,
+        AttackLight,
+        Interact,
+        OpenInventory,
+        Pause,
+        WorldInteract, // LMB world click (mouse pos read from getMousePosition())
+        ZoomIn,
+        ZoomOut,
         // Hotbar selection (v1: select-only; use action TBD)
-        HotbarSlot1, HotbarSlot2, HotbarSlot3, HotbarSlot4, HotbarSlot5,
-        HotbarSlot6, HotbarSlot7, HotbarSlot8, HotbarSlot9,
+        HotbarSlot1,
+        HotbarSlot2,
+        HotbarSlot3,
+        HotbarSlot4,
+        HotbarSlot5,
+        HotbarSlot6,
+        HotbarSlot7,
+        HotbarSlot8,
+        HotbarSlot9,
         // Menu
-        MenuConfirm, MenuCancel, MenuUp, MenuDown, MenuLeft, MenuRight,
+        MenuConfirm,
+        MenuCancel,
+        MenuUp,
+        MenuDown,
+        MenuLeft,
+        MenuRight,
         COUNT
     };
 
-    enum class InputSource : uint8_t
-    {
-        Keyboard,             // code = SDL_Scancode
-        MouseButton,          // code = 0/1/2 (LEFT/MIDDLE/RIGHT)
-        GamepadButton,        // code = SDL_GamepadButton
-        GamepadAxisPositive,  // code = SDL_GamepadAxis, active when axis > +0.3
-        GamepadAxisNegative,  // code = SDL_GamepadAxis, stick axes only, active when axis < -0.3
+    enum class InputSource : uint8_t {
+        Keyboard, // code = SDL_Scancode
+        MouseButton, // code = 0/1/2 (LEFT/MIDDLE/RIGHT)
+        GamepadButton, // code = SDL_GamepadButton
+        GamepadAxisPositive, // code = SDL_GamepadAxis, active when axis > +0.3
+        GamepadAxisNegative, // code = SDL_GamepadAxis, stick axes only, active when axis < -0.3
     };
 
     // Device grouping used by the Controls UI and by rebind capture filtering.
     // Keyboard + mouse share one category; all gamepad inputs share the other.
-    enum class DeviceCategory : uint8_t
-    {
+    enum class DeviceCategory : uint8_t {
         KeyboardMouse = 0,
-        Controller    = 1,
+        Controller = 1,
     };
 
-    static constexpr DeviceCategory categoryOf(InputSource s) noexcept
-    {
+    static constexpr DeviceCategory categoryOf(InputSource s) noexcept {
         return (s == InputSource::Keyboard || s == InputSource::MouseButton)
-                   ? DeviceCategory::KeyboardMouse
-                   : DeviceCategory::Controller;
+            ? DeviceCategory::KeyboardMouse
+            : DeviceCategory::Controller;
     }
 
-    struct InputBinding
-    {
+    struct InputBinding {
         InputSource source;
         int code;
     };
@@ -76,9 +94,9 @@ class InputManager {
     // these methods read them. Callers from worker threads must use the raw
     // isKeyDown/getButtonState APIs instead.
     // -------------------------------------------------------------------------
-    bool isCommandPressed(Command c) const;   // rising edge this frame
-    bool isCommandDown(Command c) const;      // currently active
-    bool isCommandReleased(Command c) const;  // falling edge this frame
+    bool isCommandPressed(Command c) const; // rising edge this frame
+    bool isCommandDown(Command c) const; // currently active
+    bool isCommandReleased(Command c) const; // falling edge this frame
 
     // -------------------------------------------------------------------------
     // Binding management
@@ -114,8 +132,8 @@ class InputManager {
     // -------------------------------------------------------------------------
     // UI helpers
     // -------------------------------------------------------------------------
-    std::string describeBinding(InputBinding b) const;   // "F", "Left Mouse", "A", "Cross"
-    std::string commandDisplayName(Command c) const;     // "Attack (Light)"
+    std::string describeBinding(InputBinding b) const; // "F", "Left Mouse", "A", "Cross"
+    std::string commandDisplayName(Command c) const; // "Attack (Light)"
 
     // Controller family for vendor-specific button labels. Detected from
     // SDL_GetGamepadType on the primary connected gamepad. Generic covers
@@ -139,8 +157,7 @@ class InputManager {
         }
     }
 
-    static InputManager& Instance()
-    {
+    static InputManager& Instance() {
         static InputManager instance;
         return instance;
     }
@@ -186,7 +203,7 @@ class InputManager {
     // Main thread only — see command query comment above.
     void refreshCommandState();
 
- private:
+private:
     struct GamepadState {
         SDL_JoystickID instanceId{0};
         SDL_Gamepad* pGamepad{nullptr};
@@ -205,11 +222,11 @@ class InputManager {
     std::array<bool, kCommandCount> m_currentDown{};
     std::array<bool, kCommandCount> m_previousDown{};
 
-    Command m_rebindCommand{Command::COUNT};   // COUNT = none
+    Command m_rebindCommand{Command::COUNT}; // COUNT = none
     DeviceCategory m_rebindCategory{DeviceCategory::KeyboardMouse};
 
     bool sampleBinding(const InputBinding& b) const;
-    void captureRebind();          // called from refreshCommandState() while rebinding
+    void captureRebind(); // called from refreshCommandState() while rebinding
     void loadDefaultBindings();
 
     // -------------------------------------------------------------------------
@@ -225,9 +242,9 @@ class InputManager {
     std::vector<bool> m_mouseButtonStates{};
     // Previous input states for rebind-capture edge detection (primed by startRebinding())
     std::array<bool, 3> m_prevMouseButtonStates{};
-    std::vector<std::vector<bool>> m_prevGamepadButtonStates;    // parallel to m_gamepads
-    std::vector<std::array<bool, 6>> m_prevGamepadAxisPos;       // sticks + triggers positive threshold
-    std::vector<std::array<bool, 4>> m_prevGamepadAxisNeg;       // stick axes negative threshold
+    std::vector<std::vector<bool>> m_prevGamepadButtonStates; // parallel to m_gamepads
+    std::vector<std::array<bool, 6>> m_prevGamepadAxisPos; // sticks + triggers positive threshold
+    std::vector<std::array<bool, 4>> m_prevGamepadAxisNeg; // stick axes negative threshold
     Vector2D m_mousePosition{0.0f, 0.0f};
 
     bool m_isInitialized{false};
@@ -247,4 +264,4 @@ class InputManager {
     InputManager();
 };
 
-#endif  // INPUT_MANAGER_HPP
+#endif // INPUT_MANAGER_HPP

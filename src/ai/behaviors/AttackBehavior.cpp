@@ -51,7 +51,6 @@ constexpr float CHARGE_DISTANCE_THRESHOLD_MULT = 1.5f;
 constexpr float FEAR_FLEE_THRESHOLD = 0.7f;
 constexpr float BRAVERY_FLEE_THRESHOLD = 0.3f;
 constexpr float TARGET_SCAN_RANGE_MULTIPLIER = 6.0f;
-constexpr float MIN_TARGET_SCAN_RANGE = 250.0f;
 
 enum class AttackState : uint8_t {
     SEEKING = 0,
@@ -108,7 +107,7 @@ struct CombatContext {
 };
 
 float getEffectiveAttackRange(const CharacterData& charData, AttackMode attackMode,
-                              const VoidLight::AttackBehaviorConfig& config) {
+    const VoidLight::AttackBehaviorConfig& config) {
     const bool usesMeleeReach =
         attackMode == AttackMode::MELEE ||
         attackMode == AttackMode::AMBUSH ||
@@ -152,7 +151,7 @@ void resetFailedRangedAttack(VoidLight::AttackStateData& attack) {
 }
 
 void processAttackMessages(BehaviorData& shared, VoidLight::AttackStateData& attack,
-                           const VoidLight::AttackBehaviorConfig&) {
+    const VoidLight::AttackBehaviorConfig&) {
     for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
         uint8_t msgId = shared.pendingMessages[i].messageId;
         switch (msgId) {
@@ -210,7 +209,7 @@ void changeState(VoidLight::AttackStateData& attack, AttackState newState) {
 }
 
 float calculateDamage(const VoidLight::AttackStateData& attack,
-                      const VoidLight::AttackBehaviorConfig& config) {
+    const VoidLight::AttackBehaviorConfig& config) {
     float baseDamage = config.attackDamage;
 
     float variation = (s_damageRoll(s_rng) - 0.5f) * 2.0f * config.damageVariation;
@@ -237,7 +236,7 @@ Vector2D calculateKnockbackVector(const Vector2D& attackerPos, const Vector2D& t
 }
 
 void applyDamageToTarget(EntityHandle targetHandle, float damage, const Vector2D& knockback,
-                         EntityHandle attackerHandle) {
+    EntityHandle attackerHandle) {
     if (!targetHandle.isValid()) return;
 
     Vector2D scaledKnockback = knockback * 0.1f;
@@ -280,7 +279,7 @@ bool hasRequiredAmmoForRangedAttack(const CharacterData& charData) {
 
     const std::string& requiredAmmo = weapon->getAmmoTypeRequired();
     auto& edm = EntityDataManager::Instance();
-    auto& resourceMgr = ResourceTemplateManager::Instance();
+    const auto& resourceMgr = ResourceTemplateManager::Instance();
     const size_t maxSlots = edm.getInventoryData(charData.inventoryIndex).maxSlots;
     for (size_t slot = 0; slot < maxSlots; ++slot) {
         const InventorySlotData inventorySlot =
@@ -306,9 +305,9 @@ bool hasRequiredAmmoForRangedAttack(const CharacterData& charData) {
 }
 
 bool fireProjectile(const Vector2D& attackerPos, const Vector2D& targetPos,
-                    EntityHandle attackerHandle, size_t attackerIndex,
-                    const CharacterData& charData, float damage,
-                    float attackRange, float projectileSpeed) {
+    EntityHandle attackerHandle, size_t attackerIndex,
+    const CharacterData& charData, float damage,
+    float attackRange, float projectileSpeed) {
     if (projectileSpeed <= 0.0f) {
         return false;
     }
@@ -348,51 +347,42 @@ void moveToPosition(BehaviorContext& ctx, const Vector2D& targetPos, float speed
     }
 }
 
-bool isAttackTargetCandidate(size_t selfIdx, size_t candidateIdx, const CharacterData& selfCharData) {
-    if (candidateIdx == SIZE_MAX || candidateIdx == selfIdx) return false;
-
-    auto& edm = EntityDataManager::Instance();
-    const auto& targetHot = edm.getHotDataByIndex(candidateIdx);
-    if (!targetHot.isAlive()) return false;
-
-    const uint8_t myFaction = selfCharData.faction;
-    const uint8_t targetFaction = edm.getCharacterDataByIndex(candidateIdx).faction;
-    if (targetFaction == myFaction) return false;
-
-    return true;
-}
-
+// Nearest target within acquireRange: the player only while ctx.hostileTowardPlayer,
+// NPCs only from Hostile factions in this entity's stance row.
 bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
-                      const VoidLight::AttackBehaviorConfig& config,
-                      Vector2D& targetPos) {
+    const VoidLight::AttackBehaviorConfig& config,
+    Vector2D& targetPos) {
     auto& edm = EntityDataManager::Instance();
+
+    const float acquireRange =
+        std::max(config.attackRange * TARGET_SCAN_RANGE_MULTIPLIER, Behaviors::HOSTILE_ENGAGE_RANGE) *
+        ctx.envSnapshot.detectionScale;
 
     EntityHandle bestTarget{};
-    float bestDistanceSq = std::numeric_limits<float>::max();
+    float bestDistanceSq = acquireRange * acquireRange;
 
-    if (ctx.playerValid && ctx.playerHandle.isValid()) {
+    if (ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
         const size_t playerIdx = edm.getIndex(ctx.playerHandle);
-        if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx.characterData)) {
-            targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
-            bestTarget = ctx.playerHandle;
-            bestDistanceSq = Vector2D::distanceSquared(ctx.transform.position, targetPos);
+        if (playerIdx != SIZE_MAX) {
+            const auto& playerHot = edm.getHotDataByIndex(playerIdx);
+            const float distanceSq =
+                Vector2D::distanceSquared(ctx.transform.position, playerHot.transform.position);
+            if (playerHot.isAlive() && distanceSq <= bestDistanceSq) {
+                targetPos = playerHot.transform.position;
+                bestTarget = ctx.playerHandle;
+                bestDistanceSq = distanceSq;
+            }
         }
     }
 
-    const float scanRange =
-        std::max(config.attackRange * TARGET_SCAN_RANGE_MULTIPLIER, MIN_TARGET_SCAN_RANGE);
-    AIManager::Instance().scanActiveIndicesInRadius(
-        ctx.transform.position, scanRange, s_scanBuffer, false);
+    AIManager::Instance().scanHostileInRadius(
+        ctx.characterData.faction, ctx.transform.position, acquireRange, s_scanBuffer);
 
     for (size_t candidateIdx : s_scanBuffer) {
-        if (!isAttackTargetCandidate(ctx.edmIndex, candidateIdx, ctx.characterData)) {
-            continue;
-        }
-
         const Vector2D candidatePos = edm.getHotDataByIndex(candidateIdx).transform.position;
         const float distanceSq =
             Vector2D::distanceSquared(ctx.transform.position, candidatePos);
-        if (distanceSq >= bestDistanceSq) {
+        if (bestTarget.isValid() && distanceSq >= bestDistanceSq) {
             continue;
         }
 
@@ -411,7 +401,7 @@ bool tryAcquireTarget(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
 }
 
 bool canAttackFromCurrentRange(AttackMode attackMode, float targetDistance,
-                               float attackRange, float minimumRange) {
+    float attackRange, float minimumRange) {
     if (targetDistance > attackRange) {
         return false;
     }
@@ -424,7 +414,7 @@ bool canAttackFromCurrentRange(AttackMode attackMode, float targetDistance,
 }
 
 float getAttackInterval(const VoidLight::AttackBehaviorConfig& config,
-                        float effectiveCooldown) {
+    float effectiveCooldown) {
     const float speedInterval = config.attackSpeed > 0.0f
         ? 1.0f / config.attackSpeed
         : effectiveCooldown;
@@ -432,11 +422,11 @@ float getAttackInterval(const VoidLight::AttackBehaviorConfig& config,
 }
 
 CombatContext buildCombatContext(const BehaviorContext& ctx,
-                                 const VoidLight::AttackBehaviorConfig& config,
-                                 const VoidLight::AttackStateData& attack,
-                                 AttackMode attackMode,
-                                 float attackRange,
-                                 float effectiveCooldown) {
+    const VoidLight::AttackBehaviorConfig& config,
+    const VoidLight::AttackStateData& attack,
+    AttackMode attackMode,
+    float attackRange,
+    float effectiveCooldown) {
     CombatContext combat;
     combat.attackMode = attackMode;
     combat.attackRange = attackRange;
@@ -451,8 +441,8 @@ CombatContext buildCombatContext(const BehaviorContext& ctx,
     if (ctx.memoryData.isValid()) {
         combat.bravery = ctx.memoryData.personality.bravery;
         combat.aggression = std::clamp(ctx.memoryData.personality.aggression +
-                                           ctx.memoryData.emotions.aggression * 0.5f,
-                                       0.0f, 1.0f);
+                ctx.memoryData.emotions.aggression * 0.5f,
+            0.0f, 1.0f);
         combat.composure = ctx.memoryData.personality.composure;
         combat.loyalty = ctx.memoryData.personality.loyalty;
         combat.fear = ctx.memoryData.emotions.fear;
@@ -467,15 +457,15 @@ CombatContext buildCombatContext(const BehaviorContext& ctx,
     combat.attackReady =
         attack.currentState != static_cast<uint8_t>(AttackState::ATTACKING) &&
         (attack.currentState != static_cast<uint8_t>(AttackState::RECOVERING) ||
-         attack.stateChangeTimer > config.recoveryTime) &&
+            attack.stateChangeTimer > config.recoveryTime) &&
         attack.attackTimer >= combat.attackInterval;
     combat.canAttackFromRange =
         combat.attackReady &&
         canAttackFromCurrentRange(attackMode, attack.targetDistance,
-                                  attackRange, combat.minimumRange);
+            attackRange, combat.minimumRange);
     combat.targetTooFar = attack.targetDistance > combat.attackRange;
     combat.targetTooClose = combat.minimumRange > 0.0f &&
-                            attack.targetDistance < combat.minimumRange;
+        attack.targetDistance < combat.minimumRange;
 
     const float healthPressure = std::clamp((0.65f - combat.healthRatio) / 0.65f, 0.0f, 1.0f);
     const float fearPressure = combat.fear * (1.15f - combat.bravery * 0.45f);
@@ -483,8 +473,8 @@ CombatContext buildCombatContext(const BehaviorContext& ctx,
     const float lowComposurePressure = (1.0f - combat.composure) * 0.25f;
     const float aggressionRelief = combat.aggression * 0.28f;
     combat.pressureScore = std::clamp(healthPressure + fearPressure + recentPressure +
-                                          lowComposurePressure - aggressionRelief,
-                                      0.0f, 1.0f);
+            lowComposurePressure - aggressionRelief,
+        0.0f, 1.0f);
     return combat;
 }
 
@@ -496,12 +486,12 @@ bool shouldDisengage(const CombatContext& combat) {
     const bool criticalHealth = combat.healthRatio < 0.18f;
     const bool overwhelmed = combat.pressureScore > 0.92f;
     const bool fearful = combat.fear > FEAR_FLEE_THRESHOLD &&
-                         combat.bravery < BRAVERY_FLEE_THRESHOLD;
+        combat.bravery < BRAVERY_FLEE_THRESHOLD;
     return (criticalHealth && combat.bravery < 0.45f) || overwhelmed || fearful;
 }
 
 bool shouldTacticalReset(const CombatContext& combat,
-                         const VoidLight::AttackStateData& attack) {
+    const VoidLight::AttackStateData& attack) {
     if (combat.berserkerMode || combat.attackMode == AttackMode::BERSERKER) {
         return false;
     }
@@ -515,7 +505,7 @@ bool shouldTacticalReset(const CombatContext& combat,
 }
 
 bool tacticalResetRecovered(const CombatContext& combat,
-                            const VoidLight::AttackStateData& attack) {
+    const VoidLight::AttackStateData& attack) {
     const bool hasSafeSpace = attack.targetDistance >= combat.attackRange * RESET_SAFE_DISTANCE_MULT;
     const bool hasRecoveredSpace =
         attack.targetDistance >= combat.attackRange * RESET_RECOVERY_DISTANCE_MULT &&
@@ -527,7 +517,7 @@ bool tacticalResetRecovered(const CombatContext& combat,
 }
 
 CombatDecision chooseCombatDecision(const CombatContext& combat,
-                                    const VoidLight::AttackStateData& attack) {
+    const VoidLight::AttackStateData& attack) {
     const auto currentState = static_cast<AttackState>(attack.currentState);
     if (currentState == AttackState::ATTACKING) {
         return CombatDecision::Attack;
@@ -575,23 +565,14 @@ CombatDecision chooseCombatDecision(const CombatContext& combat,
 }
 
 void markTacticalRetreatEncounter(VoidLight::AttackStateData& attack,
-                                  const NPCMemoryData& memoryData) {
+    const NPCMemoryData& memoryData) {
     attack.lastTacticalRetreatEncounter = memoryData.combatEncounters;
     attack.hasHandledTacticalRetreat = true;
 }
 
 void recordResolvedAttack(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
-                          EntityHandle targetHandle,
-                          const VoidLight::AttackBehaviorConfig& config) {
-    auto& edm = EntityDataManager::Instance();
-
-    if (ctx.characterData.faction > 1) {
-        size_t targetIdx = edm.getIndex(targetHandle);
-        if (targetIdx != SIZE_MAX && edm.getCharacterDataByIndex(targetIdx).faction == 0) {
-            edm.setFaction(edm.getHandle(ctx.edmIndex), 1);
-        }
-    }
-
+    EntityHandle targetHandle,
+    const VoidLight::AttackBehaviorConfig& config) {
     ctx.memoryData.lastTarget = targetHandle;
 
     attack.attackTimer = 0.0f;
@@ -608,9 +589,8 @@ void recordResolvedAttack(BehaviorContext& ctx, VoidLight::AttackStateData& atta
 }
 
 void broadcastRetreatToAllies(const BehaviorContext& ctx) {
-    uint8_t myFaction = ctx.characterData.faction;
-    AIManager::Instance().scanFactionInRadius(
-        myFaction, ctx.transform.position, 200.0f, s_scanBuffer, true);
+    AIManager::Instance().scanAlliedInRadius(
+        ctx.characterData.faction, ctx.transform.position, 200.0f, s_scanBuffer, true);
     for (size_t idx : s_scanBuffer) {
         if (idx == ctx.edmIndex) continue;
         Behaviors::deferBehaviorMessage(idx, BehaviorMessage::RETREAT);
@@ -618,10 +598,10 @@ void broadcastRetreatToAllies(const BehaviorContext& ctx) {
 }
 
 void applyTacticalResetMovement(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
-                                const CombatContext& combat,
-                                const Vector2D& entityPos,
-                                const Vector2D& targetPos,
-                                float moveSpeed) {
+    const CombatContext& combat,
+    const Vector2D& entityPos,
+    const Vector2D& targetPos,
+    float moveSpeed) {
     Vector2D away = normalizeDir(entityPos - targetPos);
     if (away.lengthSquared() < 0.0001f) {
         away = Vector2D(1.0f, 0.0f);
@@ -639,7 +619,7 @@ void applyTacticalResetMovement(BehaviorContext& ctx, VoidLight::AttackStateData
         combat.pressureScore < 0.55f) {
         attack.resetConfidence =
             std::clamp(attack.resetConfidence + ctx.deltaTime * (0.6f + combat.composure),
-                       0.0f, 1.0f);
+                0.0f, 1.0f);
     } else {
         attack.resetConfidence =
             std::clamp(attack.resetConfidence - ctx.deltaTime * 0.35f, 0.0f, 1.0f);
@@ -647,10 +627,10 @@ void applyTacticalResetMovement(BehaviorContext& ctx, VoidLight::AttackStateData
 }
 
 void applyPressureMovement(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
-                           const CombatContext& combat,
-                           const Vector2D& entityPos,
-                           const Vector2D& targetPos,
-                           float moveSpeed) {
+    const CombatContext& combat,
+    const Vector2D& entityPos,
+    const Vector2D& targetPos,
+    float moveSpeed) {
     Vector2D away = normalizeDir(entityPos - targetPos);
     if (away.lengthSquared() < 0.0001f) {
         ctx.transform.velocity = Vector2D(0, 0);
@@ -682,8 +662,8 @@ void applyPressureMovement(BehaviorContext& ctx, VoidLight::AttackStateData& att
 }
 
 bool executeAttackAction(BehaviorContext& ctx, VoidLight::AttackStateData& attack,
-                         const Vector2D& targetPos,
-                         const VoidLight::AttackBehaviorConfig& config) {
+    const Vector2D& targetPos,
+    const VoidLight::AttackBehaviorConfig& config) {
     auto& edm = EntityDataManager::Instance();
     Vector2D entityPos = ctx.transform.position;
 
@@ -712,8 +692,8 @@ bool executeAttackAction(BehaviorContext& ctx, VoidLight::AttackStateData& attac
     bool attackResolved = false;
     if (mode == AttackMode::RANGED) {
         attackResolved = fireProjectile(entityPos, targetPos, attackerHandle,
-                                        ctx.edmIndex, ctx.characterData, damage,
-                                        config.attackRange, config.projectileSpeed);
+            ctx.edmIndex, ctx.characterData, damage,
+            config.attackRange, config.projectileSpeed);
     } else {
         applyDamageToTarget(targetHandle, damage, knockback, attackerHandle);
         attackResolved = true;
@@ -730,8 +710,8 @@ bool executeAttackAction(BehaviorContext& ctx, VoidLight::AttackStateData& attac
 // ============================================================================
 
 bool applyRangedPositioning(BehaviorContext& ctx, const Vector2D& entityPos, const Vector2D& targetPos,
-                            VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
-                            float moveSpeed) {
+    const VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
+    float moveSpeed) {
     float optimalRange = config.attackRange * config.optimalRangeMultiplier;
     float minimumRange = config.attackRange * config.minimumRangeMultiplier;
 
@@ -751,8 +731,8 @@ bool applyRangedPositioning(BehaviorContext& ctx, const Vector2D& entityPos, con
 }
 
 bool applyChargePositioning(BehaviorContext& ctx, const Vector2D& entityPos, const Vector2D& targetPos,
-                            VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
-                            float moveSpeed) {
+    VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
+    float moveSpeed) {
     float chargeDistance = config.attackRange * CHARGE_DISTANCE_THRESHOLD_MULT;
 
     if (attack.targetDistance > chargeDistance && !attack.isCharging) {
@@ -769,8 +749,8 @@ bool applyChargePositioning(BehaviorContext& ctx, const Vector2D& entityPos, con
 }
 
 bool applyHitAndRunPositioning(BehaviorContext& ctx, const Vector2D& entityPos, const Vector2D& targetPos,
-                               VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
-                               float moveSpeed) {
+    const VoidLight::AttackStateData& attack, const VoidLight::AttackBehaviorConfig& config,
+    float moveSpeed) {
     if (attack.currentState == static_cast<uint8_t>(AttackState::RECOVERING) ||
         attack.currentState == static_cast<uint8_t>(AttackState::TACTICAL_RESET)) {
 
@@ -793,7 +773,7 @@ void applyBerserkerModifiers(float& effectiveCooldown) {
 namespace Behaviors {
 
 void initAttack(size_t edmIndex, const VoidLight::AttackBehaviorConfig& config,
-                VoidLight::AttackStateData& state) {
+    VoidLight::AttackStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Attack);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -847,10 +827,11 @@ void initAttack(size_t edmIndex, const VoidLight::AttackBehaviorConfig& config,
 }
 
 void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& config,
-                   VoidLight::AttackStateData& attack) {
+    VoidLight::AttackStateData& attack) {
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
+    const float envSpeed = shared.moveSpeed * ctx.envSnapshot.moveSpeedScale;
 
     processAttackMessages(shared, attack, config);
     attack.attackMode = config.attackMode;
@@ -877,8 +858,13 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
     if (!hasTarget && ctx.memoryData.lastTarget.isValid()) {
         size_t targetIdx = edm.getIndex(ctx.memoryData.lastTarget);
         if (targetIdx != SIZE_MAX && edm.getHotDataByIndex(targetIdx).isAlive()) {
-            targetPos = edm.getHotDataByIndex(targetIdx).transform.position;
-            hasTarget = true;
+            if (Behaviors::shouldKeepCombatTarget(ctx, targetIdx, ctx.memoryData.lastTarget)) {
+                targetPos = edm.getHotDataByIndex(targetIdx).transform.position;
+                hasTarget = true;
+            } else {
+                // De-escalated (standing or stance no longer Hostile): drop it.
+                ctx.memoryData.lastTarget = EntityHandle{};
+            }
         }
     }
 
@@ -887,15 +873,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         if (attackerIdx != SIZE_MAX && edm.getHotDataByIndex(attackerIdx).isAlive()) {
             targetPos = edm.getHotDataByIndex(attackerIdx).transform.position;
             hasTarget = true;
-        }
-    }
-
-    if (!hasTarget && ctx.playerValid && ctx.playerHandle.isValid()) {
-        size_t playerIdx = edm.getIndex(ctx.playerHandle);
-        if (isAttackTargetCandidate(ctx.edmIndex, playerIdx, ctx.characterData)) {
-            targetPos = edm.getHotDataByIndex(playerIdx).transform.position;
-            hasTarget = true;
-            ctx.memoryData.lastTarget = ctx.playerHandle;
+            ctx.memoryData.lastTarget = ctx.memoryData.lastAttacker;
         }
     }
 
@@ -946,7 +924,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
 
     AttackState currentState = static_cast<AttackState>(attack.currentState);
     CombatContext combat = buildCombatContext(ctx, config, attack, attackMode,
-                                              attackRange, effectiveCooldown);
+        attackRange, effectiveCooldown);
     combat.berserkerMode = combat.berserkerMode || berserkerMode;
     attack.canAttack = combat.attackReady;
     attack.desiredCombatRange = combat.desiredRange;
@@ -972,35 +950,35 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
                 bool specialResolved = true;
                 if (specialMode == AttackMode::RANGED) {
                     specialResolved = fireProjectile(entityPos, targetPos, attackerHandle,
-                                                     ctx.edmIndex, ctx.characterData,
-                                                     specialDamage, config.attackRange,
-                                                     config.projectileSpeed);
+                        ctx.edmIndex, ctx.characterData,
+                        specialDamage, config.attackRange,
+                        config.projectileSpeed);
                 } else {
                     applyDamageToTarget(targetHandle, specialDamage, knockback, attackerHandle);
 
-                    if (config.aoeRadius > 0.0f)
-                    {
+                    if (config.aoeRadius > 0.0f) {
                         s_scanBuffer.clear();
                         AIManager::Instance().scanActiveIndicesInRadius(
                             targetPos, config.aoeRadius, s_scanBuffer, false);
-                        uint8_t myFaction = ctx.characterData.faction;
 
-                        for (size_t aoeIdx : s_scanBuffer)
-                        {
+                        for (size_t aoeIdx : s_scanBuffer) {
                             if (aoeIdx == ctx.edmIndex) continue;
                             const auto& aoeHot = edm.getHotDataByIndex(aoeIdx);
                             if (!aoeHot.isAlive()) continue;
+                            // Only characters take AoE damage (and have character data).
+                            if (aoeHot.kind != EntityKind::NPC &&
+                                aoeHot.kind != EntityKind::Player) continue;
                             EntityHandle aoeTarget = edm.getHandle(aoeIdx);
                             if (aoeTarget == targetHandle) continue;
                             if (config.avoidFriendlyFire &&
-                                edm.getCharacterDataByIndex(aoeIdx).faction == myFaction) continue;
+                                Behaviors::isAlliedTowardFaction(
+                                    ctx, edm.getCharacterDataByIndex(aoeIdx).faction)) continue;
 
                             float distSq = Vector2D::distanceSquared(targetPos, aoeHot.transform.position);
                             float dist = std::sqrt(distSq);
                             float falloff = 1.0f - (dist / config.aoeRadius) * 0.5f;
                             float aoeDamage = specialDamage * falloff;
-                            Vector2D aoeKnockback = calculateKnockbackVector(targetPos, aoeHot.transform.position)
-                                                    * config.knockbackForce * 0.5f;
+                            Vector2D aoeKnockback = calculateKnockbackVector(targetPos, aoeHot.transform.position) * config.knockbackForce * 0.5f;
                             applyDamageToTarget(aoeTarget, aoeDamage, aoeKnockback, attackerHandle);
                         }
                     }
@@ -1051,7 +1029,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         }
         markTacticalRetreatEncounter(attack, ctx.memoryData);
         applyTacticalResetMovement(ctx, attack, combat, entityPos, targetPos,
-                                   shared.moveSpeed);
+            envSpeed);
         return;
     }
 
@@ -1059,10 +1037,10 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         if (attack.stateChangeTimer <= config.recoveryTime) {
             if (attackMode == AttackMode::HIT_AND_RUN) {
                 applyHitAndRunPositioning(ctx, entityPos, targetPos, attack,
-                                          config, shared.moveSpeed);
+                    config, envSpeed);
             } else {
                 applyPressureMovement(ctx, attack, combat, entityPos, targetPos,
-                                      shared.moveSpeed * 0.65f);
+                    envSpeed * 0.65f);
             }
             return;
         }
@@ -1075,7 +1053,7 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         Vector2D toTarget = normalizeDir(targetPos - entityPos);
         const float desiredStopDistance = std::max(combat.desiredRange, combat.minimumRange + 8.0f);
         Vector2D approachPos = targetPos - toTarget * desiredStopDistance;
-        moveToPosition(ctx, approachPos, shared.moveSpeed);
+        moveToPosition(ctx, approachPos, envSpeed);
         return;
     }
 
@@ -1084,13 +1062,13 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
     bool modeHandled = false;
     switch (attackMode) {
         case AttackMode::RANGED:
-            modeHandled = applyRangedPositioning(ctx, entityPos, targetPos, attack, config, shared.moveSpeed);
+            modeHandled = applyRangedPositioning(ctx, entityPos, targetPos, attack, config, envSpeed);
             break;
         case AttackMode::CHARGE:
-            modeHandled = applyChargePositioning(ctx, entityPos, targetPos, attack, config, shared.moveSpeed);
+            modeHandled = applyChargePositioning(ctx, entityPos, targetPos, attack, config, envSpeed);
             break;
         case AttackMode::HIT_AND_RUN:
-            modeHandled = applyHitAndRunPositioning(ctx, entityPos, targetPos, attack, config, shared.moveSpeed);
+            modeHandled = applyHitAndRunPositioning(ctx, entityPos, targetPos, attack, config, envSpeed);
             break;
         default:
             break;
@@ -1100,12 +1078,12 @@ void executeAttack(BehaviorContext& ctx, const VoidLight::AttackBehaviorConfig& 
         return;
     }
 
-    applyPressureMovement(ctx, attack, combat, entityPos, targetPos, shared.moveSpeed);
+    applyPressureMovement(ctx, attack, combat, entityPos, targetPos, envSpeed);
 }
 
 void collectDeferredDamageEvents(std::vector<EventManager::DeferredEvent>& out) {
     out.insert(out.end(), std::make_move_iterator(t_deferredDamageEvents.begin()),
-                          std::make_move_iterator(t_deferredDamageEvents.end()));
+        std::make_move_iterator(t_deferredDamageEvents.end()));
     t_deferredDamageEvents.clear();
 }
 

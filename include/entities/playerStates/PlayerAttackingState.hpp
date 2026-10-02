@@ -25,7 +25,7 @@ private:
 
     // Track attack animation duration
     float m_attackDuration{0.0f};
-    static constexpr float ATTACK_ANIMATION_TIME{0.3f};  // seconds
+    static constexpr float ATTACK_ANIMATION_TIME{0.3f}; // seconds
 };
 
-#endif  // PLAYER_ATTACKING_STATE_HPP
+#endif // PLAYER_ATTACKING_STATE_HPP

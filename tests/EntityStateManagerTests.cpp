@@ -42,7 +42,7 @@ BOOST_AUTO_TEST_CASE(AddState) {
     manager.addState("idle", createMockState());
 
     BOOST_CHECK(manager.hasState("idle"));
-    BOOST_CHECK_EQUAL(manager.getCurrentStateName(), "");  // Not set yet
+    BOOST_CHECK_EQUAL(manager.getCurrentStateName(), ""); // Not set yet
 }
 
 BOOST_AUTO_TEST_CASE(AddMultipleStates) {
@@ -80,7 +80,7 @@ BOOST_AUTO_TEST_CASE(GetCurrentStateNameEmptyWhenNoState) {
     BOOST_CHECK_EQUAL(manager.getCurrentStateName(), "");
 
     manager.addState("idle", createMockState());
-    BOOST_CHECK_EQUAL(manager.getCurrentStateName(), "");  // Still empty until set
+    BOOST_CHECK_EQUAL(manager.getCurrentStateName(), ""); // Still empty until set
 }
 
 // ============================================================================
@@ -226,15 +226,9 @@ BOOST_AUTO_TEST_CASE(UpdateOnlyAffectsCurrentState) {
 // ============================================================================
 
 
-
-
-
-
-
 // ============================================================================
 // Edge Cases
 // ============================================================================
-
 
 
 BOOST_AUTO_TEST_CASE(MultipleTransitions) {

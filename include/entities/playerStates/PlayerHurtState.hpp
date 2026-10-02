@@ -25,4 +25,4 @@ private:
     float m_elapsedTime{0.0f};
 };
 
-#endif  // PLAYER_HURT_STATE_HPP
+#endif // PLAYER_HURT_STATE_HPP

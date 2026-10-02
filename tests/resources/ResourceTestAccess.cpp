@@ -3,7 +3,7 @@
 #include "managers/ResourceTemplateManager.hpp"
 
 void ResourceTestAccess::resetFactory() {
-    auto &rtm = ResourceTemplateManager::Instance();
+    auto& rtm = ResourceTemplateManager::Instance();
     if (rtm.isInitialized()) {
         rtm.clean();
     } else {
@@ -11,4 +11,3 @@ void ResourceTestAccess::resetFactory() {
         rtm.clean();
     }
 }
-

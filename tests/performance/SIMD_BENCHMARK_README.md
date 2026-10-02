@@ -164,6 +164,6 @@ ninja -C build simd_performance_benchmark && \
 ## References
 
 - **SIMDMath**: SIMD optimization documentation and performance claims
-- **AGENTS.md**: Repo-level performance and architecture guidance
+- **CLAUDE.md**: Repo-level performance and architecture guidance
 - **Architecture**: VoidLight-Framework uses Data-Oriented Design with SoA layouts optimized for SIMD
 - **Cross-Platform**: Same SIMD code compiles for x86-64 (SSE2/AVX2) and ARM64 (NEON)

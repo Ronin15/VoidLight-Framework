@@ -293,7 +293,7 @@ BOOST_AUTO_TEST_CASE(TestEveningToNightTransition) {
     BOOST_CHECK(m_controller.getCurrentPeriod() == TimePeriod::Evening);
 
     // Dispatch hour change to 9 PM (Night boundary)
-    auto hourEvent = std::make_shared<HourChangedEvent>(21, true);  // Night is true
+    auto hourEvent = std::make_shared<HourChangedEvent>(21, true); // Night is true
     EventManager::Instance().dispatchEvent(hourEvent, EventManager::DispatchMode::Immediate);
 
     // Should transition to Night
@@ -415,7 +415,7 @@ BOOST_AUTO_TEST_SUITE_END()
 BOOST_FIXTURE_TEST_SUITE(PeriodDescriptionTests, DayNightControllerFixture)
 
 BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionMorning) {
-    BOOST_REQUIRE(GameTimeManager::Instance().init(7.0f, 1.0f));  // 7 AM - Morning
+    BOOST_REQUIRE(GameTimeManager::Instance().init(7.0f, 1.0f)); // 7 AM - Morning
     m_controller.subscribe();
 
     BOOST_CHECK(m_controller.getCurrentPeriod() == TimePeriod::Morning);
@@ -423,7 +423,7 @@ BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionMorning) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionDay) {
-    BOOST_REQUIRE(GameTimeManager::Instance().init(12.0f, 1.0f));  // Noon - Day
+    BOOST_REQUIRE(GameTimeManager::Instance().init(12.0f, 1.0f)); // Noon - Day
     m_controller.subscribe();
 
     BOOST_CHECK(m_controller.getCurrentPeriod() == TimePeriod::Day);
@@ -431,7 +431,7 @@ BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionDay) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionEvening) {
-    BOOST_REQUIRE(GameTimeManager::Instance().init(19.0f, 1.0f));  // 7 PM - Evening
+    BOOST_REQUIRE(GameTimeManager::Instance().init(19.0f, 1.0f)); // 7 PM - Evening
     m_controller.subscribe();
 
     BOOST_CHECK(m_controller.getCurrentPeriod() == TimePeriod::Evening);
@@ -439,7 +439,7 @@ BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionEvening) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetCurrentPeriodDescriptionNight) {
-    BOOST_REQUIRE(GameTimeManager::Instance().init(23.0f, 1.0f));  // 11 PM - Night
+    BOOST_REQUIRE(GameTimeManager::Instance().init(23.0f, 1.0f)); // 11 PM - Night
     m_controller.subscribe();
 
     BOOST_CHECK(m_controller.getCurrentPeriod() == TimePeriod::Night);

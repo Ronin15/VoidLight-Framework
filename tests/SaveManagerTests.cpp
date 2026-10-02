@@ -119,7 +119,7 @@ BOOST_AUTO_TEST_CASE(TestErrorHandling) {
 
     // Test invalid file access (try to save to invalid path)
     bool saveResult = BinarySerial::saveToFile("/invalid/path/test.dat", player);
-    BOOST_CHECK(!saveResult);  // Should fail for invalid path
+    BOOST_CHECK(!saveResult); // Should fail for invalid path
 
     // Test valid save and file existence validation
     saveResult = BinarySerial::saveToFile("tests/test_data/valid_test.dat", player);
@@ -313,14 +313,14 @@ BOOST_AUTO_TEST_CASE(TestPerformanceComparison) {
     // Create test data
     Vector2D testPos(123.456f, 789.012f);
     std::string testString = "Performance test string with some content";
-    std::vector<int> testVector(1000, 42);  // 1000 integers
+    std::vector<int> testVector(1000, 42); // 1000 integers
 
     // Time the new serialization system
     auto start = std::chrono::high_resolution_clock::now();
 
-    for (int i = 0; i < 100; ++i) {  // 100 iterations
+    for (int i = 0; i < 100; ++i) { // 100 iterations
         std::string filename = "tests/test_data/perf_test_" + std::to_string(i) + ".dat";
-        
+
         {
             // Scope the writer to ensure proper cleanup
             auto writer = BinarySerial::Writer::createFileWriter(filename);
@@ -328,14 +328,14 @@ BOOST_AUTO_TEST_CASE(TestPerformanceComparison) {
                 writer->writeSerializable(testPos);
                 writer->writeString(testString);
                 writer->writeVector(testVector);
-                writer->flush();  // Ensure data is written
+                writer->flush(); // Ensure data is written
             }
         } // Writer destructor called here, releasing file handle
 
         // Small delay on Windows to allow file handle cleanup
-        #ifdef _WIN32
+#ifdef _WIN32
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        #endif
+#endif
 
         // Clean up with error checking
         try {
@@ -344,9 +344,9 @@ BOOST_AUTO_TEST_CASE(TestPerformanceComparison) {
             }
         } catch (const std::exception& e) {
             // On Windows, file may still be locked briefly - this is expected
-            #ifndef _WIN32
+#ifndef _WIN32
             std::cout << "Warning: Failed to remove file " << filename << ": " << e.what() << std::endl;
-            #endif
+#endif
         }
     }
 
@@ -358,11 +358,11 @@ BOOST_AUTO_TEST_CASE(TestPerformanceComparison) {
 
     // Basic performance check - should complete in reasonable time
     // Windows file system operations are slower due to file locking
-    #ifdef _WIN32
-    BOOST_CHECK(duration.count() < 2000000);  // Less than 2 seconds for 100 operations on Windows
-    #else
-    BOOST_CHECK(duration.count() < 100000);   // Less than 100ms for 100 operations on Unix
-    #endif
+#ifdef _WIN32
+    BOOST_CHECK(duration.count() < 2000000); // Less than 2 seconds for 100 operations on Windows
+#else
+    BOOST_CHECK(duration.count() < 100000); // Less than 100ms for 100 operations on Unix
+#endif
 
     std::cout << "Performance test completed successfully" << std::endl;
 }

@@ -24,8 +24,7 @@ namespace {
 
 namespace fs = std::filesystem;
 
-void writeU16(std::ofstream& stream, uint16_t value)
-{
+void writeU16(std::ofstream& stream, uint16_t value) {
     const std::array<unsigned char, 2> bytes{
         static_cast<unsigned char>(value & 0xffu),
         static_cast<unsigned char>((value >> 8u) & 0xffu),
@@ -33,8 +32,7 @@ void writeU16(std::ofstream& stream, uint16_t value)
     stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 }
 
-void writeU32(std::ofstream& stream, uint32_t value)
-{
+void writeU32(std::ofstream& stream, uint32_t value) {
     const std::array<unsigned char, 4> bytes{
         static_cast<unsigned char>(value & 0xffu),
         static_cast<unsigned char>((value >> 8u) & 0xffu),
@@ -44,8 +42,7 @@ void writeU32(std::ofstream& stream, uint32_t value)
     stream.write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
 }
 
-void writeTestWavFile(const fs::path& filePath)
-{
+void writeTestWavFile(const fs::path& filePath) {
     std::ofstream stream(filePath, std::ios::binary);
     BOOST_REQUIRE_MESSAGE(stream.is_open(), "Failed to create test WAV file");
 
@@ -79,8 +76,7 @@ void writeTestWavFile(const fs::path& filePath)
 }
 
 struct SoundManagerFixture {
-    SoundManagerFixture()
-    {
+    SoundManagerFixture() {
 #if defined(_WIN32)
         _putenv_s("SDL_AUDIODRIVER", "dummy");
 #else
@@ -102,11 +98,10 @@ struct SoundManagerFixture {
         writeTestWavFile(m_sfxFile);
 
         BOOST_REQUIRE_MESSAGE(manager.init(),
-                              "SoundManager init failed; dummy audio backend may be unavailable");
+            "SoundManager init failed; dummy audio backend may be unavailable");
     }
 
-    ~SoundManagerFixture()
-    {
+    ~SoundManagerFixture() {
         auto& manager = SoundManager::Instance();
         if (!manager.isShutdown()) {
             manager.clean();
@@ -122,8 +117,7 @@ struct SoundManagerFixture {
 };
 
 struct FontManagerFixture {
-    FontManagerFixture()
-    {
+    FontManagerFixture() {
         auto& manager = FontManager::Instance();
         if (!manager.isShutdown()) {
             manager.clean();
@@ -131,8 +125,7 @@ struct FontManagerFixture {
         BOOST_REQUIRE(manager.init());
     }
 
-    ~FontManagerFixture()
-    {
+    ~FontManagerFixture() {
         auto& manager = FontManager::Instance();
         if (!manager.isShutdown()) {
             manager.clean();
@@ -141,16 +134,14 @@ struct FontManagerFixture {
 };
 
 struct TextureManagerFixture {
-    TextureManagerFixture()
-    {
+    TextureManagerFixture() {
         auto& manager = TextureManager::Instance();
         if (!manager.isShutdown()) {
             manager.clean();
         }
     }
 
-    ~TextureManagerFixture()
-    {
+    ~TextureManagerFixture() {
         auto& manager = TextureManager::Instance();
         if (!manager.isShutdown()) {
             manager.clean();
@@ -162,8 +153,7 @@ struct TextureManagerFixture {
 
 BOOST_FIXTURE_TEST_SUITE(SoundManagerRuntimeTests, SoundManagerFixture)
 
-BOOST_AUTO_TEST_CASE(TestInitialStateAndVolumeClamping)
-{
+BOOST_AUTO_TEST_CASE(TestInitialStateAndVolumeClamping) {
     auto& manager = SoundManager::Instance();
 
     BOOST_CHECK(!manager.isShutdown());
@@ -178,8 +168,7 @@ BOOST_AUTO_TEST_CASE(TestInitialStateAndVolumeClamping)
     BOOST_CHECK_EQUAL(manager.getSFXVolume(), 10.0f);
 }
 
-BOOST_AUTO_TEST_CASE(TestLoadAndClearSFX)
-{
+BOOST_AUTO_TEST_CASE(TestLoadAndClearSFX) {
     auto& manager = SoundManager::Instance();
 
     BOOST_REQUIRE(manager.loadSFX(m_sfxDir.string(), "fx"));
@@ -189,8 +178,7 @@ BOOST_AUTO_TEST_CASE(TestLoadAndClearSFX)
     BOOST_CHECK(!manager.isSFXLoaded("fx_tone"));
 }
 
-BOOST_AUTO_TEST_CASE(TestLoadAndClearMusic)
-{
+BOOST_AUTO_TEST_CASE(TestLoadAndClearMusic) {
     auto& manager = SoundManager::Instance();
 
     BOOST_REQUIRE(manager.loadMusic(m_sfxFile.string(), "theme"));
@@ -204,8 +192,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(FontManagerRuntimeTests, FontManagerFixture)
 
-BOOST_AUTO_TEST_CASE(TestLoadFontsForDisplayAndMeasureText)
-{
+BOOST_AUTO_TEST_CASE(TestLoadFontsForDisplayAndMeasureText) {
     auto& manager = FontManager::Instance();
     const fs::path fontsDir = fs::path("res") / "fonts";
 
@@ -230,15 +217,14 @@ BOOST_AUTO_TEST_CASE(TestLoadFontsForDisplayAndMeasureText)
     int multilineWidth = 0;
     int multilineHeight = 0;
     BOOST_REQUIRE(manager.measureMultilineText("Hello\nWorld", "fonts_Arial", 0,
-                                               &multilineWidth, &multilineHeight));
+        &multilineWidth, &multilineHeight));
     BOOST_CHECK_GE(multilineHeight, lineHeight * 2);
 
     const auto wrapped = manager.wrapTextToLines("hello world", "fonts_Arial", 1);
     BOOST_CHECK_GE(wrapped.size(), 2u);
 }
 
-BOOST_AUTO_TEST_CASE(TestReloadFontsForDisplayRefreshesState)
-{
+BOOST_AUTO_TEST_CASE(TestReloadFontsForDisplayRefreshesState) {
     auto& manager = FontManager::Instance();
     const fs::path fontsDir = fs::path("res") / "fonts";
 
@@ -250,8 +236,7 @@ BOOST_AUTO_TEST_CASE(TestReloadFontsForDisplayRefreshesState)
     BOOST_CHECK(manager.isFontLoaded("fonts_UI_Arial"));
 }
 
-BOOST_AUTO_TEST_CASE(TestClearFontLeavesOtherCachedEntries)
-{
+BOOST_AUTO_TEST_CASE(TestClearFontLeavesOtherCachedEntries) {
     auto& manager = FontManager::Instance();
     const fs::path fontsDir = fs::path("res") / "fonts";
 
@@ -266,8 +251,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(TextureManagerRuntimeTests, TextureManagerFixture)
 
-BOOST_AUTO_TEST_CASE(TestLoadGPUTextureFailsWithoutInitializedDevice)
-{
+BOOST_AUTO_TEST_CASE(TestLoadGPUTextureFailsWithoutInitializedDevice) {
     auto& manager = TextureManager::Instance();
     const fs::path atlasPath = fs::path("res") / "img" / "atlas.png";
 
@@ -277,8 +261,7 @@ BOOST_AUTO_TEST_CASE(TestLoadGPUTextureFailsWithoutInitializedDevice)
     BOOST_CHECK(!manager.getGPUTextureData("atlas").has_value());
 }
 
-BOOST_AUTO_TEST_CASE(TestCleanIsSafeAfterFailedLoad)
-{
+BOOST_AUTO_TEST_CASE(TestCleanIsSafeAfterFailedLoad) {
     auto& manager = TextureManager::Instance();
     const fs::path atlasPath = fs::path("res") / "img" / "atlas.png";
 

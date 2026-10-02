@@ -34,18 +34,14 @@
 // Global fixture — ThreadSystem must be alive for WorkerBudgetManager
 // ============================================================================
 
-struct GlobalThreadSystemFixture
-{
-    GlobalThreadSystemFixture()
-    {
-        if (!VoidLight::ThreadSystem::Instance().init())
-        {
+struct GlobalThreadSystemFixture {
+    GlobalThreadSystemFixture() {
+        if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("ThreadSystem::init() failed in WorkerBudgetTests");
         }
     }
 
-    ~GlobalThreadSystemFixture()
-    {
+    ~GlobalThreadSystemFixture() {
         VoidLight::ThreadSystem::Instance().clean();
     }
 };
@@ -58,15 +54,13 @@ BOOST_GLOBAL_FIXTURE(GlobalThreadSystemFixture);
 
 BOOST_AUTO_TEST_SUITE(WorkerBudgetStateTransitionTests)
 
-BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsLearnedThreshold)
-{
+BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsLearnedThreshold) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
     // Teach a threshold: 10+ single-threaded samples > LEARNING_TIME_THRESHOLD_MS (0.9ms)
     const auto system = VoidLight::SystemType::Collision;
-    for (int i = 0; i < 11; ++i)
-    {
+    for (int i = 0; i < 11; ++i) {
         mgr.reportExecution(system, 2000, false, 1, 2.0);
     }
     BOOST_REQUIRE_GT(mgr.getLearnedThreshold(system), 0u);
@@ -78,8 +72,7 @@ BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsLearnedThreshold)
     BOOST_CHECK(!mgr.isThresholdActive(system));
 }
 
-BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsAllSevenSystemTypes)
-{
+BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsAllSevenSystemTypes) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -94,10 +87,8 @@ BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsAllSevenSystemTypes)
     };
 
     // Teach a threshold to every system
-    for (auto sys : allSystems)
-    {
-        for (int i = 0; i < 11; ++i)
-        {
+    for (auto sys : allSystems) {
+        for (int i = 0; i < 11; ++i) {
             mgr.reportExecution(sys, 1500, false, 1, 2.0);
         }
         BOOST_REQUIRE_GT(mgr.getLearnedThreshold(sys), 0u);
@@ -105,17 +96,15 @@ BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsAllSevenSystemTypes)
 
     mgr.prepareForStateTransition();
 
-    for (auto sys : allSystems)
-    {
+    for (auto sys : allSystems) {
         BOOST_CHECK_EQUAL(mgr.getLearnedThreshold(sys), 0u);
         BOOST_CHECK(!mgr.isThresholdActive(sys));
     }
 
-    mgr.prepareForStateTransition();  // clean exit
+    mgr.prepareForStateTransition(); // clean exit
 }
 
-BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsBatchMultiplier)
-{
+BOOST_AUTO_TEST_CASE(PrepareForStateTransitionResetsBatchMultiplier) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -133,8 +122,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(WorkerBudgetAccessorTests)
 
-BOOST_AUTO_TEST_CASE(GetBatchMultiplierInitialValueIsOne)
-{
+BOOST_AUTO_TEST_CASE(GetBatchMultiplierInitialValueIsOne) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -146,26 +134,23 @@ BOOST_AUTO_TEST_CASE(GetBatchMultiplierInitialValueIsOne)
              VoidLight::SystemType::Collision,
              VoidLight::SystemType::BackgroundSim,
              VoidLight::SystemType::ProjectileSim,
-         })
-    {
+         }) {
         BOOST_CHECK_CLOSE(mgr.getBatchMultiplier(sys), 1.0f, 0.01f);
     }
 }
 
-BOOST_AUTO_TEST_CASE(GetExpectedThroughputZeroBeforeMultithreadedReport)
-{
+BOOST_AUTO_TEST_CASE(GetExpectedThroughputZeroBeforeMultithreadedReport) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
     // No multi-threaded reports yet → multi-threaded expected throughput must be 0
     BOOST_CHECK_CLOSE(mgr.getExpectedThroughput(VoidLight::SystemType::BackgroundSim, true),
-                      0.0, 0.001);
+        0.0, 0.001);
     BOOST_CHECK_CLOSE(mgr.getExpectedThroughput(VoidLight::SystemType::ProjectileSim, true),
-                      0.0, 0.001);
+        0.0, 0.001);
 }
 
-BOOST_AUTO_TEST_CASE(GetExpectedThroughputUpdatesAfterMultithreadedReport)
-{
+BOOST_AUTO_TEST_CASE(GetExpectedThroughputUpdatesAfterMultithreadedReport) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -179,8 +164,7 @@ BOOST_AUTO_TEST_CASE(GetExpectedThroughputUpdatesAfterMultithreadedReport)
     mgr.prepareForStateTransition();
 }
 
-BOOST_AUTO_TEST_CASE(GetLearnedThresholdZeroAfterReset)
-{
+BOOST_AUTO_TEST_CASE(GetLearnedThresholdZeroAfterReset) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -189,8 +173,7 @@ BOOST_AUTO_TEST_CASE(GetLearnedThresholdZeroAfterReset)
     BOOST_CHECK_EQUAL(mgr.getLearnedThreshold(VoidLight::SystemType::ProjectileSim), 0u);
 }
 
-BOOST_AUTO_TEST_CASE(IsThresholdActiveFalseAfterReset)
-{
+BOOST_AUTO_TEST_CASE(IsThresholdActiveFalseAfterReset) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -199,14 +182,12 @@ BOOST_AUTO_TEST_CASE(IsThresholdActiveFalseAfterReset)
              VoidLight::SystemType::Event,
              VoidLight::SystemType::BackgroundSim,
              VoidLight::SystemType::Collision,
-         })
-    {
+         }) {
         BOOST_CHECK(!mgr.isThresholdActive(sys));
     }
 }
 
-BOOST_AUTO_TEST_CASE(MarkFrameStartDoesNotCrash)
-{
+BOOST_AUTO_TEST_CASE(MarkFrameStartDoesNotCrash) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
 
     // markFrameStart() increments the internal frame counter used to gate
@@ -224,8 +205,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(WorkerBudgetSystemCoverageTests)
 
-BOOST_AUTO_TEST_CASE(CollisionSystemTypeGetsBudget)
-{
+BOOST_AUTO_TEST_CASE(CollisionSystemTypeGetsBudget) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     const auto& budget = mgr.getBudget();
 
@@ -233,8 +213,7 @@ BOOST_AUTO_TEST_CASE(CollisionSystemTypeGetsBudget)
     BOOST_CHECK_EQUAL(workers, budget.totalWorkers);
 }
 
-BOOST_AUTO_TEST_CASE(BackgroundSimSystemTypeGetsBudget)
-{
+BOOST_AUTO_TEST_CASE(BackgroundSimSystemTypeGetsBudget) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     const auto& budget = mgr.getBudget();
 
@@ -242,8 +221,7 @@ BOOST_AUTO_TEST_CASE(BackgroundSimSystemTypeGetsBudget)
     BOOST_CHECK_EQUAL(workers, budget.totalWorkers);
 }
 
-BOOST_AUTO_TEST_CASE(ProjectileSimSystemTypeGetsBudget)
-{
+BOOST_AUTO_TEST_CASE(ProjectileSimSystemTypeGetsBudget) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     const auto& budget = mgr.getBudget();
 
@@ -251,8 +229,7 @@ BOOST_AUTO_TEST_CASE(ProjectileSimSystemTypeGetsBudget)
     BOOST_CHECK_EQUAL(workers, budget.totalWorkers);
 }
 
-BOOST_AUTO_TEST_CASE(BatchStrategyCoversEntireWorkloadForAllSystemTypes)
-{
+BOOST_AUTO_TEST_CASE(BatchStrategyCoversEntireWorkloadForAllSystemTypes) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
 
     constexpr std::array<VoidLight::SystemType, 7> allSystems{
@@ -267,8 +244,7 @@ BOOST_AUTO_TEST_CASE(BatchStrategyCoversEntireWorkloadForAllSystemTypes)
 
     constexpr size_t workload = 1200;
 
-    for (auto sys : allSystems)
-    {
+    for (auto sys : allSystems) {
         const size_t workers = mgr.getOptimalWorkers(sys, workload);
         const auto [batchCount, batchSize] = mgr.getBatchStrategy(sys, workload, workers);
 
@@ -279,8 +255,7 @@ BOOST_AUTO_TEST_CASE(BatchStrategyCoversEntireWorkloadForAllSystemTypes)
     }
 }
 
-BOOST_AUTO_TEST_CASE(SmallWorkloadBelowMinimumGetsBudget)
-{
+BOOST_AUTO_TEST_CASE(SmallWorkloadBelowMinimumGetsBudget) {
     // A workload of 1 is well below MIN_WORKLOAD (100).
     // The sequential execution model must still return all workers.
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
@@ -290,15 +265,13 @@ BOOST_AUTO_TEST_CASE(SmallWorkloadBelowMinimumGetsBudget)
     BOOST_CHECK_EQUAL(workers, budget.totalWorkers);
 }
 
-BOOST_AUTO_TEST_CASE(MultipleSystemsHaveIndependentThresholds)
-{
+BOOST_AUTO_TEST_CASE(MultipleSystemsHaveIndependentThresholds) {
     // Teaching a threshold to one system must not affect sibling systems.
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
     const auto targetSystem = VoidLight::SystemType::Collision;
-    for (int i = 0; i < 11; ++i)
-    {
+    for (int i = 0; i < 11; ++i) {
         mgr.reportExecution(targetSystem, 1500, false, 1, 2.0);
     }
 
@@ -312,16 +285,14 @@ BOOST_AUTO_TEST_CASE(MultipleSystemsHaveIndependentThresholds)
              VoidLight::SystemType::Event,
              VoidLight::SystemType::BackgroundSim,
              VoidLight::SystemType::ProjectileSim,
-         })
-    {
+         }) {
         BOOST_CHECK_EQUAL(mgr.getLearnedThreshold(sys), 0u);
     }
 
     mgr.prepareForStateTransition();
 }
 
-BOOST_AUTO_TEST_CASE(ShouldUseThreadingReturnsFalseBeforeLearning)
-{
+BOOST_AUTO_TEST_CASE(ShouldUseThreadingReturnsFalseBeforeLearning) {
     // Without sufficient single-threaded samples, the decision must be
     // single-threaded to avoid premature threading overhead.
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
@@ -333,8 +304,7 @@ BOOST_AUTO_TEST_CASE(ShouldUseThreadingReturnsFalseBeforeLearning)
     mgr.prepareForStateTransition();
 }
 
-BOOST_AUTO_TEST_CASE(ShouldUseThreadingReturnsTrueAfterThresholdLearned)
-{
+BOOST_AUTO_TEST_CASE(ShouldUseThreadingReturnsTrueAfterThresholdLearned) {
     auto& mgr = VoidLight::WorkerBudgetManager::Instance();
     mgr.prepareForStateTransition();
 
@@ -342,8 +312,7 @@ BOOST_AUTO_TEST_CASE(ShouldUseThreadingReturnsTrueAfterThresholdLearned)
     constexpr size_t workload = 1000;
 
     // Teach the threshold (10 samples of 2ms single-threaded → crosses 0.9ms)
-    for (int i = 0; i < 10; ++i)
-    {
+    for (int i = 0; i < 10; ++i) {
         mgr.reportExecution(system, workload, false, 1, 2.0);
     }
 

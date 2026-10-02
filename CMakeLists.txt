@@ -181,7 +181,7 @@ message(STATUS
 
 # Specify the stable release tags for each SDL3 component
 # SDL3 3.4.0 is first stable release - includes native PNG loading (SDL_LoadPNG)
-set(SDL3_GIT_TAG "release-3.4.14")         # SDL3 current stable release
+set(SDL3_GIT_TAG "release-3.4.16")         # SDL3 current stable release
 set(SDL3_TTF_GIT_TAG "release-3.2.2")      # SDL3_ttf current stable release
 set(SDL3_MIXER_GIT_TAG "release-3.2.4")    # SDL3_mixer current stable release
 

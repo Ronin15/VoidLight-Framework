@@ -14,34 +14,34 @@
 
 // Font sizing configuration constants
 namespace {
-  // Universal height-based font sizing (all platforms)
-  constexpr float HEIGHT_RATIO = 90.0f;
+// Universal height-based font sizing (all platforms)
+constexpr float HEIGHT_RATIO = 90.0f;
 
-  // Font size ratios for different text types
-  constexpr float UI_FONT_RATIO = 0.875f;     // 87.5% of base
-  constexpr float TITLE_FONT_RATIO = 1.5f;    // 150% of base
-  constexpr float TOOLTIP_FONT_RATIO = 0.6f;  // 60% of base
+// Font size ratios for different text types
+constexpr float UI_FONT_RATIO = 0.875f; // 87.5% of base
+constexpr float TITLE_FONT_RATIO = 1.5f; // 150% of base
+constexpr float TOOLTIP_FONT_RATIO = 0.6f; // 60% of base
 
-  // Font size bounds for edge case protection
-  constexpr int MAX_FONT_SIZE = 100;
+// Font size bounds for edge case protection
+constexpr int MAX_FONT_SIZE = 100;
 
-  // Minimum readable sizes for specific font types (ensure good readability)
-  constexpr int MIN_BASE_FONT_SIZE = 18;
-  constexpr int MIN_UI_FONT_SIZE = 16;
-  constexpr int MIN_TITLE_FONT_SIZE = 24;
-  constexpr int MIN_TOOLTIP_FONT_SIZE = 12;
+// Minimum readable sizes for specific font types (ensure good readability)
+constexpr int MIN_BASE_FONT_SIZE = 18;
+constexpr int MIN_UI_FONT_SIZE = 16;
+constexpr int MIN_TITLE_FONT_SIZE = 24;
+constexpr int MIN_TOOLTIP_FONT_SIZE = 12;
 }
 
 bool FontManager::init() {
-  if (!TTF_Init()) {
-    FONT_CRITICAL(std::format("Font system initialization failed: {}", SDL_GetError()));
-      return false;
-  } else {
-    // Reset shutdown flag when reinitializing
-    m_isShutdown = false;
-    FONT_INFO("Font system initialized with quality hints!");
-      return true;
-  }
+    if (!TTF_Init()) {
+        FONT_CRITICAL(std::format("Font system initialization failed: {}", SDL_GetError()));
+        return false;
+    } else {
+        // Reset shutdown flag when reinitializing
+        m_isShutdown = false;
+        FONT_INFO("Font system initialized with quality hints!");
+        return true;
+    }
 }
 
 bool FontManager::loadFontsForDisplay(const std::string& fontPath, int windowWidth, int windowHeight, float dpiScale) {
@@ -62,7 +62,7 @@ bool FontManager::loadFontsForDisplay(const std::string& fontPath, int windowWid
                 if (entry.is_regular_file()) {
                     std::string extension = entry.path().extension().string();
                     std::transform(extension.begin(), extension.end(), extension.begin(),
-                                   [](unsigned char c) { return std::tolower(c); });
+                        [](unsigned char c) { return std::tolower(c); });
                     if (extension == ".ttf" || extension == ".otf") {
                         m_fontFilePaths.push_back(entry.path().string());
                     }
@@ -97,7 +97,7 @@ bool FontManager::loadFontsForDisplay(const std::string& fontPath, int windowWid
     int tooltipFontSize = std::min(static_cast<int>(std::round(logicalTooltip * effectiveDpiScale)), MAX_FONT_SIZE);
 
     FONT_INFO(std::format("Calculated font sizes (dpiScale={}, logical={}): base={}, UI={}, title={}, tooltip={}",
-              effectiveDpiScale, logicalBase, baseFontSize, uiFontSize, titleFontSize, tooltipFontSize));
+        effectiveDpiScale, logicalBase, baseFontSize, uiFontSize, titleFontSize, tooltipFontSize));
 
     bool success = true;
     for (const auto& filePath : m_fontFilePaths) {
@@ -136,408 +136,408 @@ bool FontManager::loadFont(const std::string& fontFile, const std::string& fontI
     return true;
 }
 
-std::vector<std::string> FontManager::wrapTextToLines(const std::string& text, 
-                                                     const std::string& fontID, 
-                                                     int maxWidth) {
-  std::vector<std::string> wrappedLines;
-  
-  if (m_isShutdown || maxWidth <= 0) {
-    wrappedLines.push_back(text); // Return original text if invalid params
-    return wrappedLines;
-  }
+std::vector<std::string> FontManager::wrapTextToLines(const std::string& text,
+    const std::string& fontID,
+    int maxWidth) {
+    std::vector<std::string> wrappedLines;
 
-  auto fontIt = m_fontMap.find(fontID);
-  if (fontIt == m_fontMap.end()) {
-    FONT_ERROR(std::format("Font '{}' not found for text wrapping", fontID));
-    wrappedLines.push_back(text);
-    return wrappedLines;
-  }
-
-  // First split by explicit newlines
-  std::vector<std::string> lines;
-  std::string currentLine;
-  for (char c : text) {
-    if (c == '\n') {
-      lines.push_back(currentLine);
-      currentLine.clear();
-    } else {
-      currentLine += c;
-    }
-  }
-  if (!currentLine.empty()) {
-    lines.push_back(currentLine);
-  }
-
-  // Now wrap each line if it's too wide
-  for (const auto& line : lines) {
-    if (line.empty()) {
-      wrappedLines.push_back("");
-      continue;
+    if (m_isShutdown || maxWidth <= 0) {
+        wrappedLines.push_back(text); // Return original text if invalid params
+        return wrappedLines;
     }
 
-    std::string workingLine;
-    std::istringstream words(line);
-    std::string word;
-    
-    while (words >> word) {
-      std::string testLine = workingLine;
-      if (!testLine.empty()) {
-        testLine += " ";
-      }
-      testLine += word;
-      int testWidth = 0;
-      
-      if (TTF_GetStringSize(fontIt->second.get(), testLine.c_str(), 0, &testWidth, nullptr)) {
-        if (testWidth <= maxWidth) {
-          workingLine = testLine;
+    auto fontIt = m_fontMap.find(fontID);
+    if (fontIt == m_fontMap.end()) {
+        FONT_ERROR(std::format("Font '{}' not found for text wrapping", fontID));
+        wrappedLines.push_back(text);
+        return wrappedLines;
+    }
+
+    // First split by explicit newlines
+    std::vector<std::string> lines;
+    std::string currentLine;
+    for (char c : text) {
+        if (c == '\n') {
+            lines.push_back(currentLine);
+            currentLine.clear();
         } else {
-          if (!workingLine.empty()) {
-            wrappedLines.push_back(workingLine);
-            workingLine = word;
-          } else {
-            // Single word is too long, just add it
-            wrappedLines.push_back(word);
-            workingLine.clear();
-          }
+            currentLine += c;
         }
-      } else {
-        // If measurement fails, just add the word
-        workingLine = testLine;
-      }
     }
-    
-    if (!workingLine.empty()) {
-      wrappedLines.push_back(workingLine);
+    if (!currentLine.empty()) {
+        lines.push_back(currentLine);
     }
-  }
 
-  return wrappedLines;
+    // Now wrap each line if it's too wide
+    for (const auto& line : lines) {
+        if (line.empty()) {
+            wrappedLines.push_back("");
+            continue;
+        }
+
+        std::string workingLine;
+        std::istringstream words(line);
+        std::string word;
+
+        while (words >> word) {
+            std::string testLine = workingLine;
+            if (!testLine.empty()) {
+                testLine += " ";
+            }
+            testLine += word;
+            int testWidth = 0;
+
+            if (TTF_GetStringSize(fontIt->second.get(), testLine.c_str(), 0, &testWidth, nullptr)) {
+                if (testWidth <= maxWidth) {
+                    workingLine = testLine;
+                } else {
+                    if (!workingLine.empty()) {
+                        wrappedLines.push_back(workingLine);
+                        workingLine = word;
+                    } else {
+                        // Single word is too long, just add it
+                        wrappedLines.push_back(word);
+                        workingLine.clear();
+                    }
+                }
+            } else {
+                // If measurement fails, just add the word
+                workingLine = testLine;
+            }
+        }
+
+        if (!workingLine.empty()) {
+            wrappedLines.push_back(workingLine);
+        }
+    }
+
+    return wrappedLines;
 }
 
 bool FontManager::measureTextWithWrapping(const std::string& text, const std::string& fontID,
-                                         int maxWidth, int* width, int* height) {
-  if (m_isShutdown || !width || !height) {
-    return false;
-  }
-
-  auto fontIt = m_fontMap.find(fontID);
-  if (fontIt == m_fontMap.end()) {
-    FONT_ERROR(std::format("Font '{}' not found for wrapped measurement", fontID));
-    return false;
-  }
-
-  auto wrappedLines = wrapTextToLines(text, fontID, maxWidth);
-  if (wrappedLines.empty()) {
-    *width = 0;
-    *height = 0;
-    return true;
-  }
-
-  TTF_Font* font = fontIt->second.get();
-  int const lineHeight = TTF_GetFontHeight(font);
-  int maxLineWidth = 0;
-
-  // Measure each wrapped line to get the actual maximum width
-  for (const auto& line : wrappedLines) {
-    int lineWidth = 0;
-    if (!line.empty()) {
-      if (TTF_GetStringSize(font, line.c_str(), 0, &lineWidth, nullptr)) {
-        maxLineWidth = std::max(maxLineWidth, lineWidth);
-      }
+    int maxWidth, int* width, int* height) {
+    if (m_isShutdown || !width || !height) {
+        return false;
     }
-  }
 
-  *width = maxLineWidth;
-  *height = lineHeight * static_cast<int>(wrappedLines.size());
-  return true;
+    auto fontIt = m_fontMap.find(fontID);
+    if (fontIt == m_fontMap.end()) {
+        FONT_ERROR(std::format("Font '{}' not found for wrapped measurement", fontID));
+        return false;
+    }
+
+    auto wrappedLines = wrapTextToLines(text, fontID, maxWidth);
+    if (wrappedLines.empty()) {
+        *width = 0;
+        *height = 0;
+        return true;
+    }
+
+    TTF_Font* font = fontIt->second.get();
+    int const lineHeight = TTF_GetFontHeight(font);
+    int maxLineWidth = 0;
+
+    // Measure each wrapped line to get the actual maximum width
+    for (const auto& line : wrappedLines) {
+        int lineWidth = 0;
+        if (!line.empty()) {
+            if (TTF_GetStringSize(font, line.c_str(), 0, &lineWidth, nullptr)) {
+                maxLineWidth = std::max(maxLineWidth, lineWidth);
+            }
+        }
+    }
+
+    *width = maxLineWidth;
+    *height = lineHeight * static_cast<int>(wrappedLines.size());
+    return true;
 }
 
 bool FontManager::isFontLoaded(const std::string& fontID) const {
-  return m_fontMap.find(fontID) != m_fontMap.end();
+    return m_fontMap.find(fontID) != m_fontMap.end();
 }
 
 void FontManager::clearFont(const std::string& fontID) {
-  // No need to manually call TTF_CloseFont as the unique_ptr will handle it
-  if (m_fontMap.erase(fontID) > 0) {
-    FONT_INFO(std::format("Cleared font: {}", fontID));
-  }
+    // No need to manually call TTF_CloseFont as the unique_ptr will handle it
+    if (m_fontMap.erase(fontID) > 0) {
+        FONT_INFO(std::format("Cleared font: {}", fontID));
+    }
 }
 
 bool FontManager::reloadFontsForDisplay(const std::string& fontPath, int windowWidth, int windowHeight, float dpiScale) {
-  if (m_isShutdown) {
-    FONT_WARN("Cannot reload fonts - FontManager is shut down");
-    return false;
-  }
+    if (m_isShutdown) {
+        FONT_WARN("Cannot reload fonts - FontManager is shut down");
+        return false;
+    }
 
-  FONT_INFO("Reloading fonts for display change...");
+    FONT_INFO("Reloading fonts for display change...");
 
-  // Clear existing fonts and caches without shutting down the manager
-  m_fontMap.clear();
-  destroyGPUTextObjects();
-  m_fontsLoaded.store(false, std::memory_order_release);
+    // Clear existing fonts and caches without shutting down the manager
+    m_fontMap.clear();
+    destroyGPUTextObjects();
+    m_fontsLoaded.store(false, std::memory_order_release);
 
-  // Reset display tracking
-  m_lastWindowWidth = 0;
-  m_lastWindowHeight = 0;
-  m_lastFontPath.clear();
+    // Reset display tracking
+    m_lastWindowWidth = 0;
+    m_lastWindowHeight = 0;
+    m_lastFontPath.clear();
 
-  // Reload fonts with new dimensions and DPI scale
-  return loadFontsForDisplay(fontPath, windowWidth, windowHeight, dpiScale);
+    // Reload fonts with new dimensions and DPI scale
+    return loadFontsForDisplay(fontPath, windowWidth, windowHeight, dpiScale);
 }
 
 bool FontManager::measureText(const std::string& text, const std::string& fontID, int* width, int* height) {
-  if (m_isShutdown || !width || !height) {
-    return false;
-  }
+    if (m_isShutdown || !width || !height) {
+        return false;
+    }
 
-  auto fontIt = m_fontMap.find(fontID);
-  if (fontIt == m_fontMap.end()) {
-    FONT_ERROR(std::format("Font '{}' not found for measurement", fontID));
-    return false;
-  }
+    auto fontIt = m_fontMap.find(fontID);
+    if (fontIt == m_fontMap.end()) {
+        FONT_ERROR(std::format("Font '{}' not found for measurement", fontID));
+        return false;
+    }
 
-  // Use TTF_GetStringSize for accurate text measurement
-  return TTF_GetStringSize(fontIt->second.get(), text.c_str(), 0, width, height);
+    // Use TTF_GetStringSize for accurate text measurement
+    return TTF_GetStringSize(fontIt->second.get(), text.c_str(), 0, width, height);
 }
 
 bool FontManager::getFontMetrics(const std::string& fontID, int* lineHeight, int* ascent, int* descent) {
-  if (m_isShutdown || !lineHeight || !ascent || !descent) {
-    return false;
-  }
+    if (m_isShutdown || !lineHeight || !ascent || !descent) {
+        return false;
+    }
 
-  auto fontIt = m_fontMap.find(fontID);
-  if (fontIt == m_fontMap.end()) {
-    FONT_ERROR(std::format("Font '{}' not found for metrics", fontID));
-    return false;
-  }
+    auto fontIt = m_fontMap.find(fontID);
+    if (fontIt == m_fontMap.end()) {
+        FONT_ERROR(std::format("Font '{}' not found for metrics", fontID));
+        return false;
+    }
 
-  TTF_Font* font = fontIt->second.get();
-  *lineHeight = TTF_GetFontHeight(font);
-  *ascent = TTF_GetFontAscent(font);
-  *descent = TTF_GetFontDescent(font);
-  
-  return true;
+    TTF_Font* font = fontIt->second.get();
+    *lineHeight = TTF_GetFontHeight(font);
+    *ascent = TTF_GetFontAscent(font);
+    *descent = TTF_GetFontDescent(font);
+
+    return true;
 }
 
-bool FontManager::measureMultilineText(const std::string& text, const std::string& fontID, 
-                                      int maxWidth, int* width, int* height) {
-  if (m_isShutdown || !width || !height) {
-    return false;
-  }
-
-  auto fontIt = m_fontMap.find(fontID);
-  if (fontIt == m_fontMap.end()) {
-    FONT_ERROR(std::format("Font '{}' not found for multiline measurement", fontID));
-    return false;
-  }
-
-  // Split text by newlines
-  std::vector<std::string> lines;
-  std::string currentLine;
-  for (char c : text) {
-    if (c == '\n') {
-      lines.push_back(currentLine);
-      currentLine.clear();
-    } else {
-      currentLine += c;
-    }
-  }
-  if (!currentLine.empty()) {
-    lines.push_back(currentLine);
-  }
-
-  if (lines.empty()) {
-    *width = 0;
-    *height = 0;
-    return true;
-  }
-
-  TTF_Font* font = fontIt->second.get();
-  int const lineHeight = TTF_GetFontHeight(font);
-  int maxLineWidth = 0;
-
-  // Measure each line
-  for (const auto& line : lines) {
-    int lineWidth = 0;
-    if (!line.empty()) {
-      if (!TTF_GetStringSize(font, line.c_str(), 0, &lineWidth, nullptr)) {
-        FONT_ERROR(std::format("Failed to measure line: {}", line));
+bool FontManager::measureMultilineText(const std::string& text, const std::string& fontID,
+    int maxWidth, int* width, int* height) {
+    if (m_isShutdown || !width || !height) {
         return false;
-      }
     }
-    maxLineWidth = std::max(maxLineWidth, lineWidth);
-  }
 
-  // Apply max width constraint if specified
-  if (maxWidth > 0 && maxLineWidth > maxWidth) {
-    maxLineWidth = maxWidth;
-  }
+    auto fontIt = m_fontMap.find(fontID);
+    if (fontIt == m_fontMap.end()) {
+        FONT_ERROR(std::format("Font '{}' not found for multiline measurement", fontID));
+        return false;
+    }
 
-  *width = maxLineWidth;
-  *height = lineHeight * static_cast<int>(lines.size());
-  
-  return true;
+    // Split text by newlines
+    std::vector<std::string> lines;
+    std::string currentLine;
+    for (char c : text) {
+        if (c == '\n') {
+            lines.push_back(currentLine);
+            currentLine.clear();
+        } else {
+            currentLine += c;
+        }
+    }
+    if (!currentLine.empty()) {
+        lines.push_back(currentLine);
+    }
+
+    if (lines.empty()) {
+        *width = 0;
+        *height = 0;
+        return true;
+    }
+
+    TTF_Font* font = fontIt->second.get();
+    int const lineHeight = TTF_GetFontHeight(font);
+    int maxLineWidth = 0;
+
+    // Measure each line
+    for (const auto& line : lines) {
+        int lineWidth = 0;
+        if (!line.empty()) {
+            if (!TTF_GetStringSize(font, line.c_str(), 0, &lineWidth, nullptr)) {
+                FONT_ERROR(std::format("Failed to measure line: {}", line));
+                return false;
+            }
+        }
+        maxLineWidth = std::max(maxLineWidth, lineWidth);
+    }
+
+    // Apply max width constraint if specified
+    if (maxWidth > 0 && maxLineWidth > maxWidth) {
+        maxLineWidth = maxWidth;
+    }
+
+    *width = maxLineWidth;
+    *height = lineHeight * static_cast<int>(lines.size());
+
+    return true;
 }
 
 void FontManager::clean() {
-  if (m_isShutdown) {
-    return;
-  }
+    if (m_isShutdown) {
+        return;
+    }
 
-  // Mark the manager as shutting down before freeing resources
-  m_isShutdown = true;
+    // Mark the manager as shutting down before freeing resources
+    m_isShutdown = true;
 
-  // No need to manually close fonts as the unique_ptr will handle it
-  FONT_INFO(std::format("{} fonts freed", m_fontMap.size()));
-  m_fontMap.clear();
-  m_fontsLoaded.store(false, std::memory_order_release);
-  destroyGPUTextObjects();
+    // No need to manually close fonts as the unique_ptr will handle it
+    FONT_INFO(std::format("{} fonts freed", m_fontMap.size()));
+    m_fontMap.clear();
+    m_fontsLoaded.store(false, std::memory_order_release);
+    destroyGPUTextObjects();
 
-  // Clear display tracking
-  m_lastWindowWidth = 0;
-  m_lastWindowHeight = 0;
-  m_lastFontPath.clear();
-  FONT_INFO("FontManager resources cleaned - TTF will be cleaned by SDL_Quit()");
+    // Clear display tracking
+    m_lastWindowWidth = 0;
+    m_lastWindowHeight = 0;
+    m_lastFontPath.clear();
+    FONT_INFO("FontManager resources cleaned - TTF will be cleaned by SDL_Quit()");
 }
 
 #include "gpu/GPUDevice.hpp"
 #include <utility>
 
 bool FontManager::ensureGPUTextEngine() {
-  if (m_isShutdown) {
-    return false;
-  }
+    if (m_isShutdown) {
+        return false;
+    }
 
-  if (mp_gpuTextEngine) {
+    if (mp_gpuTextEngine) {
+        return true;
+    }
+
+    const auto& gpuDevice = VoidLight::GPUDevice::Instance();
+    if (!gpuDevice.isInitialized() || !gpuDevice.get()) {
+        FONT_ERROR("Cannot create GPU text engine before GPUDevice initialization");
+        return false;
+    }
+
+    mp_gpuTextEngine = TTF_CreateGPUTextEngine(gpuDevice.get());
+    if (!mp_gpuTextEngine) {
+        FONT_ERROR(std::format("Failed to create SDL3_ttf GPU text engine: {}",
+            SDL_GetError()));
+        return false;
+    }
+
+    TTF_SetGPUTextEngineWinding(mp_gpuTextEngine,
+        TTF_GPU_TEXTENGINE_WINDING_CLOCKWISE);
     return true;
-  }
-
-  auto& gpuDevice = VoidLight::GPUDevice::Instance();
-  if (!gpuDevice.isInitialized() || !gpuDevice.get()) {
-    FONT_ERROR("Cannot create GPU text engine before GPUDevice initialization");
-    return false;
-  }
-
-  mp_gpuTextEngine = TTF_CreateGPUTextEngine(gpuDevice.get());
-  if (!mp_gpuTextEngine) {
-    FONT_ERROR(std::format("Failed to create SDL3_ttf GPU text engine: {}",
-                           SDL_GetError()));
-    return false;
-  }
-
-  TTF_SetGPUTextEngineWinding(mp_gpuTextEngine,
-                              TTF_GPU_TEXTENGINE_WINDING_CLOCKWISE);
-  return true;
 }
 
 void FontManager::destroyGPUTextObjects() {
-  for (auto& [key, entry] : m_gpuTextEntries) {
-    if (entry.text) {
-      TTF_DestroyText(entry.text);
-      entry.text = nullptr;
+    for (auto& [key, entry] : m_gpuTextEntries) {
+        if (entry.text) {
+            TTF_DestroyText(entry.text);
+            entry.text = nullptr;
+        }
     }
-  }
-  m_gpuTextEntries.clear();
+    m_gpuTextEntries.clear();
 
-  if (mp_gpuTextEngine) {
-    TTF_DestroyGPUTextEngine(mp_gpuTextEngine);
-    mp_gpuTextEngine = nullptr;
-  }
+    if (mp_gpuTextEngine) {
+        TTF_DestroyGPUTextEngine(mp_gpuTextEngine);
+        mp_gpuTextEngine = nullptr;
+    }
 }
 
 bool FontManager::prepareGPUText(const std::string& key, const std::string& text,
-                                 const std::string& fontID, int* width,
-                                 int* height) {
-  if (m_isShutdown || key.empty() || text.empty()) {
-    return false;
-  }
+    const std::string& fontID, int* width,
+    int* height) {
+    if (m_isShutdown || key.empty() || text.empty()) {
+        return false;
+    }
 
-  if (!ensureGPUTextEngine()) {
-    return false;
-  }
+    if (!ensureGPUTextEngine()) {
+        return false;
+    }
 
-  auto fontIt = m_fontMap.find(fontID);
-  if (fontIt == m_fontMap.end()) {
-    FONT_ERROR(std::format("Font '{}' not found for GPU text", fontID));
-    return false;
-  }
+    auto fontIt = m_fontMap.find(fontID);
+    if (fontIt == m_fontMap.end()) {
+        FONT_ERROR(std::format("Font '{}' not found for GPU text", fontID));
+        return false;
+    }
 
-  auto& entry = m_gpuTextEntries[key];
-  if (!entry.text) {
-    entry.text = TTF_CreateText(mp_gpuTextEngine, fontIt->second.get(),
-                                text.c_str(), 0);
+    auto& entry = m_gpuTextEntries[key];
     if (!entry.text) {
-      FONT_ERROR(std::format("Failed to create SDL3_ttf GPU text '{}': {}",
-                             key, SDL_GetError()));
-      return false;
+        entry.text = TTF_CreateText(mp_gpuTextEngine, fontIt->second.get(),
+            text.c_str(), 0);
+        if (!entry.text) {
+            FONT_ERROR(std::format("Failed to create SDL3_ttf GPU text '{}': {}",
+                key, SDL_GetError()));
+            return false;
+        }
+    } else {
+        if (entry.fontID != fontID &&
+            !TTF_SetTextFont(entry.text, fontIt->second.get())) {
+            FONT_ERROR(std::format("Failed to update font for GPU text '{}': {}",
+                key, SDL_GetError()));
+            return false;
+        }
+        if (entry.stringValue != text &&
+            !TTF_SetTextString(entry.text, text.c_str(), 0)) {
+            FONT_ERROR(std::format("Failed to update string for GPU text '{}': {}",
+                key, SDL_GetError()));
+            return false;
+        }
     }
-  } else {
-    if (entry.fontID != fontID &&
-        !TTF_SetTextFont(entry.text, fontIt->second.get())) {
-      FONT_ERROR(std::format("Failed to update font for GPU text '{}': {}",
-                             key, SDL_GetError()));
-      return false;
+
+    entry.fontID = fontID;
+    entry.stringValue = text;
+
+    if (!TTF_GetTextSize(entry.text, &entry.width, &entry.height)) {
+        FONT_ERROR(std::format("Failed to measure GPU text '{}': {}", key,
+            SDL_GetError()));
+        return false;
     }
-    if (entry.stringValue != text &&
-        !TTF_SetTextString(entry.text, text.c_str(), 0)) {
-      FONT_ERROR(std::format("Failed to update string for GPU text '{}': {}",
-                             key, SDL_GetError()));
-      return false;
+
+    // Keep text objects at local origin; callers translate returned draw data.
+    if (!TTF_SetTextPosition(entry.text, 0, 0)) {
+        FONT_ERROR(std::format("Failed to reset GPU text origin for '{}': {}",
+            key, SDL_GetError()));
+        return false;
     }
-  }
 
-  entry.fontID = fontID;
-  entry.stringValue = text;
+    if (width) {
+        *width = entry.width;
+    }
+    if (height) {
+        *height = entry.height;
+    }
 
-  if (!TTF_GetTextSize(entry.text, &entry.width, &entry.height)) {
-    FONT_ERROR(std::format("Failed to measure GPU text '{}': {}", key,
-                           SDL_GetError()));
-    return false;
-  }
-
-  // Keep text objects at local origin; callers translate returned draw data.
-  if (!TTF_SetTextPosition(entry.text, 0, 0)) {
-    FONT_ERROR(std::format("Failed to reset GPU text origin for '{}': {}",
-                           key, SDL_GetError()));
-    return false;
-  }
-
-  if (width) {
-    *width = entry.width;
-  }
-  if (height) {
-    *height = entry.height;
-  }
-
-  return true;
+    return true;
 }
 
 bool FontManager::setGPUTextPosition(const std::string& key, int x, int y) {
-  auto it = m_gpuTextEntries.find(key);
-  if (it == m_gpuTextEntries.end() || !it->second.text) {
-    return false;
-  }
+    auto it = m_gpuTextEntries.find(key);
+    if (it == m_gpuTextEntries.end() || !it->second.text) {
+        return false;
+    }
 
-  if (!TTF_SetTextPosition(it->second.text, x, y)) {
-    FONT_ERROR(std::format("Failed to set GPU text position for '{}': {}", key,
-                           SDL_GetError()));
-    return false;
-  }
+    if (!TTF_SetTextPosition(it->second.text, x, y)) {
+        FONT_ERROR(std::format("Failed to set GPU text position for '{}': {}", key,
+            SDL_GetError()));
+        return false;
+    }
 
-  return true;
+    return true;
 }
 
 TTF_GPUAtlasDrawSequence* FontManager::getGPUTextDrawData(
     const std::string& key) {
-  auto it = m_gpuTextEntries.find(key);
-  if (it == m_gpuTextEntries.end() || !it->second.text) {
-    return nullptr;
-  }
+    auto it = m_gpuTextEntries.find(key);
+    if (it == m_gpuTextEntries.end() || !it->second.text) {
+        return nullptr;
+    }
 
-  return TTF_GetGPUTextDrawData(it->second.text);
+    return TTF_GetGPUTextDrawData(it->second.text);
 }
 
 void FontManager::clearGPUTextCache() {
-  destroyGPUTextObjects();
-  FONT_DEBUG("GPU text objects cleared");
+    destroyGPUTextObjects();
+    FONT_DEBUG("GPU text objects cleared");
 }

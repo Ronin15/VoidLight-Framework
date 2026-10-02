@@ -34,12 +34,9 @@ public:
     // state's own code could otherwise re-derive the caller's identity.
     void setReturnState(GameStateId state) { m_returnState = state; }
 
-    // GPU rendering support
-    void recordGPUVertices(VoidLight::GPURenderer& gpuRenderer,
-                           float interpolationAlpha) override;
+    void recordGPUUIVertices(VoidLight::GPURenderer& gpuRenderer) override;
     void renderGPUUI(VoidLight::GPURenderer& gpuRenderer,
-                     SDL_GPURenderPass* swapchainPass) override;
-    bool supportsGPURendering() const override { return true; }
+        SDL_GPURenderPass* swapchainPass) override;
 
 private:
     /**
@@ -143,7 +140,7 @@ private:
 
     // Returns the stable UI component ID for a binding button
     static std::string bindingButtonId(InputManager::Command c,
-                                       InputManager::DeviceCategory cat);
+        InputManager::DeviceCategory cat);
 
     // Keyboard/gamepad navigation — the focus ring is rebuilt per-tab in
     // rebuildNavOrder() so body controls (checkboxes, sliders, binding rows)
@@ -162,4 +159,4 @@ private:
     void handleSliderAdjust();
 };
 
-#endif  // SETTINGS_MENU_STATE_HPP
+#endif // SETTINGS_MENU_STATE_HPP

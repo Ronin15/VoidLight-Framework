@@ -7,4 +7,3 @@ struct ResourceTestAccess {
 };
 
 #endif // TESTS_RESOURCES_RESOURCE_TEST_ACCESS_HPP
-

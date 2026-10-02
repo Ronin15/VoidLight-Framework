@@ -41,17 +41,13 @@
 // Global fixture — ThreadSystem lives for the entire module
 // ============================================================================
 
-struct KBThreadSystemFixture
-{
-    KBThreadSystemFixture()
-    {
-        if (!VoidLight::ThreadSystem::Instance().init())
-        {
+struct KBThreadSystemFixture {
+    KBThreadSystemFixture() {
+        if (!VoidLight::ThreadSystem::Instance().init()) {
             throw std::runtime_error("ThreadSystem::init() failed in KnockbackSidecarTest");
         }
     }
-    ~KBThreadSystemFixture()
-    {
+    ~KBThreadSystemFixture() {
         VoidLight::ThreadSystem::Instance().clean();
     }
 };
@@ -61,10 +57,8 @@ BOOST_GLOBAL_FIXTURE(KBThreadSystemFixture);
 // Per-test fixture — managers reset between tests
 // ============================================================================
 
-struct KBFixture
-{
-    KBFixture()
-    {
+struct KBFixture {
+    KBFixture() {
         BOOST_REQUIRE(EntityDataManager::Instance().init());
         BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(CollisionManager::Instance().init());
@@ -72,8 +66,7 @@ struct KBFixture
         BOOST_REQUIRE(AIManager::Instance().init());
     }
 
-    ~KBFixture()
-    {
+    ~KBFixture() {
         AIManager::Instance().clean();
         PathfinderManager::Instance().clean();
         CollisionManager::Instance().clean();
@@ -98,8 +91,7 @@ BOOST_FIXTURE_TEST_SUITE(KnockbackSidecarIntegration, KBFixture)
  * - Verify no stale entries: each surviving entity's knockback is present and
  *   the destroyed entities' knockback is absent.
  */
-BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar)
-{
+BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar) {
     auto& edm = EntityDataManager::Instance();
 
     constexpr int TOTAL_NPCS = 100;
@@ -112,8 +104,7 @@ BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar)
     handles.reserve(TOTAL_NPCS);
 
     // Spawn NPCs
-    for (int i = 0; i < TOTAL_NPCS; ++i)
-    {
+    for (int i = 0; i < TOTAL_NPCS; ++i) {
         EntityHandle h = edm.createNPCWithRaceClass(
             Vector2D(static_cast<float>(i * 20), 100.0f), "Human", "Guard");
         BOOST_REQUIRE(h.isValid());
@@ -123,8 +114,7 @@ BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar)
     BOOST_CHECK_EQUAL(edm.getEntityCount(), TOTAL_NPCS);
 
     // Apply knockback to all NPCs
-    for (const auto& h : handles)
-    {
+    for (const auto& h : handles) {
         const size_t idx = edm.getIndex(h);
         BOOST_REQUIRE(idx != SIZE_MAX);
 
@@ -142,15 +132,12 @@ BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar)
     surviving.reserve(67);
     destroyed.reserve(33);
 
-    for (int i = 0; i < TOTAL_NPCS; ++i)
-    {
-        if ((i + 1) % 3 == 0)   // 3rd, 6th, 9th, ... (1-based)
+    for (int i = 0; i < TOTAL_NPCS; ++i) {
+        if ((i + 1) % 3 == 0) // 3rd, 6th, 9th, ... (1-based)
         {
             destroyed.push_back(handles[i]);
             edm.destroyEntity(handles[i]);
-        }
-        else
-        {
+        } else {
             surviving.push_back(handles[i]);
         }
     }
@@ -165,8 +152,7 @@ BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar)
     BOOST_CHECK_EQUAL(edm.knockbackActiveCount(), 67u);
 
     // Surviving entities must still have knockback with correct values
-    for (const auto& h : surviving)
-    {
+    for (const auto& h : surviving) {
         const size_t idx = edm.getIndex(h);
         BOOST_REQUIRE(idx != SIZE_MAX);
         BOOST_CHECK(edm.hasKnockback(idx));
@@ -184,21 +170,19 @@ BOOST_AUTO_TEST_CASE(DestroyDuringKnockbackCleansUpSidecar)
  * Uses Knockback::DECAY directly (mirrors what AIManager does).
  * After 8 frames: framesRemaining = INITIAL_FRAMES - 8, impulses decayed by DECAY^8.
  */
-BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
-{
+BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction) {
     auto& edm = EntityDataManager::Instance();
 
     constexpr int TOTAL_NPCS = 100;
-    constexpr uint8_t INITIAL_FRAMES = 20;   // > 8 so none expire during the loop
+    constexpr uint8_t INITIAL_FRAMES = 20; // > 8 so none expire during the loop
     constexpr float IMPULSE_X = 100.0f;
-    constexpr float IMPULSE_Y =  50.0f;
+    constexpr float IMPULSE_Y = 50.0f;
     constexpr int DECAY_FRAMES = 8;
 
     std::vector<EntityHandle> handles;
     handles.reserve(TOTAL_NPCS);
 
-    for (int i = 0; i < TOTAL_NPCS; ++i)
-    {
+    for (int i = 0; i < TOTAL_NPCS; ++i) {
         EntityHandle h = edm.createNPCWithRaceClass(
             Vector2D(static_cast<float>(i * 20), 200.0f), "Human", "Guard");
         BOOST_REQUIRE(h.isValid());
@@ -206,8 +190,7 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
     }
 
     // Apply knockback to all
-    for (const auto& h : handles)
-    {
+    for (const auto& h : handles) {
         const size_t idx = edm.getIndex(h);
         auto& kb = edm.applyKnockback(idx);
         kb.impulseX = IMPULSE_X;
@@ -216,8 +199,7 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
     }
 
     // Destroy every 3rd
-    for (int i = 2; i < TOTAL_NPCS; i += 3)
-    {
+    for (int i = 2; i < TOTAL_NPCS; i += 3) {
         edm.destroyEntity(handles[i]);
     }
     edm.processDestructionQueue();
@@ -227,8 +209,7 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
     // Compute expected impulse after DECAY_FRAMES applications of Knockback::DECAY
     float expectedX = IMPULSE_X;
     float expectedY = IMPULSE_Y;
-    for (int f = 0; f < DECAY_FRAMES; ++f)
-    {
+    for (int f = 0; f < DECAY_FRAMES; ++f) {
         expectedX *= Knockback::DECAY;
         expectedY *= Knockback::DECAY;
     }
@@ -236,11 +217,9 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
 
     // Manually drive 8 decay frames on surviving entities (mirrors AIManager batch logic)
     auto& sidecar = edm.knockbackSidecar();
-    for (int frame = 0; frame < DECAY_FRAMES; ++frame)
-    {
-        auto dense  = sidecar.dense();
-        for (size_t i = 0; i < dense.size(); ++i)
-        {
+    for (int frame = 0; frame < DECAY_FRAMES; ++frame) {
+        auto dense = sidecar.dense();
+        for (size_t i = 0; i < dense.size(); ++i) {
             auto& kb = dense[i];
             kb.impulseX *= Knockback::DECAY;
             kb.impulseY *= Knockback::DECAY;
@@ -252,9 +231,8 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
     // Verify all 67 surviving entries decayed correctly
     BOOST_CHECK_EQUAL(edm.knockbackActiveCount(), 67u);
 
-    for (int i = 0; i < TOTAL_NPCS; ++i)
-    {
-        if ((i + 1) % 3 == 0) { continue; }   // destroyed
+    for (int i = 0; i < TOTAL_NPCS; ++i) {
+        if ((i + 1) % 3 == 0) { continue; } // destroyed
 
         const size_t idx = edm.getIndex(handles[i]);
         BOOST_REQUIRE(idx != SIZE_MAX);
@@ -273,8 +251,7 @@ BOOST_AUTO_TEST_CASE(SurvivingEntitiesDecayCorrectlyAfterPartialDestruction)
  * For every entry in dense(), owners()[i] must point to an edmIdx whose
  * sidecar.get() returns exactly &dense[i].
  */
-BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction)
-{
+BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction) {
     auto& edm = EntityDataManager::Instance();
 
     constexpr int TOTAL_NPCS = 50;
@@ -282,8 +259,7 @@ BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction)
     std::vector<EntityHandle> handles;
     handles.reserve(TOTAL_NPCS);
 
-    for (int i = 0; i < TOTAL_NPCS; ++i)
-    {
+    for (int i = 0; i < TOTAL_NPCS; ++i) {
         EntityHandle h = edm.createNPCWithRaceClass(
             Vector2D(static_cast<float>(i * 10), 300.0f), "Human", "Guard");
         BOOST_REQUIRE(h.isValid());
@@ -291,8 +267,7 @@ BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction)
     }
 
     // Apply knockback to all
-    for (const auto& h : handles)
-    {
+    for (const auto& h : handles) {
         const size_t idx = edm.getIndex(h);
         auto& kb = edm.applyKnockback(idx);
         kb.impulseX = 10.0f;
@@ -301,8 +276,7 @@ BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction)
     }
 
     // Destroy every other entity (indices 1, 3, 5, ...)
-    for (int i = 1; i < TOTAL_NPCS; i += 2)
-    {
+    for (int i = 1; i < TOTAL_NPCS; i += 2) {
         edm.destroyEntity(handles[i]);
     }
     edm.processDestructionQueue();
@@ -313,13 +287,12 @@ BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction)
     // Cross-check owners/dense consistency
     const auto& sidecar = edm.knockbackSidecar();
     auto owners = sidecar.owners();
-    auto dense  = sidecar.dense();
+    auto dense = sidecar.dense();
 
     BOOST_REQUIRE_EQUAL(owners.size(), dense.size());
     BOOST_REQUIRE_EQUAL(owners.size(), expectedActive);
 
-    for (size_t i = 0; i < owners.size(); ++i)
-    {
+    for (size_t i = 0; i < owners.size(); ++i) {
         uint32_t edmIdx = owners[i];
         const KnockbackData* ptr = edm.getKnockback(static_cast<size_t>(edmIdx));
         BOOST_CHECK(ptr != nullptr);
@@ -330,8 +303,7 @@ BOOST_AUTO_TEST_CASE(SidecarOwnersTableConsistentAfterPartialDestruction)
 /**
  * Clearing knockback (framesRemaining hits 0) removes the entry from the sidecar.
  */
-BOOST_AUTO_TEST_CASE(ClearKnockbackRemovesEntry)
-{
+BOOST_AUTO_TEST_CASE(ClearKnockbackRemovesEntry) {
     auto& edm = EntityDataManager::Instance();
 
     EntityHandle h = edm.createNPCWithRaceClass(Vector2D(50.0f, 50.0f), "Human", "Guard");
@@ -350,8 +322,7 @@ BOOST_AUTO_TEST_CASE(ClearKnockbackRemovesEntry)
     BOOST_REQUIRE(p != nullptr);
     p->impulseX *= Knockback::DECAY;
     p->impulseY *= Knockback::DECAY;
-    if (--p->framesRemaining == 0)
-    {
+    if (--p->framesRemaining == 0) {
         edm.clearKnockback(idx);
     }
 
@@ -360,8 +331,7 @@ BOOST_AUTO_TEST_CASE(ClearKnockbackRemovesEntry)
     BOOST_CHECK(edm.getKnockback(idx) == nullptr);
 }
 
-BOOST_AUTO_TEST_CASE(DamageEventsAccumulateKnockbackAndRefreshFrames)
-{
+BOOST_AUTO_TEST_CASE(DamageEventsAccumulateKnockbackAndRefreshFrames) {
     auto& edm = EntityDataManager::Instance();
 
     EntityHandle playerHandle = edm.registerPlayer(9901, Vector2D(75.0f, 75.0f));

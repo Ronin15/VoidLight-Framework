@@ -6,6 +6,7 @@
 #ifndef WORLD_DATA_HPP
 #define WORLD_DATA_HPP
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -14,22 +15,29 @@
 namespace VoidLight {
 
 struct WorldGenerationConfig {
-    int width;
-    int height;
-    int seed;
-    float elevationFrequency;
-    float humidityFrequency;
-    float waterLevel;
-    float mountainLevel;
+    int width{};
+    int height{};
+    int seed{};
+    float elevationFrequency{};
+    float humidityFrequency{};
+    float waterLevel{};
+    float mountainLevel{};
+    // false skips WorldManager settlement/wilderness NPC population on
+    // loadNewWorld (no populate registry entry). Harvestables and
+    // settlements are still generated.
+    bool populate{true};
 };
 
 // World rendering and spatial constants
-constexpr float TILE_SIZE = 32.0f;  // Tile size in pixels
+constexpr float TILE_SIZE = 32.0f; // Tile size in pixels
+// Settlement radius in tiles: max building placement distance from a village
+// center (WorldGenerator) and SettlementRecord::radiusTiles.
+constexpr int VILLAGE_RADIUS = 12;
 
 enum class Biome {
     DESERT,
     FOREST,
-    PLAINS,     // Open grassland with sparse vegetation
+    PLAINS, // Open grassland with sparse vegetation
     MOUNTAIN,
     SWAMP,
     HAUNTED,
@@ -183,21 +191,40 @@ struct Tile {
     VoidLight::ResourceHandle resourceHandle;
 
     // Building support for multi-tile structures
-    uint32_t buildingId = 0;        // 0 = no building, >0 = unique building ID
-    uint8_t buildingSize = 0;       // 0 = no building, 1-4 = connected building count
-    bool isTopLeftOfBuilding = false;  // Pre-computed flag for render optimization
+    uint32_t buildingId = 0; // 0 = no building, >0 = unique building ID
+    uint8_t buildingSize = 0; // 0 = no building, 1-4 = connected building count
+    bool isTopLeftOfBuilding = false; // Pre-computed flag for render optimization
+};
 
-    // Harvestable deposit support (ore, gem deposits)
-    // Lazy-created EDM entity index for tile-based deposits
-    // UINT32_MAX = no entity created yet
-    // TODO: Connect to tile-based deposit system when implemented
-    // Currently harvestables are spawned at obstacle positions via WorldManager::spawnHarvestablesAtObstacles
-    uint32_t harvestableIndex = UINT32_MAX;
+struct SettlementRecord {
+    uint32_t id{0}; // 1-based
+    int centerTileX{0};
+    int centerTileY{0};
+    int radiusTiles{12};
+    Biome biome{Biome::PLAINS};
+    uint8_t faction{0};
+    uint8_t buildingCount{0};
+
+    [[nodiscard]] bool containsTile(int tileX, int tileY) const noexcept {
+        const int dx = tileX - centerTileX;
+        const int dy = tileY - centerTileY;
+        return dx * dx + dy * dy <= radiusTiles * radiusTiles;
+    }
+
+    [[nodiscard]] bool containsPixel(float worldX, float worldY) const noexcept {
+        const float centerX = (static_cast<float>(centerTileX) + 0.5f) * TILE_SIZE;
+        const float centerY = (static_cast<float>(centerTileY) + 0.5f) * TILE_SIZE;
+        const float radius = static_cast<float>(radiusTiles) * TILE_SIZE;
+        const float dx = worldX - centerX;
+        const float dy = worldY - centerY;
+        return dx * dx + dy * dy <= radius * radius;
+    }
 };
 
 struct WorldData {
     std::string worldId;
     std::vector<std::vector<Tile>> grid;
+    std::vector<SettlementRecord> settlements;
 };
 
 }

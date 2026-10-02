@@ -125,7 +125,7 @@ The VoidLight Engine has the following test suites:
 - **Benchmarks**: Performance and scalability testing (~8-20 minutes total)
 - **GPU Tests**: SDL3 GPU rendering validation
 - **Tooling Tests**: Python tool validation outside the Boost executable list
-- **Total Coverage**: 80 core `ALL_TESTS` executables plus 8 GPU-specific test targets with comprehensive automation scripts
+- **Total Coverage**: 84 core `ALL_TESTS` executables plus 8 GPU-specific test targets with comprehensive automation scripts
 
 ## Running Tests
 
@@ -138,6 +138,7 @@ Each test suite has dedicated scripts in the `tests/test_scripts/` directory:
 # Core functionality tests (fast execution)
 ./tests/test_scripts/run_thread_tests.sh                # Thread system tests
 ./tests/test_scripts/run_buffer_utilization_tests.sh    # WorkerBudget buffer thread utilization tests
+./tests/test_scripts/run_worker_budget_tests.sh         # WorkerBudget targeted unit tests (reset, accessors, per-system coverage)
 ./tests/test_scripts/run_thread_safe_ai_tests.sh        # Thread-safe AI tests
 ./tests/test_scripts/run_thread_safe_ai_integration_tests.sh  # Thread-safe AI integration tests
 ./tests/test_scripts/run_ai_optimization_tests.sh       # AI optimization tests
@@ -157,6 +158,8 @@ Each test suite has dedicated scripts in the `tests/test_scripts/` directory:
 ./tests/test_scripts/run_ai_manager_edm_integration_tests.sh      # AIManager EDM integration tests
 ./tests/test_scripts/run_collision_manager_edm_integration_tests.sh  # CollisionManager EDM integration tests
 ./tests/test_scripts/run_npc_memory_tests.sh                      # NPC memory system tests
+./tests/test_scripts/run_world_population_tests.sh                # WorldPopulation settlement NPC population tests
+./tests/test_scripts/run_timestep_manager_tests.sh                # TimestepManager fixed-delta and accumulator tests
 
 # Performance scaling benchmarks (slow execution)
 ./tests/test_scripts/run_event_scaling_benchmark.sh     # Event manager scaling benchmark
@@ -194,6 +197,7 @@ Each test suite has dedicated scripts in the `tests/test_scripts/` directory:
 ```
 # Core functionality tests (fast execution)
 tests/test_scripts/run_thread_tests.bat                 # Thread system tests
+tests/test_scripts/run_worker_budget_tests.bat          # WorkerBudget targeted unit tests (reset, accessors, per-system coverage)
 tests/test_scripts/run_thread_safe_ai_tests.bat         # Thread-safe AI tests
 tests/test_scripts/run_thread_safe_ai_integration_tests.bat  # Thread-safe AI integration tests
 tests/test_scripts/run_ai_optimization_tests.bat        # AI optimization tests
@@ -205,13 +209,15 @@ tests/test_scripts/run_collision_tests.bat              # Collision system and s
 tests/test_scripts/run_pathfinding_tests.bat            # Pathfinding algorithm and grid tests
 tests/test_scripts/run_pathfinder_manager_tests.bat     # PathfinderManager EDM integration and lifecycle tests
 tests/test_scripts/run_game_time_tests.bat              # GameTimeManager tests
-tests/test_scripts/run_controller_tests.bat             # Controller tests (Registry, Weather, DayNight)
+tests/test_scripts/run_controller_tests.bat             # Controller tests (Registry, Weather, DayNight, ProjectileRender)
 tests/test_scripts/run_projectile_manager_tests.bat     # ProjectileManager EDM integration and lifecycle tests
 tests/test_scripts/run_entity_state_manager_tests.bat   # Entity state machine tests
 tests/test_scripts/run_entity_data_manager_tests.bat    # EntityDataManager and BackgroundSimulationManager tests
 tests/test_scripts/run_ai_manager_edm_integration_tests.bat      # AIManager EDM integration tests
 tests/test_scripts/run_collision_manager_edm_integration_tests.bat  # CollisionManager EDM integration tests
 tests/test_scripts/run_npc_memory_tests.bat                       # NPC memory system tests
+tests/test_scripts/run_world_population_tests.bat                 # WorldPopulation settlement NPC population tests
+tests/test_scripts/run_timestep_manager_tests.bat                 # TimestepManager fixed-delta and accumulator tests
 
 tests/test_scripts/run_json_reader_tests.bat            # JSON parser validation tests
 
@@ -526,7 +532,6 @@ Located in `events/EventManagerTest.cpp`, `events/EventTypesTest.cpp`, `events/W
 - WeatherEvent creation and parameter setting
 - SceneChangeEvent functionality
 - NPCSpawnEvent creation, spawn parameters, conditions, and limits
-- EventFactory event creation methods
 - Event sequences and cooldown functionality
 
 **WeatherEventTest.cpp** provides focused weather event testing:
@@ -612,7 +617,7 @@ Located in `particle/` directory, these tests provide comprehensive validation o
 #### Test Suites Overview
 
 **1. Core Tests (`ParticleManagerCoreTest.cpp`)**
-**14 test cases** covering basic ParticleManager functionality:
+**43 test cases** covering basic ParticleManager functionality:
 - Initialization and cleanup
 - Effect registration and management  
 - Particle creation and lifecycle
@@ -621,16 +626,16 @@ Located in `particle/` directory, these tests provide comprehensive validation o
 - State transition handling
 
 **2. Weather Integration Tests (`ParticleManagerWeatherTest.cpp`)**
-**9 test cases** covering weather system integration:
+**13 test cases** covering weather system integration:
 - Weather effect triggering (Rain, Snow, Fog, Cloudy, Stormy, Clear)
 - Weather transitions and timing
 - Weather-specific particle behavior
-- Intensity scaling
+- Variant selection from `WeatherType` (intensity does not pick the variant; HeavyRain/Windy variants)
 - Weather effect cleanup
 - Multiple weather effect handling
 
 **3. Performance Tests (`ParticleManagerPerformanceTest.cpp`)**
-**8 test cases** covering performance characteristics:
+**11 test cases** covering performance characteristics:
 - Large-scale particle simulation (1000+ particles)
 - Update performance scaling
 - Memory usage efficiency
@@ -1087,13 +1092,7 @@ Located in `tests/EntityStateManagerTests.cpp`, these tests validate the EntityS
    - UpdateWithNoCurrentStateIsNoOp: Safe with no current state
    - UpdateOnlyAffectsCurrentState: Only active state updated
 
-4. **Remove State** (3 tests):
-   - RemoveState: Basic state removal
-   - RemoveCurrentStateResetsIt: Removing current state resets it
-   - RemoveNonExistentStateIsNoOp: Safe removal of non-existing state
-
-5. **Edge Cases** (2 tests):
-   - EmptyManagerIsValid: Empty manager operations safe
+4. **Edge Cases** (1 test):
    - MultipleTransitions: Complex transition sequences
 
 #### Running Entity State Machine Tests
@@ -1112,7 +1111,7 @@ tests/test_scripts/run_entity_state_manager_tests.bat --transition-test
 tests/test_scripts/run_entity_state_manager_tests.bat --update-test
 ```
 
-**Estimated Runtime:** ~1 second (18 tests)
+**Estimated Runtime:** ~1 second (14 tests)
 
 ### Entity Data Management Tests
 
@@ -1120,89 +1119,129 @@ Located in `tests/managers/`, these tests validate the Data-Oriented Design (DoD
 
 #### Test Coverage
 
-1. **EntityDataManager Tests** (`EntityDataManagerTests.cpp`) - **65 test cases**:
+1. **EntityDataManager Tests** (`EntityDataManagerTests.cpp`) - **95 test cases**:
 
-   **Singleton & Lifecycle** (6 tests):
+   **Singleton** (1 test):
    - Singleton pattern validation
-   - Init/clean lifecycle
-   - State transition handling
+
+   **Lifecycle** (6 tests):
+   - Init/clean lifecycle and reinit
    - Double init prevention
+   - State transition handling (clears behavior state pools)
+   - Direct destroy clears behavior config for slot reuse
 
-   **Entity Creation** (10 tests):
+   **Entity Creation** (8 tests):
    - NPC, Player, DroppedItem, Projectile, AreaEffect, StaticBody creation
-   - Handle validity after creation
-   - Entity kind assignment
-   - Initial tier placement
+   - Monster/Animal factories auto-register JSON suggested behavior
+   - Multiple entity creation
 
-   **Handle Validation** (8 tests):
+   **Entity Registration** (5 tests):
+   - NPC creation with character data
+   - Player and DroppedItem registration
+   - Unregistering existing and nonexistent entities
+
+   **Destruction Queue** (6 tests):
+   - Single and batch entity destruction
+   - Invalid handle destruction and empty queue processing
+   - Generation increment after destruction
+   - GameEngine skips the destruction drain while globally paused
+
+   **Handle Validation** (7 tests):
    - Valid/invalid handle detection
+   - Index extraction from handles (valid and invalid)
+   - EntityId-to-index lookup (valid and invalid)
    - Stale handle detection after destruction
-   - Generation increment verification
-   - Index extraction from handles
 
-   **Data Access** (12 tests):
-   - Transform data access (position, velocity, rotation)
-   - HotData access (flags, kind, tier)
-   - Type-specific data (CharacterData, ItemData, ProjectileData, AreaEffectData)
-   - Static vs dynamic entity separation
+   **Transform Access** (4 tests):
+   - Transform access by handle and by index
+   - Transform mutation
+   - Static body transform access by index
 
-   **Destruction Queue** (8 tests):
-   - Entity destruction queuing
-   - Batch destruction processing
-   - Slot reuse after destruction
-   - Generation increment on reuse
+   **Hot Data Access** (5 tests):
+   - HotData access by handle and by index
+   - Dynamic and static HotData arrays
+   - HotData flags
 
-   **Simulation Tier System** (12 tests):
-   - Tier assignment (Active, Background, Hibernated)
+   **Type-Specific Data** (5 tests):
+   - CharacterData by handle and by index
+   - ItemData, ProjectileData, AreaEffectData
+
+   **Simulation Tier System** (7 tests):
+   - Default Active tier and manual tier assignment
    - Distance-based tier updates
-   - Active/Background index retrieval
-   - Tier transitions based on reference point
+   - Active/Background index retrieval and entity count by tier
+   - Player always stays Active
 
-   **Queries & Lookups** (9 tests):
-   - Radius-based entity queries
-   - Entity count by kind/tier
-   - EntityId lookup
-   - Handle-to-index mapping
+   **Queries** (6 tests):
+   - Radius-based entity queries, with and without kind filter
+   - Empty query results
+   - Entity count (total and by kind) and indices by kind
+
+   **Entity Lookup** (4 tests):
+   - EntityId and handle lookup by index
+   - Invalid index handling
+
+   **Slot Reuse** (3 tests):
+   - Slot reuse after destruction
+   - Type-specific data slot reuse
+   - Mass creation and destruction
+
+   **State Transition Cached Indices** (9 tests):
+   - prepareForStateTransition clears active, background, hibernated, active-collision, trigger-detection, and kind index caches
+   - No stale indices after state transition reuse
+   - Access after clear does not crash
+
+   **NPC Render Data, Equipment & Inventory** (19 tests):
+   - NPC render data initialization, defaults, minimum values, per-NPC separation, and clearing on destroy
+   - Container render data uses the mapped atlas and preserves open-variant dimensions
+   - Equipment: cached stat recalculation, two-handed weapon/shield slot rules, ranged weapons consuming compatible ammunition
+   - Inventory transfers are atomic or rejected without mutation; `canAddToInventory` matches `addToInventory`; NPC starting equipment auto-equips (non-merchants, class order) while merchant stock stays in inventory
 
 2. **BackgroundSimulationManager Tests** (`BackgroundSimulationManagerTests.cpp`) - **32 test cases**:
 
-   **Singleton & Lifecycle** (6 tests):
+   **Singleton** (1 test):
    - Singleton pattern validation
+
+   **Lifecycle** (4 tests):
    - Init/clean lifecycle (including state reset)
-   - Dependency verification (requires EntityDataManager)
+   - Double init prevention
    - State transition preparation
 
-   **Pause/Resume** (5 tests):
+   **Pause/Resume** (4 tests):
+   - Initially not paused
    - Global pause stops all processing
    - Resume continues processing
-   - No frame counter updates when paused
-   - No tier calculations when paused
 
-   **Reference Point** (5 tests):
-   - Reference point setting
-   - Movement threshold (32-unit) triggering tier recalc
-   - Initial reference point always sets dirty flag
+   **Reference Point** (2 tests):
+   - Reference point setting, directly and via update
 
-   **Tier Management** (6 tests):
-   - Tier update interval (120 frames)
-   - Manual tier invalidation
+   **Tier Management** (4 tests):
+   - Tier updates and manual tier invalidation
    - hasWork() reflects background entity presence
-   - Tier update delegates to EntityDataManager
 
    **Configuration** (5 tests):
    - Active/Background radius configuration
    - Update rate configuration
    - Screen-size based configuration
-   - Default values validation
 
-   **Update Processing** (3 tests):
+   **Update Processing** (5 tests):
+   - Basic update and background entity processing
+   - Tier update interval
    - Accumulator pattern (10Hz updates)
-   - Background entity processing
-   - Performance statistics tracking
+   - Async completion wait
 
-   **Performance Stats** (2 tests):
+   **Performance Stats** (3 tests):
    - Stats collection and retrieval
    - Stats reset functionality
+   - Stats update after processing
+
+   **NPC Simulation** (2 tests):
+   - Background NPC velocity decay
+   - Background NPC position update
+
+   **Integration** (2 tests):
+   - Full workflow
+   - Many background entities
 
 #### Running Entity Data Management Tests
 
@@ -1220,7 +1259,7 @@ tests/test_scripts/run_entity_data_manager_tests.bat --bgsm       # BackgroundSi
 tests/test_scripts/run_entity_data_manager_tests.bat --verbose    # Verbose output
 ```
 
-**Estimated Runtime:** ~2-3 seconds (97 tests total)
+**Estimated Runtime:** ~2-3 seconds (127 tests total)
 
 ### NPC Memory System Tests
 
@@ -1228,47 +1267,51 @@ Located in `tests/managers/NPCMemoryTests.cpp`, these tests validate the NPC mem
 
 #### Test Coverage
 
-1. **Memory Structure Tests** (4 tests):
+1. **Memory Structure Tests** (5 tests):
    - MemoryEntry size validation (≤40 bytes with padding)
    - EmotionalState layout (16 bytes, 4 floats)
-   - NPCMemoryData cache-line alignment (alignas(64))
-   - MemoryOverflow vector storage
+   - NPCMemoryData size (448 bytes, cache-line aligned)
+   - MemoryEntry clearing and EmotionalState decay
 
 2. **Memory Initialization Tests** (3 tests):
-   - Memory data allocation with entity creation
+   - Memory data preallocated with entity creation
    - Initialization sets validity flag
-   - Default emotional state values
+   - Memory data clearing
 
-3. **Add Memory Tests** (4 tests):
-   - Adding memories to inline storage (6 slots)
-   - Overflow to vector storage when inline full
-   - Memory count tracking
+3. **Add Memory Tests** (5 tests):
+   - Adding single and multiple memories to inline storage
    - Circular buffer behavior for inline slots
+   - Overflow to sidecar storage when inline full
 
-4. **Find Memory Tests** (4 tests):
-   - Search memories by type (AttackedBy, Attacked, etc.)
-   - Search memories by entity handle
-   - Combined type and entity search
-   - Empty result handling
+4. **Find Memory Tests** (3 tests):
+   - Search memories by type (with and without limit)
+   - Search memories of an entity
 
 5. **Emotional State Tests** (3 tests):
-   - Emotional decay over time (configurable rate)
-   - Emotion modification (add/subtract)
+   - Emotion modification
    - Clamping to [0.0, 1.0] range
+   - Emotional decay over time
 
 6. **Combat Event Tests** (3 tests):
-   - Recording attack events (attacker/target)
-   - Damage tracking (dealt/received totals)
-   - Combat statistics (encounter count, last combat time)
+   - Recording received and dealt combat events
+   - Multiple combat events accumulate totals
 
 7. **Location History Tests** (2 tests):
    - Location tracking with circular buffer
-   - History limit enforcement (4 locations)
+   - History limit enforcement
 
-8. **Cleanup Tests** (3 tests):
+8. **Cleanup Tests** (1 test):
    - Memory clearing on entity destruction
-   - Overflow cleanup
-   - State transition handling (prepareForStateTransition)
+
+9. **Personality Traits Tests** (6 tests):
+   - PersonalityTraits size, defaults, and clearing
+   - Personality randomization
+   - Effective resilience calculation
+   - Spawned NPCs have a personality
+
+10. **Emotional Resilience Tests** (4 tests):
+    - Class info carries resilience; character data inherits it
+    - Resilience and bravery do not change recorded combat totals
 
 #### Running NPC Memory Tests
 
@@ -1291,7 +1334,7 @@ tests/test_scripts/run_npc_memory_tests.bat --verbose    # Verbose output
 ./bin/debug/npc_memory_tests --run_test="AddMemory*"      # Run specific tests
 ```
 
-**Estimated Runtime:** ~1-2 seconds (24 tests)
+**Estimated Runtime:** ~1-2 seconds (35 tests)
 
 #### Key Data Structures
 
@@ -1304,7 +1347,7 @@ struct MemoryEntry {
     float value;            // Context-dependent (damage, etc.)
     MemoryType type;        // Type of memory (AttackedBy, Interaction, etc.)
     uint8_t importance;     // 0-255 importance score
-    uint8_t flags;          // State flags (FLAG_VALID, FLAG_FADING)
+    uint8_t flags;          // State flags (FLAG_VALID)
 };
 
 // Emotional state affecting NPC behavior (16 bytes)
@@ -1315,12 +1358,13 @@ struct EmotionalState {
     float suspicion;    // Alertness to threats
 };
 
-// Per-entity memory data (cache-line aligned, ≤512 bytes)
+// Per-entity memory data (cache-line aligned, 448 bytes)
 struct alignas(64) NPCMemoryData {
+    EmotionalState emotions;        // Hot first cache line
+    PersonalityTraits personality;
+    EntityHandle lastAttacker, lastTarget;
     MemoryEntry memories[6];        // Inline storage
     Vector2D locationHistory[4];    // Recent locations
-    EmotionalState emotions;
-    EntityHandle lastAttacker, lastTarget;
     float totalDamageReceived, totalDamageDealt;
     // ... additional tracking fields
 };
@@ -1331,9 +1375,10 @@ struct alignas(64) NPCMemoryData {
 Memory data is accessible in AI behaviors via `BehaviorContext`:
 
 ```cpp
-void AttackBehavior::executeLogic(BehaviorContext& ctx) {
-    if (ctx.memoryData && ctx.memoryData->isValid()) {
-        auto& memory = *ctx.memoryData;
+// Inside a Behaviors::execute*() function (e.g. executeAttack in src/ai/behaviors/AttackBehavior.cpp)
+void executeAttack(BehaviorContext& ctx, const AttackBehaviorConfig& config, AttackStateData& state) {
+    if (ctx.memoryData.isValid()) {  // NPCMemoryData& - guaranteed bound for NPCs
+        auto& memory = ctx.memoryData;
 
         // Check grudge against attacker
         if (memory.lastAttacker == ctx.playerHandle) {
@@ -1354,35 +1399,68 @@ Located in `tests/managers/` and `tests/collisions/`, these tests validate manag
 
 #### AIManager EDM Integration Tests
 
-**File:** `tests/managers/AIManagerEDMIntegrationTests.cpp` (~400 lines, 12 test cases)
+**File:** `tests/managers/AIManagerEDMIntegrationTests.cpp` (~1650 lines, 50 test cases)
 
 **Test Coverage:**
 
-1. **Sparse Behavior Vector Tests** (4 tests):
+1. **Sparse Behavior Vector Tests** (5 tests):
    - Behavior assignment creates EDM index mapping
    - Sparse vector handles gaps correctly
    - Behavior unassignment clears sparse behavior
    - Behavior reassignment updates sparse behavior
+   - Ranged attack commit failure queues a behavior-owned reset
 
-2. **Batch Processing EDM Tests** (2 tests):
+2. **Combat Event Routing Tests** (1 test):
+   - EventManager combat handler mutates player health
+
+3. **Batch Processing EDM Tests** (2 tests):
    - Batch processing writes to EDM transform
    - Multiple entities processed via batch
 
-3. **State Transition Tests** (3 tests):
+4. **State Transition Tests** (3 tests):
    - prepareForStateTransition clears AI data
    - State transition while batch processing
    - AIManager reinit after state transition
 
-4. **EDM Index Caching Tests** (2 tests):
+5. **EDM Index Caching Tests** (2 tests):
    - EDM index cached on behavior assignment
    - Entity destruction doesn't affect other entities
 
-5. **Behavior Cloning Tests** (1 test):
-   - Each entity gets separate behavior instance
+6. **Behavior Data-Driven Tests** (3 tests):
+   - Multiple entities share a behavior type
+   - All behavior types can be assigned
+   - Behavior switching
+
+7. **Guard/Faction Index Tests** (14 tests):
+   - Guard and faction indices populated on assignment, removed on unassign/unregister, cleared on state transition
+   - Radius filters exclude distant guards and entities; hostile scans return only hostile faction members
+   - Behavior reassignment and runtime `switchBehavior` keep guard queries current
+   - Stale higher-sequence transitions do not suppress valid transitions (including a stress loop)
+
+8. **Faction Stance Tests** (7 tests):
+   - Defaults (same faction allied, others neutral), set/get, and bounds
+   - Stance resets on prepareForStateTransition and resetBehaviors
+   - No-op set does not emit; a real change does
+   - Collision follows player relation; player faction standing sidecar lifetime
+
+9. **NPC Need Sidecar Tests** (7 tests):
+   - Need getter defaults when absent
+   - Sidecar cleared on destroy/reuse and on prepareForStateTransition
+   - Forage assignment creates a need entry; needs enabled only for civilian roles
+   - Same-frame civilian seeds are staggered; merchant entries carry a home leash
+
+10. **Harvestable Snapshot Tests** (1 test):
+    - Harvestable snapshot cleared on state transition
+
+11. **Environment Snapshot Tests** (5 tests):
+    - Deferred weather fills the snapshot before the batch
+    - Night snapshot derived from game hour
+    - prepareForStateTransition resets weather but keeps the handler
+    - Stormy weather is not Custom; foggy snapshot ignores weather params
 
 #### CollisionManager EDM Integration Tests
 
-**File:** `tests/collisions/CollisionManagerEDMIntegrationTests.cpp` (~480 lines, 17 test cases)
+**File:** `tests/collisions/CollisionManagerEDMIntegrationTests.cpp` (~730 lines, 19 test cases)
 
 **Test Coverage:**
 
@@ -1404,9 +1482,12 @@ Located in `tests/managers/` and `tests/collisions/`, these tests validate manag
    - Movable-movable pair indices are EDM indices
    - Movable-static pair uses mixed indices
 
-5. **State Transition Tests** (2 tests):
+5. **State Transition Tests** (7 tests):
    - prepareForStateTransition clears dynamic data
    - Static bodies preserved after dynamic clear
+   - Active collision indices and static query cache cleared after state transition (each time, across repeated transitions)
+   - Collision update after state transition does not crash
+   - Concurrent access during state transition
 
 6. **Layer Filtering Tests** (2 tests):
    - Collision layers read from EDM
@@ -1858,11 +1939,11 @@ BOOST_FIXTURE_TEST_CASE(TestName, GPUTestFixture) {
 
 ### Test Count
 
-- Unit tests: ~20 test cases
-- Integration tests: ~45 test cases
-- System tests: ~25 test cases
+- Unit tests: 38 test cases (`gpu_types_tests` 23, `gpu_pipeline_config_tests` 15)
+- Integration tests: 97 test cases (`gpu_device_tests` 14, `gpu_shader_manager_tests` 16, `gpu_resource_tests` 25, `gpu_vertex_pool_tests` 19, `sprite_batch_tests` 23)
+- System tests: 33 test cases (`gpu_renderer_tests`)
 - GPU benchmark utilities: 1 standalone executable
-- **Total: ~90 test cases across 8 GPU test executables plus 1 GPU benchmark utility**
+- **Total: 168 test cases across 8 GPU test executables plus 1 GPU benchmark utility**
 
 ## Additional Documentation
 

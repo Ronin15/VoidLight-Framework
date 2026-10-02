@@ -33,6 +33,7 @@ void prepareForStateTransition();
 - `Event`
 - `Collision`
 - `BackgroundSim`
+- `ProjectileSim`
 
 ## Current Model
 

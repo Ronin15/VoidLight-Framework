@@ -23,47 +23,47 @@ using namespace VoidLight;
 
 class ResourceFactoryTestFixture {
 public:
-  ResourceFactoryTestFixture() {
-    // Ensure isolation, then initialize the factory with default creators
-    ResourceTestAccess::resetFactory();
-    ResourceFactory::initialize();
-  }
+    ResourceFactoryTestFixture() {
+        // Ensure isolation, then initialize the factory with default creators
+        ResourceTestAccess::resetFactory();
+        ResourceFactory::initialize();
+    }
 
-  ~ResourceFactoryTestFixture() {
-    // Clean up for isolation using test helper
-    ResourceTestAccess::resetFactory();
-  }
+    ~ResourceFactoryTestFixture() {
+        // Clean up for isolation using test helper
+        ResourceTestAccess::resetFactory();
+    }
 
 protected:
-  // Helper method to create JsonValue from string
-  JsonValue parseJson(const std::string &jsonString) {
-    JsonReader reader;
-    BOOST_REQUIRE(reader.parse(jsonString));
-    return reader.getRoot();
-  }
+    // Helper method to create JsonValue from string
+    JsonValue parseJson(const std::string& jsonString) {
+        JsonReader reader;
+        BOOST_REQUIRE(reader.parse(jsonString));
+        return reader.getRoot();
+    }
 };
 
 BOOST_FIXTURE_TEST_SUITE(ResourceFactoryTestSuite, ResourceFactoryTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestFactoryInitialization) {
-  // Test that default creators are registered
-  auto registeredTypes = ResourceFactory::getRegisteredTypes();
-  BOOST_CHECK(registeredTypes.size() > 0);
+    // Test that default creators are registered
+    auto registeredTypes = ResourceFactory::getRegisteredTypes();
+    BOOST_CHECK(registeredTypes.size() > 0);
 
-  // Check for specific types
-  BOOST_CHECK(ResourceFactory::hasCreator("Equipment"));
-  BOOST_CHECK(ResourceFactory::hasCreator("Consumable"));
-  BOOST_CHECK(ResourceFactory::hasCreator("QuestItem"));
-  BOOST_CHECK(ResourceFactory::hasCreator("CraftingComponent"));
-  BOOST_CHECK(ResourceFactory::hasCreator("RawResource"));
-  BOOST_CHECK(ResourceFactory::hasCreator("Gold"));
-  BOOST_CHECK(ResourceFactory::hasCreator("Gem"));
-  BOOST_CHECK(ResourceFactory::hasCreator("Ammunition"));
-  BOOST_CHECK(ResourceFactory::hasCreator("CraftingCurrency"));
+    // Check for specific types
+    BOOST_CHECK(ResourceFactory::hasCreator("Equipment"));
+    BOOST_CHECK(ResourceFactory::hasCreator("Consumable"));
+    BOOST_CHECK(ResourceFactory::hasCreator("QuestItem"));
+    BOOST_CHECK(ResourceFactory::hasCreator("CraftingComponent"));
+    BOOST_CHECK(ResourceFactory::hasCreator("RawResource"));
+    BOOST_CHECK(ResourceFactory::hasCreator("Gold"));
+    BOOST_CHECK(ResourceFactory::hasCreator("Gem"));
+    BOOST_CHECK(ResourceFactory::hasCreator("Ammunition"));
+    BOOST_CHECK(ResourceFactory::hasCreator("CraftingCurrency"));
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateEquipmentFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_sword",
         "name": "Test Sword",
         "category": "Item",
@@ -87,33 +87,33 @@ BOOST_AUTO_TEST_CASE(TestCreateEquipmentFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Sword");
-  BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
-                    static_cast<int>(ResourceCategory::Item));
-  BOOST_CHECK_EQUAL(static_cast<int>(resource->getType()),
-                    static_cast<int>(ResourceType::Equipment));
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Sword");
+    BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
+        static_cast<int>(ResourceCategory::Item));
+    BOOST_CHECK_EQUAL(static_cast<int>(resource->getType()),
+        static_cast<int>(ResourceType::Equipment));
 
-  // Test that it's actually an Equipment object
-  auto equipment = std::dynamic_pointer_cast<Equipment>(resource);
-  BOOST_REQUIRE(equipment != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(equipment->getEquipmentSlot()),
-                    static_cast<int>(Equipment::EquipmentSlot::Weapon));
-  BOOST_CHECK_EQUAL(equipment->getAttackBonus(), 15);
-  BOOST_CHECK_EQUAL(equipment->getDefenseBonus(), 2);
-  BOOST_CHECK_EQUAL(equipment->getHandsRequired(), 2);
-  BOOST_CHECK_EQUAL(static_cast<int>(equipment->getWeaponMode()),
-                    static_cast<int>(Equipment::WeaponMode::Ranged));
-  BOOST_CHECK_CLOSE(equipment->getAttackRangeOverride(), 375.0f, 0.001f);
-  BOOST_CHECK_CLOSE(equipment->getProjectileSpeedOverride(), 280.0f, 0.001f);
-  BOOST_CHECK_EQUAL(equipment->getAmmoTypeRequired(), "Arrow");
+    // Test that it's actually an Equipment object
+    auto equipment = std::dynamic_pointer_cast<Equipment>(resource);
+    BOOST_REQUIRE(equipment != nullptr);
+    BOOST_CHECK_EQUAL(static_cast<int>(equipment->getEquipmentSlot()),
+        static_cast<int>(Equipment::EquipmentSlot::Weapon));
+    BOOST_CHECK_EQUAL(equipment->getAttackBonus(), 15);
+    BOOST_CHECK_EQUAL(equipment->getDefenseBonus(), 2);
+    BOOST_CHECK_EQUAL(equipment->getHandsRequired(), 2);
+    BOOST_CHECK_EQUAL(static_cast<int>(equipment->getWeaponMode()),
+        static_cast<int>(Equipment::WeaponMode::Ranged));
+    BOOST_CHECK_CLOSE(equipment->getAttackRangeOverride(), 375.0f, 0.001f);
+    BOOST_CHECK_CLOSE(equipment->getProjectileSpeedOverride(), 280.0f, 0.001f);
+    BOOST_CHECK_EQUAL(equipment->getAmmoTypeRequired(), "Arrow");
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateShieldEquipmentFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_shield",
         "name": "Test Shield",
         "category": "Item",
@@ -132,19 +132,19 @@ BOOST_AUTO_TEST_CASE(TestCreateShieldEquipmentFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  auto equipment = std::dynamic_pointer_cast<Equipment>(resource);
-  BOOST_REQUIRE(equipment != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(equipment->getEquipmentSlot()),
-                    static_cast<int>(Equipment::EquipmentSlot::Shield));
-  BOOST_CHECK_EQUAL(equipment->getDefenseBonus(), 15);
-  BOOST_CHECK_EQUAL(equipment->getHandsRequired(), 1);
+    auto equipment = std::dynamic_pointer_cast<Equipment>(resource);
+    BOOST_REQUIRE(equipment != nullptr);
+    BOOST_CHECK_EQUAL(static_cast<int>(equipment->getEquipmentSlot()),
+        static_cast<int>(Equipment::EquipmentSlot::Shield));
+    BOOST_CHECK_EQUAL(equipment->getDefenseBonus(), 15);
+    BOOST_CHECK_EQUAL(equipment->getHandsRequired(), 1);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateConsumableFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_potion",
         "name": "Test Potion",
         "category": "Item",
@@ -160,24 +160,24 @@ BOOST_AUTO_TEST_CASE(TestCreateConsumableFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Potion");
-  BOOST_CHECK(resource->isConsumable());
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Potion");
+    BOOST_CHECK(resource->isConsumable());
 
-  // Test that it's actually a Consumable object
-  auto consumable = std::dynamic_pointer_cast<Consumable>(resource);
-  BOOST_REQUIRE(consumable != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(consumable->getEffect()),
-                    static_cast<int>(Consumable::ConsumableEffect::HealHP));
-  BOOST_CHECK_EQUAL(consumable->getEffectPower(), 50);
-  BOOST_CHECK_EQUAL(consumable->getEffectDuration(), 0);
+    // Test that it's actually a Consumable object
+    auto consumable = std::dynamic_pointer_cast<Consumable>(resource);
+    BOOST_REQUIRE(consumable != nullptr);
+    BOOST_CHECK_EQUAL(static_cast<int>(consumable->getEffect()),
+        static_cast<int>(Consumable::ConsumableEffect::HealHP));
+    BOOST_CHECK_EQUAL(consumable->getEffectPower(), 50);
+    BOOST_CHECK_EQUAL(consumable->getEffectDuration(), 0);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateStaminaConsumableFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_stamina_drink",
         "name": "Test Stamina Drink",
         "category": "Item",
@@ -193,18 +193,18 @@ BOOST_AUTO_TEST_CASE(TestCreateStaminaConsumableFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  auto consumable = std::dynamic_pointer_cast<Consumable>(resource);
-  BOOST_REQUIRE(consumable != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(consumable->getEffect()),
-                    static_cast<int>(Consumable::ConsumableEffect::RestoreStamina));
-  BOOST_CHECK_EQUAL(consumable->getEffectPower(), 20);
+    auto consumable = std::dynamic_pointer_cast<Consumable>(resource);
+    BOOST_REQUIRE(consumable != nullptr);
+    BOOST_CHECK_EQUAL(static_cast<int>(consumable->getEffect()),
+        static_cast<int>(Consumable::ConsumableEffect::RestoreStamina));
+    BOOST_CHECK_EQUAL(consumable->getEffectPower(), 20);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateQuestItemFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_key",
         "name": "Test Key",
         "category": "Item",
@@ -218,21 +218,21 @@ BOOST_AUTO_TEST_CASE(TestCreateQuestItemFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Key");
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Key");
 
-  // Test that it's actually a QuestItem object
-  auto questItem = std::dynamic_pointer_cast<QuestItem>(resource);
-  BOOST_REQUIRE(questItem != nullptr);
-  BOOST_CHECK_EQUAL(questItem->getQuestId(), "test_quest_123");
-  BOOST_CHECK(questItem->isQuestSpecific());
+    // Test that it's actually a QuestItem object
+    auto questItem = std::dynamic_pointer_cast<QuestItem>(resource);
+    BOOST_REQUIRE(questItem != nullptr);
+    BOOST_CHECK_EQUAL(questItem->getQuestId(), "test_quest_123");
+    BOOST_CHECK(questItem->isQuestSpecific());
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateCraftingComponentFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_essence",
         "name": "Test Essence",
         "category": "Material",
@@ -248,25 +248,25 @@ BOOST_AUTO_TEST_CASE(TestCreateCraftingComponentFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Essence");
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Essence");
 
-  // Test that it's actually a CraftingComponent object
-  auto craftingComponent =
-      std::dynamic_pointer_cast<CraftingComponent>(resource);
-  BOOST_REQUIRE(craftingComponent != nullptr);
-  BOOST_CHECK_EQUAL(
-      static_cast<int>(craftingComponent->getComponentType()),
-      static_cast<int>(CraftingComponent::ComponentType::Essence));
-  BOOST_CHECK_EQUAL(craftingComponent->getTier(), 3);
-  BOOST_CHECK_CLOSE(craftingComponent->getPurity(), 0.8f, 0.001f);
+    // Test that it's actually a CraftingComponent object
+    auto craftingComponent =
+        std::dynamic_pointer_cast<CraftingComponent>(resource);
+    BOOST_REQUIRE(craftingComponent != nullptr);
+    BOOST_CHECK_EQUAL(
+        static_cast<int>(craftingComponent->getComponentType()),
+        static_cast<int>(CraftingComponent::ComponentType::Essence));
+    BOOST_CHECK_EQUAL(craftingComponent->getTier(), 3);
+    BOOST_CHECK_CLOSE(craftingComponent->getPurity(), 0.8f, 0.001f);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateRawResourceFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_ore",
         "name": "Test Ore",
         "category": "Material",
@@ -282,23 +282,23 @@ BOOST_AUTO_TEST_CASE(TestCreateRawResourceFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Ore");
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Ore");
 
-  // Test that it's actually a RawResource object
-  auto rawResource = std::dynamic_pointer_cast<RawResource>(resource);
-  BOOST_REQUIRE(rawResource != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(rawResource->getOrigin()),
-                    static_cast<int>(RawResource::ResourceOrigin::Mining));
-  BOOST_CHECK_EQUAL(rawResource->getTier(), 2);
-  BOOST_CHECK_EQUAL(rawResource->getRarity(), 4);
+    // Test that it's actually a RawResource object
+    auto rawResource = std::dynamic_pointer_cast<RawResource>(resource);
+    BOOST_REQUIRE(rawResource != nullptr);
+    BOOST_CHECK_EQUAL(static_cast<int>(rawResource->getOrigin()),
+        static_cast<int>(RawResource::ResourceOrigin::Mining));
+    BOOST_CHECK_EQUAL(rawResource->getTier(), 2);
+    BOOST_CHECK_EQUAL(rawResource->getRarity(), 4);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateGoldFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_gold",
         "name": "Test Gold",
         "category": "Currency",
@@ -312,20 +312,20 @@ BOOST_AUTO_TEST_CASE(TestCreateGoldFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Gold");
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Gold");
 
-  // Test that it's actually a Gold object
-  auto gold = std::dynamic_pointer_cast<Gold>(resource);
-  BOOST_REQUIRE(gold != nullptr);
-  BOOST_CHECK_CLOSE(gold->getExchangeRate(), 1.0f, 0.001f);
+    // Test that it's actually a Gold object
+    auto gold = std::dynamic_pointer_cast<Gold>(resource);
+    BOOST_REQUIRE(gold != nullptr);
+    BOOST_CHECK_CLOSE(gold->getExchangeRate(), 1.0f, 0.001f);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateGemFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_emerald",
         "name": "Test Emerald",
         "category": "Currency",
@@ -341,23 +341,23 @@ BOOST_AUTO_TEST_CASE(TestCreateGemFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Emerald");
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Emerald");
 
-  // Test that it's actually a Gem object
-  auto gem = std::dynamic_pointer_cast<Gem>(resource);
-  BOOST_REQUIRE(gem != nullptr);
-  BOOST_CHECK_EQUAL(static_cast<int>(gem->getGemType()),
-                    static_cast<int>(Gem::GemType::Emerald));
-  BOOST_CHECK_CLOSE(gem->getExchangeRate(), 100.0f, 0.001f);
-  BOOST_CHECK_EQUAL(gem->getClarity(), 8);
+    // Test that it's actually a Gem object
+    auto gem = std::dynamic_pointer_cast<Gem>(resource);
+    BOOST_REQUIRE(gem != nullptr);
+    BOOST_CHECK_EQUAL(static_cast<int>(gem->getGemType()),
+        static_cast<int>(Gem::GemType::Emerald));
+    BOOST_CHECK_CLOSE(gem->getExchangeRate(), 100.0f, 0.001f);
+    BOOST_CHECK_EQUAL(gem->getClarity(), 8);
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateAmmunitionFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_arrows",
         "name": "Test Arrows",
         "category": "Item",
@@ -371,21 +371,21 @@ BOOST_AUTO_TEST_CASE(TestCreateAmmunitionFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Arrows");
-  BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
-                    static_cast<int>(ResourceCategory::Item));
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Arrows");
+    BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
+        static_cast<int>(ResourceCategory::Item));
 
-  auto ammunition = std::dynamic_pointer_cast<Ammunition>(resource);
-  BOOST_REQUIRE(ammunition != nullptr);
-  BOOST_CHECK_EQUAL(ammunition->getAmmoType(), "Arrow");
+    auto ammunition = std::dynamic_pointer_cast<Ammunition>(resource);
+    BOOST_REQUIRE(ammunition != nullptr);
+    BOOST_CHECK_EQUAL(ammunition->getAmmoType(), "Arrow");
 }
 
 BOOST_AUTO_TEST_CASE(TestCreateCraftingCurrencyFromJson) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_essence",
         "name": "Test Essence",
         "category": "Currency",
@@ -399,41 +399,41 @@ BOOST_AUTO_TEST_CASE(TestCreateCraftingCurrencyFromJson) {
         }
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Essence");
-  BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
-                    static_cast<int>(ResourceCategory::Currency));
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Essence");
+    BOOST_CHECK_EQUAL(static_cast<int>(resource->getCategory()),
+        static_cast<int>(ResourceCategory::Currency));
 
-  auto craftingCurrency = std::dynamic_pointer_cast<CraftingCurrency>(resource);
-  BOOST_REQUIRE(craftingCurrency != nullptr);
-  BOOST_CHECK_CLOSE(craftingCurrency->getExchangeRate(), 0.0f, 0.001f);
+    auto craftingCurrency = std::dynamic_pointer_cast<CraftingCurrency>(resource);
+    BOOST_REQUIRE(craftingCurrency != nullptr);
+    BOOST_CHECK_CLOSE(craftingCurrency->getExchangeRate(), 0.0f, 0.001f);
 }
 
 BOOST_AUTO_TEST_CASE(TestInvalidJsonHandling) {
-  // Test empty JSON
-  std::string emptyJson = "{}";
-  JsonValue json = parseJson(emptyJson);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
-  BOOST_CHECK(resource == nullptr);
+    // Test empty JSON
+    std::string emptyJson = "{}";
+    JsonValue json = parseJson(emptyJson);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
+    BOOST_CHECK(resource == nullptr);
 
-  // Test missing required fields
-  std::string incompleteJson = R"({"id": "test", "name": "Test"})";
-  json = parseJson(incompleteJson);
-  resource = ResourceFactory::createFromJson(json);
-  BOOST_CHECK(resource == nullptr);
+    // Test missing required fields
+    std::string incompleteJson = R"({"id": "test", "name": "Test"})";
+    json = parseJson(incompleteJson);
+    resource = ResourceFactory::createFromJson(json);
+    BOOST_CHECK(resource == nullptr);
 
-  // Test invalid JSON type (not object)
-  std::string invalidJson = R"("not an object")";
-  json = parseJson(invalidJson);
-  resource = ResourceFactory::createFromJson(json);
-  BOOST_CHECK(resource == nullptr);
+    // Test invalid JSON type (not object)
+    std::string invalidJson = R"("not an object")";
+    json = parseJson(invalidJson);
+    resource = ResourceFactory::createFromJson(json);
+    BOOST_CHECK(resource == nullptr);
 }
 
 BOOST_AUTO_TEST_CASE(TestUnknownTypeHandling) {
-  std::string jsonString = R"({
+    std::string jsonString = R"({
         "id": "test_unknown",
         "name": "Test Unknown",
         "category": "Item",
@@ -444,34 +444,34 @@ BOOST_AUTO_TEST_CASE(TestUnknownTypeHandling) {
         "consumable": false
     })";
 
-  JsonValue json = parseJson(jsonString);
-  ResourcePtr resource = ResourceFactory::createFromJson(json);
+    JsonValue json = parseJson(jsonString);
+    ResourcePtr resource = ResourceFactory::createFromJson(json);
 
-  // Should fallback to base Resource class
-  BOOST_REQUIRE(resource != nullptr);
-  BOOST_CHECK_EQUAL(resource->getName(), "Test Unknown");
+    // Should fallback to base Resource class
+    BOOST_REQUIRE(resource != nullptr);
+    BOOST_CHECK_EQUAL(resource->getName(), "Test Unknown");
 }
 
 BOOST_AUTO_TEST_CASE(TestCustomCreatorRegistration) {
-  // Test registering a custom creator
-  bool registered = ResourceFactory::registerCreator(
-      "CustomType", [](const JsonValue &json) -> ResourcePtr {
-        // Create a proper ResourceHandle for the custom resource
-        auto handle = ResourceTemplateManager::Instance().generateHandle();
-        return std::make_shared<Resource>(
-            handle, json["id"].asString(), json["name"].asString(),
-            ResourceCategory::Item, ResourceType::Equipment);
-      });
+    // Test registering a custom creator
+    bool registered = ResourceFactory::registerCreator(
+        "CustomType", [](const JsonValue& json) -> ResourcePtr {
+            // Create a proper ResourceHandle for the custom resource
+            auto handle = ResourceTemplateManager::Instance().generateHandle();
+            return std::make_shared<Resource>(
+                handle, json["id"].asString(), json["name"].asString(),
+                ResourceCategory::Item, ResourceType::Equipment);
+        });
 
-  BOOST_CHECK(registered);
-  BOOST_CHECK(ResourceFactory::hasCreator("CustomType"));
+    BOOST_CHECK(registered);
+    BOOST_CHECK(ResourceFactory::hasCreator("CustomType"));
 
-  // Test that registering the same type again fails
-  bool registeredAgain = ResourceFactory::registerCreator(
-      "CustomType",
-      [](const JsonValue & /*json*/) -> ResourcePtr { return nullptr; });
+    // Test that registering the same type again fails
+    bool registeredAgain = ResourceFactory::registerCreator(
+        "CustomType",
+        [](const JsonValue& /*json*/) -> ResourcePtr { return nullptr; });
 
-  BOOST_CHECK(!registeredAgain);
+    BOOST_CHECK(!registeredAgain);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

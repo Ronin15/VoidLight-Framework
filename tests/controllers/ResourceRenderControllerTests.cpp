@@ -35,8 +35,7 @@ using namespace VoidLight;
 class ResourceRenderControllerTestFixture {
 public:
     ResourceRenderControllerTestFixture()
-        : m_camera(1000.0f, 1000.0f, 200.0f, 200.0f)
-    {
+        : m_camera(1000.0f, 1000.0f, 200.0f, 200.0f) {
         // Reset EventManager to clean state
         EventManagerTestAccess::reset();
         BOOST_REQUIRE(EventManager::Instance().init());

@@ -14,16 +14,14 @@
 // project root injected by CMake. Allows the test binary to be run from any
 // working directory (not just the repo root).
 #ifndef VOIDLIGHT_PROJECT_SOURCE_DIR
-#  define VOIDLIGHT_PROJECT_SOURCE_DIR "."
+#define VOIDLIGHT_PROJECT_SOURCE_DIR "."
 #endif
 
-static std::string sourcePath(const char* repoRelative)
-{
+static std::string sourcePath(const char* repoRelative) {
     return std::string(VOIDLIGHT_PROJECT_SOURCE_DIR) + "/" + repoRelative;
 }
 
-static std::string readFileContents(const std::string& filepath)
-{
+static std::string readFileContents(const std::string& filepath) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         return {};
@@ -99,8 +97,8 @@ int countPatternInFile(const std::string& filepath, const std::string& pattern) 
 
 // Helper to search for a pattern inside one function body (ignoring comments)
 bool functionContainsPattern(const std::string& filepath,
-                             const std::string& functionSignature,
-                             const std::string& pattern) {
+    const std::string& functionSignature,
+    const std::string& pattern) {
     std::ifstream file(filepath);
     if (!file.is_open()) {
         return false;
@@ -147,7 +145,7 @@ bool functionContainsPattern(const std::string& filepath,
 // TEST SUITE: GPURenderPipelineComplianceTests
 // ============================================================================
 // Tests that validate GPU render-pass best practices
-// From AGENTS.md: one present/end-frame path through GameEngine
+// From CLAUDE.md: one present/end-frame path through GameEngine
 BOOST_AUTO_TEST_SUITE(GPURenderPipelineComplianceTests)
 
 // ----------------------------------------------------------------------------
@@ -168,8 +166,6 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineCallsEndFrame) {
     // Verify game states never end the frame directly
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
         sourcePath("src/gameStates/LogoState.cpp"),
         sourcePath("src/gameStates/GameOverState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
@@ -177,9 +173,7 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineCallsEndFrame) {
         sourcePath("src/gameStates/PauseState.cpp"),
         sourcePath("src/gameStates/SettingsMenuState.cpp"),
         sourcePath("src/gameStates/LoadingState.cpp"),
-        sourcePath("src/gameStates/UIDemoState.cpp"),
-        sourcePath("src/gameStates/EventDemoState.cpp")
-    };
+        sourcePath("src/gameStates/EventDemoState.cpp")};
 
     for (const auto& file : gameStateFiles) {
         bool hasEndFrame = fileContainsPattern(file, "endFrame(");
@@ -204,8 +198,6 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineBeginsScenePass) {
     // Verify GameStates NEVER begin the pass directly
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
         sourcePath("src/gameStates/LogoState.cpp"),
         sourcePath("src/gameStates/GameOverState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
@@ -213,9 +205,7 @@ BOOST_AUTO_TEST_CASE(TestOnlyGameEngineBeginsScenePass) {
         sourcePath("src/gameStates/PauseState.cpp"),
         sourcePath("src/gameStates/SettingsMenuState.cpp"),
         sourcePath("src/gameStates/LoadingState.cpp"),
-        sourcePath("src/gameStates/UIDemoState.cpp"),
-        sourcePath("src/gameStates/EventDemoState.cpp")
-    };
+        sourcePath("src/gameStates/EventDemoState.cpp")};
 
     for (const auto& file : gameStateFiles) {
         bool hasScenePass = fileContainsPattern(file, "beginScenePass(");
@@ -237,8 +227,8 @@ BOOST_AUTO_TEST_CASE(TestLoadingStateAsyncPattern) {
 
     // Verify LoadingState uses atomics for thread-safe progress tracking
     bool usesAtomics = fileContainsPattern(loadingStateFile, "std::atomic") ||
-                      fileContainsPattern(loadingStateFile, ".load(") ||
-                      fileContainsPattern(loadingStateFile, ".store(");
+        fileContainsPattern(loadingStateFile, ".load(") ||
+        fileContainsPattern(loadingStateFile, ".store(");
     BOOST_CHECK_MESSAGE(usesAtomics, "LoadingState should use atomics for thread-safe state");
 
     // Verify LoadingState does NOT have blocking loops with forbidden legacy rendering calls
@@ -252,8 +242,7 @@ BOOST_AUTO_TEST_CASE(TestLoadingStateAsyncPattern) {
         if (line.find("while") != std::string::npos && line.find("(") != std::string::npos) {
             inWhileLoop = true;
         }
-        if (inWhileLoop && (line.find("SDL_RenderPresent") != std::string::npos ||
-                           line.find("SDL_RenderClear") != std::string::npos)) {
+        if (inWhileLoop && (line.find("SDL_RenderPresent") != std::string::npos || line.find("SDL_RenderClear") != std::string::npos)) {
             foundBlockingPattern = true;
             break;
         }
@@ -263,7 +252,7 @@ BOOST_AUTO_TEST_CASE(TestLoadingStateAsyncPattern) {
     }
 
     BOOST_CHECK_MESSAGE(!foundBlockingPattern,
-                       "LoadingState should NOT have blocking loops with forbidden legacy present/clear calls");
+        "LoadingState should NOT have blocking loops with forbidden legacy present/clear calls");
 }
 
 // ----------------------------------------------------------------------------
@@ -274,7 +263,7 @@ BOOST_AUTO_TEST_CASE(TestLoadingStateAsyncPattern) {
 BOOST_AUTO_TEST_CASE(TestLoadingStateRenderPattern) {
     const std::string loadingStateFile = sourcePath("src/gameStates/LoadingState.cpp");
 
-    BOOST_CHECK(fileContainsPattern(loadingStateFile, "LoadingState::recordGPUVertices"));
+    BOOST_CHECK(fileContainsPattern(loadingStateFile, "LoadingState::recordGPUUIVertices"));
     BOOST_CHECK(fileContainsPattern(loadingStateFile, "LoadingState::renderGPUUI"));
     BOOST_CHECK(fileContainsPattern(loadingStateFile, "UIManager::Instance()"));
     BOOST_CHECK(!fileContainsPattern(loadingStateFile, "SDL_RenderPresent"));
@@ -314,11 +303,13 @@ BOOST_AUTO_TEST_CASE(TestGameEngineCallsGameStateManager) {
 BOOST_AUTO_TEST_CASE(TestGameStateManagerCallsGameState) {
     const std::string gsmFile = sourcePath("src/managers/GameStateManager.cpp");
 
-    bool callsRecord = fileContainsPattern(gsmFile, "->recordGPUVertices(");
+    bool callsSceneRecord = fileContainsPattern(gsmFile, "->recordGPUSceneVertices(");
+    bool callsUIRecord = fileContainsPattern(gsmFile, "->recordGPUUIVertices(");
     bool callsScene = fileContainsPattern(gsmFile, "->renderGPUScene(");
     bool callsUI = fileContainsPattern(gsmFile, "->renderGPUUI(");
 
-    BOOST_CHECK_MESSAGE(callsRecord, "GameStateManager must call GameState::recordGPUVertices()");
+    BOOST_CHECK_MESSAGE(callsSceneRecord, "GameStateManager must call GameState::recordGPUSceneVertices()");
+    BOOST_CHECK_MESSAGE(callsUIRecord, "GameStateManager must call GameState::recordGPUUIVertices()");
     BOOST_CHECK_MESSAGE(callsScene, "GameStateManager must call GameState::renderGPUScene()");
     BOOST_CHECK_MESSAGE(callsUI, "GameStateManager must call GameState::renderGPUUI()");
 }
@@ -346,18 +337,16 @@ BOOST_AUTO_TEST_CASE(TestCompleteRenderingFlow) {
     // Step 3: At least one GameState implements GPU rendering hooks
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
         sourcePath("src/gameStates/GamePlayState.cpp"),
         sourcePath("src/gameStates/LoadingState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
         sourcePath("src/gameStates/EventDemoState.cpp"),
-        sourcePath("src/gameStates/LogoState.cpp")
-    };
+        sourcePath("src/gameStates/LogoState.cpp")};
 
     bool foundStateRender = false;
     for (const auto& file : gameStateFiles) {
-        if (fileContainsPattern(file, "::recordGPUVertices(") ||
+        if (fileContainsPattern(file, "::recordGPUSceneVertices(") ||
+            fileContainsPattern(file, "::recordGPUUIVertices(") ||
             fileContainsPattern(file, "::renderGPUScene(") ||
             fileContainsPattern(file, "::renderGPUUI(")) {
             foundStateRender = true;
@@ -375,7 +364,7 @@ BOOST_AUTO_TEST_CASE(TestGPUVertexRecordingPrecedesScenePassAndSwapchainIsAcquir
     BOOST_REQUIRE(gameEngineStream.is_open());
 
     std::string gameEngineContent((std::istreambuf_iterator<char>(gameEngineStream)),
-                                  std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>());
 
     const auto recordPos = gameEngineContent.find("mp_gameStateManager->recordGPUVertices");
     const auto beginScenePassPos = gameEngineContent.find("gpuRenderer.beginScenePass()");
@@ -388,7 +377,7 @@ BOOST_AUTO_TEST_CASE(TestGPUVertexRecordingPrecedesScenePassAndSwapchainIsAcquir
     BOOST_REQUIRE(gpuRendererStream.is_open());
 
     std::string gpuRendererContent((std::istreambuf_iterator<char>(gpuRendererStream)),
-                                   std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>());
 
     const auto scenePassFuncPos = gpuRendererContent.find("SDL_GPURenderPass* GPURenderer::beginScenePass()");
     BOOST_REQUIRE(scenePassFuncPos != std::string::npos);
@@ -399,6 +388,25 @@ BOOST_AUTO_TEST_CASE(TestGPUVertexRecordingPrecedesScenePassAndSwapchainIsAcquir
     BOOST_REQUIRE(acquirePos != std::string::npos);
     BOOST_REQUIRE(beginRenderPassPos != std::string::npos);
     BOOST_CHECK_LT(acquirePos, beginRenderPassPos);
+
+    BOOST_CHECK_MESSAGE(
+        functionContainsPattern(gameEngineFile, "void GameEngine::refreshWindowMetrics",
+            "gpuRenderer.updateViewport"),
+        "Window/display metrics refresh should pre-size GPURenderer before the next record");
+    BOOST_CHECK_MESSAGE(
+        fileContainsPattern(gameEngineFile, "SDL_EVENT_WINDOW_ENTER_FULLSCREEN"),
+        "Fullscreen enter should refresh window metrics, not only WINDOW_RESIZED");
+    BOOST_CHECK_MESSAGE(
+        fileContainsPattern(gameEngineFile, "SDL_EVENT_WINDOW_LEAVE_FULLSCREEN"),
+        "Fullscreen leave should refresh window metrics, not only WINDOW_RESIZED");
+    BOOST_CHECK_MESSAGE(
+        functionContainsPattern(gameEngineFile, "void GameEngine::toggleFullscreen",
+            "refreshWindowMetrics"),
+        "toggleFullscreen should refresh metrics immediately, not wait for WINDOW_RESIZED");
+    BOOST_CHECK_MESSAGE(
+        fileContainsPattern(sourcePath("src/gameStates/MainMenuState.cpp"),
+            "setCompositeParams(1.0f, 0.0f, 0.0f)"),
+        "Main menu scene record must reset identity composite so leftover GamePlay zoom cannot crop the background");
 }
 
 BOOST_AUTO_TEST_CASE(TestGamePlayStateGPUResourceDrawOrderMatchesSDLPath) {
@@ -408,7 +416,7 @@ BOOST_AUTO_TEST_CASE(TestGamePlayStateGPUResourceDrawOrderMatchesSDLPath) {
     BOOST_REQUIRE(file.is_open());
 
     std::string content((std::istreambuf_iterator<char>(file)),
-                        std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>());
 
     const auto droppedItemsPos = content.find("resourceCtrl->recordGPUDroppedItems");
     const auto npcPos = content.find("m_npcRenderCtrl.recordGPU(ctx)");
@@ -488,21 +496,21 @@ BOOST_AUTO_TEST_CASE(TestUIRenderUsesFixedFamilyOrder) {
 
     const auto renderPos = content.find("void GPURenderer::renderUIBatches");
     BOOST_REQUIRE_MESSAGE(renderPos != std::string::npos,
-                          "GPURenderer::renderUIBatches() must exist");
+        "GPURenderer::renderUIBatches() must exist");
 
     const auto primitivePos = content.find("if (primitiveVertexCount > 0)", renderPos);
     const auto imagePos = content.find("if (!imageBatches.empty())", renderPos);
     const auto textPos = content.find("if (!textBatches.empty())", renderPos);
 
     BOOST_REQUIRE_MESSAGE(primitivePos != std::string::npos,
-                          "GPURenderer::renderUIBatches() must draw primitive family");
+        "GPURenderer::renderUIBatches() must draw primitive family");
     BOOST_REQUIRE_MESSAGE(imagePos != std::string::npos,
-                          "GPURenderer::renderUIBatches() must draw image family");
+        "GPURenderer::renderUIBatches() must draw image family");
     BOOST_REQUIRE_MESSAGE(textPos != std::string::npos,
-                          "GPURenderer::renderUIBatches() must draw text family");
+        "GPURenderer::renderUIBatches() must draw text family");
 
     BOOST_CHECK_MESSAGE(primitivePos < imagePos && imagePos < textPos,
-                        "GPURenderer::renderUIBatches() must use fixed primitive -> image -> text family order");
+        "GPURenderer::renderUIBatches() must use fixed primitive -> image -> text family order");
 }
 
 BOOST_AUTO_TEST_CASE(TestUISDLGPUSubmissionStaysInGPURenderer) {
@@ -574,8 +582,7 @@ BOOST_AUTO_TEST_CASE(TestNoMidFramePresentInManagers) {
     std::vector<std::string> managerFiles = {
         sourcePath("src/managers/UIManager.cpp"),
         sourcePath("src/managers/ParticleManager.cpp"),
-        sourcePath("src/managers/WorldManager.cpp")
-    };
+        sourcePath("src/managers/WorldManager.cpp")};
 
     for (const auto& file : managerFiles) {
         bool hasPresent = fileContainsPattern(file, "SDL_RenderPresent");
@@ -600,15 +607,13 @@ BOOST_AUTO_TEST_SUITE(DeterministicRenderingTests)
 BOOST_AUTO_TEST_CASE(TestNoRandomInRenderMethods) {
     std::vector<std::string> gameStateFiles = {
         sourcePath("src/gameStates/AIDemoState.cpp"),
-        sourcePath("src/gameStates/AdvancedAIDemoState.cpp"),
         sourcePath("src/gameStates/GameOverState.cpp"),
         sourcePath("src/gameStates/MainMenuState.cpp"),
         sourcePath("src/gameStates/GamePlayState.cpp"),
         sourcePath("src/gameStates/PauseState.cpp"),
         sourcePath("src/gameStates/SettingsMenuState.cpp"),
-        sourcePath("src/gameStates/OverlayDemoState.cpp"),
-        sourcePath("src/gameStates/LogoState.cpp")
-    };
+        sourcePath("src/gameStates/EventDemoState.cpp"),
+        sourcePath("src/gameStates/LogoState.cpp")};
 
     for (const auto& file : gameStateFiles) {
         // Check for render() method with random calls (suspicious pattern)
@@ -640,7 +645,7 @@ BOOST_AUTO_TEST_CASE(TestNoRandomInRenderMethods) {
         }
 
         BOOST_CHECK_MESSAGE(!foundRandomCall,
-                           file + "::render() should not use random values for determinism");
+            file + "::render() should not use random values for determinism");
     }
 }
 
@@ -704,7 +709,7 @@ BOOST_AUTO_TEST_CASE(TestMacOSFontDPIScaleUsesWindowPixelDensityFirst) {
         "macOS font DPI setup should prefer window pixel density over display scale");
 
     BOOST_CHECK_MESSAGE(functionContainsPattern(gameEngineCpp,
-        "void GameEngine::refreshWindowMetrics", "calculateFontDPIScale"),
+                            "void GameEngine::refreshWindowMetrics", "calculateFontDPIScale"),
         "Window/display changes should reuse the same macOS font DPI calculation");
 }
 

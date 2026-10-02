@@ -16,7 +16,7 @@
 // TEST SUITE: BufferReusePatternTests
 // ============================================================================
 // Tests that verify the fundamental buffer reuse patterns used throughout VoidLight
-// These patterns are documented in AGENTS.md "Performance and Threading"
+// These patterns are documented in CLAUDE.md "Performance and Threading"
 
 BOOST_AUTO_TEST_SUITE(BufferReusePatternTests)
 
@@ -24,7 +24,7 @@ BOOST_AUTO_TEST_SUITE(BufferReusePatternTests)
 // Test: Verify vector clear() preserves capacity
 // ----------------------------------------------------------------------------
 // This is the fundamental pattern used in AIManager, CollisionManager, ParticleManager
-// From AGENTS.md: preserve capacity with clear(), never swap() away reusable capacity
+// From CLAUDE.md: preserve capacity with clear(), never swap() away reusable capacity
 
 BOOST_AUTO_TEST_CASE(TestVectorClearPreservesCapacity) {
     std::vector<int> buffer;
@@ -44,7 +44,7 @@ BOOST_AUTO_TEST_CASE(TestVectorClearPreservesCapacity) {
 
     // Clear buffer - should preserve capacity
     buffer.clear();
-    BOOST_CHECK_EQUAL(buffer.size(), 0);               // Size reset to 0
+    BOOST_CHECK_EQUAL(buffer.size(), 0); // Size reset to 0
     BOOST_CHECK_GE(buffer.capacity(), initialCapacity); // Capacity preserved
 
     // Second populate - no reallocation should occur
@@ -132,7 +132,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // TEST SUITE: ReserveBeforePopulateTests
 // ============================================================================
 // Tests that verify proper use of reserve() before populating vectors
-// From AGENTS.md: call reserve() when size is known; avoid per-frame allocations
+// From CLAUDE.md: call reserve() when size is known; avoid per-frame allocations
 
 BOOST_AUTO_TEST_SUITE(ReserveBeforePopulateTests)
 
@@ -170,8 +170,8 @@ BOOST_AUTO_TEST_CASE(TestReservePreventReallocations) {
     }
 
     // Verify reserve() prevented reallocations
-    BOOST_CHECK_GT(reallocationCountWithout, 0);  // Multiple reallocations without reserve
-    BOOST_CHECK_EQUAL(reallocationCountWith, 0);  // Zero reallocations with reserve
+    BOOST_CHECK_GT(reallocationCountWithout, 0); // Multiple reallocations without reserve
+    BOOST_CHECK_EQUAL(reallocationCountWith, 0); // Zero reallocations with reserve
 }
 
 // ----------------------------------------------------------------------------
@@ -211,7 +211,7 @@ BOOST_AUTO_TEST_SUITE_END()
 // TEST SUITE: MemberVariableBufferTests
 // ============================================================================
 // Tests that verify member variable buffer reuse patterns
-// From AGENTS.md: reuse member buffers on hot paths
+// From CLAUDE.md: reuse member buffers on hot paths
 
 BOOST_AUTO_TEST_SUITE(MemberVariableBufferTests)
 

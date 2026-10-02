@@ -8,8 +8,7 @@
 #include "events/WeatherEvent.hpp"
 #include "core/Logger.hpp"
 
-void WeatherController::subscribe()
-{
+void WeatherController::subscribe() {
     if (checkAlreadySubscribed()) {
         return;
     }
@@ -19,16 +18,14 @@ void WeatherController::subscribe()
     // Subscribe to Time events to handle WeatherCheckEvent
     auto token = eventMgr.registerHandlerWithToken(
         EventTypeId::Time,
-        [this](const EventData& data) { onTimeEvent(data); }
-    );
+        [this](const EventData& data) { onTimeEvent(data); });
     addHandlerToken(token);
 
     setSubscribed(true);
     WEATHER_INFO("Subscribed to time events for automatic weather");
 }
 
-void WeatherController::onTimeEvent(const EventData& data)
-{
+void WeatherController::onTimeEvent(const EventData& data) {
     if (!data.event) {
         return;
     }
@@ -37,7 +34,7 @@ void WeatherController::onTimeEvent(const EventData& data)
     // We registered for EventTypeId::Time, so we know it's a TimeEvent
     const auto* timeEvent = static_cast<const TimeEvent*>(data.event.get());
     if (timeEvent->getTimeEventType() != TimeEventType::WeatherCheck) {
-        return;  // Not a weather check event, ignore
+        return; // Not a weather check event, ignore
     }
 
     // Safe static_cast - we verified the subtype via enum
@@ -63,30 +60,28 @@ void WeatherController::onTimeEvent(const EventData& data)
     WEATHER_DEBUG(weatherName);
 }
 
-std::string_view WeatherController::getCurrentWeatherString() const
-{
+std::string_view WeatherController::getCurrentWeatherString() const {
     switch (m_currentWeather) {
-        case WeatherType::Clear:  return "Clear";
+        case WeatherType::Clear: return "Clear";
         case WeatherType::Cloudy: return "Cloudy";
-        case WeatherType::Rainy:  return "Rainy";
+        case WeatherType::Rainy: return "Rainy";
         case WeatherType::Stormy: return "Stormy";
-        case WeatherType::Foggy:  return "Foggy";
-        case WeatherType::Snowy:  return "Snowy";
-        case WeatherType::Windy:  return "Windy";
+        case WeatherType::Foggy: return "Foggy";
+        case WeatherType::Snowy: return "Snowy";
+        case WeatherType::Windy: return "Windy";
         default: return "Clear";
     }
 }
 
-std::string_view WeatherController::getCurrentWeatherDescription() const
-{
+std::string_view WeatherController::getCurrentWeatherDescription() const {
     switch (m_currentWeather) {
-        case WeatherType::Clear:  return "Clear skies";
+        case WeatherType::Clear: return "Clear skies";
         case WeatherType::Cloudy: return "Clouds gather";
-        case WeatherType::Rainy:  return "Rain begins";
+        case WeatherType::Rainy: return "Rain begins";
         case WeatherType::Stormy: return "Storm approaches";
-        case WeatherType::Foggy:  return "Fog rolls in";
-        case WeatherType::Snowy:  return "Snow falls";
-        case WeatherType::Windy:  return "Wind picks up";
+        case WeatherType::Foggy: return "Fog rolls in";
+        case WeatherType::Snowy: return "Snow falls";
+        case WeatherType::Windy: return "Wind picks up";
         default: return "Weather changes";
     }
 }

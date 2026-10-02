@@ -15,13 +15,28 @@
 #include "managers/PathfinderManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
+#include "managers/WorldResourceManager.hpp"
 #include "ai/AICommandBus.hpp"
 #include "ai/BehaviorExecutors.hpp"
+#include "ai/EnvironmentModifiers.hpp"
 #include "core/ThreadSystem.hpp"
+#include "controllers/world/HarvestController.hpp"
 #include "entities/Player.hpp"
 #include "events/EntityEvents.hpp"
+#include "events/HarvestResourceEvent.hpp"
+#include "events/ResourceChangeEvent.hpp"
+#include "events/ScarcityEvent.hpp"
+#include "events/StanceChangedEvent.hpp"
+#include "events/TimeEvent.hpp"
+#include "events/WeatherEvent.hpp"
+#include "world/HarvestCommit.hpp"
 #include "world/WorldData.hpp"
+#include <algorithm>
+#include <array>
+#include <filesystem>
 #include <format>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <vector>
 #include <thread>
@@ -107,7 +122,7 @@ struct BehaviorTestFixture {
         BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
 
         // Initialize managers in proper order (matches CollisionPathfindingIntegrationTests)
-        BOOST_REQUIRE(GameTimeManager::Instance().init());  // Required for combat timing in behaviors
+        BOOST_REQUIRE(GameTimeManager::Instance().init()); // Required for combat timing in behaviors
         BOOST_REQUIRE(EventManager::Instance().init());
         BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(WorldManager::Instance().init());
@@ -120,28 +135,40 @@ struct BehaviorTestFixture {
         // Load a simple test world for pathfinding
         // Note: World must be >= 26x26 to satisfy VILLAGE_RADIUS constraints in WorldGenerator
         VoidLight::WorldGenerationConfig cfg{};
-        cfg.width = 30; cfg.height = 30; cfg.seed = 12345;
-        cfg.elevationFrequency = 0.05f; cfg.humidityFrequency = 0.05f;
-        cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+        cfg.width = 30;
+        cfg.height = 30;
+        cfg.seed = 12345;
+        cfg.elevationFrequency = 0.05f;
+        cfg.humidityFrequency = 0.05f;
+        cfg.waterLevel = 0.3f;
+        cfg.mountainLevel = 0.7f;
+        cfg.populate = false; // Tests spawn their own NPCs
 
         if (!WorldManager::Instance().loadNewWorld(cfg)) {
             throw std::runtime_error("Failed to load test world for behavior tests");
         }
 
-        // EVENT-DRIVEN: Process any deferred events (triggers WorldLoaded task on ThreadSystem)
-        EventManager::Instance().update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        // EVENT-DRIVEN: Process any deferred events from the world load
         EventManager::Instance().update();
 
-        // Set world bounds explicitly for tests (20x20 tiles * 64 pixels/tile = 1280x1280)
+        // Set world bounds explicitly for tests (30x30 tiles * 64 pixels/tile = 1920x1920)
         const float TILE_SIZE = 64.0f;
         float worldPixelWidth = cfg.width * TILE_SIZE;
         float worldPixelHeight = cfg.height * TILE_SIZE;
         CollisionManager::Instance().setWorldBounds(0, 0, worldPixelWidth, worldPixelHeight);
 
-        // Rebuild pathfinding grid (async operation - best effort, not critical for basic tests)
-        PathfinderManager::Instance().rebuildGrid();
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); // Give grid a chance to build
+        // Wait for the event-driven grid rebuild. The deferred WorldLoaded event
+        // builds collision statics on the main thread, then StaticCollidersReady
+        // rebuilds the grid; a manual rebuildGrid() here would read collision
+        // storage while the statics are still being built.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline &&
+            !PathfinderManager::Instance().isGridReady()) {
+            PathfinderManager::Instance().update();
+            EventManager::Instance().update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        BOOST_REQUIRE(PathfinderManager::Instance().isGridReady());
 
         // NOTE: Behaviors are auto-registered in AIManager::init() - no manual registration needed
 
@@ -150,8 +177,9 @@ struct BehaviorTestFixture {
             testEntities.push_back(TestNPC::create(i * 100.0f, i * 100.0f));
         }
 
-        // Set a mock player for behaviors that need a target
-        playerEntity = TestNPC::create(500.0f, 500.0f);
+        // Real Player (EntityKind::Player, no faction) for behaviors that need a target
+        playerEntity = std::make_shared<Player>();
+        playerEntity->setPosition(Vector2D(500.0f, 500.0f));
         EntityHandle playerHandle = playerEntity->getHandle();
         AIManager::Instance().setPlayerHandle(playerHandle);
 
@@ -187,17 +215,16 @@ struct BehaviorTestFixture {
     }
 
     std::vector<std::shared_ptr<TestNPC>> testEntities;
-    std::shared_ptr<TestNPC> playerEntity;
+    std::shared_ptr<Player> playerEntity;
 };
 
 // Test Suite 1: Basic Behavior Registration and Assignment
 BOOST_FIXTURE_TEST_SUITE(BehaviorRegistrationTests, BehaviorTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestAllBehaviorsRegistered) {
-    // Test that all 8 behavior types are auto-registered
+    // Test that all 9 behavior types are auto-registered
     std::vector<std::string> expectedBehaviors = {
-        "Idle", "Wander", "Patrol", "Chase", "Flee", "Follow", "Guard", "Attack"
-    };
+        "Idle", "Wander", "Patrol", "Chase", "Flee", "Follow", "Guard", "Attack", "Forage"};
 
     for (const auto& behaviorName : expectedBehaviors) {
         BOOST_CHECK(AIManager::Instance().hasBehavior(behaviorName));
@@ -219,6 +246,1249 @@ BOOST_AUTO_TEST_CASE(TestBehaviorAssignment) {
     // Test unassigning behavior
     AIManager::Instance().unassignBehavior(handle);
     BOOST_CHECK(!AIManager::Instance().hasBehavior(handle));
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+// Survival need (Slice 6): AIManager ticks the need sidecar in the fused batch loop.
+BOOST_FIXTURE_TEST_SUITE(NeedTickTests, BehaviorTestFixture)
+
+BOOST_AUTO_TEST_CASE(NeedPressureAccumulatesPerTick) {
+    auto& edm = EntityDataManager::Instance();
+    constexpr float DT = 0.5f;
+    constexpr int FRAMES = 4;
+
+    const EntityHandle villager =
+        edm.createNPCWithRaceClass(Vector2D(520.0f, 500.0f), "Human", "Villager");
+    BOOST_REQUIRE(villager.isValid());
+    const size_t villagerIdx = edm.getIndex(villager);
+    BOOST_REQUIRE(villagerIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.hasNpcNeed(villagerIdx));
+    // New entries start with a deterministic per-entity stagger below the threshold.
+    const float seeded = edm.getNpcNeedPressure(villagerIdx);
+    BOOST_REQUIRE_GE(seeded, 0.0f);
+    BOOST_REQUIRE_LE(seeded,
+        Behaviors::NEED_PRESSURE_PER_SECOND * Behaviors::NEED_ENTRY_STAGGER_SECONDS);
+    BOOST_REQUIRE_LT(seeded, Behaviors::FORAGE_ENTER_THRESHOLD);
+
+    // Guard-class test NPC: no need entry, never ticks.
+    const size_t guardIdx = edm.getIndex(testEntities[0]->getHandle());
+    BOOST_REQUIRE(guardIdx != SIZE_MAX);
+    BOOST_REQUIRE(!edm.hasNpcNeed(guardIdx));
+
+    const size_t updatesBefore = AIManager::Instance().getBehaviorUpdateCount();
+    for (int i = 0; i < FRAMES; ++i) {
+        updateAI(DT);
+    }
+    BOOST_REQUIRE_GT(AIManager::Instance().getBehaviorUpdateCount(), updatesBefore);
+
+    const float expected = seeded + Behaviors::NEED_PRESSURE_PER_SECOND * DT * FRAMES;
+    BOOST_CHECK_CLOSE(edm.getNpcNeedPressure(villagerIdx), expected, 0.01f);
+    BOOST_CHECK(!edm.hasNpcNeed(guardIdx));
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(guardIdx), 0.0f);
+
+    // Retry cooldown counts down and floors at zero.
+    NpcNeedData* need = edm.npcNeedSidecar().get(static_cast<uint32_t>(villagerIdx));
+    BOOST_REQUIRE(need != nullptr);
+    need->retryCooldown = 0.75f;
+    updateAI(DT);
+    BOOST_CHECK_CLOSE(need->retryCooldown, 0.25f, 0.01f);
+    updateAI(DT);
+    BOOST_CHECK_EQUAL(need->retryCooldown, 0.0f);
+
+    // Pressure clamps at 1.
+    edm.setNpcNeedPressure(villagerIdx, 1.0f - Behaviors::NEED_PRESSURE_PER_SECOND * DT * 0.5f);
+    updateAI(DT);
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(villagerIdx), 1.0f);
+    updateAI(DT);
+    BOOST_CHECK_EQUAL(edm.getNpcNeedPressure(villagerIdx), 1.0f);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+// ============================================================================
+// Forage (Slice 6): need-driven harvesting through the snapshot + commit path.
+// Separate fixture so the existing suites do not pay for WorldResourceManager.
+// ============================================================================
+
+// Brings WorldResourceManager up before the behavior managers (so the test world
+// registers its generated harvestables) and tears it down after them.
+struct WorldResourceScope {
+    WorldResourceScope() { BOOST_REQUIRE(WorldResourceManager::Instance().init()); }
+    ~WorldResourceScope() { WorldResourceManager::Instance().clean(); }
+};
+
+struct ForageTestFixture : WorldResourceScope, BehaviorTestFixture {
+    static constexpr float DT = 0.1f;
+
+    ForageTestFixture() {
+        oreHandle = ResourceTemplateManager::Instance().getHandleById("iron_ore");
+        BOOST_REQUIRE(oreHandle.isValid());
+
+        auto& events = EventManager::Instance();
+        events.registerHandler(EventTypeId::ResourceChange, [this](const EventData& data) {
+            if (auto* e = dynamic_cast<const ResourceChangeEvent*>(data.event.get())) {
+                resourceEvents.push_back({e->getOwnerHandle(), e->getResourceHandle(),
+                    e->getQuantityChange()});
+            }
+        });
+        events.registerHandler(EventTypeId::Scarcity, [this](const EventData& data) {
+            if (auto* e = dynamic_cast<const ScarcityEvent*>(data.event.get())) {
+                scarcityEvents.push_back({e->getAvailableCount(), e->getHarvester()});
+            }
+        });
+    }
+
+    // Destroys the world-generated harvestables (EDM + WRM registry and spatial
+    // index) so a test controls every node the snapshot can contain.
+    void clearGeneratedHarvestables() {
+        auto& edm = EntityDataManager::Instance();
+        auto& wrm = WorldResourceManager::Instance();
+        std::vector<size_t> indices;
+        wrm.copyHarvestableIndices(wrm.getActiveWorld(), indices);
+        for (size_t staticIndex : indices) {
+            const EntityHandle handle = edm.getStaticHandle(staticIndex);
+            if (handle.isValid()) {
+                edm.destroyEntity(handle);
+            }
+        }
+        BOOST_REQUIRE_EQUAL(wrm.getHarvestableCount(wrm.getActiveWorld()), 0u);
+    }
+
+    EntityHandle createNode(const Vector2D& position) {
+        const EntityHandle handle = EntityDataManager::Instance().createHarvestable(
+            position, oreHandle, 1, 1, 30.0f);
+        BOOST_REQUIRE(handle.isValid());
+        return handle;
+    }
+
+    static bool isDepleted(EntityHandle node) {
+        const auto& edm = EntityDataManager::Instance();
+        const size_t index = edm.getIndex(node);
+        BOOST_REQUIRE(index != SIZE_MAX);
+        return edm.getHarvestableData(edm.getStaticHotDataByIndex(index).typeLocalIndex).isDepleted;
+    }
+
+    static size_t indexOf(EntityHandle handle) {
+        const size_t index = EntityDataManager::Instance().getIndex(handle);
+        BOOST_REQUIRE(index != SIZE_MAX);
+        return index;
+    }
+
+    static EntityHandle createCivilian(const Vector2D& position, const std::string& className) {
+        const EntityHandle handle =
+            EntityDataManager::Instance().createNPCWithRaceClass(position, "Human", className);
+        BOOST_REQUIRE(handle.isValid());
+        BOOST_REQUIRE(EntityDataManager::Instance().hasNpcNeed(indexOf(handle)));
+        return handle;
+    }
+
+    static BehaviorType behaviorOf(EntityHandle handle) {
+        return EntityDataManager::Instance().getBehaviorConfigRef(indexOf(handle)).type;
+    }
+
+    static const VoidLight::ForageStateData& forageStateOf(EntityHandle handle) {
+        auto& edm = EntityDataManager::Instance();
+        const auto& ref = edm.getBehaviorConfigRef(indexOf(handle));
+        BOOST_REQUIRE(ref.type == BehaviorType::Forage);
+        return edm.getForageState(ref.index);
+    }
+
+    static NpcNeedData& needOf(EntityHandle handle) {
+        NpcNeedData* need =
+            EntityDataManager::Instance().npcNeedSidecar().get(static_cast<uint32_t>(indexOf(handle)));
+        BOOST_REQUIRE(need != nullptr);
+        return *need;
+    }
+
+    // Pressure just below the threshold: the next tick crosses it (fixed DT).
+    static void seedNeedBelowThreshold(EntityHandle handle) {
+        EntityDataManager::Instance().setNpcNeedPressure(indexOf(handle),
+            Behaviors::FORAGE_ENTER_THRESHOLD - Behaviors::NEED_PRESSURE_PER_SECOND * DT * 0.5f);
+    }
+
+    int oreQuantity(EntityHandle npc) const {
+        const auto& edm = EntityDataManager::Instance();
+        return edm.getInventoryQuantity(edm.getCharacterDataByIndex(indexOf(npc)).inventoryIndex,
+            oreHandle);
+    }
+
+    void step(const Vector2D& referencePoint = Vector2D(500.0f, 500.0f)) {
+        updateAI(DT, referencePoint);
+        EventManager::Instance().update();
+    }
+
+    struct ResourceRecord {
+        EntityHandle owner;
+        VoidLight::ResourceHandle resource;
+        int delta;
+    };
+    struct ScarcityRecord {
+        uint16_t availableCount;
+        EntityHandle harvester;
+    };
+
+    VoidLight::ResourceHandle oreHandle;
+    std::vector<ResourceRecord> resourceEvents;
+    std::vector<ScarcityRecord> scarcityEvents;
+};
+
+BOOST_FIXTURE_TEST_SUITE(ForageBehaviorTests, ForageTestFixture)
+
+BOOST_AUTO_TEST_CASE(NeedThresholdSwitchesIdleAndWanderToForage) {
+    clearGeneratedHarvestables();
+    createNode(Vector2D(700.0f, 600.0f));
+    createNode(Vector2D(500.0f, 800.0f));
+
+    const EntityHandle wanderer = createCivilian(Vector2D(600.0f, 600.0f), "Villager");
+    const EntityHandle idler = createCivilian(Vector2D(640.0f, 640.0f), "Blacksmith");
+    BOOST_REQUIRE(behaviorOf(wanderer) == BehaviorType::Wander);
+    BOOST_REQUIRE(behaviorOf(idler) == BehaviorType::Idle);
+
+    // Patrol with a need entry: excluded from Forage entry (authored waypoints).
+    const EntityHandle patroller = createCivilian(Vector2D(560.0f, 600.0f), "Villager");
+    AIManager::Instance().assignBehavior(patroller, "Patrol");
+    BOOST_REQUIRE(behaviorOf(patroller) == BehaviorType::Patrol);
+    EntityDataManager::Instance().ensureNpcNeed(indexOf(patroller));
+    EntityDataManager::Instance().setNpcNeedPressure(indexOf(patroller), 1.0f);
+
+    seedNeedBelowThreshold(wanderer);
+    seedNeedBelowThreshold(idler);
+
+    step();
+
+    BOOST_CHECK(behaviorOf(wanderer) == BehaviorType::Forage);
+    BOOST_CHECK(behaviorOf(idler) == BehaviorType::Forage);
+    BOOST_CHECK(needOf(wanderer).returnBehavior == BehaviorType::Wander);
+    BOOST_CHECK(needOf(idler).returnBehavior == BehaviorType::Idle);
+
+    for (int i = 0; i < 10; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(patroller) == BehaviorType::Patrol);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(ForageNpcWalksToAndDepletesHarvestable) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const EntityHandle target = createNode(start + Vector2D(96.0f, 0.0f));
+    // Second node keeps the area above the NPC reserve; farther, so not targeted.
+    const EntityHandle reserve = createNode(start + Vector2D(-300.0f, 0.0f));
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    const int oreBefore = oreQuantity(villager);
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+
+    for (int i = 0; i < 200 && !isDepleted(target); ++i) {
+        step();
+    }
+
+    BOOST_CHECK(isDepleted(target));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_GT(oreQuantity(villager), oreBefore);
+    BOOST_CHECK_EQUAL(EntityDataManager::Instance().getNpcNeedPressure(indexOf(villager)), 0.0f);
+    BOOST_CHECK_EQUAL(needOf(villager).failCount, 0u);
+    BOOST_CHECK(behaviorOf(villager) == BehaviorType::Wander);
+
+    const bool sawResourceChange = std::any_of(resourceEvents.begin(), resourceEvents.end(),
+        [&](const ResourceRecord& r) {
+            return r.owner == villager && r.resource == oreHandle && r.delta > 0;
+        });
+    BOOST_CHECK(sawResourceChange);
+}
+
+BOOST_AUTO_TEST_CASE(ForageReachesObstacleTileHarvestable) {
+    auto& edm = EntityDataManager::Instance();
+    auto& wrm = WorldResourceManager::Instance();
+    auto& worldMgr = WorldManager::Instance();
+
+    std::vector<size_t> indices;
+    wrm.copyHarvestableIndices(wrm.getActiveWorld(), indices);
+    BOOST_REQUIRE(!indices.empty());
+    // copyHarvestableIndices order is unspecified; the first-match pick below needs a fixed order.
+    std::sort(indices.begin(), indices.end());
+
+    std::vector<std::pair<EntityHandle, Vector2D>> nodes;
+    for (size_t staticIndex : indices) {
+        nodes.emplace_back(edm.getStaticHandle(staticIndex),
+            edm.getStaticHotDataByIndex(staticIndex).transform.position);
+    }
+
+    // Pick a generated node with (a) another node inside the reserve area and
+    // (b) an open orthogonal neighbour tile where this node is strictly nearest.
+    EntityHandle chosen{};
+    Vector2D spawn{};
+    const float tile = VoidLight::TILE_SIZE;
+    const std::array<Vector2D, 4> offsets = {
+        Vector2D(tile, 0.0f), Vector2D(-tile, 0.0f), Vector2D(0.0f, tile), Vector2D(0.0f, -tile)};
+    for (const auto& [handle, pos] : nodes) {
+        const auto neighbours = std::count_if(nodes.begin(), nodes.end(), [&](const auto& other) {
+            return other.first != handle &&
+                (other.second - pos).length() <= VoidLight::HarvestCommit::SCARCITY_RADIUS;
+        });
+        if (neighbours < 1) {
+            continue;
+        }
+        for (const Vector2D& offset : offsets) {
+            const Vector2D candidate = pos + offset;
+            const int tx = static_cast<int>(candidate.getX() / tile);
+            const int ty = static_cast<int>(candidate.getY() / tile);
+            const auto t = worldMgr.getTileCopyAt(tx, ty);
+            if (!t || t->isWater || t->obstacleType != VoidLight::ObstacleType::NONE ||
+                t->buildingId != 0) {
+                continue;
+            }
+            const bool strictlyNearest = std::none_of(nodes.begin(), nodes.end(), [&](const auto& other) {
+                return other.first != handle && (other.second - candidate).length() <= tile + 0.5f;
+            });
+            if (strictlyNearest) {
+                chosen = handle;
+                spawn = candidate;
+                break;
+            }
+        }
+        if (chosen.isValid()) {
+            break;
+        }
+    }
+    BOOST_REQUIRE_MESSAGE(chosen.isValid(), "No generated harvestable with an open neighbour tile");
+
+    const EntityHandle villager = createCivilian(spawn, "Villager");
+    seedNeedBelowThreshold(villager);
+
+    for (int i = 0; i < 300 && !isDepleted(chosen); ++i) {
+        step(spawn);
+        CollisionManager::Instance().update(DT);
+    }
+
+    BOOST_CHECK(isDepleted(chosen));
+}
+
+BOOST_AUTO_TEST_CASE(ForageCommitRejectsStaleAndDoubleHarvest) {
+    clearGeneratedHarvestables();
+    const Vector2D nodePos(700.0f, 700.0f);
+    const EntityHandle shared = createNode(nodePos);
+    const EntityHandle reserve = createNode(nodePos + Vector2D(0.0f, 400.0f));
+
+    const EntityHandle left = createCivilian(nodePos + Vector2D(-80.0f, 0.0f), "Villager");
+    const EntityHandle right = createCivilian(nodePos + Vector2D(80.0f, 0.0f), "Villager");
+    const int leftBefore = oreQuantity(left);
+    const int rightBefore = oreQuantity(right);
+    seedNeedBelowThreshold(left);
+    seedNeedBelowThreshold(right);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(left) == BehaviorType::Forage);
+    BOOST_REQUIRE(behaviorOf(right) == BehaviorType::Forage);
+
+    for (int i = 0; i < 200 &&
+        (behaviorOf(left) == BehaviorType::Forage || behaviorOf(right) == BehaviorType::Forage);
+        ++i) {
+        step();
+    }
+
+    // Exactly one yield from the shared node; the reserve node survives.
+    BOOST_CHECK(isDepleted(shared));
+    BOOST_CHECK(!isDepleted(reserve));
+    const int gained = (oreQuantity(left) - leftBefore) + (oreQuantity(right) - rightBefore);
+    BOOST_CHECK_EQUAL(gained, 1);
+    const auto harvestEvents = std::count_if(resourceEvents.begin(), resourceEvents.end(),
+        [&](const ResourceRecord& r) { return r.resource == oreHandle && r.delta > 0; });
+    BOOST_CHECK_EQUAL(harvestEvents, 1);
+
+    // The loser was rejected, could not retarget above the reserve, and backed off.
+    const EntityHandle loser = (oreQuantity(left) > leftBefore) ? right : left;
+    BOOST_CHECK(behaviorOf(loser) == BehaviorType::Wander);
+    BOOST_CHECK_GT(needOf(loser).failCount, 0u);
+    BOOST_CHECK_GT(needOf(loser).retryCooldown, 0.0f);
+
+    // Stale identities on the Harvest channel are rejected at commit.
+    const EntityHandle doomed = createNode(nodePos + Vector2D(0.0f, -200.0f));
+    const size_t doomedIndex = indexOf(doomed);
+    EntityDataManager::Instance().destroyEntity(doomed);
+    const size_t loserIndex = indexOf(loser);
+    VoidLight::AICommandBus::Instance().enqueueHarvest(loser, loserIndex, doomed,
+        static_cast<uint32_t>(doomedIndex));
+    EntityHandle staleHarvester = loser;
+    staleHarvester.generation += 1;
+    VoidLight::AICommandBus::Instance().enqueueHarvest(staleHarvester, loserIndex, reserve,
+        static_cast<uint32_t>(indexOf(reserve)));
+    const int loserBefore = oreQuantity(loser);
+    step();
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_EQUAL(oreQuantity(loser), loserBefore);
+}
+
+BOOST_AUTO_TEST_CASE(ForageScarcityReturnsToRole) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    // 450 px apart: each keeps the other as its area reserve, the target is nearest.
+    const EntityHandle target = createNode(start + Vector2D(150.0f, 0.0f));
+    const EntityHandle other = createNode(start + Vector2D(-300.0f, 0.0f));
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+    // Searching (first search staggered by < 0.2 s) -> Moving toward the nearest node
+    for (int i = 0; i < 5 && forageStateOf(villager).phase == VoidLight::ForagePhase::Searching;
+        ++i) {
+        step();
+    }
+    BOOST_REQUIRE(forageStateOf(villager).phase == VoidLight::ForagePhase::Moving);
+    BOOST_REQUIRE(forageStateOf(villager).targetHandle == target);
+
+    // Someone else takes the forager's node; only one node remains in the area.
+    BOOST_REQUIRE(VoidLight::HarvestCommit::commit(target, EntityHandle{}, 0).has_value());
+
+    for (int i = 0; i < 100 && behaviorOf(villager) == BehaviorType::Forage; ++i) {
+        step();
+    }
+
+    BOOST_CHECK(behaviorOf(villager) == BehaviorType::Wander);
+    BOOST_CHECK_GT(needOf(villager).failCount, 0u);
+    BOOST_CHECK_GT(needOf(villager).retryCooldown, 0.0f);
+    BOOST_CHECK(!isDepleted(other));
+}
+
+BOOST_AUTO_TEST_CASE(ForageBackoffBoundsTransitions) {
+    clearGeneratedHarvestables();
+    const EntityHandle villager = createCivilian(Vector2D(600.0f, 600.0f), "Villager");
+    EntityDataManager::Instance().setNpcNeedPressure(indexOf(villager), 1.0f);
+
+    constexpr float BACKOFF_DT = 0.5f;
+    const int frames = static_cast<int>(10.0f * Behaviors::FORAGE_RETRY_COOLDOWN / BACKOFF_DT);
+    std::vector<float> cooldownsAtFailure;
+    uint8_t lastFailCount = needOf(villager).failCount;
+    for (int i = 0; i < frames; ++i) {
+        updateAI(BACKOFF_DT);
+        BOOST_REQUIRE(behaviorOf(villager) != BehaviorType::Forage);
+        const NpcNeedData& need = needOf(villager);
+        if (need.failCount != lastFailCount) {
+            BOOST_REQUIRE_EQUAL(need.failCount, lastFailCount + 1);
+            cooldownsAtFailure.push_back(need.retryCooldown);
+            lastFailCount = need.failCount;
+        }
+    }
+
+    // 150 s: failures at t = 0, 15, 45, 105 -> cooldowns 15, 30, 60, 120.
+    BOOST_REQUIRE_GE(cooldownsAtFailure.size(), 3u);
+    BOOST_CHECK_LE(cooldownsAtFailure.size(), 5u);
+    BOOST_CHECK_CLOSE(cooldownsAtFailure.front(), Behaviors::FORAGE_RETRY_COOLDOWN, 0.01f);
+    for (size_t i = 1; i < cooldownsAtFailure.size(); ++i) {
+        BOOST_CHECK_CLOSE(cooldownsAtFailure[i], cooldownsAtFailure[i - 1] * 2.0f, 0.01f);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(NpcHarvestRespectsAreaReserve) {
+    clearGeneratedHarvestables();
+    const Vector2D nodeA(600.0f, 600.0f);
+    const Vector2D nodeB(800.0f, 600.0f);
+    const EntityHandle a = createNode(nodeA);
+    const EntityHandle b = createNode(nodeB);
+
+    const EntityHandle nearA = createCivilian(nodeA + Vector2D(-60.0f, 0.0f), "Villager");
+    const EntityHandle nearB = createCivilian(nodeB + Vector2D(60.0f, 0.0f), "Villager");
+    seedNeedBelowThreshold(nearA);
+    seedNeedBelowThreshold(nearB);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(nearA) == BehaviorType::Forage);
+    BOOST_REQUIRE(behaviorOf(nearB) == BehaviorType::Forage);
+
+    for (int i = 0; i < 200 &&
+        (behaviorOf(nearA) == BehaviorType::Forage || behaviorOf(nearB) == BehaviorType::Forage);
+        ++i) {
+        step();
+    }
+
+    BOOST_CHECK_EQUAL(static_cast<int>(isDepleted(a)) + static_cast<int>(isDepleted(b)), 1);
+    const EntityHandle winner = isDepleted(a) ? nearA : nearB;
+    BOOST_REQUIRE_EQUAL(scarcityEvents.size(), 1u);
+    BOOST_CHECK_EQUAL(scarcityEvents.front().availableCount, 1u);
+    BOOST_CHECK(scarcityEvents.front().harvester == winner);
+}
+
+BOOST_AUTO_TEST_CASE(ForageDoesNotQueryWrmPerEntityPerFrame) {
+    clearGeneratedHarvestables();
+    // Nodes inside every forager's search radius. The window (10 x 0.1 s) is shorter
+    // than harvestDuration, so no commit (and no HarvestCommit WRM count) happens.
+    createNode(Vector2D(800.0f, 650.0f));
+    createNode(Vector2D(850.0f, 650.0f));
+
+    constexpr int FORAGERS = 16;
+    constexpr int FRAMES = 10;
+    std::vector<EntityHandle> foragers;
+    for (int i = 0; i < FORAGERS; ++i) {
+        const EntityHandle npc = createCivilian(
+            Vector2D(620.0f + static_cast<float>(i % 4) * 20.0f,
+                620.0f + static_cast<float>(i / 4) * 20.0f),
+            "Villager");
+        AIManager::Instance().assignBehavior(npc, "Forage");
+        BOOST_REQUIRE(behaviorOf(npc) == BehaviorType::Forage);
+        foragers.push_back(npc);
+    }
+
+    auto& ai = AIManager::Instance();
+    const uint64_t queriesBefore = WorldResourceManager::Instance().getStats().queryCount.load();
+    const size_t rebuildsBefore = ai.getHarvestableSnapshotRebuildCount();
+    const size_t updatesBefore = ai.getBehaviorUpdateCount();
+
+    for (int i = 0; i < FRAMES; ++i) {
+        step();
+    }
+
+    const uint64_t queriesAfter = WorldResourceManager::Instance().getStats().queryCount.load();
+    BOOST_CHECK_LE(queriesAfter - queriesBefore, 1u);
+    BOOST_CHECK_LE(ai.getHarvestableSnapshotRebuildCount() - rebuildsBefore, 1u);
+    BOOST_CHECK_GE(ai.getBehaviorUpdateCount() - updatesBefore,
+        static_cast<size_t>(FORAGERS * FRAMES));
+    for (const EntityHandle npc : foragers) {
+        BOOST_CHECK(behaviorOf(npc) == BehaviorType::Forage);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(ForageSkipsNodesWithoutAreaReserve) {
+    clearGeneratedHarvestables();
+    // Two isolated nodes 530 px apart: each sees the other from the NPC's side,
+    // but neither has another node within SCARCITY_RADIUS of itself, so the
+    // commit would reject both. Candidates must be filtered by the same rule.
+    const Vector2D nodeA(600.0f, 600.0f);
+    const Vector2D nodeB(1130.0f, 600.0f);
+    const EntityHandle a = createNode(nodeA);
+    const EntityHandle b = createNode(nodeB);
+    BOOST_REQUIRE_GT((nodeB - nodeA).length(), VoidLight::HarvestCommit::SCARCITY_RADIUS);
+
+    // Need-driven civilian beside A (B is within its search radius): never enters Forage.
+    const EntityHandle civilian = createCivilian(nodeA + Vector2D(40.0f, 0.0f), "Villager");
+    seedNeedBelowThreshold(civilian);
+    // Directly assigned forager beside B: backs off and returns to its role.
+    const EntityHandle forager = createCivilian(nodeB + Vector2D(-40.0f, 0.0f), "Villager");
+    AIManager::Instance().assignBehavior(forager, "Forage");
+    BOOST_REQUIRE(behaviorOf(forager) == BehaviorType::Forage);
+    const BehaviorType forageReturn = needOf(forager).returnBehavior;
+
+    for (int i = 0; i < 20; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(civilian) != BehaviorType::Forage);
+    }
+
+    BOOST_CHECK(behaviorOf(forager) == forageReturn);
+    BOOST_CHECK_GT(needOf(forager).failCount, 0u);
+    BOOST_CHECK_GT(needOf(forager).retryCooldown, 0.0f);
+    BOOST_CHECK_GT(needOf(civilian).failCount, 0u);
+    BOOST_CHECK(!isDepleted(a));
+    BOOST_CHECK(!isDepleted(b));
+}
+
+BOOST_AUTO_TEST_CASE(ForageRejectedCommitsAreBounded) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const std::array<EntityHandle, 3> nodes = {createNode(start + Vector2D(96.0f, 0.0f)),
+        createNode(start + Vector2D(0.0f, 96.0f)), createNode(start + Vector2D(-96.0f, 0.0f))};
+
+    // A harvester without an inventory: every commit it enqueues is rejected on
+    // the main thread, so each harvest attempt fails.
+    const EntityHandle villager = createCivilian(start, "Villager");
+    {
+        auto& edm = EntityDataManager::Instance();
+        auto& charData = edm.getCharacterDataByIndex(indexOf(villager));
+        BOOST_REQUIRE(charData.inventoryIndex != INVALID_INVENTORY_INDEX);
+        edm.destroyInventory(charData.inventoryIndex);
+        charData.inventoryIndex = INVALID_INVENTORY_INDEX;
+    }
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+
+    uint8_t maxAttempts = 0;
+    int frames = 0;
+    for (; frames < 600 && behaviorOf(villager) == BehaviorType::Forage; ++frames) {
+        maxAttempts = std::max(maxAttempts, forageStateOf(villager).failedAttempts);
+        step();
+    }
+
+    // Bounded: the forager gives up after FORAGE_MAX_FAILED_ATTEMPTS rejections
+    // instead of alternating between nodes forever.
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Wander);
+    BOOST_CHECK_EQUAL(maxAttempts, Behaviors::FORAGE_MAX_FAILED_ATTEMPTS - 1);
+    BOOST_CHECK_GT(needOf(villager).failCount, 0u);
+    BOOST_CHECK_GT(needOf(villager).retryCooldown, 0.0f);
+    for (const EntityHandle node : nodes) {
+        BOOST_CHECK(!isDepleted(node));
+    }
+    BOOST_CHECK(resourceEvents.empty());
+}
+
+BOOST_AUTO_TEST_CASE(PlayerHarvestOfForagerTargetForcesRetarget) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const EntityHandle contested = createNode(start + Vector2D(96.0f, 0.0f));
+    const EntityHandle fallback = createNode(start + Vector2D(-150.0f, 0.0f));
+    const EntityHandle reserve = createNode(start + Vector2D(-300.0f, 0.0f));
+
+    std::vector<int> harvestedIds;
+    EventManager::Instance().registerHandler(EventTypeId::Harvest,
+        [&harvestedIds](const EventData& data) {
+            if (auto* e = dynamic_cast<const HarvestResourceEvent*>(data.event.get())) {
+                harvestedIds.push_back(e->getEntityId());
+            }
+        });
+
+    auto player = std::make_shared<Player>();
+    player->initializeInventory();
+    BOOST_REQUIRE(player->getInventoryIndex() != INVALID_INVENTORY_INDEX);
+    // Beside the contested node, on the far side from the forager.
+    player->setPosition(start + Vector2D(126.0f, 0.0f));
+    HarvestController controller(player);
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    const int villagerOreBefore = oreQuantity(villager);
+    seedNeedBelowThreshold(villager);
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+    for (int i = 0; i < 100 && forageStateOf(villager).phase != VoidLight::ForagePhase::Harvesting;
+        ++i) {
+        step();
+    }
+    BOOST_REQUIRE(forageStateOf(villager).phase == VoidLight::ForagePhase::Harvesting);
+    BOOST_REQUIRE(forageStateOf(villager).targetHandle == contested);
+
+    // The player completes the contested node before the forager's timer ends.
+    BOOST_REQUIRE(controller.startHarvest());
+    for (int i = 0; i < 200 && controller.isHarvesting(); ++i) {
+        controller.update(DT);
+    }
+    BOOST_REQUIRE(isDepleted(contested));
+    const int playerOre = EntityDataManager::Instance().getInventoryQuantity(
+        player->getInventoryIndex(), oreHandle);
+    BOOST_CHECK_GT(playerOre, 0);
+
+    // Next snapshot drops the node: the forager retargets without a yield.
+    step();
+    BOOST_CHECK(behaviorOf(villager) != BehaviorType::Forage ||
+        forageStateOf(villager).targetHandle != contested);
+    BOOST_CHECK_EQUAL(oreQuantity(villager), villagerOreBefore);
+
+    for (int i = 0; i < 300 && behaviorOf(villager) == BehaviorType::Forage; ++i) {
+        step();
+    }
+
+    // The forager recovers on the fallback node; the reserve node survives.
+    BOOST_CHECK(behaviorOf(villager) == BehaviorType::Wander);
+    BOOST_CHECK(isDepleted(fallback));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_EQUAL(std::count(harvestedIds.begin(), harvestedIds.end(),
+                          static_cast<int>(contested.getId())),
+        1);
+    const auto villagerGains = std::count_if(resourceEvents.begin(), resourceEvents.end(),
+        [&](const ResourceRecord& r) { return r.owner == villager && r.delta > 0; });
+    BOOST_CHECK_EQUAL(villagerGains, 1);
+    const auto playerGains = std::count_if(resourceEvents.begin(), resourceEvents.end(),
+        [&](const ResourceRecord& r) { return r.owner == player->getHandle() && r.delta > 0; });
+    BOOST_CHECK_EQUAL(playerGains, 1);
+    BOOST_CHECK_EQUAL(EntityDataManager::Instance().getInventoryQuantity(
+                          player->getInventoryIndex(), oreHandle),
+        playerOre);
+}
+
+// Grid-boundary coverage for the Forage reserve rule. The snapshot grid origin
+// is the min corner of the available nodes and cells are CELL_SIZE (= the
+// HarvestCommit SCARCITY_RADIUS) wide, so every placement below is computed
+// from that rule and the expected cell of each node is asserted up front.
+BOOST_AUTO_TEST_CASE(ForageReserveCountsNeighbourInDiagonalCell) {
+    clearGeneratedHarvestables();
+    constexpr float CELL = HarvestableSnapshotView::CELL_SIZE;
+    constexpr float RADIUS = VoidLight::HarvestCommit::SCARCITY_RADIUS;
+    // Isolated node defining the grid min corner: no node within RADIUS of it.
+    const Vector2D origin(200.0f, 200.0f);
+    const Vector2D corner = origin + Vector2D(CELL, CELL);
+    const Vector2D targetPos = corner - Vector2D(12.0f, 12.0f);
+    const Vector2D neighbourPos = corner + Vector2D(188.0f, 188.0f);
+    const auto cellOf = [&origin](const Vector2D& p) {
+        return std::pair{static_cast<int>((p.getX() - origin.getX()) / CELL),
+            static_cast<int>((p.getY() - origin.getY()) / CELL)};
+    };
+    BOOST_REQUIRE(cellOf(targetPos) == std::pair(0, 0));
+    BOOST_REQUIRE(cellOf(neighbourPos) == std::pair(1, 1));
+    BOOST_REQUIRE_LE((neighbourPos - targetPos).length(), RADIUS);
+    BOOST_REQUIRE_GT((targetPos - origin).length(), RADIUS);
+    BOOST_REQUIRE_GT((neighbourPos - origin).length(), RADIUS);
+
+    const EntityHandle originNode = createNode(origin);
+    const EntityHandle target = createNode(targetPos);
+    const EntityHandle neighbour = createNode(neighbourPos);
+
+    // Inside HARVEST_RANGE of the target, on the side away from the neighbour.
+    const Vector2D start = targetPos - Vector2D(20.0f, 20.0f);
+    BOOST_REQUIRE_GT((start - origin).length(), RADIUS);
+    const EntityHandle villager = createCivilian(start, "Villager");
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+
+    for (int i = 0; i < 200 && !isDepleted(target); ++i) {
+        step();
+    }
+
+    BOOST_CHECK(isDepleted(target));
+    BOOST_CHECK(!isDepleted(neighbour));
+    BOOST_CHECK(!isDepleted(originNode));
+    BOOST_CHECK_EQUAL(needOf(villager).failCount, 0u);
+}
+
+BOOST_AUTO_TEST_CASE(ForageReserveIgnoresNeighbourJustOutsideRadiusAcrossCell) {
+    clearGeneratedHarvestables();
+    constexpr float CELL = HarvestableSnapshotView::CELL_SIZE;
+    constexpr float RADIUS = VoidLight::HarvestCommit::SCARCITY_RADIUS;
+    const Vector2D origin(200.0f, 200.0f);
+    const Vector2D corner = origin + Vector2D(CELL, CELL);
+    const Vector2D targetPos = corner - Vector2D(12.0f, 12.0f);
+    // ~513 px diagonal: across the cell boundary, just outside the reserve radius.
+    const Vector2D neighbourPos = targetPos + Vector2D(363.0f, 363.0f);
+    const auto cellOf = [&origin](const Vector2D& p) {
+        return std::pair{static_cast<int>((p.getX() - origin.getX()) / CELL),
+            static_cast<int>((p.getY() - origin.getY()) / CELL)};
+    };
+    BOOST_REQUIRE(cellOf(targetPos) == std::pair(0, 0));
+    BOOST_REQUIRE(cellOf(neighbourPos) == std::pair(1, 1));
+    BOOST_REQUIRE_GT((neighbourPos - targetPos).length(), RADIUS);
+    BOOST_REQUIRE_LT((neighbourPos - targetPos).length(), RADIUS + 2.0f);
+    BOOST_REQUIRE_GT((targetPos - origin).length(), RADIUS);
+
+    const EntityHandle originNode = createNode(origin);
+    const EntityHandle target = createNode(targetPos);
+    const EntityHandle neighbour = createNode(neighbourPos);
+
+    const Vector2D start = targetPos - Vector2D(20.0f, 20.0f);
+    BOOST_REQUIRE_GT((start - origin).length(), RADIUS);
+    const EntityHandle villager = createCivilian(start, "Villager");
+    seedNeedBelowThreshold(villager);
+
+    for (int i = 0; i < 20; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(villager) != BehaviorType::Forage);
+    }
+
+    BOOST_CHECK_GT(needOf(villager).failCount, 0u);
+    BOOST_CHECK_GT(needOf(villager).retryCooldown, 0.0f);
+    BOOST_CHECK(!isDepleted(target));
+    BOOST_CHECK(!isDepleted(neighbour));
+    BOOST_CHECK(!isDepleted(originNode));
+}
+
+BOOST_AUTO_TEST_CASE(ForageKeepsTargetWhenGridOriginMoves) {
+    clearGeneratedHarvestables();
+    constexpr float CELL = HarvestableSnapshotView::CELL_SIZE;
+    constexpr float RADIUS = VoidLight::HarvestCommit::SCARCITY_RADIUS;
+    const Vector2D origin(200.0f, 200.0f);
+    const Vector2D targetPos(800.0f, 760.0f);
+    const Vector2D reservePos(1000.0f, 760.0f);
+    const Vector2D start(600.0f, 760.0f);
+    // The target's cell changes when the origin node leaves the snapshot: the
+    // min corner moves from `origin` to targetPos.
+    BOOST_REQUIRE_GT(static_cast<int>((targetPos.getX() - origin.getX()) / CELL), 0);
+    BOOST_REQUIRE_GT(static_cast<int>((targetPos.getY() - origin.getY()) / CELL), 0);
+    BOOST_REQUIRE_LE((reservePos - targetPos).length(), RADIUS);
+    BOOST_REQUIRE_GT((targetPos - origin).length(), RADIUS);
+    BOOST_REQUIRE_GT((start - origin).length(), RADIUS);
+    BOOST_REQUIRE_GT((targetPos - start).length(), VoidLight::HarvestCommit::HARVEST_RANGE);
+
+    const EntityHandle originNode = createNode(origin);
+    const EntityHandle target = createNode(targetPos);
+    const EntityHandle reserve = createNode(reservePos);
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+    for (int i = 0; i < 5 && forageStateOf(villager).phase == VoidLight::ForagePhase::Searching;
+        ++i) {
+        step();
+    }
+    BOOST_REQUIRE(forageStateOf(villager).phase == VoidLight::ForagePhase::Moving);
+    BOOST_REQUIRE(forageStateOf(villager).targetHandle == target);
+
+    auto& ai = AIManager::Instance();
+    const size_t rebuilds = ai.getHarvestableSnapshotRebuildCount();
+    BOOST_REQUIRE(VoidLight::HarvestCommit::commit(originNode, EntityHandle{}, 0).has_value());
+    step();
+    BOOST_REQUIRE_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds + 1);
+
+    // Rebuilt grid: the target is still found in its new cell, so no retarget.
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+    BOOST_CHECK(forageStateOf(villager).phase != VoidLight::ForagePhase::Searching);
+    BOOST_CHECK(forageStateOf(villager).targetHandle == target);
+    BOOST_CHECK_EQUAL(forageStateOf(villager).failedAttempts, 0u);
+
+    for (int i = 0; i < 300 && !isDepleted(target); ++i) {
+        step();
+    }
+
+    BOOST_CHECK(isDepleted(target));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK(behaviorOf(villager) == BehaviorType::Wander);
+    BOOST_CHECK_EQUAL(needOf(villager).failCount, 0u);
+}
+
+BOOST_AUTO_TEST_CASE(SnapshotRebuildsAfterDepletion) {
+    clearGeneratedHarvestables();
+    const EntityHandle a = createNode(Vector2D(600.0f, 600.0f));
+    const EntityHandle b = createNode(Vector2D(700.0f, 600.0f));
+
+    auto& ai = AIManager::Instance();
+    auto contains = [&ai](EntityHandle handle) {
+        const auto snapshot = ai.getHarvestableSnapshot();
+        return std::any_of(snapshot.begin(), snapshot.end(),
+            [handle](const HarvestableSnapshotEntry& e) { return e.handle == handle; });
+    };
+
+    step();
+    BOOST_REQUIRE(contains(a));
+    BOOST_REQUIRE(contains(b));
+    const size_t rebuilds = ai.getHarvestableSnapshotRebuildCount();
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds);
+
+    BOOST_REQUIRE(VoidLight::HarvestCommit::commit(a, EntityHandle{}, 0).has_value());
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds + 1);
+    BOOST_CHECK(!contains(a));
+    BOOST_CHECK(contains(b));
+    step();
+    BOOST_CHECK_EQUAL(ai.getHarvestableSnapshotRebuildCount(), rebuilds + 1);
+}
+
+// ----------------------------------------------------------------------------
+// Slice 6R WP4: full-inventory pre-check, arbitration, merchant leash, and the
+// Forage gaps (engage, damage, environment speed, detection scale).
+// ----------------------------------------------------------------------------
+
+namespace {
+
+bool samePosition(const Vector2D& a, const Vector2D& b) {
+    return a.getX() == b.getX() && a.getY() == b.getY();
+}
+
+// Fills the NPC's inventory with ore until not even one more unit fits.
+void fillInventoryWithOre(EntityHandle npc, VoidLight::ResourceHandle ore) {
+    auto& edm = EntityDataManager::Instance();
+    const uint32_t inventory =
+        edm.getCharacterDataByIndex(edm.getIndex(npc)).inventoryIndex;
+    BOOST_REQUIRE(inventory != INVALID_INVENTORY_INDEX);
+    for (int chunk = 4096; chunk > 0; chunk /= 2) {
+        while (edm.canAddToInventory(inventory, ore, chunk)) {
+            BOOST_REQUIRE(edm.addToInventory(inventory, ore, chunk));
+        }
+    }
+    BOOST_REQUIRE(!edm.canAddToInventory(inventory, ore, 1));
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(ForageFullInventoryDoesNotDepleteNode) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const EntityHandle target = createNode(start + Vector2D(96.0f, 0.0f));
+    const EntityHandle reserve = createNode(start + Vector2D(-300.0f, 0.0f));
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    fillInventoryWithOre(villager, oreHandle);
+    const int oreBefore = oreQuantity(villager);
+    seedNeedBelowThreshold(villager);
+
+    step();
+    BOOST_REQUIRE(behaviorOf(villager) == BehaviorType::Forage);
+
+    // The forager reaches the node and enqueues its harvest; the main-thread
+    // commit rejects it on capacity before HarvestCommit depletes anything.
+    bool sawHarvesting = false;
+    for (int i = 0; i < 300 && behaviorOf(villager) == BehaviorType::Forage; ++i) {
+        sawHarvesting = sawHarvesting ||
+            forageStateOf(villager).phase == VoidLight::ForagePhase::Harvesting;
+        step();
+    }
+
+    BOOST_REQUIRE(sawHarvesting);
+    BOOST_CHECK(behaviorOf(villager) == BehaviorType::Wander);
+    BOOST_CHECK(!isDepleted(target));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_EQUAL(oreQuantity(villager), oreBefore);
+    BOOST_CHECK(std::none_of(resourceEvents.begin(), resourceEvents.end(),
+        [&](const ResourceRecord& r) { return r.owner == villager; }));
+
+    // Abandon: backoff jumps to the cap, pressure is not reset.
+    const NpcNeedData& need = needOf(villager);
+    const float cappedCooldown = Behaviors::FORAGE_RETRY_COOLDOWN *
+        static_cast<float>(1u << Behaviors::FORAGE_MAX_BACKOFF_SHIFT);
+    BOOST_CHECK_GT(need.retryCooldown, cappedCooldown - 1.0f);
+    BOOST_CHECK_LE(need.retryCooldown, cappedCooldown);
+    BOOST_CHECK_GT(need.failCount, 0u);
+    BOOST_CHECK_GE(need.pressure, Behaviors::FORAGE_ENTER_THRESHOLD);
+}
+
+BOOST_AUTO_TEST_CASE(HarvestArbitrationPrefersLowestHarvesterIndex) {
+    clearGeneratedHarvestables();
+    const Vector2D nodePos(700.0f, 700.0f);
+    const EntityHandle node = createNode(nodePos);
+    const EntityHandle reserve = createNode(nodePos + Vector2D(0.0f, 400.0f));
+
+    const EntityHandle first = createCivilian(nodePos + Vector2D(-20.0f, 0.0f), "Villager");
+    const EntityHandle second = createCivilian(nodePos + Vector2D(20.0f, 0.0f), "Villager");
+    const bool firstIsLower = indexOf(first) < indexOf(second);
+    const EntityHandle low = firstIsLower ? first : second;
+    const EntityHandle high = firstIsLower ? second : first;
+    const int lowBefore = oreQuantity(low);
+    const int highBefore = oreQuantity(high);
+
+    // Enqueue order is the reverse of the expected winner.
+    auto& bus = VoidLight::AICommandBus::Instance();
+    const auto nodeIndex = static_cast<uint32_t>(indexOf(node));
+    bus.enqueueHarvest(high, indexOf(high), node, nodeIndex);
+    bus.enqueueHarvest(low, indexOf(low), node, nodeIndex);
+    step();
+
+    BOOST_CHECK(isDepleted(node));
+    BOOST_CHECK(!isDepleted(reserve));
+    BOOST_CHECK_EQUAL(oreQuantity(low), lowBefore + 1);
+    BOOST_CHECK_EQUAL(oreQuantity(high), highBefore);
+}
+
+BOOST_AUTO_TEST_CASE(MerchantForageStaysWithinLeash) {
+    clearGeneratedHarvestables();
+    constexpr float LEASH = Behaviors::MERCHANT_FORAGE_LEASH_RADIUS;
+    const Vector2D home(300.0f, 600.0f);
+    const EntityHandle merchant = createCivilian(home, "Blacksmith");
+    BOOST_REQUIRE(EntityDataManager::Instance().getCharacterDataByIndex(indexOf(merchant)).isMerchant());
+    BOOST_REQUIRE(behaviorOf(merchant) == BehaviorType::Idle);
+    BOOST_REQUIRE_EQUAL(needOf(merchant).leashRadius, LEASH);
+    BOOST_REQUIRE(samePosition(needOf(merchant).home, home));
+
+    // The merchant stands near the leash edge; the nearest nodes lie outside it.
+    const Vector2D standPos = home + Vector2D(370.0f, 0.0f);
+    EntityDataManager::Instance().getTransformByIndex(indexOf(merchant)).position = standPos;
+    const EntityHandle outside = createNode(home + Vector2D(400.0f, 0.0f));
+    const EntityHandle outsideReserve = createNode(home + Vector2D(480.0f, 120.0f));
+    BOOST_REQUIRE_GT((home + Vector2D(480.0f, 120.0f) - home).length(), LEASH);
+
+    // Entry pre-check: nothing inside the leash, so the merchant backs off in Idle.
+    seedNeedBelowThreshold(merchant);
+    for (int i = 0; i < 10; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(merchant) != BehaviorType::Forage);
+    }
+    BOOST_CHECK_GT(needOf(merchant).failCount, 0u);
+    BOOST_CHECK_GT(needOf(merchant).retryCooldown, 0.0f);
+
+    // A node inside the leash, farther than the outside node: Searching must pick it.
+    const Vector2D insidePos = home + Vector2D(300.0f, 0.0f);
+    BOOST_REQUIRE_GT((insidePos - standPos).length(),
+        (home + Vector2D(400.0f, 0.0f) - standPos).length());
+    const EntityHandle inside = createNode(insidePos);
+    needOf(merchant).retryCooldown = 0.0f;
+    step();
+    BOOST_REQUIRE(behaviorOf(merchant) == BehaviorType::Forage);
+
+    for (int i = 0; i < 300 && behaviorOf(merchant) == BehaviorType::Forage; ++i) {
+        const auto& state = forageStateOf(merchant);
+        if (state.phase != VoidLight::ForagePhase::Searching) {
+            BOOST_REQUIRE(state.targetHandle == inside);
+        }
+        step();
+    }
+
+    BOOST_CHECK(behaviorOf(merchant) == BehaviorType::Idle);
+    BOOST_CHECK(isDepleted(inside));
+    BOOST_CHECK(!isDepleted(outside));
+    BOOST_CHECK(!isDepleted(outsideReserve));
+    BOOST_CHECK(samePosition(needOf(merchant).home, home));
+}
+
+namespace {
+
+// Brings a Villager (faction 1) into the given Forage phase with a hostile
+// faction-2 NPC placed later by the caller. Noon: detection scale 1.
+struct EngageSetup {
+    EntityHandle forager;
+    EntityHandle target;
+    EntityHandle reserve;
+};
+
+EngageSetup startForagerInPhase(ForageTestFixture& fixture, VoidLight::ForagePhase phase) {
+    GameTimeManager::Instance().setGameHour(12.0f);
+    fixture.clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    EngageSetup setup;
+    setup.target = fixture.createNode(start + Vector2D(150.0f, 0.0f));
+    setup.reserve = fixture.createNode(start + Vector2D(-300.0f, 0.0f));
+    setup.forager = ForageTestFixture::createCivilian(start, "Villager");
+    EntityDataManager::Instance().setFaction(setup.forager, 1);
+    AIManager::Instance().setStance(1, 2, FactionStance::Hostile);
+    ForageTestFixture::seedNeedBelowThreshold(setup.forager);
+
+    fixture.step();
+    BOOST_REQUIRE(ForageTestFixture::behaviorOf(setup.forager) == BehaviorType::Forage);
+    for (int i = 0; i < 200 && ForageTestFixture::forageStateOf(setup.forager).phase != phase;
+        ++i) {
+        fixture.step();
+    }
+    BOOST_REQUIRE(ForageTestFixture::forageStateOf(setup.forager).phase == phase);
+    return setup;
+}
+
+std::shared_ptr<TestNPC> spawnHostileNear(EntityHandle forager, const Vector2D& offset) {
+    auto& edm = EntityDataManager::Instance();
+    const Vector2D pos = edm.getTransformByIndex(edm.getIndex(forager)).position + offset;
+    auto hostile = TestNPC::create(pos.getX(), pos.getY());
+    edm.setFaction(hostile->getHandle(), 2);
+    return hostile;
+}
+
+void checkEngagedWithoutHarvest(ForageTestFixture& fixture, const EngageSetup& setup,
+    EntityHandle hostile, int oreBefore) {
+    auto& edm = EntityDataManager::Instance();
+    const size_t foragerIdx = ForageTestFixture::indexOf(setup.forager);
+    for (int i = 0; i < 3 && ForageTestFixture::behaviorOf(setup.forager) == BehaviorType::Forage;
+        ++i) {
+        fixture.step();
+    }
+    BOOST_REQUIRE(ForageTestFixture::behaviorOf(setup.forager) == BehaviorType::Attack);
+    BOOST_CHECK(edm.getMemoryData(foragerIdx).lastTarget == hostile);
+
+    // Longer than harvestDuration: an unbroken episode would have committed.
+    for (int i = 0; i < 30; ++i) {
+        fixture.step();
+    }
+    BOOST_CHECK(!ForageTestFixture::isDepleted(setup.target));
+    BOOST_CHECK(!ForageTestFixture::isDepleted(setup.reserve));
+    BOOST_CHECK_EQUAL(fixture.oreQuantity(setup.forager), oreBefore);
+    BOOST_CHECK(ForageTestFixture::needOf(setup.forager).pressure >=
+        Behaviors::FORAGE_ENTER_THRESHOLD);
+}
+
+} // namespace
+
+BOOST_AUTO_TEST_CASE(ForageEngagesHostileWhileMovingWithoutCommitting) {
+    const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Moving);
+    const int oreBefore = oreQuantity(setup.forager);
+    const auto hostile = spawnHostileNear(setup.forager, Vector2D(0.0f, 100.0f));
+    checkEngagedWithoutHarvest(*this, setup, hostile->getHandle(), oreBefore);
+}
+
+BOOST_AUTO_TEST_CASE(ForageEngagesHostileWhileHarvestingWithoutCommitting) {
+    const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Harvesting);
+    BOOST_REQUIRE_LT(forageStateOf(setup.forager).harvestTimer,
+        VoidLight::ForageBehaviorConfig{}.harvestDuration - 3.0f * DT);
+    const int oreBefore = oreQuantity(setup.forager);
+    const auto hostile = spawnHostileNear(setup.forager, Vector2D(0.0f, 100.0f));
+    checkEngagedWithoutHarvest(*this, setup, hostile->getHandle(), oreBefore);
+}
+
+BOOST_AUTO_TEST_CASE(ForageDamageMidEpisodeKeepsNeedEntry) {
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const EntityHandle target = createNode(start + Vector2D(150.0f, 0.0f));
+    createNode(start + Vector2D(-300.0f, 0.0f));
+
+    // Farmer: merchant Wander civilian, so the need entry carries a leash anchor.
+    const EntityHandle farmer = createCivilian(start, "Farmer");
+    BOOST_REQUIRE_EQUAL(needOf(farmer).leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+    seedNeedBelowThreshold(farmer);
+    step();
+    BOOST_REQUIRE(behaviorOf(farmer) == BehaviorType::Forage);
+    for (int i = 0; i < 50 && forageStateOf(farmer).phase != VoidLight::ForagePhase::Moving; ++i) {
+        step();
+    }
+    BOOST_REQUIRE(forageStateOf(farmer).phase == VoidLight::ForagePhase::Moving);
+    const float pressureBefore = needOf(farmer).pressure;
+
+    // A real hit through the combat event path records lastAttacker/lastCombatTime.
+    auto attacker = TestNPC::create(start.getX(), start.getY() + 60.0f);
+    auto damage = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, attacker->getHandle(), farmer, 1.0f);
+    EventManager::Instance().dispatchEvent(damage, EventManager::DispatchMode::Immediate);
+    BOOST_REQUIRE(EntityDataManager::Instance().getMemoryData(indexOf(farmer)).lastAttacker ==
+        attacker->getHandle());
+    step();
+
+    const BehaviorType response = behaviorOf(farmer);
+    BOOST_REQUIRE(response == BehaviorType::Chase || response == BehaviorType::Flee);
+    BOOST_REQUIRE(EntityDataManager::Instance().hasNpcNeed(indexOf(farmer)));
+    const NpcNeedData& need = needOf(farmer);
+    BOOST_CHECK(samePosition(need.home, start));
+    BOOST_CHECK_EQUAL(need.leashRadius, Behaviors::MERCHANT_FORAGE_LEASH_RADIUS);
+    BOOST_CHECK(need.returnBehavior == BehaviorType::Wander);
+    BOOST_CHECK_GE(need.pressure, pressureBefore);
+    BOOST_CHECK(!isDepleted(target));
+}
+
+BOOST_AUTO_TEST_CASE(ForageMoveSpeedScalesWithEnvironment) {
+    auto& edm = EntityDataManager::Instance();
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const Vector2D targetPos = start + Vector2D(200.0f, 0.0f);
+    const EntityHandle target = createNode(targetPos);
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    AIManager::Instance().assignBehavior(villager, "Forage");
+    const size_t idx = indexOf(villager);
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Forage);
+    const VoidLight::ForageBehaviorConfig config = edm.getForageConfig(ref.index);
+    auto& state = edm.getForageState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    BOOST_REQUIRE(edm.getBehaviorData(idx).moveSpeed > 0.0f);
+
+    const std::array<HarvestableSnapshotEntry, 1> entries = {
+        HarvestableSnapshotEntry{targetPos, target, static_cast<uint32_t>(indexOf(target))}};
+    const std::array<uint32_t, 2> cellStarts = {0, 1};
+    HarvestableSnapshotView view;
+    view.entries = entries;
+    view.cellStarts = cellStarts;
+    view.origin = targetPos;
+    view.cols = 1;
+    view.rows = 1;
+
+    auto runMoving = [&](const EnvironmentSnapshot& env) {
+        state.phase = VoidLight::ForagePhase::Moving;
+        state.targetHandle = target;
+        state.targetStaticIndex = entries[0].staticIndex;
+        state.targetPos = targetPos;
+        state.lastTargetDistance = 1.0e6f;
+        hotData.transform.position = start;
+        hotData.transform.velocity = Vector2D(0, 0);
+        BehaviorContext ctx(hotData.transform, hotData, villager.getId(), idx, DT,
+            EntityHandle{}, Vector2D(0, 0), Vector2D(0, 0), false, edm.getBehaviorData(idx),
+            nullptr, memoryData, edm.getCharacterDataByIndex(idx), 0.0f, 0.0f, 1280.0f,
+            1280.0f, true, 0.0f, kNeutralFactionStanceRow, false, false,
+            edm.knockbackSidecar(), edm.npcNeedSidecar(), env, view);
+        Behaviors::executeForage(ctx, config, state);
+        BOOST_REQUIRE(state.phase == VoidLight::ForagePhase::Moving);
+        return hotData.transform.velocity.length();
+    };
+
+    const float clearSpeed = runMoving(EnvironmentSnapshot{});
+    EnvironmentSnapshot storm{};
+    storm.moveSpeedScale = 0.75f;
+    const float stormSpeed = runMoving(storm);
+
+    BOOST_CHECK_GT(clearSpeed, 0.0f);
+    BOOST_CHECK_CLOSE(stormSpeed, clearSpeed * 0.75f, 1.0);
+}
+
+// A nav path that detours around obstacles first leads away from the node. Stall
+// detection measures progress toward the current waypoint, so following the
+// detour is not a stall, while a forager stuck on its path still fails the attempt.
+BOOST_AUTO_TEST_CASE(ForageDetourPathIsNotAStall) {
+    auto& edm = EntityDataManager::Instance();
+    clearGeneratedHarvestables();
+    const Vector2D start(600.0f, 600.0f);
+    const Vector2D targetPos = start + Vector2D(-200.0f, 0.0f);
+    const EntityHandle target = createNode(targetPos);
+
+    const EntityHandle villager = createCivilian(start, "Villager");
+    AIManager::Instance().assignBehavior(villager, "Forage");
+    const size_t idx = indexOf(villager);
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Forage);
+    const VoidLight::ForageBehaviorConfig config = edm.getForageConfig(ref.index);
+    auto& state = edm.getForageState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    BOOST_REQUIRE(edm.hasPathData(idx));
+    auto& pathData = edm.getPathData(idx);
+    BOOST_REQUIRE(edm.getBehaviorData(idx).moveSpeed > 0.0f);
+
+    const std::array<HarvestableSnapshotEntry, 1> entries = {
+        HarvestableSnapshotEntry{targetPos, target, static_cast<uint32_t>(indexOf(target))}};
+    const std::array<uint32_t, 2> cellStarts = {0, 1};
+    HarvestableSnapshotView view;
+    view.entries = entries;
+    view.cellStarts = cellStarts;
+    view.origin = targetPos;
+    view.cols = 1;
+    view.rows = 1;
+
+    // The first leg heads away from the node and is longer than the frames run.
+    const Vector2D detour = start + Vector2D(0.0f, 600.0f);
+    // 3 s: past the 2 s Forage stall window.
+    constexpr int FRAMES = 30;
+    const EnvironmentSnapshot env{};
+
+    auto runDetour = [&](bool moves) {
+        state.phase = VoidLight::ForagePhase::Moving;
+        state.targetHandle = target;
+        state.targetStaticIndex = entries[0].staticIndex;
+        state.targetPos = targetPos;
+        state.lastTargetDistance = (targetPos - start).length();
+        state.failedAttempts = 0;
+        edm.getBehaviorData(idx).separationTimer = 0.0f;
+        hotData.transform.position = start;
+        hotData.transform.velocity = Vector2D(0, 0);
+        pathData.clear();
+        auto waypoints = edm.getWaypointSlot(idx);
+        waypoints[0] = detour;
+        waypoints[1] = targetPos;
+        edm.finalizePath(idx, 2);
+
+        for (int i = 0; i < FRAMES && state.phase == VoidLight::ForagePhase::Moving; ++i) {
+            BehaviorContext ctx(hotData.transform, hotData, villager.getId(), idx, DT,
+                EntityHandle{}, Vector2D(0, 0), Vector2D(0, 0), false, edm.getBehaviorData(idx),
+                &pathData, memoryData, edm.getCharacterDataByIndex(idx), 0.0f, 0.0f, 1280.0f,
+                1280.0f, true, 0.0f, kNeutralFactionStanceRow, false, false,
+                edm.knockbackSidecar(), edm.npcNeedSidecar(), env, view);
+            Behaviors::executeForage(ctx, config, state);
+            if (moves) {
+                hotData.transform.position =
+                    hotData.transform.position + hotData.transform.velocity * DT;
+            }
+        }
+    };
+
+    runDetour(true);
+    BOOST_CHECK(state.phase == VoidLight::ForagePhase::Moving);
+    BOOST_CHECK_EQUAL(state.failedAttempts, 0u);
+    BOOST_CHECK(state.targetHandle == target);
+    BOOST_CHECK_GT((targetPos - hotData.transform.position).length(), (targetPos - start).length());
+
+    // Pushed back every frame (no displacement): no waypoint progress is a stall.
+    runDetour(false);
+    BOOST_CHECK(state.phase == VoidLight::ForagePhase::Searching);
+    BOOST_CHECK_EQUAL(state.failedAttempts, 1u);
+}
+
+BOOST_AUTO_TEST_CASE(ForageReengageRespectsDetectionScale) {
+    auto& edm = EntityDataManager::Instance();
+    const EngageSetup setup = startForagerInPhase(*this, VoidLight::ForagePhase::Moving);
+    const size_t foragerIdx = indexOf(setup.forager);
+    // 200 px: inside HOSTILE_ENGAGE_RANGE (noon), outside the night-scaled range.
+    constexpr float GAP = 200.0f;
+    static_assert(GAP < Behaviors::HOSTILE_ENGAGE_RANGE);
+
+    GameTimeManager::Instance().setGameHour(22.0f);
+    // Behind the forager (it moves +x toward its node), so the gap only grows.
+    const auto hostile = spawnHostileNear(setup.forager, Vector2D(-GAP, 0.0f));
+    for (int i = 0; i < 3; ++i) {
+        step();
+        BOOST_REQUIRE(behaviorOf(setup.forager) == BehaviorType::Forage);
+    }
+    BOOST_CHECK(edm.getMemoryData(foragerIdx).lastTarget != hostile->getHandle());
+
+    GameTimeManager::Instance().setGameHour(12.0f);
+    hostile->setPosition(edm.getTransformByIndex(foragerIdx).position + Vector2D(-GAP, 0.0f));
+    for (int i = 0; i < 3 && behaviorOf(setup.forager) == BehaviorType::Forage; ++i) {
+        step();
+    }
+    BOOST_CHECK(behaviorOf(setup.forager) == BehaviorType::Attack);
+    BOOST_CHECK(edm.getMemoryData(foragerIdx).lastTarget == hostile->getHandle());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -332,7 +1602,7 @@ BOOST_AUTO_TEST_CASE(TestWanderBehavior) {
 BOOST_AUTO_TEST_CASE(TestChaseBehavior) {
     // Test: NPC chases an opponent who attacked them (memory-based targeting)
     auto chaser = TestNPC::create(200.0f, 200.0f);
-    auto opponent = TestNPC::create(500.0f, 500.0f);  // The attacker
+    auto opponent = TestNPC::create(500.0f, 500.0f); // The attacker
 
     auto& edm = EntityDataManager::Instance();
     EntityHandle chaserHandle = chaser->getHandle();
@@ -373,8 +1643,8 @@ BOOST_AUTO_TEST_CASE(TestChaseBehavior) {
         if (chaserIdx != SIZE_MAX) {
             edm.initMemoryData(chaserIdx);
             auto& memData = edm.getMemoryData(chaserIdx);
-            memData.lastAttacker = opponentHandle;  // Opponent attacked us - chase them!
-            memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+            memData.lastAttacker = opponentHandle; // Opponent attacked us - chase them!
+            memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
             memData.setValid(true);
         }
     }
@@ -436,7 +1706,7 @@ BOOST_AUTO_TEST_CASE(TestKnockbackOverridesChaseMovement) {
     edm.initMemoryData(targetIdx);
     auto& memData = edm.getMemoryData(targetIdx);
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+    memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
     memData.setValid(true);
 
     updateAI(0.016f, attacker->getPosition());
@@ -514,11 +1784,11 @@ BOOST_AUTO_TEST_CASE(TestFleeBehavior) {
     EntityHandle handle = entity->getHandle();
 
     // FleeBehavior requires a lastAttacker in memory to know who to flee from
-    auto &edm = EntityDataManager::Instance();
+    auto& edm = EntityDataManager::Instance();
     size_t entityIdx = edm.getIndex(handle);
     if (entityIdx != SIZE_MAX) {
         edm.recordCombatEvent(entityIdx, playerHandle, handle, 10.0f,
-                              /*wasAttacked=*/true, 0.0f);
+            /*wasAttacked=*/true, 0.0f);
     }
 
     AIManager::Instance().assignBehavior(handle, "Flee");
@@ -609,7 +1879,14 @@ BOOST_AUTO_TEST_CASE(TestAttackBehavior) {
     entity->resetUpdateCount();
 
     EntityHandle handle = entity->getHandle();
+    auto& edm = EntityDataManager::Instance();
+    const size_t attackerIdx = edm.getIndex(handle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
     AIManager::Instance().assignBehavior(handle, "Attack");
+    // The player is a target only through standing (no lastTarget injection).
+    const uint8_t npcFaction = edm.getCharacterDataByIndex(attackerIdx).faction;
+    AIManager::Instance().adjustPlayerStanding(
+        playerEntity->getHandle(), npcFaction, AIManager::PLAYER_STANDING_MIN);
 
     // Capture initial behavior execution count
     size_t initialBehaviorCount = AIManager::Instance().getBehaviorUpdateCount();
@@ -632,6 +1909,7 @@ BOOST_AUTO_TEST_CASE(TestAttackBehavior) {
 
 BOOST_AUTO_TEST_CASE(TestAttackAutoAcquiresNearbyEnemyTarget) {
     auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
 
     auto attacker = TestNPC::create(300.0f, 300.0f);
     auto target = TestNPC::create(360.0f, 300.0f);
@@ -642,7 +1920,9 @@ BOOST_AUTO_TEST_CASE(TestAttackAutoAcquiresNearbyEnemyTarget) {
     size_t attackerIdx = edm.getIndex(attackerHandle);
     BOOST_REQUIRE(attackerIdx != SIZE_MAX);
 
-    AIManager::Instance().assignBehavior(attackerHandle, "Attack");
+    const uint8_t attackerFaction = edm.getCharacterDataByIndex(attackerIdx).faction;
+    aiMgr.setStance(attackerFaction, 2, FactionStance::Hostile);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
 
     const float testDeltaTime = 0.1f;
     for (int i = 0; i < 20; ++i) {
@@ -652,6 +1932,784 @@ BOOST_AUTO_TEST_CASE(TestAttackAutoAcquiresNearbyEnemyTarget) {
     const auto& memData = edm.getMemoryData(attackerIdx);
     BOOST_CHECK(memData.lastTarget.isValid());
     BOOST_CHECK(memData.lastTarget == target->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDoesNotDefaultAgroPlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto attacker = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDoesNotAcquireNeutralOtherFaction) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto attacker = TestNPC::create(300.0f, 300.0f);
+    auto other = TestNPC::create(360.0f, 300.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(other->getHandle(), 2);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != other->getHandle());
+}
+
+// Attack acquisition range is max(attackRange * multiplier, HOSTILE_ENGAGE_RANGE)
+// scaled by detectionScale. A short authored attackRange keeps the range at the
+// HOSTILE_ENGAGE_RANGE floor so the gaps below are independent of the multiplier.
+constexpr float kShortAttackRange = 30.0f;
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquisitionRangeScalesWithDetection) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& gameTime = GameTimeManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    // Inside the noon acquire range (250 px); outside the detection-scaled
+    // night acquire range (250 * 0.55 px), so the night attacker never acquires.
+    constexpr float kGapPx = 200.0f;
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+
+    auto spawnAttacker = [&](const std::shared_ptr<TestNPC>& npc) {
+        const EntityHandle handle = npc->getHandle();
+        const size_t idx = edm.getIndex(handle);
+        BOOST_REQUIRE(idx != SIZE_MAX);
+        edm.setFaction(handle, 1);
+        edm.getCharacterDataByIndex(idx).attackRange = kShortAttackRange;
+        aiMgr.assignBehavior(handle, "Attack");
+        const auto ref = edm.getBehaviorConfigRef(idx);
+        BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+        BOOST_REQUIRE_LE(edm.getAttackConfig(ref.index).attackRange, 1.5f * kShortAttackRange);
+        return idx;
+    };
+
+    gameTime.setGameHour(12.0f);
+    auto noonNpc = TestNPC::create(playerPos.getX() + kGapPx, playerPos.getY());
+    const size_t noonIdx = spawnAttacker(noonNpc);
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, noonNpc->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(noonIdx).lastTarget == playerEntity->getHandle());
+
+    gameTime.setGameHour(22.0f);
+    auto nightNpc = TestNPC::create(playerPos.getX() - kGapPx, playerPos.getY());
+    const size_t nightIdx = spawnAttacker(nightNpc);
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, nightNpc->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(nightIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDoesNotAcquireDistantHostilePlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto attacker = TestNPC::create(playerPos.getX() + 400.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    // Beyond the noon acquisition range (<= 270 px for kShortAttackRange).
+    const float startDistance = (attacker->getPosition() - playerPos).length();
+    BOOST_REQUIRE_GT(startDistance, 350.0f);
+
+    edm.setFaction(attackerHandle, 1);
+    edm.getCharacterDataByIndex(attackerIdx).attackRange = kShortAttackRange;
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+    const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+    BOOST_REQUIRE_LE(edm.getAttackConfig(ref.index).attackRange, 1.5f * kShortAttackRange);
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    // A hostile player beyond the acquisition range is not a target (no
+    // unlimited-range fallback); the attacker does not close on the player.
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != playerEntity->getHandle());
+    BOOST_CHECK_GE((attacker->getPosition() - playerPos).length(), startDistance - 1.0f);
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerWhenStandingHostile) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto attacker = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    for (int i = 0; i < 20; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackAcquiresPlayerAfterDirectCombatHit) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto player = std::make_shared<Player>();
+    player->setPosition(Vector2D(500.0f, 500.0f));
+    const EntityHandle playerHandle = player->getHandle();
+    BOOST_REQUIRE(playerHandle.isValid());
+    aiMgr.setPlayerHandle(playerHandle);
+
+    auto attacker = TestNPC::create(540.0f, 500.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    auto damageEvent = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, attackerHandle, 10.0f);
+    EventManager::Instance().dispatchEvent(damageEvent, EventManager::DispatchMode::Immediate);
+
+    // The hit is a player incident: standing only, no stance-table write.
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        BOOST_CHECK(!aiMgr.factionRowHasHostile(faction));
+    }
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+        AIManager::PLAYER_STANDING_ASSAULT_DELTA);
+    BOOST_CHECK(aiMgr.getPlayerRelation(1) == FactionStance::Neutral);
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastAttacker == playerHandle);
+
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+
+    // Retaliation against the last attacker, not faction hostility.
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+}
+
+BOOST_AUTO_TEST_CASE(TestPlayerAssaultErodesStandingUntilHostileAndKillAlwaysApplies) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& eventMgr = EventManager::Instance();
+
+    auto realPlayer = std::make_shared<Player>();
+    realPlayer->initializeInventory();
+    const EntityHandle playerHandle = realPlayer->getHandle();
+    BOOST_REQUIRE(playerHandle.isValid());
+    const size_t playerIdx = edm.getIndex(playerHandle);
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.getHotDataByIndex(playerIdx).kind == EntityKind::Player);
+    aiMgr.setPlayerHandle(playerHandle);
+
+    auto victim = TestNPC::create(100.0f, 100.0f);
+    const EntityHandle victimHandle = victim->getHandle();
+    const size_t victimIdx = edm.getIndex(victimHandle);
+    BOOST_REQUIRE(victimIdx != SIZE_MAX);
+    edm.setFaction(victimHandle, 1);
+    auto& victimChar = edm.getCharacterDataByIndex(victimIdx);
+    victimChar.maxHealth = 100000.0f;
+    victimChar.health = 100000.0f;
+
+    int towardPlayerEvents = 0;
+    int factionStanceEvents = 0;
+    FactionStance lastRelation = FactionStance::Allied;
+    uint8_t lastFrom = 255;
+    uint8_t lastToward = 0;
+    eventMgr.registerHandler(EventTypeId::StanceChanged,
+        [&](const EventData& data) {
+            const auto* event = dynamic_cast<const StanceChangedEvent*>(data.event.get());
+            if (!event) {
+                return;
+            }
+            if (event->isTowardPlayer()) {
+                ++towardPlayerEvents;
+                lastRelation = event->getNewStance();
+                lastFrom = event->getFromFaction();
+                lastToward = event->getTowardFaction();
+            } else {
+                ++factionStanceEvents;
+            }
+        });
+
+    auto hit = [&]() {
+        auto damage = std::make_shared<DamageEvent>(
+            EntityEventType::DamageIntent, playerHandle, victimHandle, 10.0f);
+        eventMgr.dispatchEvent(damage, EventManager::DispatchMode::Immediate);
+    };
+
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1), 0);
+
+    // Each non-lethal hit applies the assault delta until the relation is Hostile.
+    constexpr int kHitsToHostile =
+        AIManager::PLAYER_STANDING_HOSTILE_AT / AIManager::PLAYER_STANDING_ASSAULT_DELTA;
+    for (int i = 1; i <= kHitsToHostile; ++i) {
+        hit();
+        BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+            i * AIManager::PLAYER_STANDING_ASSAULT_DELTA);
+        BOOST_CHECK_EQUAL(towardPlayerEvents, i == kHitsToHostile ? 1 : 0);
+    }
+    BOOST_CHECK(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+    BOOST_CHECK(lastRelation == FactionStance::Hostile);
+    BOOST_CHECK_EQUAL(lastFrom, 1);
+    BOOST_CHECK_EQUAL(lastToward, CharacterData::NO_FACTION);
+
+    // Already Hostile: further assaults do not erode standing.
+    hit();
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+        AIManager::PLAYER_STANDING_HOSTILE_AT);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
+
+    // A kill always applies the kill delta.
+    victimChar.health = 1.0f;
+    hit();
+    BOOST_CHECK(!edm.getHotDataByIndex(victimIdx).isAlive());
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, 1),
+        AIManager::PLAYER_STANDING_HOSTILE_AT + AIManager::PLAYER_STANDING_KILL_DELTA);
+    BOOST_CHECK_EQUAL(towardPlayerEvents, 1);
+
+    // The stance table is never written by player incidents.
+    BOOST_CHECK_EQUAL(factionStanceEvents, 0);
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        BOOST_CHECK(!aiMgr.factionRowHasHostile(faction));
+    }
+
+    // Standing is not mixed into the per-NPC relationship level.
+    const float relationshipBefore = Behaviors::getRelationshipLevel(victimHandle, playerHandle);
+    aiMgr.adjustPlayerStanding(playerHandle, 1, AIManager::PLAYER_STANDING_THEFT_DELTA);
+    BOOST_CHECK_EQUAL(Behaviors::getRelationshipLevel(victimHandle, playerHandle),
+        relationshipBefore);
+}
+
+BOOST_AUTO_TEST_CASE(TestFactionMateIgnoresPlayerUntilStandingHostile) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto player = std::make_shared<Player>();
+    player->setPosition(Vector2D(500.0f, 500.0f));
+    const EntityHandle playerHandle = player->getHandle();
+    BOOST_REQUIRE(playerHandle.isValid());
+    aiMgr.setPlayerHandle(playerHandle);
+
+    auto attacker = TestNPC::create(540.0f, 500.0f);
+    auto mate = TestNPC::create(560.0f, 500.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const EntityHandle mateHandle = mate->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    const size_t mateIdx = edm.getIndex(mateHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    BOOST_REQUIRE(mateIdx != SIZE_MAX);
+
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(mateHandle, 1);
+    edm.getCharacterDataByIndex(mateIdx).maxHealth = 100000.0f;
+    edm.getCharacterDataByIndex(mateIdx).health = 100000.0f;
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+    aiMgr.assignBehavior(mateHandle, "Idle");
+
+    auto hitMate = [&]() {
+        auto damage = std::make_shared<DamageEvent>(
+            EntityEventType::DamageIntent, playerHandle, mateHandle, 10.0f);
+        EventManager::Instance().dispatchEvent(damage, EventManager::DispatchMode::Immediate);
+    };
+
+    // One hit on a faction mate: standing drops but the faction is not Hostile.
+    hitMate();
+    BOOST_CHECK(aiMgr.getPlayerRelation(1) == FactionStance::Neutral);
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != playerHandle);
+
+    // Repeated hits cross the Hostile threshold: the uninvolved mate engages.
+    while (aiMgr.getPlayerRelation(1) != FactionStance::Hostile) {
+        hitMate();
+    }
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+    BOOST_CHECK(!aiMgr.factionRowHasHostile(1));
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackDropsLastTargetAfterDeescalation) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto player = std::make_shared<Player>();
+    player->setPosition(Vector2D(500.0f, 500.0f));
+    const EntityHandle playerHandle = player->getHandle();
+    BOOST_REQUIRE(playerHandle.isValid());
+    aiMgr.setPlayerHandle(playerHandle);
+
+    auto attacker = TestNPC::create(540.0f, 500.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    edm.setFaction(attackerHandle, 1);
+
+    aiMgr.adjustPlayerStanding(playerHandle, 1, AIManager::PLAYER_STANDING_MIN);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+    BOOST_REQUIRE(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+    BOOST_REQUIRE(!edm.getMemoryData(attackerIdx).lastAttacker.isValid());
+
+    // Gifts raise standing back above the Hostile threshold.
+    while (aiMgr.getPlayerRelation(1) == FactionStance::Hostile) {
+        aiMgr.recordPlayerIncident(AIManager::PlayerIncident::Gift, playerHandle, attackerHandle);
+    }
+
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+        BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget != playerHandle);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(TestAttackKeepsRetaliatingAgainstLastAttackerAfterDeescalation) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto player = std::make_shared<Player>();
+    player->setPosition(Vector2D(500.0f, 500.0f));
+    const EntityHandle playerHandle = player->getHandle();
+    BOOST_REQUIRE(playerHandle.isValid());
+    aiMgr.setPlayerHandle(playerHandle);
+
+    auto attacker = TestNPC::create(540.0f, 500.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    edm.setFaction(attackerHandle, 1);
+    aiMgr.assignBehavior(attackerHandle, "Attack");
+
+    auto damageEvent = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, attackerHandle, 10.0f);
+    EventManager::Instance().dispatchEvent(damageEvent, EventManager::DispatchMode::Immediate);
+    BOOST_REQUIRE(edm.getMemoryData(attackerIdx).lastAttacker == playerHandle);
+
+    // Even Allied standing does not cancel retaliation against the last attacker.
+    aiMgr.adjustPlayerStanding(playerHandle, 1, AIManager::PLAYER_STANDING_MAX);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Allied);
+
+    for (int i = 0; i < 10; ++i) {
+        updateAI(0.1f, attacker->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(attackerIdx).lastTarget == playerHandle);
+}
+
+BOOST_AUTO_TEST_CASE(TestChaseDropsNonHostileLastTarget) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto chaser = TestNPC::create(300.0f, 300.0f);
+    auto neutralTarget = TestNPC::create(500.0f, 300.0f);
+    auto hostileChaser = TestNPC::create(300.0f, 600.0f);
+    auto hostileTarget = TestNPC::create(500.0f, 600.0f);
+    const EntityHandle chaserHandle = chaser->getHandle();
+    const EntityHandle hostileChaserHandle = hostileChaser->getHandle();
+    const size_t chaserIdx = edm.getIndex(chaserHandle);
+    const size_t hostileChaserIdx = edm.getIndex(hostileChaserHandle);
+    BOOST_REQUIRE(chaserIdx != SIZE_MAX);
+    BOOST_REQUIRE(hostileChaserIdx != SIZE_MAX);
+
+    edm.setFaction(chaserHandle, 1);
+    edm.setFaction(neutralTarget->getHandle(), 2);
+    edm.setFaction(hostileChaserHandle, 3);
+    edm.setFaction(hostileTarget->getHandle(), 4);
+    aiMgr.setStance(3, 4, FactionStance::Hostile);
+    aiMgr.assignBehavior(chaserHandle, "Chase");
+    aiMgr.assignBehavior(hostileChaserHandle, "Chase");
+
+    auto& chaserMem = edm.getMemoryData(chaserIdx);
+    auto& hostileMem = edm.getMemoryData(hostileChaserIdx);
+    chaserMem.setValid(true);
+    hostileMem.setValid(true);
+    chaserMem.lastTarget = neutralTarget->getHandle();
+    hostileMem.lastTarget = hostileTarget->getHandle();
+
+    updateAI(0.016f, chaser->getPosition());
+
+    BOOST_CHECK(!chaserMem.lastTarget.isValid());
+    BOOST_CHECK(hostileMem.lastTarget == hostileTarget->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestPlayerHasNoFactionMembership) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    auto player = std::make_shared<Player>();
+    const EntityHandle playerHandle = player->getHandle();
+    const size_t playerIdx = edm.getIndex(playerHandle);
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+    BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(playerIdx).faction, CharacterData::NO_FACTION);
+
+    edm.setFaction(playerHandle, 1);
+    BOOST_CHECK_EQUAL(edm.getCharacterDataByIndex(playerIdx).faction, CharacterData::NO_FACTION);
+
+    // A player hit on a faction-0 NPC adjusts standing with faction 0 only.
+    auto villager = TestNPC::create(100.0f, 100.0f);
+    const size_t villagerIdx = edm.getIndex(villager->getHandle());
+    BOOST_REQUIRE(villagerIdx != SIZE_MAX);
+    const uint8_t villagerFaction = edm.getCharacterDataByIndex(villagerIdx).faction;
+    BOOST_REQUIRE(villagerFaction < AIManager::MAX_FACTIONS);
+    auto damage = std::make_shared<DamageEvent>(
+        EntityEventType::DamageIntent, playerHandle, villager->getHandle(), 10.0f);
+    EventManager::Instance().dispatchEvent(damage, EventManager::DispatchMode::Immediate);
+
+    BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, villagerFaction),
+        AIManager::PLAYER_STANDING_ASSAULT_DELTA);
+    for (uint8_t faction = 0; faction < AIManager::MAX_FACTIONS; ++faction) {
+        BOOST_CHECK(!aiMgr.factionRowHasHostile(faction));
+        if (faction != villagerFaction) {
+            BOOST_CHECK_EQUAL(aiMgr.getPlayerStanding(playerHandle, faction), 0);
+        }
+    }
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDoesNotAutoDetectNeutralPlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto guard = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle guardHandle = guard->getHandle();
+    const size_t guardIdx = edm.getIndex(guardHandle);
+    BOOST_REQUIRE(guardIdx != SIZE_MAX);
+
+    edm.setFaction(guardHandle, 1);
+    aiMgr.assignBehavior(guardHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, guard->getPosition());
+    }
+
+    const auto ref = edm.getBehaviorConfigRef(guardIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Guard);
+    BOOST_CHECK_LT(static_cast<int>(edm.getGuardState(ref.index).currentAlertLevel), 3);
+    BOOST_CHECK(edm.getMemoryData(guardIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDetectsHostilePlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto guard = TestNPC::create(playerPos.getX() + 100.0f, playerPos.getY());
+    const EntityHandle guardHandle = guard->getHandle();
+    const size_t guardIdx = edm.getIndex(guardHandle);
+    BOOST_REQUIRE(guardIdx != SIZE_MAX);
+
+    edm.setFaction(guardHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    aiMgr.assignBehavior(guardHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, guard->getPosition());
+    }
+
+    BOOST_CHECK(edm.getMemoryData(guardIdx).lastTarget == playerEntity->getHandle());
+    const auto ref = edm.getBehaviorConfigRef(guardIdx);
+    BOOST_CHECK(ref.type == BehaviorType::Guard || ref.type == BehaviorType::Attack);
+    if (ref.type == BehaviorType::Guard) {
+        BOOST_CHECK_GE(static_cast<int>(edm.getGuardState(ref.index).currentAlertLevel), 3);
+    }
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDetectsPlayerAtNoonNotAtNight) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+    auto& gameTime = GameTimeManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    constexpr float kDetectionGapPx = 160.0f;
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+
+    gameTime.setGameHour(12.0f);
+    auto noonGuard = TestNPC::create(playerPos.getX() + kDetectionGapPx, playerPos.getY());
+    const EntityHandle noonHandle = noonGuard->getHandle();
+    const size_t noonIdx = edm.getIndex(noonHandle);
+    BOOST_REQUIRE(noonIdx != SIZE_MAX);
+    edm.setFaction(noonHandle, 1);
+    aiMgr.assignBehavior(noonHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, noonGuard->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(noonIdx).lastTarget == playerEntity->getHandle());
+
+    gameTime.setGameHour(22.0f);
+    auto nightGuard = TestNPC::create(playerPos.getX() + kDetectionGapPx, playerPos.getY());
+    const EntityHandle nightHandle = nightGuard->getHandle();
+    const size_t nightIdx = edm.getIndex(nightHandle);
+    BOOST_REQUIRE(nightIdx != SIZE_MAX);
+    edm.setFaction(nightHandle, 1);
+    aiMgr.assignBehavior(nightHandle, "Guard");
+
+    for (int i = 0; i < 30; ++i) {
+        updateAI(0.1f, nightGuard->getPosition());
+    }
+    BOOST_CHECK(edm.getMemoryData(nightIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto idleNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle idleHandle = idleNpc->getHandle();
+    const size_t idleIdx = edm.getIndex(idleHandle);
+    BOOST_REQUIRE(idleIdx != SIZE_MAX);
+
+    edm.setFaction(idleHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    aiMgr.assignBehavior(idleHandle, "Idle");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, idleNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(idleIdx).type == BehaviorType::Attack);
+}
+
+// NPC path of tryEngageHostileInRange: Hostile stance row, player not hostile.
+struct IdleVsHostileNpc {
+    std::shared_ptr<TestNPC> idleNpc;
+    std::shared_ptr<TestNPC> hostileNpc;
+    size_t idleIdx{SIZE_MAX};
+};
+
+IdleVsHostileNpc spawnIdleNearHostileFactionNpc(float gapPx) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    IdleVsHostileNpc setup;
+    setup.idleNpc = TestNPC::create(200.0f, 700.0f);
+    setup.hostileNpc = TestNPC::create(200.0f + gapPx, 700.0f);
+    setup.idleIdx = edm.getIndex(setup.idleNpc->getHandle());
+    BOOST_REQUIRE(setup.idleIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.getIndex(setup.hostileNpc->getHandle()) != SIZE_MAX);
+
+    edm.setFaction(setup.idleNpc->getHandle(), 1);
+    edm.setFaction(setup.hostileNpc->getHandle(), 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) != FactionStance::Hostile);
+    aiMgr.assignBehavior(setup.idleNpc->getHandle(), "Idle");
+    return setup;
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleEngagesHostileFactionNpcInRange) {
+    auto& edm = EntityDataManager::Instance();
+    GameTimeManager::Instance().setGameHour(12.0f);
+
+    const auto setup = spawnIdleNearHostileFactionNpc(100.0f);
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, setup.idleNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(setup.idleIdx).type == BehaviorType::Attack);
+    BOOST_CHECK(edm.getMemoryData(setup.idleIdx).lastTarget == setup.hostileNpc->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleDoesNotEngageHostileFactionNpcBeyondScaledRange) {
+    auto& edm = EntityDataManager::Instance();
+    // Night detection 0.55: engage range 137.5 px. 200 px is inside the unscaled
+    // HOSTILE_ENGAGE_RANGE, so this fails if the NPC scan radius were unscaled.
+    GameTimeManager::Instance().setGameHour(22.0f);
+    constexpr float kGapPx = 200.0f;
+    static_assert(kGapPx < Behaviors::HOSTILE_ENGAGE_RANGE);
+
+    const auto setup = spawnIdleNearHostileFactionNpc(kGapPx);
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, setup.idleNpc->getPosition());
+        BOOST_CHECK(edm.getBehaviorConfigRef(setup.idleIdx).type == BehaviorType::Idle);
+    }
+    BOOST_CHECK(edm.getMemoryData(setup.idleIdx).lastTarget != setup.hostileNpc->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestIdleDoesNotEngageDeadHostilePlayer) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto idleNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle idleHandle = idleNpc->getHandle();
+    const size_t idleIdx = edm.getIndex(idleHandle);
+    BOOST_REQUIRE(idleIdx != SIZE_MAX);
+    const size_t playerIdx = edm.getIndex(playerEntity->getHandle());
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+
+    edm.setFaction(idleHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    BOOST_REQUIRE(aiMgr.getPlayerRelation(1) == FactionStance::Hostile);
+    edm.getHotDataByIndex(playerIdx).setAlive(false);
+    aiMgr.assignBehavior(idleHandle, "Idle");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, idleNpc->getPosition());
+        BOOST_CHECK(edm.getBehaviorConfigRef(idleIdx).type == BehaviorType::Idle);
+    }
+    BOOST_CHECK(edm.getMemoryData(idleIdx).lastTarget != playerEntity->getHandle());
+}
+
+BOOST_AUTO_TEST_CASE(TestChaseReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto chaseNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle chaseHandle = chaseNpc->getHandle();
+    const size_t chaseIdx = edm.getIndex(chaseHandle);
+    BOOST_REQUIRE(chaseIdx != SIZE_MAX);
+
+    edm.setFaction(chaseHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    aiMgr.assignBehavior(chaseHandle, "Chase");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, chaseNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(chaseIdx).type == BehaviorType::Attack);
+}
+
+BOOST_AUTO_TEST_CASE(TestWanderReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto wanderNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle wanderHandle = wanderNpc->getHandle();
+    const size_t wanderIdx = edm.getIndex(wanderHandle);
+    BOOST_REQUIRE(wanderIdx != SIZE_MAX);
+
+    edm.setFaction(wanderHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    aiMgr.assignBehavior(wanderHandle, "Wander");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, wanderNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(wanderIdx).type == BehaviorType::Attack);
+}
+
+BOOST_AUTO_TEST_CASE(TestPatrolReengagesHostilePlayerInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto patrolNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle patrolHandle = patrolNpc->getHandle();
+    const size_t patrolIdx = edm.getIndex(patrolHandle);
+    BOOST_REQUIRE(patrolIdx != SIZE_MAX);
+
+    edm.setFaction(patrolHandle, 1);
+    aiMgr.adjustPlayerStanding(playerEntity->getHandle(), 1, AIManager::PLAYER_STANDING_MIN);
+    aiMgr.assignBehavior(patrolHandle, "Patrol");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, patrolNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(patrolIdx).type == BehaviorType::Attack);
+}
+
+BOOST_AUTO_TEST_CASE(TestWanderDoesNotEngageNeutralOtherFactionInRange) {
+    auto& edm = EntityDataManager::Instance();
+    auto& aiMgr = AIManager::Instance();
+
+    const Vector2D playerPos = playerEntity->getPosition();
+    auto wanderNpc = TestNPC::create(playerPos.getX() + 40.0f, playerPos.getY());
+    const EntityHandle wanderHandle = wanderNpc->getHandle();
+    const size_t wanderIdx = edm.getIndex(wanderHandle);
+    BOOST_REQUIRE(wanderIdx != SIZE_MAX);
+
+    edm.setFaction(wanderHandle, 1);
+    aiMgr.assignBehavior(wanderHandle, "Wander");
+
+    for (int i = 0; i < 8; ++i) {
+        updateAI(0.1f, wanderNpc->getPosition());
+    }
+
+    BOOST_CHECK(edm.getBehaviorConfigRef(wanderIdx).type == BehaviorType::Wander);
+}
+
+BOOST_AUTO_TEST_CASE(TestBehaviorContextStanceRowIsNonOwningRef) {
+    auto& edm = EntityDataManager::Instance();
+
+    auto npc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Idle");
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+
+    std::array<FactionStance, kFactionStanceRowSize> stanceRow = kNeutralFactionStanceRow;
+    BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+        idx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(idx),
+        &edm.getPathData(idx), memoryData,
+        edm.getCharacterDataByIndex(idx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        stanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
+
+    BOOST_CHECK(!Behaviors::isHostileTowardFaction(ctx, 3));
+    stanceRow[3] = FactionStance::Hostile;
+    BOOST_CHECK(Behaviors::isHostileTowardFaction(ctx, 3));
+
+    // The player target reads the by-value standing flag, never the stance row:
+    // with every row cell Hostile, only hostileTowardPlayer decides.
+    const EntityHandle playerHandle = playerEntity->getHandle();
+    const size_t playerIdx = edm.getIndex(playerHandle);
+    BOOST_REQUIRE(playerIdx != SIZE_MAX);
+    stanceRow.fill(FactionStance::Hostile);
+    auto makePlayerCtx = [&](bool hostileTowardPlayer) {
+        return BehaviorContext(hotData.transform, hotData, handle.getId(),
+            idx, 0.016f, playerHandle, playerEntity->getPosition(),
+            Vector2D(0, 0), true, edm.getBehaviorData(idx),
+            &edm.getPathData(idx), memoryData,
+            edm.getCharacterDataByIndex(idx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            stanceRow, hostileTowardPlayer, true,
+            edm.knockbackSidecar(), edm.npcNeedSidecar());
+    };
+    BOOST_CHECK(!Behaviors::isHostileTowardTarget(makePlayerCtx(false), playerIdx, playerHandle));
+    BOOST_CHECK(Behaviors::isHostileTowardTarget(makePlayerCtx(true), playerIdx, playerHandle));
 }
 
 BOOST_AUTO_TEST_CASE(TestAttackBehaviorRespectsAuthoredRangeWhenClosing) {
@@ -681,6 +2739,8 @@ BOOST_AUTO_TEST_CASE(TestAttackBehaviorRespectsAuthoredRangeWhenClosing) {
     edm.setFaction(longAttackerHandle, 1);
     edm.setFaction(shortTargetHandle, 2);
     edm.setFaction(longTargetHandle, 2);
+    // lastTarget is kept only while Hostile (or the last attacker).
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
 
     edm.getCharacterDataByIndex(shortAttackerIdx).attackRange = 45.0f;
     edm.getCharacterDataByIndex(longAttackerIdx).attackRange = 125.0f;
@@ -764,12 +2824,13 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackUsesFullWeaponReach) {
     memoryData.lastTarget = targetHandle;
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -813,12 +2874,13 @@ BOOST_AUTO_TEST_CASE(TestMeleeAttackPressuresInsideReachBeforeWeaponReady) {
     memoryData.personality.composure = 0.8f;
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -858,12 +2920,13 @@ BOOST_AUTO_TEST_CASE(TestAttackBehaviorSynchronizesCurrentAttackMode) {
     memoryData.setValid(true);
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -917,12 +2980,13 @@ BOOST_AUTO_TEST_CASE(TestRangedAttackWithoutAmmoResetsForRepositioning) {
     memoryData.lastTarget = targetHandle;
 
     BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
-                        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
-                        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
-                        &edm.getPathData(attackerIdx), memoryData,
-                        edm.getCharacterDataByIndex(attackerIdx),
-                        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
-                        edm.knockbackSidecar());
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
 
     Behaviors::executeAttack(ctx, attackConfig, attackState);
 
@@ -939,6 +3003,83 @@ BOOST_AUTO_TEST_CASE(TestRangedAttackWithoutAmmoResetsForRepositioning) {
     BOOST_REQUIRE_EQUAL(fallbackCommands.size(), 1u);
     BOOST_CHECK(fallbackCommands.front().targetHandle == attackerHandle);
     BOOST_CHECK_EQUAL(fallbackCommands.front().targetEdmIndex, attackerIdx);
+}
+
+BOOST_AUTO_TEST_CASE(TestSpecialAttackAoeSkipsNonCharacterEntities) {
+    // A melee special attack with aoeRadius damages characters around the
+    // target. Projectiles and area effects share the active-entity scan but are
+    // not characters: no damage and no character-data read for them.
+    auto& edm = EntityDataManager::Instance();
+
+    auto attacker = TestNPC::create(600.0f, 200.0f);
+    auto target = TestNPC::create(640.0f, 200.0f);
+    auto bystander = TestNPC::create(660.0f, 210.0f);
+    const EntityHandle attackerHandle = attacker->getHandle();
+    const EntityHandle targetHandle = target->getHandle();
+    const EntityHandle bystanderHandle = bystander->getHandle();
+    const size_t attackerIdx = edm.getIndex(attackerHandle);
+    BOOST_REQUIRE(attackerIdx != SIZE_MAX);
+    const EntityHandle projectile = edm.createProjectile(
+        Vector2D(650.0f, 190.0f), Vector2D(0.0f, 0.0f), attackerHandle, 1.0f);
+    BOOST_REQUIRE(projectile.isValid());
+
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(targetHandle, 2);
+    edm.setFaction(bystanderHandle, 2);
+    edm.getCharacterDataByIndex(attackerIdx).attackRange = 60.0f;
+    AIManager::Instance().assignBehavior(attackerHandle, "Attack");
+    const auto ref = edm.getBehaviorConfigRef(attackerIdx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Attack);
+
+    // One AI frame builds the active-entity scan buffer the AoE reads.
+    updateAI(0.0f, Vector2D(600.0f, 200.0f));
+    const auto active = edm.getActiveIndices();
+    BOOST_REQUIRE(std::find(active.begin(), active.end(), edm.getIndex(projectile)) !=
+        active.end());
+    std::vector<EventManager::DeferredEvent> damageEvents;
+    Behaviors::collectDeferredDamageEvents(damageEvents);
+    damageEvents.clear();
+
+    auto attackConfig = VoidLight::AttackBehaviorConfig::createMeleeConfig(60.0f);
+    attackConfig.specialAttackChance = 1.0f;
+    attackConfig.aoeRadius = 60.0f;
+    attackConfig.avoidFriendlyFire = false;
+
+    auto& attackState = edm.getAttackState(ref.index);
+    attackState.currentState = 3; // ATTACKING
+    attackState.stateChangeTimer = 0.0f;
+    attackState.specialAttackReady = true;
+    attackState.hasExplicitTarget = true;
+    attackState.explicitTarget = targetHandle;
+
+    auto& hotData = edm.getHotDataByIndex(attackerIdx);
+    auto& memoryData = edm.getMemoryData(attackerIdx);
+    memoryData.setValid(true);
+    memoryData.lastTarget = targetHandle;
+
+    BehaviorContext ctx(hotData.transform, hotData, attackerHandle.getId(),
+        attackerIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(attackerIdx),
+        &edm.getPathData(attackerIdx), memoryData,
+        edm.getCharacterDataByIndex(attackerIdx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar());
+
+    Behaviors::executeAttack(ctx, attackConfig, attackState);
+    Behaviors::collectDeferredDamageEvents(damageEvents);
+
+    const auto damaged = [&damageEvents](EntityHandle handle) {
+        return std::any_of(damageEvents.begin(), damageEvents.end(),
+            [handle](const EventManager::DeferredEvent& deferred) {
+                auto damage = std::dynamic_pointer_cast<DamageEvent>(deferred.data.event);
+                return damage && damage->getTarget() == handle;
+            });
+    };
+    BOOST_REQUIRE(damaged(targetHandle));
+    BOOST_CHECK(damaged(bystanderHandle)); // AoE ran
+    BOOST_CHECK(!damaged(projectile));
+    AIManager::Instance().unassignBehavior(attackerHandle);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -1017,8 +3158,8 @@ BOOST_AUTO_TEST_CASE(TestMessageQueueBasicOperations) {
     updateAI(0.016f);
     const auto afterRef = edm.getBehaviorConfigRef(idx);
     bool processedRetreat = (afterRef.type == BehaviorType::Flee) ||
-                            (afterRef.type == BehaviorType::Attack &&
-                             edm.getAttackState(afterRef.index).isRetreating);
+        (afterRef.type == BehaviorType::Attack &&
+            edm.getAttackState(afterRef.index).isRetreating);
     BOOST_CHECK(processedRetreat);
 
     // Clear messages
@@ -1030,11 +3171,13 @@ BOOST_AUTO_TEST_CASE(TestMessageQueueBasicOperations) {
 }
 
 // ============================================================================
-// DEFERRED MESSAGE PIPELINE INTEGRATION TESTS
-// Test the command-bus communication: behavior → deferBehaviorMessage → AI commit
+// MESSAGE PIPELINE INTEGRATION TESTS
+// Main-thread queueBehaviorMessage → AI commit → behavior handler.
+// Worker deferBehaviorMessage → batch collect → AI commit is covered by
+// TestGuardCallsForHelp_NearbyGuardGoesHostile.
 // ============================================================================
 
-BOOST_AUTO_TEST_CASE(TestDeferredPipelineEndToEnd) {
+BOOST_AUTO_TEST_CASE(TestQueuedMessagePipelineEndToEnd) {
     auto& edm = EntityDataManager::Instance();
     auto& aiMgr = AIManager::Instance();
 
@@ -1049,18 +3192,18 @@ BOOST_AUTO_TEST_CASE(TestDeferredPipelineEndToEnd) {
     // Guard starts CALM
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guardIdx).index).currentAlertLevel == 0);
 
-    // Simulate what a behavior does during batch: defer a message
-    Behaviors::deferBehaviorMessage(guardIdx, BehaviorMessage::RAISE_ALERT);
+    // Main-thread callers queue on the command bus (never the worker defer path)
+    Behaviors::queueBehaviorMessage(guardIdx, BehaviorMessage::RAISE_ALERT);
 
-    // AI update commits deferred message and processes it
+    // AI update commits the queued message and processes it
     updateAI(0.016f);
 
     // Verify guard is now HOSTILE and queue is drained by behavior handler
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guardIdx).index).currentAlertLevel == 3);
     BOOST_CHECK(edm.getBehaviorData(guardIdx).pendingMessageCount == 0);
 
-    BOOST_TEST_MESSAGE("Deferred command-bus pipeline verified: "
-                       "defer → AI commit → process");
+    BOOST_TEST_MESSAGE("Queued command-bus pipeline verified: "
+                       "queue → AI commit → process");
     aiMgr.unassignBehavior(guardHandle);
 }
 
@@ -1070,7 +3213,7 @@ BOOST_AUTO_TEST_CASE(TestCivilianAttacked_NearbyGuardGoesHostile) {
 
     // Civilian and guard close together
     auto civilian = TestNPC::create(200.0f, 200.0f);
-    auto guard = TestNPC::create(250.0f, 250.0f);  // ~70 units away
+    auto guard = TestNPC::create(250.0f, 250.0f); // ~70 units away
 
     EntityHandle civilianHandle = civilian->getHandle();
     EntityHandle guardHandle = guard->getHandle();
@@ -1107,7 +3250,7 @@ BOOST_AUTO_TEST_CASE(TestGuardCallsForHelp_NearbyGuardGoesHostile) {
 
     // Two guards near each other (within 250 radius)
     auto guard1 = TestNPC::create(300.0f, 300.0f);
-    auto guard2 = TestNPC::create(350.0f, 350.0f);  // ~70 units away
+    auto guard2 = TestNPC::create(350.0f, 350.0f); // ~70 units away
 
     EntityHandle guard1Handle = guard1->getHandle();
     EntityHandle guard2Handle = guard2->getHandle();
@@ -1128,12 +3271,13 @@ BOOST_AUTO_TEST_CASE(TestGuardCallsForHelp_NearbyGuardGoesHostile) {
     Behaviors::queueBehaviorMessage(guard1Idx, BehaviorMessage::RAISE_ALERT);
 
     // Frame 1: Guard1 processes RAISE_ALERT → HOSTILE (3) → helpCalled →
-    // defers RAISE_ALERT to nearby same-faction allies (guard2)
+    // worker defers RAISE_ALERT to nearby same-faction allies (guard2); the
+    // batch collects the defer buffer into AICommandBus
     updateAI(0.016f);
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guard1Idx).index).currentAlertLevel == 3);
     BOOST_CHECK(edm.getGuardState(edm.getBehaviorConfigRef(guard1Idx).index).helpCalled == true);
 
-    // EventManager delivers deferred RAISE_ALERT to guard2's queue
+    // Drain events between frames as in production (messages travel via AICommandBus)
     eventMgr.update();
 
     // Frame 2: Guard2 processes RAISE_ALERT → HOSTILE (3)
@@ -1311,8 +3455,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorSwitching) {
     EntityHandle handle = entity->getHandle();
 
     std::vector<std::string> behaviorSequence = {
-        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack"
-    };
+        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack", "Forage"};
 
     for (const auto& behavior : behaviorSequence) {
         AIManager::Instance().assignBehavior(handle, behavior);
@@ -1334,7 +3477,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorSwitching) {
 
 BOOST_AUTO_TEST_CASE(TestMultipleEntitiesDifferentBehaviors) {
     // Assign different behaviors to different entities
-    std::vector<std::string> behaviors = {"Idle", "Wander", "Chase", "Follow", "Guard"};
+    std::vector<std::string> behaviors = {"Idle", "Wander", "Chase", "Follow", "Guard", "Forage"};
 
     // Capture initial behavior execution count
     size_t initialBehaviorCount = AIManager::Instance().getBehaviorUpdateCount();
@@ -1362,7 +3505,7 @@ BOOST_AUTO_TEST_CASE(TestGuardToAttackTransitionStatePreserved) {
 
     // Start with Guard behavior
     AIManager::Instance().assignBehavior(handle, "Guard");
-    updateAI(0.016f);  // Allow behavior to initialize
+    updateAI(0.016f); // Allow behavior to initialize
 
     size_t edmIdx = edm.getIndex(handle);
     BOOST_REQUIRE_NE(edmIdx, SIZE_MAX);
@@ -1375,7 +3518,7 @@ BOOST_AUTO_TEST_CASE(TestGuardToAttackTransitionStatePreserved) {
 
     // Now transition to Attack behavior
     AIManager::Instance().assignBehavior(handle, "Attack");
-    updateAI(0.016f);  // Process the transition
+    updateAI(0.016f); // Process the transition
 
     // CRITICAL CHECK: Attack behavior state must be valid after transition
     BOOST_CHECK(edm.hasBehaviorData(edmIdx));
@@ -1408,10 +3551,10 @@ BOOST_AUTO_TEST_CASE(TestAllBehaviorTransitionsPreserveState) {
         {"Chase", "Attack"},
         {"Attack", "Flee"},
         {"Flee", "Guard"},
-        {"Guard", "Attack"},  // Critical transition
+        {"Guard", "Attack"}, // Critical transition
         {"Attack", "Follow"},
-        {"Follow", "Idle"}
-    };
+        {"Follow", "Forage"},
+        {"Forage", "Idle"}};
 
     for (const auto& [fromBehavior, toBehavior] : transitions) {
         // Start with first behavior
@@ -1454,8 +3597,7 @@ BOOST_AUTO_TEST_CASE(TestRapidBehaviorTransitionsStability) {
     auto& edm = EntityDataManager::Instance();
 
     std::vector<std::string> behaviors = {
-        "Idle", "Wander", "Chase", "Attack", "Flee", "Guard", "Follow"
-    };
+        "Idle", "Wander", "Chase", "Attack", "Flee", "Guard", "Follow", "Forage"};
 
     // Register initially
     AIManager::Instance().assignBehavior(handle, "Idle");
@@ -1465,7 +3607,7 @@ BOOST_AUTO_TEST_CASE(TestRapidBehaviorTransitionsStability) {
     for (int cycle = 0; cycle < 3; ++cycle) {
         for (const auto& behavior : behaviors) {
             AIManager::Instance().assignBehavior(handle, behavior);
-            updateAI(0.016f);  // Single update between transitions
+            updateAI(0.016f); // Single update between transitions
 
             size_t edmIdx = edm.getIndex(handle);
             BOOST_REQUIRE_NE(edmIdx, SIZE_MAX);
@@ -1475,7 +3617,7 @@ BOOST_AUTO_TEST_CASE(TestRapidBehaviorTransitionsStability) {
             auto& behaviorData = edm.getBehaviorData(edmIdx);
             BOOST_CHECK_MESSAGE(behaviorData.isValid(),
                 "BehaviorData corrupt during rapid transitions at cycle " +
-                std::to_string(cycle) + ", behavior " + behavior);
+                    std::to_string(cycle) + ", behavior " + behavior);
         }
     }
 
@@ -1500,7 +3642,7 @@ BOOST_AUTO_TEST_CASE(TestLargeNumberOfEntities) {
     std::vector<EntityHandle> perfTestHandles;
 
     // Create many NPCs with different behaviors
-    std::vector<std::string> behaviors = {"Idle", "Wander", "Chase", "Follow", "Guard"};
+    std::vector<std::string> behaviors = {"Idle", "Wander", "Chase", "Follow", "Guard", "Forage"};
 
     for (int i = 0; i < NUM_ENTITIES; ++i) {
         auto entity = TestNPC::create(i * 10.0f, i * 10.0f);
@@ -1538,8 +3680,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorMemoryManagement) {
 
     // Rapidly switch between behaviors to test memory management
     std::vector<std::string> behaviors = {
-        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack"
-    };
+        "Idle", "Wander", "Chase", "Flee", "Follow", "Guard", "Attack", "Forage"};
 
     for (int cycle = 0; cycle < 5; ++cycle) {
         for (const auto& behavior : behaviors) {
@@ -1554,7 +3695,7 @@ BOOST_AUTO_TEST_CASE(TestBehaviorMemoryManagement) {
 
     BOOST_CHECK(!AIManager::Instance().hasBehavior(handle));
     BOOST_CHECK_GE(AIManager::Instance().getTotalAssignmentCount(),
-                   initialAssignments + behaviors.size() * 5);
+        initialAssignments + behaviors.size() * 5);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -1708,9 +3849,9 @@ BOOST_AUTO_TEST_CASE(TestWanderSwitchesToFleeWhenAttacked) {
     // Simulate being attacked - set lastCombatTime=0 to indicate "just happened"
     // (delta-based semantics: starts at 0, increments each frame via emotional decay)
     auto& memData = edm.getMemoryData(entityIdx);
-    memData.setValid(true);  // Mark memory as valid so isUnderRecentAttack() can read it
+    memData.setValid(true); // Mark memory as valid so isUnderRecentAttack() can read it
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+    memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
 
     // Run behavior updates
     for (int i = 0; i < 5; ++i) {
@@ -1723,7 +3864,7 @@ BOOST_AUTO_TEST_CASE(TestWanderSwitchesToFleeWhenAttacked) {
     BOOST_CHECK(responseType == BehaviorType::Chase || responseType == BehaviorType::Flee);
 
     BOOST_TEST_MESSAGE("Wander -> combat response on attack verified (type="
-                       << static_cast<int>(responseType) << ")");
+        << static_cast<int>(responseType) << ")");
 
     // Cleanup
     aiMgr.unassignBehavior(entityHandle);
@@ -1751,9 +3892,9 @@ BOOST_AUTO_TEST_CASE(TestIdleSwitchesToFleeWhenAttacked) {
     // Simulate being attacked - set lastCombatTime=0 to indicate "just happened"
     // (delta-based semantics: starts at 0, increments each frame via emotional decay)
     auto& memData = edm.getMemoryData(entityIdx);
-    memData.setValid(true);  // Mark memory as valid so isUnderRecentAttack() can read it
+    memData.setValid(true); // Mark memory as valid so isUnderRecentAttack() can read it
     memData.lastAttacker = attackerHandle;
-    memData.lastCombatTime = 0.0f;  // Delta semantics: 0 = just happened
+    memData.lastCombatTime = 0.0f; // Delta semantics: 0 = just happened
 
     // Run behavior updates
     for (int i = 0; i < 5; ++i) {
@@ -1766,7 +3907,7 @@ BOOST_AUTO_TEST_CASE(TestIdleSwitchesToFleeWhenAttacked) {
     BOOST_CHECK(responseType == BehaviorType::Chase || responseType == BehaviorType::Flee);
 
     BOOST_TEST_MESSAGE("Idle -> combat response on attack verified (type="
-                       << static_cast<int>(responseType) << ")");
+        << static_cast<int>(responseType) << ")");
 
     // Cleanup
     aiMgr.unassignBehavior(entityHandle);
@@ -1791,7 +3932,7 @@ BOOST_AUTO_TEST_CASE(TestMassBasedKnockback) {
     float heavyScale = 1.0f / std::max(0.1f, heavyChar.mass);
 
     BOOST_TEST_MESSAGE("Knockback scales - light (mass=0.5): " << lightScale
-                       << ", heavy (mass=4.0): " << heavyScale);
+                                                               << ", heavy (mass=4.0): " << heavyScale);
 
     BOOST_CHECK_CLOSE(lightScale / heavyScale, 8.0f, 0.1f);
 
@@ -1870,15 +4011,15 @@ BOOST_AUTO_TEST_CASE(TestBerserkerModeNoRetreat) {
     memData.personality.aggression = 0.8f;
 
     bool isBerserker = (memData.emotions.aggression > 0.8f &&
-                        memData.personality.aggression > 0.7f);
+        memData.personality.aggression > 0.7f);
     BOOST_CHECK(isBerserker);
 
     auto& charData = edm.getCharacterData(handle);
     charData.health = charData.maxHealth * 0.1f;
 
     BOOST_TEST_MESSAGE("Berserker mode: aggression=" << memData.emotions.aggression
-                       << " personality=" << memData.personality.aggression
-                       << " health=" << (charData.health/charData.maxHealth*100) << "%");
+                                                     << " personality=" << memData.personality.aggression
+                                                     << " health=" << (charData.health / charData.maxHealth * 100) << "%");
 
     BOOST_CHECK(isBerserker);
 }
@@ -1927,6 +4068,9 @@ BOOST_AUTO_TEST_CASE(TestChasePanicSwitchesToFlee) {
     BOOST_REQUIRE(entityIdx != SIZE_MAX);
 
     // Assign Chase behavior and set a target
+    edm.setFaction(entityHandle, 1);
+    edm.setFaction(target->getHandle(), 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
     aiMgr.assignBehavior(entityHandle, "Chase");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
@@ -1955,6 +4099,9 @@ BOOST_AUTO_TEST_CASE(TestChaseRetreatSwitchesToFlee) {
     size_t entityIdx = edm.getIndex(entityHandle);
     BOOST_REQUIRE(entityIdx != SIZE_MAX);
 
+    edm.setFaction(entityHandle, 1);
+    edm.setFaction(target->getHandle(), 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
     aiMgr.assignBehavior(entityHandle, "Chase");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
@@ -2080,7 +4227,7 @@ BOOST_AUTO_TEST_CASE(TestFollowRaiseAlertCowardFlees) {
     aiMgr.assignBehavior(entityHandle, "Follow");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.2f;  // Cowardly (< 0.4 threshold)
+    memData.personality.bravery = 0.2f; // Cowardly (< 0.4 threshold)
     updateAI(0.016f);
 
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
@@ -2103,7 +4250,7 @@ BOOST_AUTO_TEST_CASE(TestFollowRaiseAlertBraveStands) {
     aiMgr.assignBehavior(entityHandle, "Follow");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.7f;  // Brave (>= 0.4 threshold)
+    memData.personality.bravery = 0.7f; // Brave (>= 0.4 threshold)
     updateAI(0.016f);
 
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
@@ -2210,8 +4357,8 @@ BOOST_AUTO_TEST_CASE(TestGuardFleesWhenOverwhelmed) {
     aiMgr.assignBehavior(entityHandle, "Guard");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.1f;  // Very cowardly (0.1 + 0.1 bonus = 0.2 < 0.3)
-    memData.emotions.fear = 0.8f;        // High fear (> 0.7)
+    memData.personality.bravery = 0.1f; // Very cowardly (0.1 + 0.1 bonus = 0.2 < 0.3)
+    memData.emotions.fear = 0.8f; // High fear (> 0.7)
 
     // Force HOSTILE alert so the flee check triggers
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
@@ -2235,8 +4382,8 @@ BOOST_AUTO_TEST_CASE(TestGuardStandsWhenBrave) {
     aiMgr.assignBehavior(entityHandle, "Guard");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
-    memData.personality.bravery = 0.5f;  // Brave (0.5 + 0.1 bonus = 0.6 >= 0.3)
-    memData.emotions.fear = 0.8f;        // High fear
+    memData.personality.bravery = 0.5f; // Brave (0.5 + 0.1 bonus = 0.6 >= 0.3)
+    memData.emotions.fear = 0.8f; // High fear
 
     Behaviors::queueBehaviorMessage(entityIdx, BehaviorMessage::RAISE_ALERT);
     updateAI(0.016f);
@@ -2261,6 +4408,9 @@ BOOST_AUTO_TEST_CASE(TestAttackPanicForcesRetreat) {
     size_t entityIdx = edm.getIndex(entityHandle);
     BOOST_REQUIRE(entityIdx != SIZE_MAX);
 
+    edm.setFaction(entityHandle, 1);
+    edm.setFaction(target->getHandle(), 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
     aiMgr.assignBehavior(entityHandle, "Attack");
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
@@ -2274,7 +4424,7 @@ BOOST_AUTO_TEST_CASE(TestAttackPanicForcesRetreat) {
     const auto attackRef = edm.getBehaviorConfigRef(entityIdx);
     // May have switched to Flee or be in a disengaging Attack state.
     bool retreatingOrFled = (attackRef.type == BehaviorType::Flee) ||
-                            (attackRef.type == BehaviorType::Attack && edm.getAttackState(attackRef.index).isRetreating);
+        (attackRef.type == BehaviorType::Attack && edm.getAttackState(attackRef.index).isRetreating);
     BOOST_CHECK(retreatingOrFled);
     BOOST_TEST_MESSAGE("Attack PANIC forced retreat/flee verified");
     aiMgr.unassignBehavior(entityHandle);
@@ -2291,6 +4441,10 @@ BOOST_AUTO_TEST_CASE(TestLowHealthAttackRetreatsThenReengages) {
     const size_t attackerIdx = edm.getIndex(attackerHandle);
     BOOST_REQUIRE(attackerIdx != SIZE_MAX);
 
+    // lastTarget is kept only while Hostile (or the last attacker).
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(targetHandle, 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
     aiMgr.assignBehavior(attackerHandle, "Attack");
 
     auto& attackerChar = edm.getCharacterDataByIndex(attackerIdx);
@@ -2307,7 +4461,7 @@ BOOST_AUTO_TEST_CASE(TestLowHealthAttackRetreatsThenReengages) {
     BOOST_REQUIRE(attackRef.type == BehaviorType::Attack);
     auto& attackState = edm.getAttackState(attackRef.index);
     BOOST_REQUIRE_MESSAGE(attackState.isRetreating,
-                          "Low-health attacker should enter tactical retreat once");
+        "Low-health attacker should enter tactical retreat once");
     BOOST_CHECK(attackState.hasHandledTacticalRetreat);
     BOOST_CHECK_EQUAL(static_cast<int>(attackState.lastTacticalRetreatEncounter), 1);
 
@@ -2337,10 +4491,10 @@ BOOST_AUTO_TEST_CASE(TestLowHealthAttackRetreatsThenReengages) {
         finalPressure = finalAttackState.pressureScore;
     }
     BOOST_CHECK_MESSAGE(reengaged,
-                        std::format("Handled low-health retreat should not permanently block re-engagement "
-                                    "(type={}, state={}, attackTimer={:.2f}, pressure={:.2f})",
-                                    static_cast<int>(finalRef.type), finalState,
-                                    finalAttackTimer, finalPressure));
+        std::format("Handled low-health retreat should not permanently block re-engagement "
+                    "(type={}, state={}, attackTimer={:.2f}, pressure={:.2f})",
+            static_cast<int>(finalRef.type), finalState,
+            finalAttackTimer, finalPressure));
     aiMgr.unassignBehavior(attackerHandle);
 }
 
@@ -2356,6 +4510,10 @@ BOOST_AUTO_TEST_CASE(TestAttackNewDamageEncounterCanTriggerAnotherRetreat) {
     const size_t attackerIdx = edm.getIndex(attackerHandle);
     BOOST_REQUIRE(attackerIdx != SIZE_MAX);
 
+    // lastTarget is kept only while Hostile (or the last attacker).
+    edm.setFaction(attackerHandle, 1);
+    edm.setFaction(targetHandle, 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
     aiMgr.assignBehavior(attackerHandle, "Attack");
 
     auto& attackerChar = edm.getCharacterDataByIndex(attackerIdx);
@@ -2388,11 +4546,11 @@ BOOST_AUTO_TEST_CASE(TestAttackNewDamageEncounterCanTriggerAnotherRetreat) {
     const auto& committedAttackState =
         edm.getAttackState(edm.getBehaviorConfigRef(attackerIdx).index);
     BOOST_REQUIRE_MESSAGE(committedAttackState.currentState == 3,
-                          std::format("Attacker should commit an attack after first tactical retreat "
-                                      "(state={}, pressure={:.2f}, resetConfidence={:.2f})",
-                                      static_cast<int>(committedAttackState.currentState),
-                                      committedAttackState.pressureScore,
-                                      committedAttackState.resetConfidence));
+        std::format("Attacker should commit an attack after first tactical retreat "
+                    "(state={}, pressure={:.2f}, resetConfidence={:.2f})",
+            static_cast<int>(committedAttackState.currentState),
+            committedAttackState.pressureScore,
+            committedAttackState.resetConfidence));
 
     memData.combatEncounters = 2;
     updateAI(0.1f, attacker->getPosition());
@@ -2401,16 +4559,16 @@ BOOST_AUTO_TEST_CASE(TestAttackNewDamageEncounterCanTriggerAnotherRetreat) {
     const auto& interruptedState =
         edm.getAttackState(edm.getBehaviorConfigRef(attackerIdx).index);
     BOOST_CHECK_MESSAGE(!interruptedState.isRetreating,
-                        "A fresh encounter must not preempt an already committed attack frame");
+        "A fresh encounter must not preempt an already committed attack frame");
     BOOST_REQUIRE_MESSAGE(damageAfterRetreat,
-                          "Committed attack should deal damage before tactical retreat replans");
+        "Committed attack should deal damage before tactical retreat replans");
 
     updateAI(0.1f, attacker->getPosition());
 
     const auto& secondRetreatState =
         edm.getAttackState(edm.getBehaviorConfigRef(attackerIdx).index);
     BOOST_CHECK_MESSAGE(secondRetreatState.isRetreating,
-                        "A new damage encounter can trigger another retreat after the committed attack resolves");
+        "A new damage encounter can trigger another retreat after the committed attack resolves");
     BOOST_CHECK_EQUAL(static_cast<int>(secondRetreatState.lastTacticalRetreatEncounter), 2);
     eventMgr.removeHandler(combatToken);
     aiMgr.unassignBehavior(attackerHandle);
@@ -2433,6 +4591,8 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
     BOOST_REQUIRE(attackerIdx != SIZE_MAX);
 
     edm.setFaction(attackerHandle, 1);
+    // The player stays a kept target only while standing is Hostile.
+    aiMgr.adjustPlayerStanding(playerHandle, 1, AIManager::PLAYER_STANDING_MIN);
     aiMgr.assignBehavior(attackerHandle, "Attack");
 
     auto& memData = edm.getMemoryData(attackerIdx);
@@ -2463,7 +4623,7 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
 
     updateAI(0.1f, player->getPosition());
     BOOST_REQUIRE_MESSAGE(attackState.isRetreating,
-                          "Low-health attacker should retreat during post-attack recovery");
+        "Low-health attacker should retreat during post-attack recovery");
     BOOST_REQUIRE(!attackState.canAttack);
 
     const float postRetreatStartHealth = player->getHealth();
@@ -2490,13 +4650,13 @@ BOOST_AUTO_TEST_CASE(TestRetreatInterruptedRecoveryRearmsAttackAgainstPlayer) {
     }
 
     BOOST_CHECK_MESSAGE(secondHit,
-                        std::format("Retreat must not strand attack readiness after interrupting recovery "
-                                    "(type={}, state={}, canAttack={}, retreating={}, attackTimer={:.2f}, "
-                                    "pressure={:.2f}, healthBefore={:.2f}, healthAfter={:.2f})",
-                                    static_cast<int>(finalRef.type), finalState,
-                                    finalCanAttack, finalRetreating, finalAttackTimer,
-                                    finalPressure, postRetreatStartHealth,
-                                    player->getHealth()));
+        std::format("Retreat must not strand attack readiness after interrupting recovery "
+                    "(type={}, state={}, canAttack={}, retreating={}, attackTimer={:.2f}, "
+                    "pressure={:.2f}, healthBefore={:.2f}, healthAfter={:.2f})",
+            static_cast<int>(finalRef.type), finalState,
+            finalCanAttack, finalRetreating, finalAttackTimer,
+            finalPressure, postRetreatStartHealth,
+            player->getHealth()));
     aiMgr.unassignBehavior(attackerHandle);
 }
 
@@ -2529,6 +4689,9 @@ BOOST_AUTO_TEST_CASE(TestSpecialAttackReadyAfterRecovery) {
     auto& memData = edm.getMemoryData(entityIdx);
     memData.setValid(true);
     auto target = TestNPC::create(350.0f, 350.0f);
+    edm.setFaction(entityHandle, 1);
+    edm.setFaction(target->getHandle(), 2);
+    aiMgr.setStance(1, 2, FactionStance::Hostile);
     memData.lastTarget = target->getHandle();
 
     updateAI(0.016f);
@@ -2537,6 +4700,265 @@ BOOST_AUTO_TEST_CASE(TestSpecialAttackReadyAfterRecovery) {
     BOOST_CHECK(edm.getAttackState(edm.getBehaviorConfigRef(entityIdx).index).specialAttackReady == true);
     BOOST_TEST_MESSAGE("specialAttackReady set to true after recovery transition");
     aiMgr.unassignBehavior(entityHandle);
+}
+
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_FIXTURE_TEST_SUITE(EnvironmentModifierTests, BehaviorTestFixture)
+
+BOOST_AUTO_TEST_CASE(TestEnvironmentModifierTableCombinesAndClamps) {
+    const auto identity = combineEnvironmentScales(TimePeriod::Day, WeatherType::Clear);
+    BOOST_CHECK_CLOSE(identity.detectionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(identity.moveSpeedScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(identity.cautionScale, 1.0f, 0.01);
+
+    const auto nightClear = combineEnvironmentScales(TimePeriod::Night, WeatherType::Clear);
+    BOOST_CHECK_CLOSE(nightClear.detectionScale, 0.55f, 0.01);
+
+    const auto nightStormy = combineEnvironmentScales(TimePeriod::Night, WeatherType::Stormy);
+    BOOST_CHECK_CLOSE(nightStormy.detectionScale, 0.3025f, 0.01);
+
+    const auto foggyNight = combineEnvironmentScales(TimePeriod::Night, WeatherType::Foggy);
+    BOOST_CHECK_CLOSE(foggyNight.detectionScale, 0.25f, 0.01);
+
+    const auto customDay = combineEnvironmentScales(TimePeriod::Day, WeatherType::Custom);
+    BOOST_CHECK_CLOSE(customDay.detectionScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(customDay.moveSpeedScale, 1.0f, 0.01);
+    BOOST_CHECK_CLOSE(customDay.cautionScale, 1.0f, 0.01);
+
+    const auto foggyDay = combineEnvironmentScales(TimePeriod::Day, WeatherType::Foggy);
+    BOOST_CHECK_CLOSE(foggyDay.detectionScale, 0.45f, 0.01);
+}
+
+BOOST_AUTO_TEST_CASE(TestGuardDetectsAtIdentityNotAtNightScale) {
+    auto& edm = EntityDataManager::Instance();
+    auto guard = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = guard->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Guard");
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Guard);
+
+    auto config = edm.getGuardConfig(ref.index);
+    auto& state = edm.getGuardState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+    memoryData.lastAttacker = EntityHandle{};
+    memoryData.lastTarget = EntityHandle{};
+
+    const EntityHandle playerHandle = playerEntity->getHandle();
+    const Vector2D playerPos = playerEntity->getPosition();
+    hotData.transform.position = Vector2D(playerPos.getX() + 160.0f, playerPos.getY());
+
+    // Player hostility is the by-value standing flag, not a stance-row cell.
+    auto detectWithScale = [&](float detectionScale) {
+        memoryData.lastTarget = EntityHandle{};
+        state.currentAlertLevel = 0;
+        state.threatSightingTimer = 2.0f;
+        state.lastCachedMode = 255;
+        EnvironmentSnapshot env{};
+        env.detectionScale = detectionScale;
+        BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+            idx, 0.016f, playerHandle, playerPos,
+            Vector2D(0, 0), true, edm.getBehaviorData(idx),
+            &edm.getPathData(idx), memoryData,
+            edm.getCharacterDataByIndex(idx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, true, false,
+            edm.knockbackSidecar(), edm.npcNeedSidecar(), env);
+        Behaviors::executeGuard(ctx, config, state);
+        return memoryData.lastTarget == playerHandle;
+    };
+
+    BOOST_CHECK(detectWithScale(1.0f));
+    BOOST_CHECK(!detectWithScale(0.55f));
+}
+
+BOOST_AUTO_TEST_CASE(TestWanderSlowerInStormThanClear) {
+    auto& edm = EntityDataManager::Instance();
+    auto npc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+
+    AIManager::Instance().assignBehavior(handle, "Wander");
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Wander);
+
+    const auto config = edm.getWanderConfig(ref.index);
+    auto& state = edm.getWanderState(ref.index);
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+
+    auto runWander = [&](const EnvironmentSnapshot& env) {
+        state.startDelay = 0.0f;
+        state.movementStarted = false;
+        state.movementUpdateTimer = 0.0f;
+        state.directionChangeTimer = 0.0f;
+        hotData.transform.velocity = Vector2D(0, 0);
+        BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+            idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
+            Vector2D(0, 0), false, edm.getBehaviorData(idx),
+            &edm.getPathData(idx), memoryData,
+            edm.getCharacterDataByIndex(idx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, false, false,
+            edm.knockbackSidecar(), edm.npcNeedSidecar(), env);
+        Behaviors::executeWander(ctx, config, state);
+        return npc->getVelocity().length();
+    };
+
+    const float clearSpeed = runWander(EnvironmentSnapshot{});
+    EnvironmentSnapshot storm{};
+    storm.moveSpeedScale = 0.75f;
+    const float stormSpeed = runWander(storm);
+
+    BOOST_CHECK_GT(clearSpeed, 0.0f);
+    BOOST_CHECK_CLOSE(stormSpeed, clearSpeed * 0.75f, 1.0);
+}
+
+BOOST_AUTO_TEST_CASE(TestPatrolDwellAndFleeSafeDistanceUseCaution) {
+    auto& edm = EntityDataManager::Instance();
+
+    auto patrolNpc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle patrolHandle = patrolNpc->getHandle();
+    const size_t patrolIdx = edm.getIndex(patrolHandle);
+    BOOST_REQUIRE(patrolIdx != SIZE_MAX);
+    AIManager::Instance().assignBehavior(patrolHandle, "Patrol");
+    const auto patrolRef = edm.getBehaviorConfigRef(patrolIdx);
+    BOOST_REQUIRE(patrolRef.type == BehaviorType::Patrol);
+
+    auto patrolConfig = edm.getPatrolConfig(patrolRef.index);
+    patrolConfig.updateInterval = 0.0f;
+    auto& patrolState = edm.getPatrolState(patrolRef.index);
+    auto& patrolHot = edm.getHotDataByIndex(patrolIdx);
+    auto& patrolMem = edm.getMemoryData(patrolIdx);
+    patrolMem.setValid(true);
+    patrolHot.transform.position = patrolState.patrolTargets[0];
+    const uint32_t startIndex = patrolState.currentPatrolIndex;
+
+    auto dwellWithCaution = [&](float cautionScale) {
+        patrolState.patrolMoveTimer = 0.90f;
+        patrolState.patrolThrottleTimer = 0.0f;
+        patrolState.currentPatrolIndex = startIndex;
+        EnvironmentSnapshot env{};
+        env.cautionScale = cautionScale;
+        BehaviorContext ctx(patrolHot.transform, patrolHot, patrolHandle.getId(),
+            patrolIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+            Vector2D(0, 0), false, edm.getBehaviorData(patrolIdx),
+            &edm.getPathData(patrolIdx), patrolMem,
+            edm.getCharacterDataByIndex(patrolIdx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, false, false,
+            edm.knockbackSidecar(), edm.npcNeedSidecar(), env);
+        Behaviors::executePatrol(ctx, patrolConfig, patrolState);
+        return patrolState.currentPatrolIndex;
+    };
+
+    BOOST_CHECK_EQUAL(dwellWithCaution(1.40f), startIndex);
+    BOOST_CHECK_NE(dwellWithCaution(1.0f), startIndex);
+
+    auto fleeNpc = TestNPC::create(300.0f, 300.0f);
+    auto threatNpc = TestNPC::create(750.0f, 300.0f);
+    const EntityHandle fleeHandle = fleeNpc->getHandle();
+    const EntityHandle threatHandle = threatNpc->getHandle();
+    const size_t fleeIdx = edm.getIndex(fleeHandle);
+    BOOST_REQUIRE(fleeIdx != SIZE_MAX);
+    BOOST_REQUIRE(edm.getIndex(threatHandle) != SIZE_MAX);
+    AIManager::Instance().assignBehavior(fleeHandle, "Flee");
+    const auto fleeRef = edm.getBehaviorConfigRef(fleeIdx);
+    BOOST_REQUIRE(fleeRef.type == BehaviorType::Flee);
+
+    const auto fleeConfig = edm.getFleeConfig(fleeRef.index);
+    auto& fleeState = edm.getFleeState(fleeRef.index);
+    auto& fleeHot = edm.getHotDataByIndex(fleeIdx);
+    auto& fleeMem = edm.getMemoryData(fleeIdx);
+    fleeMem.setValid(true);
+    fleeMem.lastAttacker = threatHandle;
+
+    auto fleeWithCaution = [&](float cautionScale) {
+        fleeState.isFleeing = false;
+        fleeState.isInPanic = false;
+        fleeState.hasValidThreat = false;
+        EnvironmentSnapshot env{};
+        env.cautionScale = cautionScale;
+        BehaviorContext ctx(fleeHot.transform, fleeHot, fleeHandle.getId(),
+            fleeIdx, 0.016f, EntityHandle{}, Vector2D(0, 0),
+            Vector2D(0, 0), false, edm.getBehaviorData(fleeIdx),
+            &edm.getPathData(fleeIdx), fleeMem,
+            edm.getCharacterDataByIndex(fleeIdx),
+            0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+            kNeutralFactionStanceRow, false, false,
+            edm.knockbackSidecar(), edm.npcNeedSidecar(), env);
+        Behaviors::executeFlee(ctx, fleeConfig, fleeState);
+        return fleeState.isFleeing;
+    };
+
+    BOOST_CHECK(fleeWithCaution(1.40f));
+    BOOST_CHECK(!fleeWithCaution(1.0f));
+}
+
+BOOST_AUTO_TEST_CASE(TestExecuteDoesNotCallWeatherOrTimeSingletons) {
+    const std::filesystem::path repoRoot =
+        std::filesystem::path(__FILE__).parent_path().parent_path();
+    const std::filesystem::path aiDir = repoRoot / "src" / "ai";
+    BOOST_REQUIRE(std::filesystem::exists(aiDir));
+    const std::filesystem::path workerFiles[] = {
+        aiDir / "BehaviorExecutors.cpp",
+        aiDir / "behaviors",
+    };
+    auto scanCpp = [](const std::filesystem::path& path) {
+        std::ifstream in(path);
+        BOOST_REQUIRE(in);
+        const std::string contents((std::istreambuf_iterator<char>(in)),
+            std::istreambuf_iterator<char>());
+        BOOST_CHECK_MESSAGE(
+            contents.find("GameTimeManager.hpp") == std::string::npos,
+            path.filename().string() + " includes GameTimeManager.hpp");
+        BOOST_CHECK_MESSAGE(
+            contents.find("WeatherController.hpp") == std::string::npos,
+            path.filename().string() + " includes WeatherController.hpp");
+    };
+    scanCpp(workerFiles[0]);
+    BOOST_REQUIRE(std::filesystem::exists(workerFiles[1]));
+    for (const auto& entry : std::filesystem::directory_iterator(workerFiles[1])) {
+        if (entry.path().extension() == ".cpp") {
+            scanCpp(entry.path());
+        }
+    }
+
+    auto& edm = EntityDataManager::Instance();
+    auto npc = TestNPC::create(300.0f, 300.0f);
+    const EntityHandle handle = npc->getHandle();
+    const size_t idx = edm.getIndex(handle);
+    BOOST_REQUIRE(idx != SIZE_MAX);
+    AIManager::Instance().assignBehavior(handle, "Wander");
+    const auto ref = edm.getBehaviorConfigRef(idx);
+    BOOST_REQUIRE(ref.type == BehaviorType::Wander);
+
+    auto& state = edm.getWanderState(ref.index);
+    state.startDelay = 0.0f;
+    auto& hotData = edm.getHotDataByIndex(idx);
+    auto& memoryData = edm.getMemoryData(idx);
+    memoryData.setValid(true);
+    EnvironmentSnapshot env{};
+    env.moveSpeedScale = 0.5f;
+    BehaviorContext ctx(hotData.transform, hotData, handle.getId(),
+        idx, 5.0f, EntityHandle{}, Vector2D(0, 0),
+        Vector2D(0, 0), false, edm.getBehaviorData(idx),
+        &edm.getPathData(idx), memoryData,
+        edm.getCharacterDataByIndex(idx),
+        0.0f, 0.0f, 1280.0f, 1280.0f, true, 0.0f,
+        kNeutralFactionStanceRow, false, false,
+        edm.knockbackSidecar(), edm.npcNeedSidecar(), env);
+    Behaviors::executeWander(ctx, edm.getWanderConfig(ref.index), state);
+    BOOST_CHECK_GT(npc->getVelocity().length(), 0.0f);
+    BOOST_CHECK_CLOSE(npc->getVelocity().length(),
+        edm.getBehaviorData(idx).moveSpeed * 0.5f, 1.0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

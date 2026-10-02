@@ -9,45 +9,54 @@
 namespace VoidLight {
 
 void AICommandBus::enqueueBehaviorMessage(EntityHandle targetHandle, size_t targetEdmIndex,
-                                          uint8_t messageId, uint8_t param) {
+    uint8_t messageId, uint8_t param) {
     const uint64_t sequence = m_nextMessageSequence.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pendingMessages.push_back({targetHandle, targetEdmIndex, messageId, param, sequence});
 }
 
 void AICommandBus::enqueueBehaviorTransition(EntityHandle targetHandle, size_t targetEdmIndex,
-                                             const BehaviorConfigData& config) {
+    const BehaviorConfigData& config) {
     const uint64_t sequence = m_nextTransitionSequence.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pendingTransitions.push_back({targetHandle, targetEdmIndex, config, sequence});
 }
 
 void AICommandBus::enqueueFactionChange(EntityHandle targetHandle, size_t targetEdmIndex,
-                                        uint8_t oldFaction, uint8_t newFaction) {
+    uint8_t oldFaction, uint8_t newFaction) {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pendingFactionChanges.push_back({targetHandle, targetEdmIndex, oldFaction, newFaction});
 }
 
 void AICommandBus::enqueueMeleeFallbackEquip(EntityHandle targetHandle,
-                                             size_t targetEdmIndex) {
+    size_t targetEdmIndex) {
     const uint64_t sequence = m_nextEquipmentSequence.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pendingMeleeFallbackEquips.push_back({targetHandle, targetEdmIndex, sequence});
 }
 
 void AICommandBus::enqueueRangedAttack(EntityHandle attackerHandle,
-                                       size_t attackerEdmIndex,
-                                       const Vector2D& attackerPos,
-                                       const Vector2D& targetPos,
-                                       float damage,
-                                       float attackRange,
-                                       float projectileSpeed) {
+    size_t attackerEdmIndex,
+    const Vector2D& attackerPos,
+    const Vector2D& targetPos,
+    float damage,
+    float attackRange,
+    float projectileSpeed) {
     const uint64_t sequence =
         m_nextRangedAttackSequence.fetch_add(1, std::memory_order_relaxed);
     std::lock_guard<std::mutex> lock(m_mutex);
     m_pendingRangedAttacks.push_back({attackerHandle, attackerEdmIndex,
-                                      attackerPos, targetPos, damage,
-                                      attackRange, projectileSpeed, sequence});
+        attackerPos, targetPos, damage,
+        attackRange, projectileSpeed, sequence});
+}
+
+void AICommandBus::enqueueHarvest(EntityHandle harvesterHandle,
+    size_t harvesterEdmIndex,
+    EntityHandle harvestableHandle,
+    uint32_t harvestableStaticIndex) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_pendingHarvests.push_back({harvesterHandle, harvesterEdmIndex,
+        harvestableHandle, harvestableStaticIndex});
 }
 
 void AICommandBus::clearBehaviorMessages(EntityHandle targetHandle, size_t targetEdmIndex) {
@@ -64,6 +73,7 @@ void AICommandBus::clearAll() {
     m_pendingFactionChanges.clear();
     m_pendingMeleeFallbackEquips.clear();
     m_pendingRangedAttacks.clear();
+    m_pendingHarvests.clear();
 }
 
 void AICommandBus::drainBehaviorMessages(std::vector<BehaviorMessageCommand>& out) {
@@ -94,6 +104,12 @@ void AICommandBus::drainRangedAttacks(std::vector<RangedAttackCommand>& out) {
     std::lock_guard<std::mutex> lock(m_mutex);
     out.clear();
     out.swap(m_pendingRangedAttacks);
+}
+
+void AICommandBus::drainHarvests(std::vector<HarvestCommand>& out) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    out.clear();
+    out.swap(m_pendingHarvests);
 }
 
 } // namespace VoidLight

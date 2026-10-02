@@ -29,8 +29,8 @@ namespace VoidLight {
  * Defines how long harvesting takes, stamina cost, and display text.
  */
 struct HarvestTypeConfig {
-    float baseDuration{1.0f};              // Seconds to complete harvest
-    float staminaCost{0.0f};               // Stamina consumed (future use)
+    float baseDuration{1.0f}; // Seconds to complete harvest
+    float staminaCost{0.0f}; // Stamina consumed (future use)
     std::string_view actionVerb{"Harvesting..."}; // Display text during harvest
 };
 
@@ -40,10 +40,10 @@ struct HarvestTypeConfig {
  * Maps ObstacleType deposits (ore, gems) to their resource yields.
  */
 struct DepositConfig {
-    std::string_view resourceId{};                 // Resource template ID ("iron_ore", ...)
-    int yieldMin{0};                               // Minimum yield per harvest
-    int yieldMax{0};                               // Maximum yield per harvest
-    float respawnTime{0.0f};                       // Seconds until deposit respawns
+    std::string_view resourceId{}; // Resource template ID ("iron_ore", ...)
+    int yieldMin{0}; // Minimum yield per harvest
+    int yieldMax{0}; // Maximum yield per harvest
+    float respawnTime{0.0f}; // Seconds until deposit respawns
     HarvestType harvestType{HarvestType::Gathering}; // Type of harvesting required
 };
 

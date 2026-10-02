@@ -1,6 +1,8 @@
 # EntityStateManager
 
-**Code:** `include/managers/EntityStateManager.hpp`, `src/managers/EntityStateManager.cpp`
+**Code:** `include/entities/EntityStateManager.hpp`, `src/entities/EntityStateManager.cpp`
+
+This is an entity utility, not a domain manager. The page lives under `docs/managers/` for historical layout only.
 
 ## Overview
 
@@ -33,9 +35,6 @@ std::string getCurrentStateName() const;
 
 bool hasState(const std::string& stateName) const;
     // Returns true if a state with the given name exists.
-
-void removeState(const std::string& stateName);
-    // Removes the named state. If it was active, no state will be active after removal.
 ```
 
 ### State Update
@@ -60,13 +59,13 @@ stateMgr.setState("Attack");
 
 ## Best Practices
 - Use descriptive state names (e.g., "Idle", "Attack", "Flee").
-- Always check `hasState()` before switching or removing states.
+- Always check `hasState()` before switching states.
 - States should be lightweight and reusable.
-- Clean up unused states to avoid memory leaks.
+- There is no `removeState()`; states live until the manager is destroyed.
 
 ## Thread Safety
 This class is **not** thread-safe. All state changes and updates should occur on the main/game thread.
 
 ## See Also
 - `EntityState` (base class for states)
-- `Player` and `NPC` (example users of state managers)
+- `Player` (the only current user; NPCs are EDM-driven and have no EntityStateManager)

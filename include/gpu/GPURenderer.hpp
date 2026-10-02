@@ -37,6 +37,8 @@ public:
      */
     [[nodiscard]] bool init();
 
+    [[nodiscard]] bool isInitialized() const { return m_initialized; }
+
     /**
      * Shutdown and release all resources.
      */
@@ -133,15 +135,15 @@ public:
      * SDL_GPU pipeline, sampler, vertex-buffer, and draw-call submission.
      */
     void renderUIBatches(SDL_GPURenderPass* pass,
-                         uint32_t primitiveVertexCount,
-                         std::span<const UITextureDrawBatch> imageBatches,
-                         std::span<const UITextDrawBatch> textBatches);
+        uint32_t primitiveVertexCount,
+        std::span<const UITextureDrawBatch> imageBatches,
+        std::span<const UITextDrawBatch> textBatches);
 
     /**
      * Push composite uniforms.
      */
     void pushCompositeUniforms(const SDL_GPURenderPass* pass,
-                                float subPixelX, float subPixelY, float zoom);
+        float subPixelX, float subPixelY, float zoom);
 
     /**
      * Set day/night ambient lighting parameters.
@@ -178,7 +180,7 @@ public:
      * @param out Output matrix (16 floats)
      */
     static void createOrthoMatrix(float left, float right, float bottom, float top,
-                                   float* out);
+        float* out);
 
 private:
     GPURenderer() = default;
@@ -191,7 +193,7 @@ private:
     [[nodiscard]] bool loadShaders();
     [[nodiscard]] bool createPipelines();
     [[nodiscard]] bool createSceneTexture();
-    void cleanupPartialInit();  // Clean up resources on init failure
+    void cleanupPartialInit(); // Clean up resources on init failure
     void resetFrameState();
 
     // Device reference
@@ -232,14 +234,14 @@ private:
 
     // Vertex pools
     GPUVertexPool m_spriteVertexPool;
-    GPUVertexPool m_entityVertexPool;  // For entity sprites (player, NPCs) with separate textures
+    GPUVertexPool m_entityVertexPool; // For entity sprites (player, NPCs) with separate textures
     GPUVertexPool m_particleVertexPool;
     GPUVertexPool m_primitiveVertexPool;
-    GPUVertexPool m_uiVertexPool;  // For UI sprites (text, icons) rendered to swapchain
+    GPUVertexPool m_uiVertexPool; // For UI sprites (text, icons) rendered to swapchain
 
     // Sprite batches
-    SpriteBatch m_spriteBatch;      // World tiles (atlas)
-    SpriteBatch m_entityBatch;      // Entities (player, NPCs)
+    SpriteBatch m_spriteBatch; // World tiles (atlas)
+    SpriteBatch m_entityBatch; // Entities (player, NPCs)
 
     // Viewport (initialized from window size in init())
     uint32_t m_viewportWidth{0};

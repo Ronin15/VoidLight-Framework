@@ -5,6 +5,7 @@
 #include "gpu/GPUTypes.hpp"
 #include "gpu/GPUTransferBuffer.hpp"
 #include "core/Logger.hpp"
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <format>
@@ -84,13 +85,13 @@ bool SpriteBatch::init(SDL_GPUDevice* device, const char* name) {
     SDL_EndGPUCopyPass(copyPass);
     if (!SDL_SubmitGPUCommandBuffer(cmd)) {
         GAMEENGINE_ERROR(std::format("SpriteBatch: failed to submit index upload command buffer: {}",
-                                     SDL_GetError()));
+            SDL_GetError()));
         return false;
     }
 
     m_initialized = true;
     GAMEENGINE_INFO(std::format("{} initialized: max {} sprites, {} KB index buffer",
-                    name, MAX_SPRITES, indexBufferSize / 1024));
+        name, MAX_SPRITES, indexBufferSize / 1024));
     return true;
 }
 
@@ -113,8 +114,7 @@ SpriteBatch::SpriteBatch(SpriteBatch&& other) noexcept
     , m_spriteCount(other.m_spriteCount)
     , m_vertexCount(other.m_vertexCount)
     , m_recording(other.m_recording)
-    , m_initialized(other.m_initialized)
-{
+    , m_initialized(other.m_initialized) {
     // Clear source state to prevent double-cleanup
     other.m_device = nullptr;
     other.m_texture = nullptr;
@@ -164,9 +164,9 @@ SpriteBatch& SpriteBatch::operator=(SpriteBatch&& other) noexcept {
 }
 
 void SpriteBatch::begin(SpriteVertex* writePtr, size_t maxVertices,
-                        SDL_GPUTexture* texture, SDL_GPUSampler* sampler,
-                        float textureWidth, float textureHeight,
-                        float targetHeight) {
+    SDL_GPUTexture* texture, SDL_GPUSampler* sampler,
+    float textureWidth, float textureHeight,
+    float targetHeight) {
     if (!m_initialized) {
         GAMEENGINE_ERROR("SpriteBatch::begin: not initialized");
         return;
@@ -190,8 +190,8 @@ void SpriteBatch::begin(SpriteVertex* writePtr, size_t maxVertices,
 }
 
 void SpriteBatch::draw(float srcX, float srcY, float srcW, float srcH,
-                       float dstX, float dstY, float dstW, float dstH,
-                       uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    float dstX, float dstY, float dstW, float dstH,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     // Convert pixel coords to normalized UVs
     float u0 = srcX / m_textureWidth;
     float v0 = srcY / m_textureHeight;
@@ -202,8 +202,8 @@ void SpriteBatch::draw(float srcX, float srcY, float srcW, float srcH,
 }
 
 void SpriteBatch::drawUV(float u0, float v0, float u1, float v1,
-                         float dstX, float dstY, float dstW, float dstH,
-                         uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    float dstX, float dstY, float dstW, float dstH,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     if (!m_recording) {
         return;
     }
@@ -229,8 +229,8 @@ void SpriteBatch::drawUV(float u0, float v0, float u1, float v1,
 }
 
 void SpriteBatch::addQuad(float x0, float y0, float x1, float y1,
-                          float u0, float v0, float u1, float v1,
-                          uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    float u0, float v0, float u1, float v1,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     if (!m_writePtr) {
         return;
     }
@@ -252,9 +252,9 @@ void SpriteBatch::addQuad(float x0, float y0, float x1, float y1,
 }
 
 void SpriteBatch::drawUVRotated(float u0, float v0, float u1, float v1,
-                                float dstX, float dstY, float dstW, float dstH,
-                                float angleRad,
-                                uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    float dstX, float dstY, float dstW, float dstH,
+    float angleRad,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     if (!m_recording) { return; }
 
     if (m_vertexCount + VERTICES_PER_SPRITE > m_maxVertices) {
@@ -277,13 +277,13 @@ void SpriteBatch::drawUVRotated(float u0, float v0, float u1, float v1,
     float sinA = std::sin(-angleRad);
 
     addQuadRotated(gpuCX, gpuCY, halfW, halfH, cosA, sinA,
-                   u0, v0, u1, v1, r, g, b, a);
+        u0, v0, u1, v1, r, g, b, a);
 }
 
 void SpriteBatch::addQuadRotated(float cx, float cy, float halfW, float halfH,
-                                 float cosA, float sinA,
-                                 float u0, float v0, float u1, float v1,
-                                 uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
+    float cosA, float sinA,
+    float u0, float v0, float u1, float v1,
+    uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     if (!m_writePtr) { return; }
 
     SpriteVertex* v = m_writePtr + m_vertexCount;
@@ -293,21 +293,21 @@ void SpriteBatch::addQuadRotated(float cx, float cy, float halfW, float halfH,
     //   1: top-right    (+halfW, +halfH)
     //   2: bottom-right (+halfW, -halfH)
     //   3: bottom-left  (-halfW, -halfH)
-    struct { float dx, dy; } corners[4] = {
-        {-halfW, +halfH},
-        {+halfW, +halfH},
-        {+halfW, -halfH},
-        {-halfW, -halfH},
+    struct CornerUV {
+        float dx, dy, u, v;
     };
+    const std::array<CornerUV, 4> corners{{
+        {-halfW, +halfH, u0, v0},
+        {+halfW, +halfH, u1, v0},
+        {+halfW, -halfH, u1, v1},
+        {-halfW, -halfH, u0, v1},
+    }};
 
-    float uvs[4][2] = {
-        {u0, v0}, {u1, v0}, {u1, v1}, {u0, v1}
-    };
-
-    for (int i = 0; i < 4; ++i) {
-        float rx = corners[i].dx * cosA - corners[i].dy * sinA;
-        float ry = corners[i].dx * sinA + corners[i].dy * cosA;
-        v[i] = {cx + rx, cy + ry, uvs[i][0], uvs[i][1], r, g, b, a};
+    for (size_t i = 0; i < corners.size(); ++i) {
+        const CornerUV& c = corners[i];
+        float rx = c.dx * cosA - c.dy * sinA;
+        float ry = c.dx * sinA + c.dy * cosA;
+        v[i] = {cx + rx, cy + ry, c.u, c.v, r, g, b, a};
     }
 
     m_vertexCount += VERTICES_PER_SPRITE;
@@ -334,8 +334,8 @@ void SpriteBatch::reset() {
 }
 
 void SpriteBatch::render(SDL_GPURenderPass* pass,
-                         SDL_GPUGraphicsPipeline* pipeline,
-                         SDL_GPUBuffer* vertexBuffer) {
+    SDL_GPUGraphicsPipeline* pipeline,
+    SDL_GPUBuffer* vertexBuffer) {
     if (!pass || !pipeline || !vertexBuffer || m_spriteCount == 0) {
         return;
     }

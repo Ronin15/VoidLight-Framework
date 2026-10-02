@@ -14,4 +14,3 @@ void EventManagerTestAccess::reset() {
         throw std::runtime_error("EventManager re-init failed in EventManagerTestAccess::reset()");
     }
 }
-

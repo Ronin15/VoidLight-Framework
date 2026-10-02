@@ -37,7 +37,7 @@ void applyPathCooldown(VoidLight::ChaseStateData& chase, float cooldownSeconds) 
 namespace Behaviors {
 
 void initChase(size_t edmIndex, const VoidLight::ChaseBehaviorConfig&,
-               VoidLight::ChaseStateData& state) {
+    VoidLight::ChaseStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Chase);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -68,24 +68,21 @@ void initChase(size_t edmIndex, const VoidLight::ChaseBehaviorConfig&,
 }
 
 void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& config,
-                  VoidLight::ChaseStateData& chase) {
+    VoidLight::ChaseStateData& chase) {
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
-    {
-        switch (shared.pendingMessages[i].messageId)
-        {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        switch (shared.pendingMessages[i].messageId) {
             case BehaviorMessage::PANIC:
                 shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::ATTACK_TARGET:
                 // Redirect chase to new target from memory
-                if (ctx.memoryData.lastAttacker.isValid())
-                {
+                if (ctx.memoryData.lastAttacker.isValid()) {
                     chase.hasExplicitTarget = true;
                     chase.explicitTarget = ctx.memoryData.lastAttacker;
                 }
@@ -124,7 +121,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         auto& nearbyPositions = AIInternal::GetNearbyPositionBuffer();
         nearbyPositions.clear();
         shared.cachedNearbyCount = AIInternal::GetNearbyEntitiesWithPositions(
-            ctx.entityId, ctx.transform.position, kCrowdQueryRadius, nearbyPositions);
+            ctx.edmIndex, ctx.transform.position, kCrowdQueryRadius, nearbyPositions);
 
         if (!nearbyPositions.empty()) {
             Vector2D sum = std::accumulate(nearbyPositions.begin(), nearbyPositions.end(), Vector2D{0, 0});
@@ -172,14 +169,22 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         if (targetIdx != SIZE_MAX) {
             const auto& targetHot = edm.getHotDataByIndex(targetIdx);
             if (targetHot.isAlive()) {
-                targetPos = targetHot.transform.position;
-                targetHandle = ctx.memoryData.lastTarget;
-                targetValid = true;
+                if (shouldKeepCombatTarget(ctx, targetIdx, ctx.memoryData.lastTarget)) {
+                    targetPos = targetHot.transform.position;
+                    targetHandle = ctx.memoryData.lastTarget;
+                    targetValid = true;
+                } else {
+                    // De-escalated (standing or stance no longer Hostile): drop it.
+                    ctx.memoryData.lastTarget = EntityHandle{};
+                }
             }
         }
     }
 
     if (!targetValid) {
+        if (tryEngageHostileInRange(ctx)) {
+            return;
+        }
         if (chase.isChasing) {
             ctx.transform.velocity = Vector2D(0, 0);
             chase.isChasing = false;
@@ -200,7 +205,8 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
         switchBehavior(ctx.edmIndex, BehaviorType::Attack);
         return;
     }
-    float maxRangeSquared = config.maxChaseRange * config.maxChaseRange;
+    const float effectiveMaxRange = config.maxChaseRange * ctx.envSnapshot.detectionScale;
+    float maxRangeSquared = effectiveMaxRange * effectiveMaxRange;
     float minRangeSquared = config.minChaseRange * config.minChaseRange;
 
     updateCooldowns(chase, ctx.deltaTime);
@@ -268,7 +274,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
             }
 
             const bool skipRefresh = (pathData.pathRequestCooldown > 0.0f && pathData.isFollowingPath() &&
-                                      pathData.progressTimer < 0.8f);
+                pathData.progressTimer < 0.8f);
             bool needsNewPath = false;
 
             if (!skipRefresh) {
@@ -280,7 +286,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                     Vector2D pathGoal = edm.getPathGoal(ctx.edmIndex);
                     float targetMovementSquared = (targetPos - pathGoal).lengthSquared();
                     needsNewPath = (targetMovementSquared >
-                                   config.pathInvalidationDistance * config.pathInvalidationDistance);
+                        config.pathInvalidationDistance * config.pathInvalidationDistance);
                 }
             }
 
@@ -295,7 +301,7 @@ void executeChase(BehaviorContext& ctx, const VoidLight::ChaseBehaviorConfig& co
                 }
 
                 PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, entityPos, targetPos,
-                                                               PathfinderManager::Priority::High);
+                    PathfinderManager::Priority::High);
                 applyPathCooldown(chase, config.pathRequestCooldown);
             }
 

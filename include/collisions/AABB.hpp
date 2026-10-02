@@ -11,7 +11,7 @@
 namespace VoidLight {
 
 struct AABB {
-    Vector2D center;   // world center
+    Vector2D center; // world center
     Vector2D halfSize; // half extents (w/2, h/2)
 
     AABB() = default;
@@ -30,4 +30,3 @@ struct AABB {
 } // namespace VoidLight
 
 #endif // AABB_HPP
-

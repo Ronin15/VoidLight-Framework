@@ -4,7 +4,7 @@
 
 ## Overview
 
-`TimestepManager` owns fixed-update timing plus render cadence handling. This branch adds explicit display refresh propagation through:
+`TimestepManager` owns fixed-update timing plus render cadence handling. Display refresh is propagated explicitly through:
 
 ```cpp
 setDisplayRefreshHz(float hz);

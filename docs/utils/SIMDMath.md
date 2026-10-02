@@ -217,11 +217,14 @@ Broadcasts integer to all lanes.
 Int4 layer = broadcast_int(0x01); // [0x01, 0x01, 0x01, 0x01]
 ```
 
-#### `Int4 bitwise_and_int(Int4 a, Int4 b)`
-Bitwise AND for integers.
+#### `Int4 bitwise_and(Int4 a, Int4 b)` / `Int4 bitwise_or_int(Int4 a, Int4 b)`
+Bitwise AND / OR for integers.
 ```cpp
-Int4 result = bitwise_and_int(layerMask, collideMask);
+Int4 result = bitwise_and(layerMask, collideMask);
 ```
+
+#### `Int4 load_int4(const uint32_t* ptr)` / `Int4 setzero_int()` / `Int4 cmpeq_int(Int4 a, Int4 b)`
+Unaligned integer load, zero vector, and per-lane equality (all bits set where equal).
 
 #### `int movemask_int(Int4 v)`
 Extracts sign bits from integer vector.
@@ -341,18 +344,17 @@ bool canCollide(uint32_t layerMasks[4], uint32_t collideMasks[4], bool results[4
     using namespace VoidLight::SIMD;
 
     // Load masks
-    Int4 layers = _mm_loadu_si128(reinterpret_cast<const __m128i*>(layerMasks));
-    Int4 collides = _mm_loadu_si128(reinterpret_cast<const __m128i*>(collideMasks));
+    Int4 layers = load_int4(layerMasks);
+    Int4 collides = load_int4(collideMasks);
 
     // Bitwise AND to test overlap
-    Int4 overlap = bitwise_and_int(layers, collides);
+    Int4 overlap = bitwise_and(layers, collides);
 
-    // Check if any bits set (non-zero means can collide)
-    Int4 zero = broadcast_int(0);
-    Int4 mask = cmpgt_int(overlap, zero);
+    // Lanes equal to zero cannot collide; invert the 4-bit lane mask
+    Int4 zeroMask = cmpeq_int(overlap, setzero_int());
 
     // Extract results
-    int movemask = movemask_int(mask);
+    int movemask = ~movemask_int(zeroMask) & 0xF;
     results[0] = (movemask & 0x1) != 0;
     results[1] = (movemask & 0x2) != 0;
     results[2] = (movemask & 0x4) != 0;
@@ -606,13 +608,13 @@ printFloat4("v", v); // Prints: v: [5.00, 5.00, 5.00, 5.00]
 ### Verify SIMD Path Selection
 ```cpp
 #if defined(VOIDLIGHT_SIMD_AVX2)
-    LOGGER_INFO("Using AVX2 SIMD path");
+    GAMEENGINE_INFO("Using AVX2 SIMD path");
 #elif defined(VOIDLIGHT_SIMD_SSE2)
-    LOGGER_INFO("Using SSE2 SIMD path");
+    GAMEENGINE_INFO("Using SSE2 SIMD path");
 #elif defined(VOIDLIGHT_SIMD_NEON)
-    LOGGER_INFO("Using NEON SIMD path");
+    GAMEENGINE_INFO("Using NEON SIMD path");
 #else
-    LOGGER_INFO("Using scalar fallback path");
+    GAMEENGINE_INFO("Using scalar fallback path");
 #endif
 ```
 
@@ -622,4 +624,4 @@ printFloat4("v", v); // Prints: v: [5.00, 5.00, 5.00, 5.00]
 - [CollisionManager Documentation](../managers/CollisionManager.md) - SIMD AABB operations
 - [ParticleManager Documentation](../managers/ParticleManager.md) - SIMD particle updates
 - [Build Safety Controls](../performance/BuildSafetyControls.md) - Build type safety/optimization tradeoffs, `load_byte16` bounds assertion
-- [AGENTS.md](../../AGENTS.md) - Repo build and architecture guidance for SIMD-related work
+- [CLAUDE.md](../../CLAUDE.md) - Repo build and architecture guidance for SIMD-related work

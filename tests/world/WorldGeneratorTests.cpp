@@ -23,9 +23,9 @@ BOOST_AUTO_TEST_CASE(TestBasicWorldGeneration) {
     config.humidityFrequency = 0.15f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     auto world = WorldGenerator::generateWorld(config);
-    
+
     BOOST_REQUIRE(world != nullptr);
     BOOST_CHECK_EQUAL(world->grid.size(), 50);
     BOOST_CHECK_EQUAL(world->grid[0].size(), 50);
@@ -41,20 +41,20 @@ BOOST_AUTO_TEST_CASE(TestDeterministicGeneration) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     auto world1 = WorldGenerator::generateWorld(config);
     auto world2 = WorldGenerator::generateWorld(config);
-    
+
     BOOST_REQUIRE(world1 != nullptr);
     BOOST_REQUIRE(world2 != nullptr);
-    
+
     // Same seed should produce identical worlds
     for (int y = 0; y < config.height; ++y) {
         for (int x = 0; x < config.width; ++x) {
-            BOOST_CHECK_EQUAL(static_cast<int>(world1->grid[y][x].biome), 
-                             static_cast<int>(world2->grid[y][x].biome));
-            BOOST_CHECK_EQUAL(static_cast<int>(world1->grid[y][x].obstacleType), 
-                             static_cast<int>(world2->grid[y][x].obstacleType));
+            BOOST_CHECK_EQUAL(static_cast<int>(world1->grid[y][x].biome),
+                static_cast<int>(world2->grid[y][x].biome));
+            BOOST_CHECK_EQUAL(static_cast<int>(world1->grid[y][x].obstacleType),
+                static_cast<int>(world2->grid[y][x].obstacleType));
             BOOST_CHECK_EQUAL(world1->grid[y][x].isWater, world2->grid[y][x].isWater);
             BOOST_CHECK_CLOSE(world1->grid[y][x].elevation, world2->grid[y][x].elevation, 0.001f);
         }
@@ -70,13 +70,13 @@ BOOST_AUTO_TEST_CASE(TestBiomeDistribution) {
     config.humidityFrequency = 0.05f;
     config.waterLevel = 0.2f;
     config.mountainLevel = 0.8f;
-    
+
     auto world = WorldGenerator::generateWorld(config);
     BOOST_REQUIRE(world != nullptr);
-    
+
     int biomeCount[static_cast<int>(Biome::OCEAN) + 1] = {0};
     int waterTileCount = 0;
-    
+
     for (int y = 0; y < config.height; ++y) {
         for (int x = 0; x < config.width; ++x) {
             const Tile& tile = world->grid[y][x];
@@ -86,7 +86,7 @@ BOOST_AUTO_TEST_CASE(TestBiomeDistribution) {
             }
         }
     }
-    
+
     // Verify that we have various biomes
     int biomesPresent = 0;
     for (int i = 0; i <= static_cast<int>(Biome::OCEAN); ++i) {
@@ -94,7 +94,7 @@ BOOST_AUTO_TEST_CASE(TestBiomeDistribution) {
             biomesPresent++;
         }
     }
-    
+
     BOOST_CHECK_GE(biomesPresent, 3); // At least 3 different biomes
     BOOST_CHECK_GT(waterTileCount, 0); // Some water tiles should exist
 }
@@ -108,20 +108,20 @@ BOOST_AUTO_TEST_CASE(TestObstaclePlacement) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.1f; // Low water level to have more land
     config.mountainLevel = 0.9f; // High mountain level
-    
+
     auto world = WorldGenerator::generateWorld(config);
     BOOST_REQUIRE(world != nullptr);
-    
+
     int obstacleCount = 0;
     int waterObstacleCount = 0;
-    
+
     for (int y = 0; y < config.height; ++y) {
         for (int x = 0; x < config.width; ++x) {
             const Tile& tile = world->grid[y][x];
-            
+
             if (tile.obstacleType != ObstacleType::NONE) {
                 obstacleCount++;
-                
+
                 // No obstacles should be in water
                 if (tile.isWater) {
                     waterObstacleCount++;
@@ -129,7 +129,7 @@ BOOST_AUTO_TEST_CASE(TestObstaclePlacement) {
             }
         }
     }
-    
+
     BOOST_CHECK_GT(obstacleCount, 0); // Should have some obstacles
     BOOST_CHECK_EQUAL(waterObstacleCount, 0); // No obstacles in water
 }
@@ -176,25 +176,25 @@ BOOST_AUTO_TEST_CASE(TestElevationRange) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     auto world = WorldGenerator::generateWorld(config);
     BOOST_REQUIRE(world != nullptr);
-    
+
     float minElevation = 1.0f;
     float maxElevation = 0.0f;
-    
+
     for (int y = 0; y < config.height; ++y) {
         for (int x = 0; x < config.width; ++x) {
             float elevation = world->grid[y][x].elevation;
             minElevation = std::min(minElevation, elevation);
             maxElevation = std::max(maxElevation, elevation);
-            
+
             // Elevation should be normalized to [0, 1]
             BOOST_CHECK_GE(elevation, 0.0f);
             BOOST_CHECK_LE(elevation, 1.0f);
         }
     }
-    
+
     // Should have some variation in elevation
     BOOST_CHECK_LT(minElevation, maxElevation);
     BOOST_CHECK_GT(maxElevation - minElevation, 0.1f);
@@ -209,13 +209,13 @@ BOOST_AUTO_TEST_CASE(TestSmallWorld) {
     config.humidityFrequency = 0.2f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     auto world = WorldGenerator::generateWorld(config);
-    
+
     BOOST_REQUIRE(world != nullptr);
     BOOST_CHECK_EQUAL(world->grid.size(), 5);
     BOOST_CHECK_EQUAL(world->grid[0].size(), 5);
-    
+
     // Even small worlds should be valid
     for (int y = 0; y < 5; ++y) {
         for (int x = 0; x < 5; ++x) {
@@ -349,6 +349,38 @@ BOOST_AUTO_TEST_CASE(TestBuildingGeneration) {
     // Should have at least some buildings in a 100x100 world
     BOOST_CHECK_GT(buildingTiles.size(), 0);
     BOOST_CHECK_GT(buildingTileCount, 0);
+}
+
+BOOST_AUTO_TEST_CASE(TestSettlementRecordsPersisted) {
+    WorldGenerationConfig config;
+    config.width = 100;
+    config.height = 100;
+    config.seed = 55555;
+    config.elevationFrequency = 0.1f;
+    config.humidityFrequency = 0.1f;
+    config.waterLevel = 0.2f;
+    config.mountainLevel = 0.9f;
+
+    auto world = WorldGenerator::generateWorld(config);
+    BOOST_REQUIRE(world != nullptr);
+    BOOST_REQUIRE(!world->settlements.empty());
+
+    for (size_t i = 0; i < world->settlements.size(); ++i) {
+        const SettlementRecord& record = world->settlements[i];
+        BOOST_CHECK_EQUAL(record.id, static_cast<uint32_t>(i + 1));
+        BOOST_CHECK_EQUAL(record.radiusTiles, 12);
+        BOOST_CHECK_EQUAL(record.faction, 0);
+        BOOST_CHECK_GT(record.buildingCount, 0);
+        BOOST_REQUIRE(record.centerTileY >= 0);
+        BOOST_REQUIRE(record.centerTileX >= 0);
+        BOOST_REQUIRE(static_cast<size_t>(record.centerTileY) < world->grid.size());
+        BOOST_REQUIRE(static_cast<size_t>(record.centerTileX) <
+            world->grid[static_cast<size_t>(record.centerTileY)].size());
+        BOOST_CHECK(record.biome ==
+            world->grid[static_cast<size_t>(record.centerTileY)]
+                       [static_cast<size_t>(record.centerTileX)]
+                           .biome);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(TestBuildingNoOverlap) {

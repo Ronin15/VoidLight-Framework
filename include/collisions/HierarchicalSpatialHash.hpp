@@ -32,17 +32,23 @@ namespace VoidLight {
 class HierarchicalSpatialHash {
 public:
     // Configuration constants - OPTIMIZED FOR 10K+ ENTITY PERFORMANCE
-    static constexpr float COARSE_CELL_SIZE = 128.0f;    // Smaller for better distribution with 10K entities
-    static constexpr float FINE_CELL_SIZE = 32.0f;       // Better granularity for collision detection
-    static constexpr float MOVEMENT_THRESHOLD = 8.0f;    // Not used for dynamic bodies (rebuilt every frame), only for static hash updates
+    static constexpr float COARSE_CELL_SIZE = 128.0f; // Smaller for better distribution with 10K entities
+    static constexpr float FINE_CELL_SIZE = 32.0f; // Better granularity for collision detection
+    static constexpr float MOVEMENT_THRESHOLD = 8.0f; // Not used for dynamic bodies (rebuilt every frame), only for static hash updates
     static constexpr size_t REGION_ACTIVE_THRESHOLD = 16; // PERFORMANCE OPTIMIZATION: Increased from 8 (20-30% improvement)
 
     // Simple 2D grid key type (more efficient than Morton codes for 2D AABB queries)
     using GridKey = uint64_t; // Packed: (x << 32) | y
 
     // Coordinate types
-    struct CoarseCoord { int32_t x{0}; int32_t y{0}; };
-    struct FineCoord { int32_t x{0}; int32_t y{0}; };
+    struct CoarseCoord {
+        int32_t x{0};
+        int32_t y{0};
+    };
+    struct FineCoord {
+        int32_t x{0};
+        int32_t y{0};
+    };
 
     // Hash functors for coordinates (public for use in CollisionManager)
     struct CoarseCoordHash {
@@ -53,12 +59,12 @@ public:
         size_t operator()(const CoarseCoord& c) const noexcept {
             // Combine x and y into single 64-bit hash
             uint64_t h = (static_cast<uint64_t>(static_cast<uint32_t>(c.x)) << 32) |
-                         static_cast<uint32_t>(c.y);
+                static_cast<uint32_t>(c.y);
 
             // Fibonacci hashing: multiply by golden ratio conjugate
             // This provides excellent distribution for hash tables
             h ^= h >> 33;
-            h *= 0xff51afd7ed558ccdULL;  // Fibonacci constant
+            h *= 0xff51afd7ed558ccdULL; // Fibonacci constant
             h ^= h >> 33;
             return h;
         }
@@ -136,8 +142,8 @@ public:
     // Thread-safe query for parallel broadphase - uses external buffers instead of mutable members
     // Each thread should create its own QueryBuffers instance and reuse it across queries
     void queryRegionBoundsThreadSafe(float minX, float minY, float maxX, float maxY,
-                                     std::vector<size_t>& outBodyIndices,
-                                     QueryBuffers& buffers) const;
+        std::vector<size_t>& outBodyIndices,
+        QueryBuffers& buffers) const;
 
     // Batch operations for high performance
     void insertBatch(const std::vector<std::pair<size_t, AABB>>& bodies);
@@ -194,7 +200,7 @@ private:
 
 // Required for std::find and other STL algorithms
 inline bool operator==(const HierarchicalSpatialHash::CoarseCoord& a,
-                      const HierarchicalSpatialHash::CoarseCoord& b) noexcept {
+    const HierarchicalSpatialHash::CoarseCoord& b) noexcept {
     return a.x == b.x && a.y == b.y;
 }
 

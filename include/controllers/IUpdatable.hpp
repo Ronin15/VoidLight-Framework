@@ -21,8 +21,7 @@
  * The ControllerRegistry auto-detects IUpdatable at compile time via
  * std::is_base_of_v and only calls update() on controllers that implement it.
  */
-class IUpdatable
-{
+class IUpdatable {
 public:
     virtual ~IUpdatable() = default;
 

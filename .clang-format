@@ -1,0 +1,62 @@
+# VoidLight-Framework formatting: K&R (attached braces), 4-space indent.
+# Tuned to fix braces and indentation only; line breaks, comments,
+# include order, and alignment are left as written.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++20
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+IndentCaseLabels: true
+NamespaceIndentation: None
+IndentPPDirectives: None
+
+BreakBeforeBraces: Attach
+InsertBraces: false
+Cpp11BracedListStyle: true
+
+PointerAlignment: Left
+DerivePointerAlignment: false
+ReferenceAlignment: Pointer
+
+ColumnLimit: 0
+ReflowComments: false
+BreakStringLiterals: false
+SortIncludes: Never
+IncludeBlocks: Preserve
+FixNamespaceComments: false
+AlignTrailingComments:
+  Kind: Never
+AlignAfterOpenBracket: DontAlign
+AlignOperands: DontAlign
+AlignEscapedNewlines: Left
+BreakConstructorInitializers: BeforeComma
+PackConstructorInitializers: CurrentLine
+
+AllowShortFunctionsOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: false
+AllowShortLambdasOnASingleLine: All
+
+MaxEmptyLinesToKeep: 2
+KeepEmptyLines:
+  AtStartOfBlock: true
+  AtStartOfFile: true
+EmptyLineBeforeAccessModifier: Leave
+SeparateDefinitionBlocks: Leave
+InsertNewlineAtEOF: true
+LineEnding: LF
+
+# Keep macro bodies as written; format code wrapped by build-mode macros.
+SkipMacroDefinitionBody: true
+Macros:
+  - VOIDLIGHT_DEBUG_ONLY(x)=x
+  - VOIDLIGHT_STATS_ONLY(x)=x
+...

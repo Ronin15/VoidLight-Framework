@@ -39,8 +39,8 @@ bool BackgroundSimulationManager::init() {
     m_globallyPaused.store(false, std::memory_order_release);
 
     // Reserve buffers
-    m_backgroundIndices.reserve(10000);  // Expect up to 10K background entities
-    m_batchFutures.reserve(16);          // Reasonable batch count
+    m_backgroundIndices.reserve(10000); // Expect up to 10K background entities
+    m_batchFutures.reserve(16); // Reasonable batch count
 
     m_initialized.store(true, std::memory_order_release);
     BGSIM_INFO("BackgroundSimulationManager initialized successfully");
@@ -74,8 +74,8 @@ void BackgroundSimulationManager::prepareForStateTransition() {
     m_backgroundIndices.clear();
     m_tiersDirty.store(true, std::memory_order_release);
     m_framesSinceTierUpdate = 0;
-    m_referencePointSet = false;  // Force reference point update on next state
-    m_accumulator = 0.0;          // Reset timing for clean start
+    m_referencePointSet = false; // Force reference point update on next state
+    m_accumulator = 0.0; // Reset timing for clean start
     BGSIM_INFO("State transition preparation complete");
 }
 
@@ -89,13 +89,13 @@ void BackgroundSimulationManager::update(const Vector2D& referencePoint, float d
     if (!m_initialized.load(std::memory_order_acquire) ||
         m_isShutdown.load(std::memory_order_acquire) ||
         m_globallyPaused.load(std::memory_order_acquire)) {
-        return;  // Complete skip - zero CPU cycles when paused
+        return; // Complete skip - zero CPU cycles when paused
     }
 
     // === PHASE 1: Periodic tier recalculation (every 60 frames) ===
     m_framesSinceTierUpdate++;
     bool needsTierUpdate = m_tiersDirty.load(std::memory_order_acquire) ||
-                           m_framesSinceTierUpdate >= TIER_UPDATE_INTERVAL;
+        m_framesSinceTierUpdate >= TIER_UPDATE_INTERVAL;
 
     if (needsTierUpdate) {
         setReferencePoint(referencePoint);
@@ -111,7 +111,7 @@ void BackgroundSimulationManager::update(const Vector2D& referencePoint, float d
 
     // === PHASE 2: Background entity processing (10Hz, only if work exists) ===
     if (!m_hasNonActiveEntities.load(std::memory_order_acquire)) {
-        return;  // No background entities - skip processing entirely
+        return; // No background entities - skip processing entirely
     }
 
     // Accumulator pattern for 10Hz updates
@@ -127,7 +127,7 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
 
     // Get background tier indices from EntityDataManager
     // Note: Tier updates now happen in unified update() method
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     auto backgroundSpan = edm.getBackgroundIndices();
 
     if (backgroundSpan.empty()) {
@@ -139,7 +139,7 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
     // Copy to local buffer (span may be invalidated during processing)
     m_backgroundIndices.clear();
     m_backgroundIndices.insert(m_backgroundIndices.end(),
-                               backgroundSpan.begin(), backgroundSpan.end());
+        backgroundSpan.begin(), backgroundSpan.end());
 
     // Use background indices directly - processBatch already filters by kind/alive.
     // WorkerBudget learns from the full background count (close enough for threading decisions).
@@ -191,8 +191,8 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
 
     // Report ONLY batch time for adaptive tuning (not index retrieval/threading decision)
     budgetMgr.reportExecution(VoidLight::SystemType::BackgroundSim,
-                              entityCount, useThreading,
-                              actualBatchCount, batchMs);
+        entityCount, useThreading,
+        actualBatchCount, batchMs);
 
     VOIDLIGHT_DEBUG_ONLY(
         // Rolling log every 60 seconds (600 updates at 10Hz)
@@ -201,8 +201,7 @@ void BackgroundSimulationManager::processBackgroundEntities(float fixedDeltaTime
                 "Entities: {}, Avg: {:.2f}ms [{}]",
                 entityCount, m_perf.avgUpdateMs,
                 useThreading ? std::format("{} batches", actualBatchCount) : "single"));
-        }
-    )
+        })
 }
 
 void BackgroundSimulationManager::waitForAsyncCompletion() {
@@ -257,14 +256,14 @@ void BackgroundSimulationManager::updateTiers() {
 // ============================================================================
 
 void BackgroundSimulationManager::processSingleThreaded(float deltaTime,
-                                                        const std::vector<size_t>& indices) {
+    const std::vector<size_t>& indices) {
     processBatch(deltaTime, indices, 0, indices.size());
 }
 
 void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
-                                                       const std::vector<size_t>& indices,
-                                                       size_t batchCount,
-                                                       size_t batchSize) {
+    const std::vector<size_t>& indices,
+    size_t batchCount,
+    size_t batchSize) {
     auto& threadSystem = VoidLight::ThreadSystem::Instance();
 
     // Clear previous futures (reuse capacity)
@@ -300,9 +299,8 @@ void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
                     BGSIM_ERROR("Unknown exception in background sim batch");
                 }
             },
-            VoidLight::TaskPriority::Low,  // Background sim is low priority
-            "BGSim_Batch"
-        );
+            VoidLight::TaskPriority::Low, // Background sim is low priority
+            "BGSim_Batch");
 
         {
             std::lock_guard<std::mutex> lock(m_futuresMutex);
@@ -315,9 +313,9 @@ void BackgroundSimulationManager::processMultiThreaded(float deltaTime,
 }
 
 void BackgroundSimulationManager::processBatch(float deltaTime,
-                                               const std::vector<size_t>& indices,
-                                               size_t startIdx,
-                                               size_t endIdx) {
+    const std::vector<size_t>& indices,
+    size_t startIdx,
+    size_t endIdx) {
     auto& edm = EntityDataManager::Instance();
 
     for (size_t i = startIdx; i < endIdx; ++i) {
@@ -360,11 +358,11 @@ void BackgroundSimulationManager::simulateNPC(float deltaTime, size_t index) {
     transform.previousPosition = transform.position;
 
     // Apply velocity with decay
-    constexpr float VELOCITY_DECAY = 0.98f;  // 2% decay per frame
-    constexpr float MIN_VELOCITY_SQ = 0.1f;  // Stop if velocity is negligible
+    constexpr float VELOCITY_DECAY = 0.98f; // 2% decay per frame
+    constexpr float MIN_VELOCITY_SQ = 0.1f; // Stop if velocity is negligible
 
     float velMagSq = transform.velocity.getX() * transform.velocity.getX() +
-                     transform.velocity.getY() * transform.velocity.getY();
+        transform.velocity.getY() * transform.velocity.getY();
 
     if (velMagSq > MIN_VELOCITY_SQ) {
         // Apply velocity to position

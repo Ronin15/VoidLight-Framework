@@ -24,26 +24,33 @@ using namespace VoidLight::Test;
 BOOST_GLOBAL_FIXTURE(GPUGlobalFixture);
 
 /**
- * Test fixture that initializes GPUDevice for resource testing.
+ * Shuts the shared GPUDevice down once at the end of the run. Registered
+ * after GPUGlobalFixture so it tears down first (before the window and SDL).
+ */
+struct ResourceDeviceTeardown {
+    ~ResourceDeviceTeardown() {
+        if (GPUDevice::Instance().isInitialized()) {
+            GPUDevice::Instance().shutdown();
+        }
+    }
+};
+BOOST_GLOBAL_FIXTURE(ResourceDeviceTeardown);
+
+/**
+ * Test fixture that provides an initialized GPUDevice for resource testing.
+ * The device is shared across tests (device lifecycle is covered by
+ * GPUDeviceTests); every resource wrapper here is RAII-released per test.
  */
 struct ResourceTestFixture : public GPUTestFixture {
     ResourceTestFixture() {
         if (!isGPUAvailable()) return;
 
         device = &GPUDevice::Instance();
-        if (device->isInitialized()) {
-            device->shutdown();
-        }
+        if (device->isInitialized()) return;
 
         SDL_Window* window = getTestWindow();
         if (window) {
             BOOST_REQUIRE(device->init(window));
-        }
-    }
-
-    ~ResourceTestFixture() {
-        if (device && device->isInitialized()) {
-            device->shutdown();
         }
     }
 
@@ -182,8 +189,7 @@ BOOST_FIXTURE_TEST_CASE(CreateSamplerTexture, ResourceTestFixture) {
         device->get(),
         256, 256,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_SAMPLER
-    );
+        SDL_GPU_TEXTUREUSAGE_SAMPLER);
 
     BOOST_CHECK(texture.isValid());
     BOOST_CHECK(texture.get() != nullptr);
@@ -202,8 +208,7 @@ BOOST_FIXTURE_TEST_CASE(CreateRenderTargetTexture, ResourceTestFixture) {
         device->get(),
         1920, 1080,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
-    );
+        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
 
     BOOST_CHECK(texture.isValid());
     BOOST_CHECK_EQUAL(texture.getWidth(), 1920u);
@@ -221,8 +226,7 @@ BOOST_FIXTURE_TEST_CASE(CreateCombinedUsageTexture, ResourceTestFixture) {
         device->get(),
         800, 600,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
-    );
+        SDL_GPU_TEXTUREUSAGE_SAMPLER | SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
 
     BOOST_CHECK(texture.isValid());
     BOOST_CHECK(texture.isSampler());
@@ -236,8 +240,7 @@ BOOST_FIXTURE_TEST_CASE(TextureMoveSemantics, ResourceTestFixture) {
     GPUTexture tex1(
         device->get(), 128, 128,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_SAMPLER
-    );
+        SDL_GPU_TEXTUREUSAGE_SAMPLER);
     BOOST_REQUIRE(tex1.isValid());
 
     SDL_GPUTexture* rawPtr = tex1.get();
@@ -256,16 +259,14 @@ BOOST_FIXTURE_TEST_CASE(TextureAsColorTarget, ResourceTestFixture) {
     GPUTexture texture(
         device->get(), 800, 600,
         SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET
-    );
+        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET);
     BOOST_REQUIRE(texture.isValid());
 
     SDL_FColor clearColor = {0.2f, 0.3f, 0.4f, 1.0f};
     SDL_GPUColorTargetInfo targetInfo = texture.asColorTarget(
         SDL_GPU_LOADOP_CLEAR,
         clearColor,
-        SDL_GPU_STOREOP_STORE
-    );
+        SDL_GPU_STOREOP_STORE);
 
     BOOST_CHECK(targetInfo.texture == texture.get());
     BOOST_CHECK(targetInfo.load_op == SDL_GPU_LOADOP_CLEAR);
@@ -296,8 +297,7 @@ BOOST_FIXTURE_TEST_CASE(CreateUploadBuffer, ResourceTestFixture) {
     GPUTransferBuffer buffer(
         device->get(),
         SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        bufferSize
-    );
+        bufferSize);
 
     BOOST_CHECK(buffer.isValid());
     BOOST_CHECK(buffer.get() != nullptr);
@@ -312,8 +312,7 @@ BOOST_FIXTURE_TEST_CASE(MapAndUnmap, ResourceTestFixture) {
     GPUTransferBuffer buffer(
         device->get(),
         SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        1024
-    );
+        1024);
     BOOST_REQUIRE(buffer.isValid());
 
     // Map buffer
@@ -336,8 +335,7 @@ BOOST_FIXTURE_TEST_CASE(MapWithCycleParameter, ResourceTestFixture) {
     GPUTransferBuffer buffer(
         device->get(),
         SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        512
-    );
+        512);
     BOOST_REQUIRE(buffer.isValid());
 
     // Map with cycle=true (allows buffer reuse)
@@ -358,8 +356,7 @@ BOOST_FIXTURE_TEST_CASE(TransferBufferAsLocation, ResourceTestFixture) {
     GPUTransferBuffer buffer(
         device->get(),
         SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        2048
-    );
+        2048);
     BOOST_REQUIRE(buffer.isValid());
 
     SDL_GPUTransferBufferLocation loc = buffer.asLocation(0);
@@ -377,8 +374,7 @@ BOOST_FIXTURE_TEST_CASE(TransferBufferMoveSemantics, ResourceTestFixture) {
     GPUTransferBuffer buf1(
         device->get(),
         SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        1024
-    );
+        1024);
     BOOST_REQUIRE(buf1.isValid());
 
     SDL_GPUTransferBuffer* rawPtr = buf1.get();
@@ -442,8 +438,7 @@ BOOST_FIXTURE_TEST_CASE(CreateCustomSampler, ResourceTestFixture) {
     GPUSampler sampler(
         device->get(),
         SDL_GPU_FILTER_LINEAR,
-        SDL_GPU_SAMPLERADDRESSMODE_REPEAT
-    );
+        SDL_GPU_SAMPLERADDRESSMODE_REPEAT);
 
     BOOST_CHECK(sampler.isValid());
 }

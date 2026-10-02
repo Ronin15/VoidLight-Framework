@@ -93,8 +93,8 @@ BOOST_AUTO_TEST_CASE(TestRoundTripTransformAccuracy) {
 
     // Test multiple world points
     std::vector<Vector2D> testPoints = {
-        Vector2D(500.0f, 500.0f),   // Camera center
-        Vector2D(0.0f, 0.0f),       // Origin
+        Vector2D(500.0f, 500.0f), // Camera center
+        Vector2D(0.0f, 0.0f), // Origin
         Vector2D(1000.0f, 1000.0f), // Far point
         Vector2D(-500.0f, -500.0f), // Negative coordinates
         Vector2D(123.456f, 789.012f) // Arbitrary point

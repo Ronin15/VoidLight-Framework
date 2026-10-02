@@ -14,7 +14,7 @@ This is a C++ game engine project using SDL3, built with CMake and following mod
 ### Code Style
 - **Standard**: C++20
 - **Indentation**: 4 spaces, no tabs
-- **Braces**: New line style (Allman style)
+- **Braces**: K&R (opening brace on the same line); `.clang-format` is authoritative
 - **Memory Management**: Use RAII with smart pointers (`std::unique_ptr`, `std::shared_ptr`), avoid raw `new/delete`
 - **STL Preference**: Use STL algorithms over manual loops when possible
 

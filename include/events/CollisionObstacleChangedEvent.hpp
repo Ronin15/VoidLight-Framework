@@ -20,9 +20,9 @@
 class CollisionObstacleChangedEvent : public Event {
 public:
     enum class ChangeType {
-        ADDED,      // New obstacle added
-        REMOVED,    // Existing obstacle removed  
-        MODIFIED    // Existing obstacle properties changed
+        ADDED, // New obstacle added
+        REMOVED, // Existing obstacle removed
+        MODIFIED // Existing obstacle properties changed
     };
 
     /**
@@ -32,14 +32,11 @@ public:
      * @param radius Approximate radius of affected area
      * @param description Optional description of the change
      */
-    CollisionObstacleChangedEvent(ChangeType changeType, 
-                                 const Vector2D& position,
-                                 float radius = 64.0f,
-                                 const std::string& description = "")
-        : m_changeType(changeType),
-          m_position(position),
-          m_radius(radius),
-          m_description(description) {}
+    CollisionObstacleChangedEvent(ChangeType changeType,
+        const Vector2D& position,
+        float radius = 64.0f,
+        const std::string& description = "")
+        : m_changeType(changeType), m_position(position), m_radius(radius), m_description(description) {}
 
     /**
      * @brief Gets the type of change
@@ -89,7 +86,7 @@ public:
     static std::string changeTypeToString(ChangeType changeType) {
         switch (changeType) {
             case ChangeType::ADDED: return "ADDED";
-            case ChangeType::REMOVED: return "REMOVED"; 
+            case ChangeType::REMOVED: return "REMOVED";
             case ChangeType::MODIFIED: return "MODIFIED";
             default: return "UNKNOWN";
         }
@@ -100,7 +97,7 @@ public:
     void execute() override {} // Execution is handled by the event system
     void clean() override {} // No cleanup needed
     bool checkConditions() override { return true; } // Always ready to fire
-    
+
     std::string getName() const override { return "collision_obstacle_changed"; }
     std::string getType() const override { return "CollisionObstacleChanged"; }
     std::string getTypeName() const override { return "CollisionObstacleChangedEvent"; }

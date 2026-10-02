@@ -22,10 +22,10 @@ using namespace VoidLight::SIMD;
 // BENCHMARK CONFIGURATION
 // ============================================================================
 
-constexpr size_t ENTITY_COUNT = 10000;           // Test scale: 10K entities
-constexpr size_t WARMUP_ITERATIONS = 100;        // Warmup iterations
-constexpr size_t BENCHMARK_ITERATIONS = 1000;    // Benchmark iterations
-constexpr float MIN_SPEEDUP_THRESHOLD = 1.0f;    // Minimum acceptable SIMD speedup (must be faster than scalar)
+constexpr size_t ENTITY_COUNT = 10000; // Test scale: 10K entities
+constexpr size_t WARMUP_ITERATIONS = 100; // Warmup iterations
+constexpr size_t BENCHMARK_ITERATIONS = 1000; // Benchmark iterations
+constexpr float MIN_SPEEDUP_THRESHOLD = 1.0f; // Minimum acceptable SIMD speedup (must be faster than scalar)
 
 // ============================================================================
 // PLATFORM DETECTION UTILITIES
@@ -139,8 +139,7 @@ struct BenchmarkResult {
 void calculateDistancesScalar(
     const std::vector<Vector2D>& entityPositions,
     const Vector2D& playerPos,
-    std::vector<float>& outDistances
-) {
+    std::vector<float>& outDistances) {
     for (size_t i = 0; i < entityPositions.size(); ++i) {
         const Vector2D& entityPos = entityPositions[i];
         Vector2D diff = entityPos - playerPos;
@@ -156,8 +155,7 @@ void calculateDistancesScalar(
 void calculateDistancesSIMD(
     const std::vector<Vector2D>& entityPositions,
     const Vector2D& playerPos,
-    std::vector<float>& outDistances
-) {
+    std::vector<float>& outDistances) {
     // SIMDMath abstraction (cross-platform: SSE2/NEON/scalar fallback)
     const Float4 playerPosX = broadcast(playerPos.getX());
     const Float4 playerPosY = broadcast(playerPos.getY());
@@ -170,14 +168,12 @@ void calculateDistancesSIMD(
             entityPositions[i].getX(),
             entityPositions[i + 1].getX(),
             entityPositions[i + 2].getX(),
-            entityPositions[i + 3].getX()
-        );
+            entityPositions[i + 3].getX());
         Float4 entityPosY = set(
             entityPositions[i].getY(),
             entityPositions[i + 1].getY(),
             entityPositions[i + 2].getY(),
-            entityPositions[i + 3].getY()
-        );
+            entityPositions[i + 3].getY());
 
         // Calculate differences
         Float4 diffX = sub(entityPosX, playerPosX);
@@ -277,8 +273,7 @@ void expandBoundsScalar(
     std::vector<float>& outMinX,
     std::vector<float>& outMinY,
     std::vector<float>& outMaxX,
-    std::vector<float>& outMaxY
-) {
+    std::vector<float>& outMaxY) {
     for (size_t i = 0; i < minX.size(); ++i) {
         outMinX[i] = minX[i] - epsilon;
         outMinY[i] = minY[i] - epsilon;
@@ -302,8 +297,7 @@ void expandBoundsSIMD(
     std::vector<float>& outMinX,
     std::vector<float>& outMinY,
     std::vector<float>& outMaxX,
-    std::vector<float>& outMaxY
-) {
+    std::vector<float>& outMaxY) {
     // SIMDMath abstraction (cross-platform: SSE2/NEON/scalar fallback)
     size_t count = minX.size();
 
@@ -364,28 +358,28 @@ BenchmarkResult benchmarkCollisionBoundsExpansion() {
     // Warmup: SIMD
     for (size_t i = 0; i < WARMUP_ITERATIONS; ++i) {
         expandBoundsSIMD(minX, minY, maxX, maxY, EPSILON,
-                        simdMinX, simdMinY, simdMaxX, simdMaxY);
+            simdMinX, simdMinY, simdMaxX, simdMaxY);
     }
 
     // Benchmark: SIMD
     timer.start();
     for (size_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
         expandBoundsSIMD(minX, minY, maxX, maxY, EPSILON,
-                        simdMinX, simdMinY, simdMaxX, simdMaxY);
+            simdMinX, simdMinY, simdMaxX, simdMaxY);
     }
     double simdTimeMs = timer.stopMs();
 
     // Warmup: Scalar
     for (size_t i = 0; i < WARMUP_ITERATIONS; ++i) {
         expandBoundsScalar(minX, minY, maxX, maxY, EPSILON,
-                          scalarMinX, scalarMinY, scalarMaxX, scalarMaxY);
+            scalarMinX, scalarMinY, scalarMaxX, scalarMaxY);
     }
 
     // Benchmark: Scalar
     timer.start();
     for (size_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
         expandBoundsScalar(minX, minY, maxX, maxY, EPSILON,
-                          scalarMinX, scalarMinY, scalarMaxX, scalarMaxY);
+            scalarMinX, scalarMinY, scalarMaxX, scalarMaxY);
     }
     double scalarTimeMs = timer.stopMs();
 
@@ -418,8 +412,7 @@ BenchmarkResult benchmarkCollisionBoundsExpansion() {
 void filterLayerMasksScalar(
     const std::vector<uint32_t>& candidateLayers,
     uint32_t targetMask,
-    std::vector<bool>& outPassed
-) {
+    std::vector<bool>& outPassed) {
     for (size_t i = 0; i < candidateLayers.size(); ++i) {
         outPassed[i] = ((candidateLayers[i] & targetMask) != 0);
     }
@@ -433,8 +426,7 @@ void filterLayerMasksScalar(
 void filterLayerMasksSIMD(
     const std::vector<uint32_t>& candidateLayers,
     uint32_t targetMask,
-    std::vector<bool>& outPassed
-) {
+    std::vector<bool>& outPassed) {
     // SIMDMath abstraction (cross-platform: SSE2/NEON/scalar fallback)
     const Int4 maskVec = broadcast_int(static_cast<int32_t>(targetMask));
     size_t i = 0;
@@ -446,8 +438,7 @@ void filterLayerMasksSIMD(
             static_cast<int32_t>(candidateLayers[i]),
             static_cast<int32_t>(candidateLayers[i + 1]),
             static_cast<int32_t>(candidateLayers[i + 2]),
-            static_cast<int32_t>(candidateLayers[i + 3])
-        );
+            static_cast<int32_t>(candidateLayers[i + 3]));
 
         // Batch layer mask check: result = layers & targetMask
         Int4 result = bitwise_and(layers, maskVec);
@@ -538,8 +529,7 @@ void updateParticlePhysicsScalar(
     const std::vector<float>& accX,
     const std::vector<float>& accY,
     float deltaTime,
-    float drag
-) {
+    float drag) {
     for (size_t i = 0; i < posX.size(); ++i) {
         // vel = (vel + acc * dt) * drag
         velX[i] = (velX[i] + accX[i] * deltaTime) * drag;
@@ -564,8 +554,7 @@ void updateParticlePhysicsSIMD(
     const std::vector<float>& accX,
     const std::vector<float>& accY,
     float deltaTime,
-    float drag
-) {
+    float drag) {
     // SIMDMath abstraction (cross-platform: SSE2/NEON/scalar fallback)
     const Float4 dtVec = broadcast(deltaTime);
     const Float4 dragVec = broadcast(drag);
@@ -644,36 +633,40 @@ BenchmarkResult benchmarkParticlePhysicsUpdate() {
     // Warmup: SIMD
     for (size_t i = 0; i < WARMUP_ITERATIONS; ++i) {
         updateParticlePhysicsSIMD(simdPosX, simdPosY, simdVelX, simdVelY,
-                                 accX, accY, DELTA_TIME, DRAG);
+            accX, accY, DELTA_TIME, DRAG);
     }
 
     // Reset state for benchmark
-    simdPosX = posX; simdPosY = posY;
-    simdVelX = velX; simdVelY = velY;
+    simdPosX = posX;
+    simdPosY = posY;
+    simdVelX = velX;
+    simdVelY = velY;
 
     // Benchmark: SIMD
     timer.start();
     for (size_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
         updateParticlePhysicsSIMD(simdPosX, simdPosY, simdVelX, simdVelY,
-                                 accX, accY, DELTA_TIME, DRAG);
+            accX, accY, DELTA_TIME, DRAG);
     }
     double simdTimeMs = timer.stopMs();
 
     // Warmup: Scalar
     for (size_t i = 0; i < WARMUP_ITERATIONS; ++i) {
         updateParticlePhysicsScalar(scalarPosX, scalarPosY, scalarVelX, scalarVelY,
-                                   accX, accY, DELTA_TIME, DRAG);
+            accX, accY, DELTA_TIME, DRAG);
     }
 
     // Reset state for benchmark
-    scalarPosX = posX; scalarPosY = posY;
-    scalarVelX = velX; scalarVelY = velY;
+    scalarPosX = posX;
+    scalarPosY = posY;
+    scalarVelX = velX;
+    scalarVelY = velY;
 
     // Benchmark: Scalar
     timer.start();
     for (size_t i = 0; i < BENCHMARK_ITERATIONS; ++i) {
         updateParticlePhysicsScalar(scalarPosX, scalarPosY, scalarVelX, scalarVelY,
-                                   accX, accY, DELTA_TIME, DRAG);
+            accX, accY, DELTA_TIME, DRAG);
     }
     double scalarTimeMs = timer.stopMs();
 

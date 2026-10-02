@@ -8,6 +8,10 @@
 `GameEngine::setGlobalPause(true)`, creates the main menu UI, and routes button
 callbacks to typed `GameStateId` transitions.
 
+Buttons: Start Game, AI Demo (load test), Event Demo (power bench), Settings,
+Exit. Debug-build shortcuts (`VOIDLIGHT_DEBUG_ONLY`) `A` / `E` / `S` jump to AI
+Demo / Event Demo / Settings.
+
 ## UI and Input
 
 - menu buttons are centered with `UIManager` positioning helpers
@@ -23,16 +27,22 @@ callbacks to typed `GameStateId` transitions.
   wires callbacks
 - `update()` runs `UIManager::update(...)` and applies menu focus
 - `handleInput()` routes menu commands through `MenuNavigation`
-- `exit()` calls `UIManager::prepareForStateTransition()`
+- `exit()` only `clearKeyboardSelection()`. Full-screen UI clear is owned by `GameStateManager` after `exit()`. Do not unpause here; destination `enter()` owns pause.
 
 ## GPU Rendering
 
-The state records and renders UI through:
+The state owns a GPU scene (diorama + particles) and UI:
 
 ```cpp
-UIManager::Instance().recordGPUVertices(gpuRenderer);
-UIManager::Instance().renderGPU(gpuRenderer, swapchainPass);
+recordGPUSceneVertices(...);  // identity composite, diorama, particles
+recordGPUUIVertices(...);     // UIManager
+renderGPUScene(...);
+renderGPUUI(...);
 ```
+
+`recordGPUSceneVertices` sets composite zoom to 1 and sub-pixel offset to 0 so
+leftover GamePlay camera zoom does not crop the menu background. Diorama layout
+uses the scene-texture pixel size, not a possibly-stale `GameEngine` window size.
 
 ## Related Docs
 

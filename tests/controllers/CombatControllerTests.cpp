@@ -18,15 +18,13 @@
 
 BOOST_AUTO_TEST_SUITE(CombatControllerTests)
 
-BOOST_AUTO_TEST_CASE(TestControllerNameAndInitialState)
-{
+BOOST_AUTO_TEST_CASE(TestControllerNameAndInitialState) {
     CombatController controller(std::shared_ptr<Player>{});
 
     BOOST_CHECK_EQUAL(controller.getName(), "CombatController");
 }
 
-BOOST_AUTO_TEST_CASE(TestSubscribeIsIdempotentWithoutHandlers)
-{
+BOOST_AUTO_TEST_CASE(TestSubscribeIsIdempotentWithoutHandlers) {
     CombatController controller(std::shared_ptr<Player>{});
 
     controller.subscribe();
@@ -36,15 +34,13 @@ BOOST_AUTO_TEST_CASE(TestSubscribeIsIdempotentWithoutHandlers)
     BOOST_CHECK(controller.isSubscribed());
 }
 
-BOOST_AUTO_TEST_CASE(TestTryAttackFailsGracefullyWithoutPlayer)
-{
+BOOST_AUTO_TEST_CASE(TestTryAttackFailsGracefullyWithoutPlayer) {
     CombatController controller(std::shared_ptr<Player>{});
 
     BOOST_CHECK(!controller.tryAttack());
 }
 
-BOOST_AUTO_TEST_CASE(TestUpdateDoesNothingWithoutPlayer)
-{
+BOOST_AUTO_TEST_CASE(TestUpdateDoesNothingWithoutPlayer) {
     CombatController controller(std::shared_ptr<Player>{});
 
     // Capture public state before update
@@ -70,7 +66,7 @@ public:
     }
 
     ~CombatControllerRuntimeFixture() {
-        UIManager::Instance().cleanupForStateTransition();
+        UIManager::Instance().prepareForStateTransition();
         EntityDataManager::Instance().clean();
         ResourceTemplateManager::Instance().clean();
         EventManager::Instance().clean();
@@ -80,10 +76,9 @@ public:
 };
 
 BOOST_FIXTURE_TEST_SUITE(CombatControllerRuntimeTests,
-                         CombatControllerRuntimeFixture)
+    CombatControllerRuntimeFixture)
 
-BOOST_AUTO_TEST_CASE(TestRangedNoAmmoDoesNotSpendAttackCost)
-{
+BOOST_AUTO_TEST_CASE(TestRangedNoAmmoDoesNotSpendAttackCost) {
     auto& edm = EntityDataManager::Instance();
     const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
     BOOST_REQUIRE(bow.isValid());
@@ -91,7 +86,7 @@ BOOST_AUTO_TEST_CASE(TestRangedNoAmmoDoesNotSpendAttackCost)
     BOOST_REQUIRE(edm.addToInventory(player->getInventoryIndex(), bow, 1));
     BOOST_REQUIRE(player->equipItem(bow));
     BOOST_CHECK_EQUAL(edm.getCharacterData(player->getHandle()).combatStyle,
-                      CharacterData::CombatStyle::Ranged);
+        CharacterData::CombatStyle::Ranged);
 
     const float staminaBefore = player->getStamina();
     CombatController controller(player);
@@ -101,8 +96,7 @@ BOOST_AUTO_TEST_CASE(TestRangedNoAmmoDoesNotSpendAttackCost)
     BOOST_CHECK_EQUAL(player->getCurrentStateName(), "idle");
 }
 
-BOOST_AUTO_TEST_CASE(TestRangedNoAmmoEquipsMeleeFallbackThroughPlayer)
-{
+BOOST_AUTO_TEST_CASE(TestRangedNoAmmoEquipsMeleeFallbackThroughPlayer) {
     auto& edm = EntityDataManager::Instance();
     const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
     const auto dagger = ResourceTemplateManager::Instance().getHandleById("dagger");
@@ -113,18 +107,17 @@ BOOST_AUTO_TEST_CASE(TestRangedNoAmmoEquipsMeleeFallbackThroughPlayer)
     BOOST_REQUIRE(edm.addToInventory(player->getInventoryIndex(), dagger, 1));
     BOOST_REQUIRE(player->equipItem(bow));
     BOOST_CHECK_EQUAL(edm.getCharacterData(player->getHandle()).combatStyle,
-                      CharacterData::CombatStyle::Ranged);
+        CharacterData::CombatStyle::Ranged);
 
     CombatController controller(player);
     BOOST_CHECK(controller.tryAttack());
     BOOST_CHECK(player->getEquippedItem("weapon") == dagger);
     BOOST_CHECK_EQUAL(edm.getCharacterData(player->getHandle()).combatStyle,
-                      CharacterData::CombatStyle::Melee);
+        CharacterData::CombatStyle::Melee);
     BOOST_CHECK_EQUAL(player->getCurrentStateName(), "attacking");
 }
 
-BOOST_AUTO_TEST_CASE(TestRangedAttackConsumesAmmoAndDispatchesResourceChange)
-{
+BOOST_AUTO_TEST_CASE(TestRangedAttackConsumesAmmoAndDispatchesResourceChange) {
     auto& edm = EntityDataManager::Instance();
     const auto bow = ResourceTemplateManager::Instance().getHandleById("bow");
     const auto arrows = ResourceTemplateManager::Instance().getHandleById("arrows");

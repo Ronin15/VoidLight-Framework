@@ -6,15 +6,17 @@
 #define BOOST_TEST_MODULE EntityDataManagerTests
 #include <boost/test/unit_test.hpp>
 
+#include "core/GameEngine.hpp"
 #include "core/ThreadSystem.hpp"
 #include "entities/resources/EquipmentResources.hpp"
+#include "ai/BehaviorConfig.hpp"
 #include "managers/AIManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
 #include "managers/PathfinderManager.hpp"
 #include "managers/ResourceTemplateManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "entities/EntityHandle.hpp"
 #include "utils/Vector2D.hpp"
 #include <cmath>
@@ -227,9 +229,27 @@ BOOST_AUTO_TEST_CASE(TestCreateNPC) {
     BOOST_CHECK(hot.isAlive());
 }
 
+BOOST_AUTO_TEST_CASE(TestCreateMonsterAndAnimalAutoRegisterSuggestedBehavior) {
+    EntityHandle monster = edm->createMonster(Vector2D(10.0f, 10.0f), "Goblin", "Scout");
+    BOOST_REQUIRE(monster.isValid());
+    const size_t monsterIdx = edm->getIndex(monster);
+    BOOST_REQUIRE_NE(monsterIdx, SIZE_MAX);
+    const auto& monsterData = edm->getCharacterDataByIndex(monsterIdx);
+    BOOST_CHECK_EQUAL(monsterData.behaviorType, static_cast<uint8_t>(BehaviorType::Chase));
+    BOOST_CHECK_EQUAL(monsterData.homeRole, static_cast<uint8_t>(BehaviorType::Chase));
+
+    EntityHandle animal = edm->createAnimal(Vector2D(20.0f, 10.0f), "Wolf", "Pup");
+    BOOST_REQUIRE(animal.isValid());
+    const size_t animalIdx = edm->getIndex(animal);
+    BOOST_REQUIRE_NE(animalIdx, SIZE_MAX);
+    const auto& animalData = edm->getCharacterDataByIndex(animalIdx);
+    BOOST_CHECK_EQUAL(animalData.behaviorType, static_cast<uint8_t>(BehaviorType::Follow));
+    BOOST_CHECK_EQUAL(animalData.homeRole, static_cast<uint8_t>(BehaviorType::Follow));
+}
+
 BOOST_AUTO_TEST_CASE(TestCreatePlayer) {
     Vector2D position(300.0f, 400.0f);
-    EntityHandle handle = edm->registerPlayer(1,position);
+    EntityHandle handle = edm->registerPlayer(1, position);
 
     BOOST_CHECK(handle.isValid());
     BOOST_CHECK(handle.isPlayer());
@@ -264,7 +284,7 @@ BOOST_AUTO_TEST_CASE(TestCreateDroppedItem) {
 BOOST_AUTO_TEST_CASE(TestCreateProjectile) {
     Vector2D position(100.0f, 100.0f);
     Vector2D velocity(50.0f, 0.0f);
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createProjectile(position, velocity, owner, 25.0f, 3.0f);
 
     BOOST_CHECK(handle.isValid());
@@ -282,7 +302,7 @@ BOOST_AUTO_TEST_CASE(TestCreateProjectile) {
 
 BOOST_AUTO_TEST_CASE(TestCreateAreaEffect) {
     Vector2D position(200.0f, 200.0f);
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createAreaEffect(position, 50.0f, owner, 10.0f, 5.0f);
 
     BOOST_CHECK(handle.isValid());
@@ -318,7 +338,7 @@ BOOST_AUTO_TEST_CASE(TestCreateMultipleEntities) {
     // Create various entity types
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(300.0f, 300.0f));
+    edm->registerPlayer(1, Vector2D(300.0f, 300.0f));
     edm->createDroppedItem(Vector2D(400.0f, 400.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
     BOOST_CHECK_EQUAL(edm->getEntityCount(), 4);
@@ -404,6 +424,40 @@ BOOST_AUTO_TEST_SUITE_END()
 // ============================================================================
 
 BOOST_FIXTURE_TEST_SUITE(DestructionQueueTests, EntityDataManagerTestFixture)
+
+// Direct drain is a legal caller (with unloadWorld and prepareForStateTransition).
+// GameEngine::processBackgroundTasks skips processDestructionQueue while
+// globally paused so LoadingState's load worker can own structural create.
+
+BOOST_AUTO_TEST_CASE(TestGameEngineSkipsDestructionDrainWhileGloballyPaused) {
+    EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
+    BOOST_REQUIRE(edm->isValidHandle(handle));
+
+    edm->destroyEntity(handle);
+    BOOST_REQUIRE(edm->isValidHandle(handle));
+
+    // LoadingState holds GameEngine paused with EventManager unpaused so the
+    // load worker can create entities without a concurrent frame-end freeSlot.
+    struct RestoreEngineUnpaused {
+        ~RestoreEngineUnpaused() {
+            GameEngine::Instance().setGlobalPause(false);
+        }
+    } restore;
+
+    GameEngine::Instance().setGlobalPause(true);
+    EventManager::Instance().setGlobalPause(false);
+    BOOST_REQUIRE(GameEngine::Instance().isGloballyPaused());
+    BOOST_REQUIRE(!EventManager::Instance().isGloballyPaused());
+
+    GameEngine::Instance().processBackgroundTasks();
+    BOOST_CHECK(edm->isValidHandle(handle));
+    BOOST_CHECK_EQUAL(edm->getEntityCount(), 1);
+
+    GameEngine::Instance().setGlobalPause(false);
+    GameEngine::Instance().processBackgroundTasks();
+    BOOST_CHECK(!edm->isValidHandle(handle));
+    BOOST_CHECK_EQUAL(edm->getEntityCount(), 0);
+}
 
 BOOST_AUTO_TEST_CASE(TestDestroyEntity) {
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
@@ -690,10 +744,10 @@ BOOST_AUTO_TEST_CASE(TestGetItemData) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetProjectileData) {
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createProjectile(Vector2D(100.0f, 100.0f),
-                                                 Vector2D(50.0f, 0.0f),
-                                                 owner, 25.0f, 5.0f);
+        Vector2D(50.0f, 0.0f),
+        owner, 25.0f, 5.0f);
 
     const auto& projData = edm->getProjectileData(handle);
     BOOST_CHECK(approxEqual(projData.damage, 25.0f));
@@ -702,9 +756,9 @@ BOOST_AUTO_TEST_CASE(TestGetProjectileData) {
 }
 
 BOOST_AUTO_TEST_CASE(TestGetAreaEffectData) {
-    EntityHandle owner = edm->registerPlayer(1,Vector2D(0.0f, 0.0f));
+    EntityHandle owner = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
     EntityHandle handle = edm->createAreaEffect(Vector2D(200.0f, 200.0f),
-                                                 100.0f, owner, 15.0f, 10.0f);
+        100.0f, owner, 15.0f, 10.0f);
 
     const auto& effectData = edm->getAreaEffectData(handle);
     BOOST_CHECK(approxEqual(effectData.radius, 100.0f));
@@ -735,14 +789,14 @@ BOOST_AUTO_TEST_CASE(TestSetSimulationTier) {
 
     edm->setSimulationTier(handle, SimulationTier::Hibernated);
     BOOST_CHECK_EQUAL(static_cast<int>(edm->getHotData(handle).tier),
-                      static_cast<int>(SimulationTier::Hibernated));
+        static_cast<int>(SimulationTier::Hibernated));
 }
 
 BOOST_AUTO_TEST_CASE(TestUpdateSimulationTiers) {
     // Create entities at various distances
-    EntityHandle near = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");     // Close
-    EntityHandle mid = edm->createNPCWithRaceClass(Vector2D(2000.0f, 2000.0f), "Human", "Guard");    // Medium
-    EntityHandle far = edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard");  // Far
+    EntityHandle near = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // Close
+    EntityHandle mid = edm->createNPCWithRaceClass(Vector2D(2000.0f, 2000.0f), "Human", "Guard"); // Medium
+    EntityHandle far = edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard"); // Far
 
     // Update tiers with reference point at origin
     Vector2D refPoint(0.0f, 0.0f);
@@ -782,9 +836,9 @@ BOOST_AUTO_TEST_CASE(TestGetBackgroundIndices) {
 }
 
 BOOST_AUTO_TEST_CASE(TestEntityCountByTier) {
-    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");      // Will be active
-    edm->createNPCWithRaceClass(Vector2D(5000.0f, 5000.0f), "Human", "Guard");    // Will be background
-    edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard");  // Will be hibernated
+    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // Will be active
+    edm->createNPCWithRaceClass(Vector2D(5000.0f, 5000.0f), "Human", "Guard"); // Will be background
+    edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard"); // Will be hibernated
 
     edm->updateSimulationTiers(Vector2D(0.0f, 0.0f), 1500.0f, 10000.0f);
 
@@ -795,7 +849,7 @@ BOOST_AUTO_TEST_CASE(TestEntityCountByTier) {
 
 BOOST_AUTO_TEST_CASE(TestPlayerAlwaysActive) {
     // Player should stay active regardless of distance
-    EntityHandle player = edm->registerPlayer(1,Vector2D(50000.0f, 50000.0f));
+    EntityHandle player = edm->registerPlayer(1, Vector2D(50000.0f, 50000.0f));
 
     edm->updateSimulationTiers(Vector2D(0.0f, 0.0f), 1500.0f, 10000.0f);
 
@@ -813,8 +867,8 @@ BOOST_FIXTURE_TEST_SUITE(QueryTests, EntityDataManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestQueryEntitiesInRadius) {
     // Create entities at known positions
-    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");   // In radius
-    edm->createNPCWithRaceClass(Vector2D(150.0f, 150.0f), "Human", "Guard");   // In radius
+    edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // In radius
+    edm->createNPCWithRaceClass(Vector2D(150.0f, 150.0f), "Human", "Guard"); // In radius
     edm->createNPCWithRaceClass(Vector2D(1000.0f, 1000.0f), "Human", "Guard"); // Out of radius
 
     std::vector<EntityHandle> found;
@@ -825,7 +879,7 @@ BOOST_AUTO_TEST_CASE(TestQueryEntitiesInRadius) {
 
 BOOST_AUTO_TEST_CASE(TestQueryEntitiesWithKindFilter) {
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(150.0f, 150.0f));
+    edm->registerPlayer(1, Vector2D(150.0f, 150.0f));
     edm->createDroppedItem(Vector2D(120.0f, 120.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
     std::vector<EntityHandle> found;
@@ -857,7 +911,7 @@ BOOST_AUTO_TEST_CASE(TestGetEntityCount) {
 BOOST_AUTO_TEST_CASE(TestGetEntityCountByKind) {
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(300.0f, 300.0f));
+    edm->registerPlayer(1, Vector2D(300.0f, 300.0f));
     edm->createDroppedItem(Vector2D(400.0f, 400.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
     BOOST_CHECK_EQUAL(edm->getEntityCount(EntityKind::NPC), 2);
@@ -869,7 +923,7 @@ BOOST_AUTO_TEST_CASE(TestGetEntityCountByKind) {
 BOOST_AUTO_TEST_CASE(TestGetIndicesByKind) {
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(1,Vector2D(300.0f, 300.0f));
+    edm->registerPlayer(1, Vector2D(300.0f, 300.0f));
 
     auto npcIndices = edm->getIndicesByKind(EntityKind::NPC);
     BOOST_CHECK_EQUAL(npcIndices.size(), 2);
@@ -1134,7 +1188,7 @@ BOOST_AUTO_TEST_CASE(TestPrepareForStateTransitionClearsKindIndices) {
     // Create entities of different kinds
     edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");
     edm->createNPCWithRaceClass(Vector2D(200.0f, 200.0f), "Human", "Guard");
-    edm->registerPlayer(99999, Vector2D(300.0f, 300.0f));  // Use unique ID to avoid collision
+    edm->registerPlayer(99999, Vector2D(300.0f, 300.0f)); // Use unique ID to avoid collision
     // Note: DroppedItems are now in static pool, not tracked by getIndicesByKind()
     edm->createDroppedItem(Vector2D(400.0f, 400.0f), VoidLight::ResourceHandle{1, 1}, 1);
 
@@ -1178,7 +1232,7 @@ BOOST_AUTO_TEST_CASE(TestAllCachedIndicesClearedComprehensive) {
     handles.push_back(edm->createNPCWithRaceClass(Vector2D(15000.0f, 15000.0f), "Human", "Guard"));
 
     // Player (always active)
-    handles.push_back(edm->registerPlayer(1,Vector2D(300.0f, 300.0f)));
+    handles.push_back(edm->registerPlayer(1, Vector2D(300.0f, 300.0f)));
 
     // Items
     handles.push_back(edm->createDroppedItem(Vector2D(400.0f, 400.0f),
@@ -1342,7 +1396,7 @@ BOOST_AUTO_TEST_CASE(TestNPCRenderDataInitialization) {
     // Verify initial state
     BOOST_CHECK_EQUAL(renderData.currentFrame, 0);
     BOOST_CHECK(approxEqual(renderData.animationAccumulator, 0.0f));
-    BOOST_CHECK_EQUAL(renderData.flipMode, 0);  // SDL_FLIP_NONE
+    BOOST_CHECK_EQUAL(renderData.flipMode, 0); // SDL_FLIP_NONE
 
     // Verify atlas coordinates were loaded
     BOOST_CHECK_GE(renderData.atlasX, 0);
@@ -1508,6 +1562,55 @@ BOOST_AUTO_TEST_CASE(TestInventoryTransferRejectsFullTargetWithoutMutation) {
     BOOST_CHECK_EQUAL(edm->getInventoryQuantity(targetInventory, ironArmor), 1);
 }
 
+BOOST_AUTO_TEST_CASE(CanAddToInventoryMatchesAddToInventory) {
+    auto& rtm = ResourceTemplateManager::Instance();
+    const auto ore = rtm.getHandleById("iron_ore");
+    const auto sword = rtm.getHandleById("iron_sword");
+    BOOST_REQUIRE(ore.isValid());
+    BOOST_REQUIRE(sword.isValid());
+    const int oreStack = rtm.getMaxStackSize(ore);
+    BOOST_REQUIRE_GT(oreStack, 1);
+    const int inlineCapacity = static_cast<int>(InventoryData::INLINE_SLOT_COUNT) * oreStack;
+
+    // Each query must predict the paired add exactly.
+    const auto agree = [this, ore](uint32_t inventory, int quantity) {
+        const bool predicted = edm->canAddToInventory(inventory, ore, quantity);
+        const bool added = edm->addToInventory(inventory, ore, quantity);
+        BOOST_CHECK_EQUAL(predicted, added);
+        return added;
+    };
+
+    // maxSlots 1: the inline slots still form the capacity (review non-issues C.87).
+    const uint32_t inlineOnly = edm->createInventory(1, false);
+    BOOST_REQUIRE_NE(inlineOnly, INVALID_INVENTORY_INDEX);
+    BOOST_CHECK(!edm->canAddToInventory(INVALID_INVENTORY_INDEX, ore, 1));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, VoidLight::ResourceHandle{}, 1));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, ore, 0));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, ore, -1));
+    BOOST_CHECK(edm->canAddToInventory(inlineOnly, ore, inlineCapacity));
+    BOOST_CHECK(!edm->canAddToInventory(inlineOnly, ore, inlineCapacity + 1));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inlineOnly, ore), 0);
+
+    // A different resource occupies one slot; partial stacks count their room.
+    BOOST_REQUIRE(edm->addToInventory(inlineOnly, sword, 1));
+    const int freeRoom = inlineCapacity - oreStack;
+    BOOST_CHECK(agree(inlineOnly, oreStack - 1));
+    BOOST_CHECK(!agree(inlineOnly, freeRoom - (oreStack - 1) + 1));
+    BOOST_CHECK(agree(inlineOnly, freeRoom - (oreStack - 1)));
+    BOOST_CHECK(!agree(inlineOnly, 1));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inlineOnly, ore), freeRoom);
+
+    // Overflow slots count once maxSlots exceeds the inline slots.
+    const uint32_t withOverflow =
+        edm->createInventory(static_cast<uint16_t>(InventoryData::INLINE_SLOT_COUNT + 2), false);
+    BOOST_REQUIRE_NE(withOverflow, INVALID_INVENTORY_INDEX);
+    const int totalCapacity = inlineCapacity + 2 * oreStack;
+    BOOST_CHECK(!agree(withOverflow, totalCapacity + 1));
+    BOOST_CHECK(agree(withOverflow, totalCapacity));
+    BOOST_CHECK(!agree(withOverflow, 1));
+    BOOST_CHECK_EQUAL(edm->getInventoryQuantity(withOverflow, ore), totalCapacity);
+}
+
 BOOST_AUTO_TEST_CASE(TestInventoryTransferRejectsSourceShortageWithoutMutation) {
     const auto ironSword = ResourceTemplateManager::Instance().getHandleById("iron_sword");
     BOOST_REQUIRE(ironSword.isValid());
@@ -1543,12 +1646,12 @@ BOOST_AUTO_TEST_CASE(TestRangedWeaponConsumesCompatibleAmmunition) {
 
     BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
     BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
-                      CharacterData::CombatStyle::Ranged);
+        CharacterData::CombatStyle::Ranged);
     BOOST_CHECK_CLOSE(edm->getCharacterData(player).attackRange, 400.0f, 0.001f);
     BOOST_CHECK_CLOSE(edm->getCharacterData(player).projectileSpeed, 300.0f, 0.001f);
 
     InventoryResourceChange ammoChange{};
-    BOOST_CHECK(edm->consumeRequiredAmmoForRangedAttack(player, &ammoChange));
+    BOOST_CHECK(edm->consumeRequiredAmmoForRangedAttack(player, ammoChange));
     BOOST_CHECK_EQUAL(edm->getInventoryQuantity(inventory, arrows), 1);
     BOOST_CHECK(ammoChange.resourceHandle == arrows);
     BOOST_CHECK_EQUAL(ammoChange.oldQuantity, 2);
@@ -1570,10 +1673,10 @@ BOOST_AUTO_TEST_CASE(TestRangedWeaponWithoutAmmoDoesNotConsumeInventory) {
 
     BOOST_REQUIRE(edm->equipCharacterItem(player, bow));
     InventoryResourceChange ammoChange{};
-    BOOST_CHECK(!edm->consumeRequiredAmmoForRangedAttack(player, &ammoChange));
+    BOOST_CHECK(!edm->consumeRequiredAmmoForRangedAttack(player, ammoChange));
 
     BOOST_CHECK_EQUAL(edm->getCharacterData(player).combatStyle,
-                      CharacterData::CombatStyle::Ranged);
+        CharacterData::CombatStyle::Ranged);
     BOOST_CHECK(!ammoChange.isValid());
 }
 

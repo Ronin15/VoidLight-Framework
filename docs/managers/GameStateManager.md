@@ -25,6 +25,20 @@ Full-screen UI clear uses `UIManager::prepareForStateTransition()` as a **servic
 
 States are identified by `GameStateId` (not free-form strings).
 
+## GPU dispatch
+
+Update and input stay top-only. GPU work is split so Pause/Settings can sit on a frozen gameplay scene without calling the paused state's UI record:
+
+| Call | Scene owner | UI owner | Overlay interpolation |
+|------|-------------|----------|------------------------|
+| `recordGPUVertices` | highest stacked state with `hasGPUScene()` (`recordGPUSceneVertices`) | top (`recordGPUUIVertices`) | `1.0f` when scene owner is not top |
+| `renderGPUScene` | highest stacked state with `hasGPUScene()` | — | `1.0f` when scene owner is not top |
+| `renderGPUUI` | — | top | — |
+
+`hasGPUScene() == true` for states that implement a scene pass: GamePlay, AIDemo, EventDemo, MainMenu, Logo. Pause, Settings, Loading, and GameOver are UI-only.
+
+The engine still owns present. The scene pass remains `LOADOP_CLEAR`; overlays re-record the underlayer at alpha 1 rather than loading the previous framebuffer.
+
 ## API (current)
 
 ```cpp

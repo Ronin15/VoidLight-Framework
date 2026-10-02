@@ -11,8 +11,7 @@
 
 #include "gpu/GPURenderer.hpp"
 
-void DayNightController::subscribe()
-{
+void DayNightController::subscribe() {
     if (checkAlreadySubscribed()) {
         return;
     }
@@ -22,8 +21,7 @@ void DayNightController::subscribe()
     // Subscribe to Time events to detect hour changes
     auto timeToken = eventMgr.registerHandlerWithToken(
         EventTypeId::Time,
-        [this](const EventData& data) { onTimeEvent(data); }
-    );
+        [this](const EventData& data) { onTimeEvent(data); });
     addHandlerToken(timeToken);
 
     // Recompute period from current game time — GameTimeManager may have
@@ -61,11 +59,10 @@ void DayNightController::subscribe()
 
     setSubscribed(true);
     DAYNIGHT_INFO(std::format("Subscribed to time events, period: {}",
-                getCurrentPeriodString()));
+        getCurrentPeriodString()));
 }
 
-void DayNightController::onTimeEvent(const EventData& data)
-{
+void DayNightController::onTimeEvent(const EventData& data) {
     if (!data.event) {
         return;
     }
@@ -91,8 +88,7 @@ void DayNightController::onTimeEvent(const EventData& data)
     }
 }
 
-void DayNightController::transitionToPeriod(TimePeriod newPeriod)
-{
+void DayNightController::transitionToPeriod(TimePeriod newPeriod) {
     m_previousPeriod = m_currentPeriod;
     m_currentPeriod = newPeriod;
 
@@ -111,54 +107,31 @@ void DayNightController::transitionToPeriod(TimePeriod newPeriod)
     DAYNIGHT_INFO(std::format("Transitioned to {}", getCurrentPeriodString()));
 }
 
-std::string_view DayNightController::getCurrentPeriodString() const
-{
+std::string_view DayNightController::getCurrentPeriodString() const {
     switch (m_currentPeriod) {
         case TimePeriod::Morning: return "Morning";
-        case TimePeriod::Day:     return "Day";
+        case TimePeriod::Day: return "Day";
         case TimePeriod::Evening: return "Evening";
-        case TimePeriod::Night:   return "Night";
-        default:                  return "Unknown";
+        case TimePeriod::Night: return "Night";
+        default: return "Unknown";
     }
 }
 
-std::string_view DayNightController::getCurrentPeriodDescription() const
-{
+std::string_view DayNightController::getCurrentPeriodDescription() const {
     switch (m_currentPeriod) {
         case TimePeriod::Morning: return "Dawn approaches";
-        case TimePeriod::Day:     return "The sun rises high";
+        case TimePeriod::Day: return "The sun rises high";
         case TimePeriod::Evening: return "Dusk settles in";
-        case TimePeriod::Night:   return "Night falls";
-        default:                  return "Time passes";
+        case TimePeriod::Night: return "Night falls";
+        default: return "Time passes";
     }
 }
 
-TimePeriodVisuals DayNightController::getCurrentVisuals() const
-{
+TimePeriodVisuals DayNightController::getCurrentVisuals() const {
     return TimePeriodVisuals::getForPeriod(m_currentPeriod);
 }
 
-TimePeriod DayNightController::hourToTimePeriod(float hour)
-{
-    // Time periods matching GameTimeManager::getTimeOfDayName() logic:
-    // Morning: 5:00 - 8:00
-    // Day:     8:00 - 17:00
-    // Evening: 17:00 - 21:00
-    // Night:   21:00 - 5:00
-
-    if (hour >= 5.0f && hour < 8.0f) {
-        return TimePeriod::Morning;
-    } else if (hour >= 8.0f && hour < 17.0f) {
-        return TimePeriod::Day;
-    } else if (hour >= 17.0f && hour < 21.0f) {
-        return TimePeriod::Evening;
-    } else {
-        return TimePeriod::Night;
-    }
-}
-
-void DayNightController::update(float deltaTime)
-{
+void DayNightController::update(float deltaTime) {
     // Exponential smoothing for natural-feeling transitions
     // lerpFactor approaches 1.0 over TRANSITION_DURATION seconds
     float lerpFactor = 1.0f - std::exp(-deltaTime * (3.0f / TRANSITION_DURATION));
@@ -173,14 +146,12 @@ void DayNightController::update(float deltaTime)
     updateGPULighting();
 }
 
-void DayNightController::updateGPULighting()
-{
+void DayNightController::updateGPULighting() {
     auto& gpuRenderer = VoidLight::GPURenderer::Instance();
     // Convert from 0-255 range to 0-1 range for shader
     gpuRenderer.setDayNightParams(
         m_currentR / 255.0f,
         m_currentG / 255.0f,
         m_currentB / 255.0f,
-        m_currentA / 255.0f
-    );
+        m_currentA / 255.0f);
 }

@@ -20,13 +20,14 @@
  * layer built on top of these types.
  */
 
-#include "ai/BehaviorConfig.hpp"        // BehaviorType
+#include "ai/BehaviorConfig.hpp" // BehaviorType
 #include "collisions/CollisionBody.hpp" // CollisionLayer
-#include "collisions/TriggerTag.hpp"    // TriggerType
-#include "entities/Entity.hpp"          // EntityKind, SimulationTier, EntityHandle, AnimationConfig
-#include "utils/ResourceHandle.hpp"     // ResourceHandle
+#include "collisions/TriggerTag.hpp" // TriggerType
+#include "entities/Entity.hpp" // EntityKind, SimulationTier, EntityHandle, AnimationConfig
+#include "entities/Sex.hpp" // Sex
+#include "utils/ResourceHandle.hpp" // ResourceHandle
 #include "utils/Vector2D.hpp"
-#include "world/HarvestType.hpp"        // HarvestType
+#include "world/HarvestType.hpp" // HarvestType
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -53,10 +54,9 @@ static constexpr size_t CHARACTER_EQUIPMENT_SLOT_COUNT = 9;
  * Points into one of the per-variant dense pools owned by EDM.
  * index == UINT32_MAX when type == BehaviorType::None (no active config).
  */
-struct BehaviorConfigRef
-{
+struct BehaviorConfigRef {
     BehaviorType type{BehaviorType::None}; // 1 byte
-    uint8_t _pad[3]{};                     // 3 bytes alignment
+    uint8_t _pad[3]{}; // 3 bytes alignment
     uint32_t index{std::numeric_limits<uint32_t>::max()}; // 4 bytes
 };
 static_assert(sizeof(BehaviorConfigRef) == 8, "BehaviorConfigRef must be exactly 8 bytes");
@@ -65,10 +65,10 @@ static_assert(sizeof(BehaviorConfigRef) == 8, "BehaviorConfigRef must be exactly
  * @brief Transform data for entity movement (32 bytes)
  */
 struct TransformData {
-    Vector2D position{0.0f, 0.0f};         // Current position (8 bytes)
+    Vector2D position{0.0f, 0.0f}; // Current position (8 bytes)
     Vector2D previousPosition{0.0f, 0.0f}; // For interpolation (8 bytes)
-    Vector2D velocity{0.0f, 0.0f};         // Current velocity (8 bytes)
-    Vector2D acceleration{0.0f, 0.0f};     // Current acceleration (8 bytes)
+    Vector2D velocity{0.0f, 0.0f}; // Current velocity (8 bytes)
+    Vector2D acceleration{0.0f, 0.0f}; // Current acceleration (8 bytes)
 };
 
 static_assert(sizeof(TransformData) == 32, "TransformData should be 32 bytes");
@@ -79,14 +79,54 @@ static_assert(sizeof(TransformData) == 32, "TransformData should be 32 bytes");
  * Only entities that are currently being knocked back occupy space in the dense array.
  * framesRemaining is a fixed-timestep frame count (see Knockback::FRAMES / DECAY).
  */
-struct KnockbackData
-{
-    float   impulseX{0.0f};         // 4 bytes: knockback impulse X component
-    float   impulseY{0.0f};         // 4 bytes: knockback impulse Y component
-    uint8_t framesRemaining{0};     // 1 byte:  remaining fixed-timestep frames
-    bool    justApplied{false};     // 1 byte:  true on the first tick after a hit is applied;
-                                    //           cleared by AIManager after consuming the REPLACE path
+struct KnockbackData {
+    float impulseX{0.0f}; // 4 bytes: knockback impulse X component
+    float impulseY{0.0f}; // 4 bytes: knockback impulse Y component
+    uint8_t framesRemaining{0}; // 1 byte:  remaining fixed-timestep frames
+    bool justApplied{false}; // 1 byte:  true on the first tick after a hit is applied;
+    //           cleared by AIManager after consuming the REPLACE path
 };
+
+/**
+ * @brief Player-only per-faction standing scores. Stored in SparseSidecar.
+ *
+ * Single source of truth for NPC-faction relations toward the player (the
+ * player has no faction; the stance table is NPC-faction only). Storage only:
+ * incident deltas, clamp, and the derived Hostile/Neutral/Allied relation are
+ * AIManager policy (main thread). NPCMemoryData is locked at 448 B. Standing is
+ * not mixed into Behaviors::getRelationshipLevel (emotions + interaction
+ * memories). 0 = neutral. FACTION_COUNT is asserted against
+ * kFactionStanceRowSize in .cpp.
+ */
+struct PlayerFactionStanding {
+    static constexpr uint8_t FACTION_COUNT = 16;
+    std::array<int8_t, FACTION_COUNT> scores{};
+};
+static_assert(sizeof(PlayerFactionStanding) == 16);
+
+/**
+ * @brief Survival need state for civilian NPCs. Stored in SparseSidecar<NpcNeedData>.
+ *
+ * Storage only: growth rate, forage threshold, and retry backoff are
+ * Behaviors:: policy. Entries are created on the main thread (AIManager role
+ * assignment, Forage init) and may be removed on the main thread by role
+ * assignment (AIManager::syncNeedForRole), outside AI batches. Forage roles
+ * always keep their entry: syncNeedForRole skips Forage, and reassignment away
+ * from Forage changes the behavior first. The owning entity's worker may
+ * mutate its own entry via SparseSidecar::get(). home/leashRadius are seeded
+ * once when the entry is created (Behaviors::seedNeed) and are read-only after.
+ */
+struct NpcNeedData {
+    float pressure{0.0f}; // 4 bytes: need pressure in [0, 1]
+    float retryCooldown{0.0f}; // 4 bytes: seconds before the next forage attempt
+    Vector2D home{}; // 8 bytes: forage leash anchor (position when the entry was seeded)
+    float leashRadius{0.0f}; // 4 bytes: max forage target distance from home (px); 0 = unleashed
+    uint8_t failCount{0}; // 1 byte:  consecutive failed forage attempts (backoff)
+    BehaviorType returnBehavior{BehaviorType::Idle}; // 1 byte: behavior to resume after Forage
+    uint8_t padding0{0};
+    uint8_t padding1{0};
+};
+static_assert(sizeof(NpcNeedData) == 24);
 
 /**
  * @brief Hot data accessed every frame (64 bytes, one cache line)
@@ -107,26 +147,26 @@ struct KnockbackData
  * - Dynamic entities to be tier-filtered efficiently
  */
 struct alignas(64) EntityHotData {
-    TransformData transform;        // 32 bytes
-    float halfWidth{16.0f};         // 4 bytes: Half-width for collision
-    float halfHeight{16.0f};        // 4 bytes: Half-height for collision
-    EntityKind kind{EntityKind::NPC};           // 1 byte
+    TransformData transform; // 32 bytes
+    float halfWidth{16.0f}; // 4 bytes: Half-width for collision
+    float halfHeight{16.0f}; // 4 bytes: Half-height for collision
+    EntityKind kind{EntityKind::NPC}; // 1 byte
     SimulationTier tier{SimulationTier::Active}; // 1 byte
-    uint8_t flags{0};               // 1 byte: alive, dirty, etc.
-    uint8_t reserved{0};           // 1 byte: padding (generation lives in m_generations vector)
-    uint32_t typeLocalIndex{0};     // 4 bytes: Index into type-specific array
+    uint8_t flags{0}; // 1 byte: alive, dirty, etc.
+    uint8_t reserved{0}; // 1 byte: padding (generation lives in m_generations vector)
+    uint32_t typeLocalIndex{0}; // 4 bytes: Index into type-specific array
 
     // Collision data (only for entities that participate in collision)
-    uint16_t collisionLayers{VoidLight::CollisionLayer::Layer_Default};  // 2 bytes: Which layer(s) this entity is on
-    uint16_t collisionMask{0xFFFF};  // 2 bytes: Which layers this entity collides with
-    uint8_t collisionFlags{0};       // 1 byte: COLLISION_ENABLED, IS_TRIGGER
-    uint8_t triggerTag{0};           // 1 byte: TriggerTag for trigger entities
-    uint8_t triggerType{0};          // 1 byte: TriggerType (EventOnly, Physical)
+    uint16_t collisionLayers{VoidLight::CollisionLayer::Layer_Default}; // 2 bytes: Which layer(s) this entity is on
+    uint16_t collisionMask{0xFFFF}; // 2 bytes: Which layers this entity collides with
+    uint8_t collisionFlags{0}; // 1 byte: COLLISION_ENABLED, IS_TRIGGER
+    uint8_t triggerTag{0}; // 1 byte: TriggerTag for trigger entities
+    uint8_t triggerType{0}; // 1 byte: TriggerType (EventOnly, Physical)
     // 9 bytes freed by moving knockback to SparseSidecar<KnockbackData> m_knockback on EDM.
     // KnockbackData (impulseX 4B + impulseY 4B + framesRemaining 1B = 9B) was removed from
     // the hot line because only a small fraction of entities are knocked back at any time.
     // Explicit padding preserves the 64-byte cache-line size and makes the removal visible in diffs.
-    uint8_t _knockbackPad[9]{};      // 9 bytes: reserved — formerly knockback inline fields
+    uint8_t _knockbackPad[9]{}; // 9 bytes: reserved — formerly knockback inline fields
 
     // Entity flag constants
     static constexpr uint8_t FLAG_ALIVE = 0x01;
@@ -194,18 +234,9 @@ static_assert(alignof(EntityHotData) == 64, "EntityHotData should be 64-byte ali
  * Used by CharacterData to identify the creature composition system in use.
  */
 enum class CreatureCategory : uint8_t {
-    NPC = 0,      // Humanoid characters (race + class)
-    Monster = 1,  // Hostile creatures (type + variant)
-    Animal = 2    // Wildlife (species + role)
-};
-
-/**
- * @brief Biological sex for creatures
- */
-enum class Sex : uint8_t {
-    Male = 0,
-    Female = 1,
-    Unknown = 2   // For creatures where sex is undefined/irrelevant
+    NPC = 0, // Humanoid characters (race + class)
+    Monster = 1, // Hostile creatures (type + variant)
+    Animal = 2 // Wildlife (species + role)
 };
 
 /**
@@ -227,36 +258,47 @@ struct CharacterData {
     float attackRange{50.0f};
     float baseAttackRange{50.0f};
     float baseMoveSpeed{100.0f};
-    float moveSpeed{100.0f};   // Effective movement speed
-    float armorDefense{0.0f};  // Effective defense from equipped gear
-    float mass{1.0f};          // Physical mass (affects knockback resistance)
+    float moveSpeed{100.0f}; // Effective movement speed
+    float armorDefense{0.0f}; // Effective defense from equipped gear
+    float mass{1.0f}; // Physical mass (affects knockback resistance)
     float projectileSpeed{0.0f}; // Ranged projectile speed (px/s), 0 = melee
     float baseProjectileSpeed{0.0f};
 
     // Identity (creature composition)
-    CreatureCategory category{CreatureCategory::NPC};  // NPC, Monster, or Animal
-    Sex sex{Sex::Unknown};     // Male, Female, or Unknown
-    uint8_t typeId{0};         // raceId / monsterTypeId / speciesId
-    uint8_t subtypeId{0};      // classId / variantId / roleId
+    CreatureCategory category{CreatureCategory::NPC}; // NPC, Monster, or Animal
+    Sex sex{Sex::Unknown}; // Male, Female, or Unknown
+    uint8_t typeId{0}; // raceId / monsterTypeId / speciesId
+    uint8_t subtypeId{0}; // classId / variantId / roleId
 
     // Faction and AI
-    uint8_t faction{0};        // 0=Friendly, 1=Enemy, 2=Neutral
-    uint8_t behaviorType{0};   // BehaviorType enum
-    uint8_t priority{5};       // AI priority (0-9)
-    uint8_t stateFlags{0};     // alive, stunned, invulnerable, etc.
-    enum CombatStyle : uint8_t { Melee = 0, Ranged = 1 };
+    // NPC faction id (0-15). Engagement is AIManager stance, not this id.
+    // The player has no faction (NO_FACTION); its relations are per-faction
+    // standing on the EDM PlayerFactionStanding sidecar.
+    uint8_t faction{0};
+    // AIManager-written mirror of the current BehaviorType (assign + transition
+    // commit). Production AI reads BehaviorConfig.type; do not treat this as home.
+    uint8_t behaviorType{0};
+    // Home role written on assignBehavior only. Slice 7 restores this; not current type.
+    uint8_t homeRole{static_cast<uint8_t>(BehaviorType::None)};
+    uint8_t priority{5}; // AI priority (0-9)
+    uint8_t stateFlags{0}; // alive, stunned, invulnerable, etc.
+    enum CombatStyle : uint8_t {
+        Melee = 0,
+        Ranged = 1
+    };
     uint8_t combatStyle{CombatStyle::Melee};
     uint8_t baseCombatStyle{CombatStyle::Melee};
 
     // Inventory (for merchants and NPCs that carry items)
-    uint32_t inventoryIndex{INVALID_INVENTORY_INDEX};  // EDM inventory index
+    uint32_t inventoryIndex{INVALID_INVENTORY_INDEX}; // EDM inventory index
     std::array<VoidLight::ResourceHandle, CHARACTER_EQUIPMENT_SLOT_COUNT>
         equippedItems{};
 
     // Emotional resilience from class (affects emotion changes)
     float emotionalResilience{0.5f};
 
-    static constexpr uint8_t FLAG_MERCHANT = 0x08;    // Can trade with player
+    static constexpr uint8_t FLAG_MERCHANT = 0x08; // Can trade with player
+    static constexpr uint8_t NO_FACTION = 0xFF; // Player: member of no NPC faction
 
     [[nodiscard]] bool isMerchant() const noexcept {
         return (stateFlags & FLAG_MERCHANT) != 0;
@@ -271,10 +313,10 @@ struct CharacterData {
  * @brief Item data for DroppedItem entities
  */
 struct ItemData {
-    VoidLight::ResourceHandle resourceHandle;  // Item template reference
+    VoidLight::ResourceHandle resourceHandle; // Item template reference
     int quantity{1};
-    float pickupTimer{0.5f};    // Delay before pickup allowed
-    float bobTimer{0.0f};       // Visual bobbing effect
+    float pickupTimer{0.5f}; // Delay before pickup allowed
+    float bobTimer{0.0f}; // Visual bobbing effect
     uint8_t flags{0};
 
     static constexpr uint8_t FLAG_CAN_PICKUP = 0x01;
@@ -289,15 +331,15 @@ struct ItemData {
  * @brief Projectile data for Projectile entities
  */
 struct ProjectileData {
-    EntityHandle owner;         // Who fired this projectile
+    EntityHandle owner; // Who fired this projectile
     EntityHandle embeddedTarget; // Dynamic target this projectile is stuck into
     float damage{10.0f};
-    float lifetime{5.0f};       // Time until despawn
+    float lifetime{5.0f}; // Time until despawn
     float speed{200.0f};
     float embeddedOffsetX{0.0f};
     float embeddedOffsetY{0.0f};
-    float embeddedAngle{0.0f};  // Flight angle (radians) preserved at embed time
-    uint8_t damageType{0};      // Physical, Fire, Ice, etc.
+    float embeddedAngle{0.0f}; // Flight angle (radians) preserved at embed time
+    uint8_t damageType{0}; // Physical, Fire, Ice, etc.
     uint8_t flags{0};
 
     static constexpr uint8_t FLAG_PIERCING = 0x01;
@@ -331,10 +373,10 @@ enum class ContainerType : uint8_t {
  * @brief Container data for Container entities (chests, barrels)
  */
 struct ContainerData {
-    uint32_t inventoryIndex{INVALID_INVENTORY_INDEX};  // EDM inventory index
+    uint32_t inventoryIndex{INVALID_INVENTORY_INDEX}; // EDM inventory index
     uint16_t maxSlots{20};
-    uint8_t containerType{0};   // ContainerType enum value
-    uint8_t lockLevel{0};       // 0 = unlocked, 1-10 = lock difficulty
+    uint8_t containerType{0}; // ContainerType enum value
+    uint8_t lockLevel{0}; // 0 = unlocked, 1-10 = lock difficulty
 
     // Container state flags
     static constexpr uint8_t FLAG_IS_OPEN = 0x01;
@@ -372,7 +414,7 @@ struct HarvestableData {
     VoidLight::ResourceHandle yieldResource;
     int yieldMin{1};
     int yieldMax{3};
-    float respawnTime{60.0f};   // Seconds until respawn
+    float respawnTime{60.0f}; // Seconds until respawn
     float currentRespawn{0.0f}; // Time remaining
     VoidLight::HarvestType harvestType{VoidLight::HarvestType::Gathering};
     bool isDepleted{false};
@@ -389,12 +431,16 @@ struct HarvestableData {
  * resource identification via ResourceTemplateManager.
  */
 struct InventorySlotData {
-    VoidLight::ResourceHandle resourceHandle;  // 8 bytes: Type-safe resource reference (6 + padding)
-    int16_t quantity{0};                          // 2 bytes: Stack quantity
-    int16_t _pad{0};                              // 2 bytes: Padding for alignment
+    VoidLight::ResourceHandle resourceHandle; // 8 bytes: Type-safe resource reference (6 + padding)
+    int16_t quantity{0}; // 2 bytes: Stack quantity
+    int16_t _pad{0}; // 2 bytes: Padding for alignment
 
     [[nodiscard]] bool isEmpty() const noexcept { return quantity <= 0 || !resourceHandle.isValid(); }
-    void clear() noexcept { resourceHandle = VoidLight::ResourceHandle{}; quantity = 0; _pad = 0; }
+    void clear() noexcept {
+        resourceHandle = VoidLight::ResourceHandle{};
+        quantity = 0;
+        _pad = 0;
+    }
 };
 
 // InventorySlotData is ~12 bytes (ResourceHandle 8 + quantity 2 + pad 2)
@@ -412,17 +458,17 @@ struct InventoryData {
     static constexpr size_t INLINE_SLOT_COUNT = 8;
 
     // Flags for inventory state
-    static constexpr uint8_t FLAG_VALID = 0x01;         // Slot is in use
+    static constexpr uint8_t FLAG_VALID = 0x01; // Slot is in use
     static constexpr uint8_t FLAG_WORLD_TRACKED = 0x02; // Registered with WorldResourceManager
-    static constexpr uint8_t FLAG_DIRTY = 0x04;         // Needs cache rebuild
+    static constexpr uint8_t FLAG_DIRTY = 0x04; // Needs cache rebuild
 
-    InventorySlotData slots[INLINE_SLOT_COUNT];   // 96 bytes: Inline slot storage (8 * 12)
-    uint32_t overflowId{0};                       // 4 bytes: ID into overflow map (0 = none)
-    uint16_t maxSlots{INLINE_SLOT_COUNT};         // 2 bytes: Max slots for this inventory
-    uint16_t usedSlots{0};                        // 2 bytes: Current used slot count
-    uint8_t flags{0};                             // 1 byte: State flags
-    uint8_t ownerKind{0};                         // 1 byte: EntityKind of owner (for debugging)
-    uint8_t _padding[22]{};                       // 22 bytes: Pad to 128 bytes
+    InventorySlotData slots[INLINE_SLOT_COUNT]; // 96 bytes: Inline slot storage (8 * 12)
+    uint32_t overflowId{0}; // 4 bytes: ID into overflow map (0 = none)
+    uint16_t maxSlots{INLINE_SLOT_COUNT}; // 2 bytes: Max slots for this inventory
+    uint16_t usedSlots{0}; // 2 bytes: Current used slot count
+    uint8_t flags{0}; // 1 byte: State flags
+    uint8_t ownerKind{0}; // 1 byte: EntityKind of owner (for debugging)
+    uint8_t _padding[22]{}; // 22 bytes: Pad to 128 bytes
 
     [[nodiscard]] bool isValid() const noexcept { return flags & FLAG_VALID; }
     [[nodiscard]] bool isWorldTracked() const noexcept { return flags & FLAG_WORLD_TRACKED; }
@@ -458,7 +504,7 @@ struct InventoryData {
  * maps to an entry in EntityDataManager::m_inventoryOverflow.
  */
 struct InventoryOverflow {
-    std::vector<InventorySlotData> extraSlots;  // Slots beyond inline capacity
+    std::vector<InventorySlotData> extraSlots; // Slots beyond inline capacity
 
     void clear() noexcept { extraSlots.clear(); }
 };
@@ -486,14 +532,14 @@ struct InventoryTransferResult {
  * @brief Area effect data for AoE zones (spell effects, traps)
  */
 struct AreaEffectData {
-    EntityHandle owner;         // Who created this effect
+    EntityHandle owner; // Who created this effect
     float radius{50.0f};
-    float damage{5.0f};         // Damage per tick
-    float tickInterval{0.5f};   // Seconds between ticks
-    float duration{5.0f};       // Total duration
-    float elapsed{0.0f};        // Time since creation
-    float lastTick{0.0f};       // Time since last damage tick
-    uint8_t effectType{0};      // Poison, Fire, Heal, Slow
+    float damage{5.0f}; // Damage per tick
+    float tickInterval{0.5f}; // Seconds between ticks
+    float duration{5.0f}; // Total duration
+    float elapsed{0.0f}; // Time since creation
+    float lastTick{0.0f}; // Time since last damage tick
+    uint8_t effectType{0}; // Poison, Fire, Heal, Slow
 };
 
 /**
@@ -504,20 +550,20 @@ struct AreaEffectData {
  * Indexed by typeLocalIndex (same as CharacterData for NPCs).
  */
 struct NPCRenderData {
-    uint16_t atlasX{0};                   // X offset in atlas (pixels)
-    uint16_t atlasY{0};                   // Y offset in atlas (pixels)
-    uint16_t frameWidth{32};              // Single frame width
-    uint16_t frameHeight{32};             // Single frame height
-    uint16_t idleSpeedMs{150};            // Milliseconds per frame for idle
-    uint16_t moveSpeedMs{100};            // Milliseconds per frame for moving
-    uint8_t currentFrame{0};              // Current animation frame index
-    uint8_t numIdleFrames{1};             // Number of frames in idle animation (static)
-    uint8_t numMoveFrames{2};             // Number of frames in move animation
-    uint8_t idleRow{0};                   // Sprite sheet row for idle (0-based)
-    uint8_t moveRow{0};                   // Sprite sheet row for moving (0-based, same as idle)
-    uint8_t flipMode{0};                  // SDL_FLIP_NONE (0) or SDL_FLIP_HORIZONTAL (1)
-    uint8_t currentRow{0};                // Active row (set by update from velocity)
-    float animationAccumulator{0.0f};     // Time accumulator for frame advancement
+    uint16_t atlasX{0}; // X offset in atlas (pixels)
+    uint16_t atlasY{0}; // Y offset in atlas (pixels)
+    uint16_t frameWidth{32}; // Single frame width
+    uint16_t frameHeight{32}; // Single frame height
+    uint16_t idleSpeedMs{150}; // Milliseconds per frame for idle
+    uint16_t moveSpeedMs{100}; // Milliseconds per frame for moving
+    uint8_t currentFrame{0}; // Current animation frame index
+    uint8_t numIdleFrames{1}; // Number of frames in idle animation (static)
+    uint8_t numMoveFrames{2}; // Number of frames in move animation
+    uint8_t idleRow{0}; // Sprite sheet row for idle (0-based)
+    uint8_t moveRow{0}; // Sprite sheet row for moving (0-based, same as idle)
+    uint8_t flipMode{0}; // SDL_FLIP_NONE (0) or SDL_FLIP_HORIZONTAL (1)
+    uint8_t currentRow{0}; // Active row (set by update from velocity)
+    float animationAccumulator{0.0f}; // Time accumulator for frame advancement
 
     void clear() noexcept {
         atlasX = 0;
@@ -589,7 +635,7 @@ struct ClassInfo {
 
     // Combat style ("melee" or "ranged") — determines attack mode
     std::string combatStyle{"melee"};
-    float projectileSpeed{0.0f};         // Ranged projectile speed (px/s), 0 = melee
+    float projectileSpeed{0.0f}; // Ranged projectile speed (px/s), 0 = melee
 
     // AI hints (not auto-applied, for reference)
     std::string suggestedBehavior;
@@ -599,7 +645,7 @@ struct ClassInfo {
     uint8_t defaultFaction{0};
 
     // Commerce flags
-    bool isMerchant{false};  // If true, NPC can trade with player
+    bool isMerchant{false}; // If true, NPC can trade with player
 
     // Emotional resilience (0.0 = very emotional, 1.0 = stoic)
     // Affects how much emotions change when modified
@@ -642,7 +688,7 @@ struct MonsterTypeInfo {
     // Size
     float sizeMultiplier{1.0f};
 
-    // Monsters are enemies by default
+    // Default faction id. Collision grouping is stance-vs-player, not this id.
     uint8_t defaultFaction{1};
 };
 
@@ -734,16 +780,16 @@ struct AnimalRoleInfo {
  * Indexed by typeLocalIndex in EntityHotData.
  */
 struct ItemRenderData {
-    uint16_t atlasX{0};                   // X offset in atlas (pixels)
-    uint16_t atlasY{0};                   // Y offset in atlas (pixels)
-    uint16_t frameWidth{16};              // Single frame width
-    uint16_t frameHeight{16};             // Single frame height
-    uint16_t animSpeedMs{100};            // Milliseconds per frame
-    uint8_t currentFrame{0};              // Current animation frame
-    uint8_t numFrames{1};                 // Total animation frames
-    float animTimer{0.0f};                // Animation accumulator
-    float bobPhase{0.0f};                 // Sine-wave bob phase (0-2PI)
-    float bobAmplitude{3.0f};             // Vertical bob amplitude in pixels
+    uint16_t atlasX{0}; // X offset in atlas (pixels)
+    uint16_t atlasY{0}; // Y offset in atlas (pixels)
+    uint16_t frameWidth{16}; // Single frame width
+    uint16_t frameHeight{16}; // Single frame height
+    uint16_t animSpeedMs{100}; // Milliseconds per frame
+    uint8_t currentFrame{0}; // Current animation frame
+    uint8_t numFrames{1}; // Total animation frames
+    float animTimer{0.0f}; // Animation accumulator
+    float bobPhase{0.0f}; // Sine-wave bob phase (0-2PI)
+    float bobAmplitude{3.0f}; // Vertical bob amplitude in pixels
 
     void clear() noexcept {
         atlasX = 0;
@@ -766,17 +812,17 @@ struct ItemRenderData {
  * Indexed by typeLocalIndex in EntityHotData.
  */
 struct ContainerRenderData {
-    uint16_t atlasX{0};                   // Atlas X offset (0 = unmapped, use default)
-    uint16_t atlasY{0};                   // Atlas Y offset (0 = unmapped, use default)
-    uint16_t openAtlasX{0};               // Atlas X offset for open state
-    uint16_t openAtlasY{0};               // Atlas Y offset for open state
-    uint16_t frameWidth{32};              // Sprite width
-    uint16_t frameHeight{32};             // Sprite height
-    uint16_t openFrameWidth{32};          // Open-state sprite width
-    uint16_t openFrameHeight{32};         // Open-state sprite height
-    uint8_t currentFrame{0};              // For animated open/close
-    uint8_t numFrames{1};                 // Animation frames
-    float animTimer{0.0f};                // Animation accumulator
+    uint16_t atlasX{0}; // Atlas X offset (0 = unmapped, use default)
+    uint16_t atlasY{0}; // Atlas Y offset (0 = unmapped, use default)
+    uint16_t openAtlasX{0}; // Atlas X offset for open state
+    uint16_t openAtlasY{0}; // Atlas Y offset for open state
+    uint16_t frameWidth{32}; // Sprite width
+    uint16_t frameHeight{32}; // Sprite height
+    uint16_t openFrameWidth{32}; // Open-state sprite width
+    uint16_t openFrameHeight{32}; // Open-state sprite height
+    uint8_t currentFrame{0}; // For animated open/close
+    uint8_t numFrames{1}; // Animation frames
+    float animTimer{0.0f}; // Animation accumulator
 
     void clear() noexcept {
         atlasX = 0;
@@ -847,21 +893,21 @@ static_assert(sizeof(FixedWaypointSlot) == 256, "FixedWaypointSlot must be 256 b
  */
 enum class MemoryType : uint8_t {
     // Combat memories
-    AttackedBy = 0,      // Who attacked this NPC
-    Attacked = 1,        // Who this NPC attacked
-    DamageDealt = 2,     // Damage dealt to a target
-    DamageReceived = 3,  // Damage received from a source
+    AttackedBy = 0, // Who attacked this NPC
+    Attacked = 1, // Who this NPC attacked
+    DamageDealt = 2, // Damage dealt to a target
+    DamageReceived = 3, // Damage received from a source
 
     // Social memories
-    Interaction = 4,     // Traded, talked, received item
+    Interaction = 4, // Traded, talked, received item
 
     // Witnessed events
     WitnessedCombat = 5, // Saw combat between others
-    WitnessedDeath = 6,  // Saw an entity die
+    WitnessedDeath = 6, // Saw an entity die
 
     // Awareness memories
-    ThreatSpotted = 7,   // Spotted a hostile entity
-    AllySpotted = 8,     // Spotted a friendly entity
+    ThreatSpotted = 7, // Spotted a hostile entity
+    AllySpotted = 8, // Spotted a friendly entity
     LocationVisited = 9, // Visited a significant location
 
     COUNT = 10
@@ -877,14 +923,14 @@ enum class MemoryType : uint8_t {
  * - Location: distance traveled to reach
  */
 struct MemoryEntry {
-    EntityHandle subject{};                 // Who/what is remembered
-    Vector2D location{};                    // Where it happened
-    float timestamp{0.0f};                  // Game time when it occurred
-    float value{0.0f};                      // Context-dependent value (damage, etc.)
-    MemoryType type{MemoryType::AttackedBy};// Type of memory
-    uint8_t importance{0};                  // 0-255 importance score
-    uint8_t flags{0};                       // Additional state (FLAG_VALID = live entry)
-    uint8_t _pad{0};                        // Alignment padding
+    EntityHandle subject{}; // Who/what is remembered
+    Vector2D location{}; // Where it happened
+    float timestamp{0.0f}; // Game time when it occurred
+    float value{0.0f}; // Context-dependent value (damage, etc.)
+    MemoryType type{MemoryType::AttackedBy}; // Type of memory
+    uint8_t importance{0}; // 0-255 importance score
+    uint8_t flags{0}; // Additional state (FLAG_VALID = live entry)
+    uint8_t _pad{0}; // Alignment padding
 
     static constexpr uint8_t FLAG_VALID = 0x01;
 
@@ -911,10 +957,10 @@ static_assert(sizeof(MemoryEntry) <= 40, "MemoryEntry exceeds 40 bytes");
  * Values are 0.0 to 1.0 representing intensity.
  */
 struct EmotionalState {
-    float aggression{0.0f};    // Combat readiness, attack likelihood
-    float fear{0.0f};          // Flee threshold, caution level
-    float curiosity{0.0f};     // Investigation tendency
-    float suspicion{0.0f};     // Alertness to threats
+    float aggression{0.0f}; // Combat readiness, attack likelihood
+    float fear{0.0f}; // Flee threshold, caution level
+    float curiosity{0.0f}; // Investigation tendency
+    float suspicion{0.0f}; // Alertness to threats
 
     void clear() noexcept {
         aggression = 0.0f;
@@ -949,10 +995,10 @@ static_assert(sizeof(EmotionalState) == 16, "EmotionalState should be 16 bytes")
  */
 struct PersonalityTraits {
     // Core traits (0.0 to 1.0, 0.5 = average)
-    float bravery{0.5f};       // Resistance to fear (high = brave, low = cowardly)
-    float aggression{0.5f};    // Combat eagerness (high = aggressive, low = passive)
-    float composure{0.5f};     // Emotional stability (high = calm, low = reactive)
-    float loyalty{0.5f};       // Faction commitment (affects flee vs fight for allies)
+    float bravery{0.5f}; // Resistance to fear (high = brave, low = cowardly)
+    float aggression{0.5f}; // Combat eagerness (high = aggressive, low = passive)
+    float composure{0.5f}; // Emotional stability (high = calm, low = reactive)
+    float loyalty{0.5f}; // Faction commitment (affects flee vs fight for allies)
 
     /**
      * @brief Generate random personality with bell curve distribution
@@ -962,7 +1008,7 @@ struct PersonalityTraits {
      * Most NPCs cluster around average, with outliers being rarer.
      */
     void randomize(std::mt19937& rng) {
-        std::normal_distribution<float> dist(0.5f, 0.15f);  // Mean 0.5, most values 0.2-0.8
+        std::normal_distribution<float> dist(0.5f, 0.15f); // Mean 0.5, most values 0.2-0.8
         bravery = std::clamp(dist(rng), 0.0f, 1.0f);
         aggression = std::clamp(dist(rng), 0.0f, 1.0f);
         composure = std::clamp(dist(rng), 0.0f, 1.0f);
@@ -993,7 +1039,7 @@ struct PersonalityTraits {
      * Class provides 60% of the factor, personality 40%.
      */
     [[nodiscard]] float getEffectiveResilience(float classResilience) const noexcept {
-        float personalityFactor = (bravery + composure) * 0.5f;  // Average of two traits
+        float personalityFactor = (bravery + composure) * 0.5f; // Average of two traits
         return classResilience * 0.6f + personalityFactor * 0.4f;
     }
 
@@ -1041,29 +1087,29 @@ struct alignas(64) NPCMemoryData {
     static constexpr float NO_COMBAT_HISTORY = 999.0f;
 
     // First 64 B — read every frame by every behavior.
-    EmotionalState    emotions;                         // 16 B  (read+write per frame in decay loop)
-    PersonalityTraits personality;                      // 16 B  (read every frame, written once at spawn)
-    EntityHandle      lastAttacker;                     // 16 B  (read by 5 behaviors)
-    float             lastCombatTime{NO_COMBAT_HISTORY};// 4 B   (updated per frame in decay)
-    float             lastDecayTime{0.0f};              // 4 B   (updated per frame)
-    uint8_t           flags{0};                         // 1 B   (FLAG_VALID, FLAG_HAS_OVERFLOW)
-    uint8_t           _pad1[7]{};                       // 7 B   → first 64 B exact
+    EmotionalState emotions; // 16 B  (read+write per frame in decay loop)
+    PersonalityTraits personality; // 16 B  (read every frame, written once at spawn)
+    EntityHandle lastAttacker; // 16 B  (read by 5 behaviors)
+    float lastCombatTime{NO_COMBAT_HISTORY}; // 4 B   (updated per frame in decay)
+    float lastDecayTime{0.0f}; // 4 B   (updated per frame)
+    uint8_t flags{0}; // 1 B   (FLAG_VALID, FLAG_HAS_OVERFLOW)
+    uint8_t _pad1[7]{}; // 7 B   → first 64 B exact
 
     // Next 64 B — read every frame by combat-tracking behaviors (Chase/Attack/Follow/Guard).
     // Kept adjacent so combat behaviors fault one extra cache line, not multiple.
-    EntityHandle lastTarget;                            // 16 B  (read+write by 4 behaviors)
-    uint8_t      _pad2[48]{};                           // 48 B  → next 64 B exact (room for future combat fields)
+    EntityHandle lastTarget; // 16 B  (read+write by 4 behaviors)
+    uint8_t _pad2[48]{}; // 48 B  → next 64 B exact (room for future combat fields)
 
     // Remaining bytes — read on event or only by Guard's memory iteration.
-    MemoryEntry  memories[INLINE_MEMORY_COUNT];         // 240 B (Guard iterates; findMemories on demand)
-    Vector2D     locationHistory[INLINE_LOCATION_COUNT];// 32 B  (only addLocationToHistory writes)
-    float        totalDamageReceived{0.0f};             // 4 B   (written on combat event)
-    float        totalDamageDealt{0.0f};                // 4 B   (written on combat event)
-    uint16_t     memoryCount{0};                        // 2 B   (total memories — inline + overflow)
-    uint16_t     locationCount{0};                      // 2 B   (locations stored — 0..4)
-    uint8_t      nextInlineSlot{0};                     // 1 B   (circular write position)
-    uint8_t      combatEncounters{0};                   // 1 B   (combat encounter counter)
-    uint8_t      _pad3[34]{};                           // 34 B  → struct totals 448 B (multiple of 64)
+    MemoryEntry memories[INLINE_MEMORY_COUNT]; // 240 B (Guard iterates; findMemories on demand)
+    Vector2D locationHistory[INLINE_LOCATION_COUNT]; // 32 B  (only addLocationToHistory writes)
+    float totalDamageReceived{0.0f}; // 4 B   (written on combat event)
+    float totalDamageDealt{0.0f}; // 4 B   (written on combat event)
+    uint16_t memoryCount{0}; // 2 B   (total memories — inline + overflow)
+    uint16_t locationCount{0}; // 2 B   (locations stored — 0..4)
+    uint8_t nextInlineSlot{0}; // 1 B   (circular write position)
+    uint8_t combatEncounters{0}; // 1 B   (combat encounter counter)
+    uint8_t _pad3[34]{}; // 34 B  → struct totals 448 B (multiple of 64)
 
     [[nodiscard]] bool isValid() const noexcept { return flags & FLAG_VALID; }
     [[nodiscard]] bool hasOverflow() const noexcept { return flags & FLAG_HAS_OVERFLOW; }
@@ -1093,13 +1139,13 @@ struct alignas(64) NPCMemoryData {
 };
 
 static_assert(offsetof(NPCMemoryData, emotions) == 0,
-              "First cache line must start at byte 0");
+    "First cache line must start at byte 0");
 static_assert(offsetof(NPCMemoryData, lastTarget) == 64,
-              "lastTarget must start at byte 64 — kept adjacent to first 64 B for combat behaviors");
+    "lastTarget must start at byte 64 — kept adjacent to first 64 B for combat behaviors");
 static_assert(offsetof(NPCMemoryData, memories) == 128,
-              "Event-only fields start at byte 128");
+    "Event-only fields start at byte 128");
 static_assert(sizeof(NPCMemoryData) == 448,
-              "Struct size locked at 448 B — change deliberately if you adjust the layout");
+    "Struct size locked at 448 B — change deliberately if you adjust the layout");
 
 /**
  * @brief Overflow storage for NPCs with extensive memory history

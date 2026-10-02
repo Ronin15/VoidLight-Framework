@@ -33,9 +33,9 @@ public:
      * @brief Camera modes for different behaviors
      */
     enum class Mode {
-        Free,       // Camera moves freely, not following anything
-        Follow,     // Camera follows a target entity with smooth interpolation
-        Fixed       // Camera is fixed at a specific position
+        Free, // Camera moves freely, not following anything
+        Follow, // Camera follows a target entity with smooth interpolation
+        Fixed // Camera is fixed at a specific position
     };
 
     /**
@@ -57,14 +57,14 @@ public:
      *    forward so it never falls arbitrarily far behind. 0 disables.
      */
     struct Config {
-        float followLag{0.30f};            // Time constant in seconds (see above)
-        float deadZoneRadius{4.0f};        // Pixels; 0 = no dead zone
-        float maxCatchupDistance{600.0f};  // Pixels; 0 = no catchup snap
+        float followLag{0.30f}; // Time constant in seconds (see above)
+        float deadZoneRadius{4.0f}; // Pixels; 0 = no dead zone
+        float maxCatchupDistance{600.0f}; // Pixels; 0 = no catchup snap
         bool clampToWorldBounds{true};
 
         // Zoom configuration
-        std::vector<float> zoomLevels{1.0f, 2.0f, 3.0f};  // Integer zoom levels (pixel-perfect)
-        int defaultZoomLevel{0};                           // Starting zoom level index
+        std::vector<float> zoomLevels{1.0f, 2.0f, 3.0f}; // Integer zoom levels (pixel-perfect)
+        int defaultZoomLevel{0}; // Starting zoom level index
 
         bool isValid() const {
             if (followLag < 0.0f || deadZoneRadius < 0.0f || maxCatchupDistance < 0.0f) {
@@ -74,7 +74,7 @@ public:
                 return false;
             }
             if (!std::all_of(zoomLevels.begin(), zoomLevels.end(),
-                             [](float zoom) { return zoom > 0.0f; })) {
+                    [](float zoom) { return zoom > 0.0f; })) {
                 return false;
             }
             if (defaultZoomLevel < 0 || defaultZoomLevel >= static_cast<int>(zoomLevels.size())) {
@@ -102,8 +102,8 @@ public:
      * @brief Viewport structure for rendering calculations
      */
     struct Viewport {
-        float width{0.0f};   // Must be set via constructor or setViewport()
-        float height{0.0f};  // Must be set via constructor or setViewport()
+        float width{0.0f}; // Must be set via constructor or setViewport()
+        float height{0.0f}; // Must be set via constructor or setViewport()
 
         bool isValid() const {
             return width > 0.0f && height > 0.0f;
@@ -357,9 +357,9 @@ public:
      * @param worldX Output world X coordinate
      * @param worldY Output world Y coordinate
      */
-     void screenToWorld(float screenX, float screenY, float& worldX, float& worldY) const;
-     Vector2D screenToWorld(const Vector2D& screenCoords) const;
-     Vector2D worldToScreen(const Vector2D& worldCoords) const;
+    void screenToWorld(float screenX, float screenY, float& worldX, float& worldY) const;
+    Vector2D screenToWorld(const Vector2D& screenCoords) const;
+    Vector2D worldToScreen(const Vector2D& worldCoords) const;
 
     /**
      * @brief Immediately snaps camera to target position (no interpolation)
@@ -441,32 +441,32 @@ public:
 
 private:
     // Core camera state (initialized via constructor)
-    Vector2D m_position{0.0f, 0.0f};        // Current camera position
-    Vector2D m_targetPosition{0.0f, 0.0f};  // Target position for interpolation
-    Viewport m_viewport{};                   // Camera viewport size (set via constructor)
-    Bounds m_worldBounds{};                  // World boundaries (auto-synced from WorldManager)
-    Config m_config{};                       // Camera configuration
-    Mode m_mode{Mode::Free};                // Current camera mode
+    Vector2D m_position{0.0f, 0.0f}; // Current camera position
+    Vector2D m_targetPosition{0.0f, 0.0f}; // Target position for interpolation
+    Viewport m_viewport{}; // Camera viewport size (set via constructor)
+    Bounds m_worldBounds{}; // World boundaries (auto-synced from WorldManager)
+    Config m_config{}; // Camera configuration
+    Mode m_mode{Mode::Free}; // Current camera mode
 
     // Target tracking
-    std::weak_ptr<Entity> m_target;         // Target entity to follow
+    std::weak_ptr<Entity> m_target; // Target entity to follow
     std::function<Vector2D()> m_positionGetter; // Alternative position getter
 
     // Camera shake
-    float m_shakeTimeRemaining{0.0f};       // Remaining shake time
-    float m_shakeIntensity{0.0f};           // Current shake intensity
-    Vector2D m_shakeOffset{0.0f, 0.0f};     // Current shake offset
+    float m_shakeTimeRemaining{0.0f}; // Remaining shake time
+    float m_shakeIntensity{0.0f}; // Current shake intensity
+    Vector2D m_shakeOffset{0.0f, 0.0f}; // Current shake offset
 
     // Event firing
-    bool m_eventFiringEnabled{false};      // Whether to fire events on state changes
+    bool m_eventFiringEnabled{false}; // Whether to fire events on state changes
 
     // World sync (auto-correct camera bounds when world changes)
     bool m_autoSyncWorldBounds{true};
     uint64_t m_lastWorldVersion{0};
 
     // Zoom state
-    float m_zoom{1.0f};              // Current zoom level (1.0 = native)
-    int m_currentZoomIndex{0};       // Index into ZOOM_LEVELS array
+    float m_zoom{1.0f}; // Current zoom level (1.0 = native)
+    int m_currentZoomIndex{0}; // Index into ZOOM_LEVELS array
 
     // Previous position for render interpolation (smooth camera at any refresh rate)
     Vector2D m_previousPosition{960.0f, 540.0f};
@@ -476,13 +476,13 @@ private:
     mutable Vector2D m_lastRenderedCenter{0.0f, 0.0f};
 
     // Shake random number generation (mutable for const generateShakeOffset)
-    // Per AGENTS.md: NEVER use static vars in threaded code - use member vars instead
+    // Per CLAUDE.md: NEVER use static vars in threaded code - use member vars instead
     mutable std::mt19937 m_shakeRng{std::random_device{}()};
     mutable std::uniform_real_distribution<float> m_shakeDist{-1.0f, 1.0f};
 
     // Internal helper methods
-    void syncWorldBounds();       // Sync m_worldBounds from WorldManager (called every update)
-    void clampToWorldBounds();    // Clamp camera position to world bounds
+    void syncWorldBounds(); // Sync m_worldBounds from WorldManager (called every update)
+    void clampToWorldBounds(); // Clamp camera position to world bounds
     Vector2D getTargetPosition() const;
     Vector2D generateShakeOffset() const;
 

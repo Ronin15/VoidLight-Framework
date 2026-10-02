@@ -244,8 +244,7 @@ BOOST_FIXTURE_TEST_CASE(NoGPUStallWithTripleBuffering, VertexPoolTestFixture) {
             vertices[i] = SpriteVertex{
                 float(i), float(frame),
                 0.0f, 0.0f,
-                255, 255, 255, 255
-            };
+                255, 255, 255, 255};
         }
 
         pool.endFrame(1000);

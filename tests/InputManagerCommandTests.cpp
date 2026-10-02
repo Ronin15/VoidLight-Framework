@@ -18,10 +18,8 @@
 // Global fixture — SDL + InputManager lifecycle
 // =============================================================================
 
-struct CommandTestFixture
-{
-    CommandTestFixture()
-    {
+struct CommandTestFixture {
+    CommandTestFixture() {
 #if defined(_WIN32)
         _putenv_s("SDL_VIDEODRIVER", "offscreen");
 #else
@@ -40,8 +38,7 @@ struct CommandTestFixture
         }
     }
 
-    ~CommandTestFixture()
-    {
+    ~CommandTestFixture() {
         if (!InputManager::Instance().isShutdown()) {
             InputManager::Instance().clean();
         }
@@ -55,136 +52,124 @@ BOOST_GLOBAL_FIXTURE(CommandTestFixture);
 // Test helpers
 // =============================================================================
 
-namespace TestHelpers
-{
-    void clearEventQueue()
-    {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {}
-    }
+namespace TestHelpers {
+void clearEventQueue() {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {}
+}
 
-    // Simulate one full input frame: clear pressed keys, drain SDL event queue,
-    // route events to InputManager handlers, then resolve command state.
-    // Mirrors GameEngine::handleEvents() behaviour.
-    void processFrame()
-    {
-        InputManager& mgr = InputManager::Instance();
-        mgr.clearFrameInput();
+// Simulate one full input frame: clear pressed keys, drain SDL event queue,
+// route events to InputManager handlers, then resolve command state.
+// Mirrors GameEngine::handleEvents() behaviour.
+void processFrame() {
+    InputManager& mgr = InputManager::Instance();
+    mgr.clearFrameInput();
 
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            switch (event.type) {
-                case SDL_EVENT_KEY_DOWN:      mgr.onKeyDown(event);          break;
-                case SDL_EVENT_KEY_UP:        mgr.onKeyUp(event);            break;
-                case SDL_EVENT_MOUSE_BUTTON_DOWN: mgr.onMouseButtonDown(event); break;
-                case SDL_EVENT_MOUSE_BUTTON_UP:   mgr.onMouseButtonUp(event);   break;
-                case SDL_EVENT_GAMEPAD_AXIS_MOTION: mgr.onGamepadAxisMove(event); break;
-                case SDL_EVENT_GAMEPAD_BUTTON_DOWN: mgr.onGamepadButtonDown(event); break;
-                case SDL_EVENT_GAMEPAD_BUTTON_UP:   mgr.onGamepadButtonUp(event);   break;
-                case SDL_EVENT_GAMEPAD_ADDED:       mgr.onGamepadAdded(event);      break;
-                case SDL_EVENT_GAMEPAD_REMOVED:     mgr.onGamepadRemoved(event);    break;
-                case SDL_EVENT_GAMEPAD_REMAPPED:    mgr.onGamepadRemapped(event);   break;
-                default: break;
-            }
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_EVENT_KEY_DOWN: mgr.onKeyDown(event); break;
+            case SDL_EVENT_KEY_UP: mgr.onKeyUp(event); break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN: mgr.onMouseButtonDown(event); break;
+            case SDL_EVENT_MOUSE_BUTTON_UP: mgr.onMouseButtonUp(event); break;
+            case SDL_EVENT_GAMEPAD_AXIS_MOTION: mgr.onGamepadAxisMove(event); break;
+            case SDL_EVENT_GAMEPAD_BUTTON_DOWN: mgr.onGamepadButtonDown(event); break;
+            case SDL_EVENT_GAMEPAD_BUTTON_UP: mgr.onGamepadButtonUp(event); break;
+            case SDL_EVENT_GAMEPAD_ADDED: mgr.onGamepadAdded(event); break;
+            case SDL_EVENT_GAMEPAD_REMOVED: mgr.onGamepadRemoved(event); break;
+            case SDL_EVENT_GAMEPAD_REMAPPED: mgr.onGamepadRemapped(event); break;
+            default: break;
         }
-
-        mgr.refreshCommandState();
     }
 
-    void injectKeyDown(SDL_Scancode sc)
-    {
-        SDL_Event e;
-        SDL_zero(e);
-        e.type = SDL_EVENT_KEY_DOWN;
-        e.key.scancode = sc;
-        e.key.repeat = false;
-        SDL_PushEvent(&e);
-    }
+    mgr.refreshCommandState();
+}
 
-    void injectKeyUp(SDL_Scancode sc)
-    {
-        SDL_Event e;
-        SDL_zero(e);
-        e.type = SDL_EVENT_KEY_UP;
-        e.key.scancode = sc;
-        SDL_PushEvent(&e);
-    }
+void injectKeyDown(SDL_Scancode sc) {
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = SDL_EVENT_KEY_DOWN;
+    e.key.scancode = sc;
+    e.key.repeat = false;
+    SDL_PushEvent(&e);
+}
 
-    void injectGamepadDeviceEvent(SDL_EventType eventType, SDL_JoystickID instanceId)
-    {
-        SDL_Event e;
-        SDL_zero(e);
-        e.type = eventType;
-        e.gdevice.which = instanceId;
-        SDL_PushEvent(&e);
-    }
+void injectKeyUp(SDL_Scancode sc) {
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = SDL_EVENT_KEY_UP;
+    e.key.scancode = sc;
+    SDL_PushEvent(&e);
+}
 
-    void injectGamepadAxisMotion(SDL_JoystickID instanceId, SDL_GamepadAxis axis, Sint16 value)
-    {
-        SDL_Event e;
-        SDL_zero(e);
-        e.type = SDL_EVENT_GAMEPAD_AXIS_MOTION;
-        e.gaxis.which = instanceId;
-        e.gaxis.axis = axis;
-        e.gaxis.value = value;
-        SDL_PushEvent(&e);
-    }
+void injectGamepadDeviceEvent(SDL_EventType eventType, SDL_JoystickID instanceId) {
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = eventType;
+    e.gdevice.which = instanceId;
+    SDL_PushEvent(&e);
+}
 
-    SDL_JoystickID attachVirtualGamepad()
-    {
-        SDL_VirtualJoystickDesc desc;
-        SDL_INIT_INTERFACE(&desc);
-        desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
-        desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
-        desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
-        desc.axis_mask =
-            (1u << SDL_GAMEPAD_AXIS_LEFTX) |
-            (1u << SDL_GAMEPAD_AXIS_LEFTY) |
-            (1u << SDL_GAMEPAD_AXIS_RIGHTX) |
-            (1u << SDL_GAMEPAD_AXIS_RIGHTY) |
-            (1u << SDL_GAMEPAD_AXIS_LEFT_TRIGGER) |
-            (1u << SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
-        desc.button_mask = 0xFFFFFFFFu;
-        desc.name = "Command Test Virtual Gamepad";
-        return SDL_AttachVirtualJoystick(&desc);
-    }
+void injectGamepadAxisMotion(SDL_JoystickID instanceId, SDL_GamepadAxis axis, Sint16 value) {
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = SDL_EVENT_GAMEPAD_AXIS_MOTION;
+    e.gaxis.which = instanceId;
+    e.gaxis.axis = axis;
+    e.gaxis.value = value;
+    SDL_PushEvent(&e);
+}
 
-    struct ScopedVirtualGamepad
-    {
-        SDL_JoystickID instanceId{0};
+SDL_JoystickID attachVirtualGamepad() {
+    SDL_VirtualJoystickDesc desc;
+    SDL_INIT_INTERFACE(&desc);
+    desc.type = SDL_JOYSTICK_TYPE_GAMEPAD;
+    desc.naxes = SDL_GAMEPAD_AXIS_COUNT;
+    desc.nbuttons = SDL_GAMEPAD_BUTTON_COUNT;
+    desc.axis_mask =
+        (1u << SDL_GAMEPAD_AXIS_LEFTX) |
+        (1u << SDL_GAMEPAD_AXIS_LEFTY) |
+        (1u << SDL_GAMEPAD_AXIS_RIGHTX) |
+        (1u << SDL_GAMEPAD_AXIS_RIGHTY) |
+        (1u << SDL_GAMEPAD_AXIS_LEFT_TRIGGER) |
+        (1u << SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+    desc.button_mask = 0xFFFFFFFFu;
+    desc.name = "Command Test Virtual Gamepad";
+    return SDL_AttachVirtualJoystick(&desc);
+}
 
-        ScopedVirtualGamepad()
-            : instanceId(attachVirtualGamepad())
-        {
-            if (instanceId != 0) {
-                injectGamepadDeviceEvent(SDL_EVENT_GAMEPAD_ADDED, instanceId);
-                processFrame();
-            }
+struct ScopedVirtualGamepad {
+    SDL_JoystickID instanceId{0};
+
+    ScopedVirtualGamepad()
+        : instanceId(attachVirtualGamepad()) {
+        if (instanceId != 0) {
+            injectGamepadDeviceEvent(SDL_EVENT_GAMEPAD_ADDED, instanceId);
+            processFrame();
         }
-
-        ~ScopedVirtualGamepad()
-        {
-            if (instanceId != 0) {
-                injectGamepadDeviceEvent(SDL_EVENT_GAMEPAD_REMOVED, instanceId);
-                processFrame();
-                SDL_DetachVirtualJoystick(instanceId);
-                clearEventQueue();
-            }
-        }
-
-        ScopedVirtualGamepad(const ScopedVirtualGamepad&) = delete;
-        ScopedVirtualGamepad& operator=(const ScopedVirtualGamepad&) = delete;
-    };
-
-    // Resets bindings to defaults and clears any queued events for a clean test state
-    void resetState()
-    {
-        clearEventQueue();
-        InputManager::Instance().resetBindingsToDefaults();
-        // Two empty frames to flush any lingering edge state
-        processFrame();
-        processFrame();
     }
+
+    ~ScopedVirtualGamepad() {
+        if (instanceId != 0) {
+            injectGamepadDeviceEvent(SDL_EVENT_GAMEPAD_REMOVED, instanceId);
+            processFrame();
+            SDL_DetachVirtualJoystick(instanceId);
+            clearEventQueue();
+        }
+    }
+
+    ScopedVirtualGamepad(const ScopedVirtualGamepad&) = delete;
+    ScopedVirtualGamepad& operator=(const ScopedVirtualGamepad&) = delete;
+};
+
+// Resets bindings to defaults and clears any queued events for a clean test state
+void resetState() {
+    clearEventQueue();
+    InputManager::Instance().resetBindingsToDefaults();
+    // Two empty frames to flush any lingering edge state
+    processFrame();
+    processFrame();
+}
 }
 
 // =============================================================================
@@ -193,8 +178,7 @@ namespace TestHelpers
 
 BOOST_AUTO_TEST_SUITE(DefaultBindings)
 
-BOOST_AUTO_TEST_CASE(AttackLightDefaultKeyF)
-{
+BOOST_AUTO_TEST_CASE(AttackLightDefaultKeyF) {
     // isKeyDown() reflects real hardware state which cannot be injected in
     // headless tests. We test through the command layer by manipulating bindings
     // to use a source we can control: m_pressedThisFrame via wasKeyPressed.
@@ -215,8 +199,7 @@ BOOST_AUTO_TEST_CASE(AttackLightDefaultKeyF)
     BOOST_CHECK(foundF);
 }
 
-BOOST_AUTO_TEST_CASE(DefaultBindingsCoverAllMovement)
-{
+BOOST_AUTO_TEST_CASE(DefaultBindingsCoverAllMovement) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -235,8 +218,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(EdgeDetection)
 
-BOOST_AUTO_TEST_CASE(PressedRisingEdgeOnce)
-{
+BOOST_AUTO_TEST_CASE(PressedRisingEdgeOnce) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -258,8 +240,7 @@ BOOST_AUTO_TEST_CASE(PressedRisingEdgeOnce)
     BOOST_CHECK(!mgr.wasKeyPressed(SDL_SCANCODE_F));
 }
 
-BOOST_AUTO_TEST_CASE(CommandIsReleasedOnlyWhenPreviouslyDown)
-{
+BOOST_AUTO_TEST_CASE(CommandIsReleasedOnlyWhenPreviouslyDown) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -276,16 +257,15 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(MultipleBindings)
 
-BOOST_AUTO_TEST_CASE(TwoBindingsBothPresent)
-{
+BOOST_AUTO_TEST_CASE(TwoBindingsBothPresent) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
     mgr.clearBindings(InputManager::Command::AttackLight);
     mgr.addBinding(InputManager::Command::AttackLight,
-                   {InputManager::InputSource::Keyboard, SDL_SCANCODE_F});
+        {InputManager::InputSource::Keyboard, SDL_SCANCODE_F});
     mgr.addBinding(InputManager::Command::AttackLight,
-                   {InputManager::InputSource::Keyboard, SDL_SCANCODE_J});
+        {InputManager::InputSource::Keyboard, SDL_SCANCODE_J});
 
     auto bindings = mgr.getBindings(InputManager::Command::AttackLight);
     BOOST_REQUIRE_EQUAL(bindings.size(), 2u);
@@ -293,13 +273,12 @@ BOOST_AUTO_TEST_CASE(TwoBindingsBothPresent)
     BOOST_CHECK_EQUAL(bindings[1].code, static_cast<int>(SDL_SCANCODE_J));
 }
 
-BOOST_AUTO_TEST_CASE(ClearBindingsWorks)
-{
+BOOST_AUTO_TEST_CASE(ClearBindingsWorks) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
     mgr.addBinding(InputManager::Command::ZoomIn,
-                   {InputManager::InputSource::Keyboard, SDL_SCANCODE_KP_PLUS});
+        {InputManager::InputSource::Keyboard, SDL_SCANCODE_KP_PLUS});
     BOOST_CHECK(!mgr.getBindings(InputManager::Command::ZoomIn).empty());
 
     mgr.clearBindings(InputManager::Command::ZoomIn);
@@ -316,8 +295,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(JsonRoundTrip)
 
-BOOST_AUTO_TEST_CASE(SaveLoadRoundTrip)
-{
+BOOST_AUTO_TEST_CASE(SaveLoadRoundTrip) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -334,7 +312,7 @@ BOOST_AUTO_TEST_CASE(SaveLoadRoundTrip)
     // Modify a binding then reload from file
     mgr.clearBindings(InputManager::Command::AttackLight);
     mgr.addBinding(InputManager::Command::AttackLight,
-                   {InputManager::InputSource::Keyboard, SDL_SCANCODE_G});
+        {InputManager::InputSource::Keyboard, SDL_SCANCODE_G});
 
     BOOST_REQUIRE(mgr.loadBindingsFromFile(tmpPath));
 
@@ -342,7 +320,7 @@ BOOST_AUTO_TEST_CASE(SaveLoadRoundTrip)
     BOOST_REQUIRE_EQUAL(reloaded.size(), originalBindings.size());
     for (size_t i = 0; i < originalBindings.size(); ++i) {
         BOOST_CHECK_EQUAL(static_cast<int>(reloaded[i].source),
-                          static_cast<int>(originalBindings[i].source));
+            static_cast<int>(originalBindings[i].source));
         BOOST_CHECK_EQUAL(reloaded[i].code, originalBindings[i].code);
     }
 
@@ -358,18 +336,17 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(RebindCapture)
 
-BOOST_AUTO_TEST_CASE(CaptureNewKeyBinding)
-{
+BOOST_AUTO_TEST_CASE(CaptureNewKeyBinding) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
     mgr.clearBindings(InputManager::Command::AttackLight);
     mgr.addBinding(InputManager::Command::AttackLight,
-                   {InputManager::InputSource::Keyboard, SDL_SCANCODE_F});
+        {InputManager::InputSource::Keyboard, SDL_SCANCODE_F});
 
     // Start rebinding the keyboard/mouse slot
     mgr.startRebinding(InputManager::Command::AttackLight,
-                       InputManager::DeviceCategory::KeyboardMouse);
+        InputManager::DeviceCategory::KeyboardMouse);
     BOOST_CHECK(mgr.isRebinding());
     BOOST_CHECK(mgr.getRebindingCommand() == InputManager::Command::AttackLight);
 
@@ -390,13 +367,12 @@ BOOST_AUTO_TEST_CASE(CaptureNewKeyBinding)
     mgr.resetBindingsToDefaults();
 }
 
-BOOST_AUTO_TEST_CASE(EscCancelsRebind)
-{
+BOOST_AUTO_TEST_CASE(EscCancelsRebind) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
     mgr.startRebinding(InputManager::Command::Pause,
-                       InputManager::DeviceCategory::KeyboardMouse);
+        InputManager::DeviceCategory::KeyboardMouse);
     BOOST_CHECK(mgr.isRebinding());
 
     // Inject ESC — captureRebind() is driven via refreshCommandState() inside processFrame()
@@ -421,12 +397,11 @@ BOOST_AUTO_TEST_CASE(EscCancelsRebind)
 // must leave the other category's binding untouched. Regression guard for a
 // class of bugs where "replace-in-category" silently clobbers cross-category
 // bindings.
-BOOST_AUTO_TEST_CASE(KeyboardRebindPreservesControllerBinding)
-{
+BOOST_AUTO_TEST_CASE(KeyboardRebindPreservesControllerBinding) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
-    using C  = InputManager::Command;
+    using C = InputManager::Command;
     using DC = InputManager::DeviceCategory;
 
     // AttackLight has defaults in both categories (keyboard + GamepadButton WEST).
@@ -458,8 +433,7 @@ BOOST_AUTO_TEST_CASE(KeyboardRebindPreservesControllerBinding)
     mgr.resetBindingsToDefaults();
 }
 
-BOOST_AUTO_TEST_CASE(BindingSnapshotRestoreRevertsRebindAndCancelsCapture)
-{
+BOOST_AUTO_TEST_CASE(BindingSnapshotRestoreRevertsRebindAndCancelsCapture) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -503,8 +477,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(MalformedJson)
 
-BOOST_AUTO_TEST_CASE(GarbageJsonKeepsDefaults)
-{
+BOOST_AUTO_TEST_CASE(GarbageJsonKeepsDefaults) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -533,8 +506,7 @@ BOOST_AUTO_TEST_CASE(GarbageJsonKeepsDefaults)
     std::filesystem::remove(tmpPath);
 }
 
-BOOST_AUTO_TEST_CASE(MissingFileKeepsDefaults)
-{
+BOOST_AUTO_TEST_CASE(MissingFileKeepsDefaults) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -553,8 +525,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(SchemaVersionValidation)
 
-BOOST_AUTO_TEST_CASE(SchemaVersionTwoIsRejected)
-{
+BOOST_AUTO_TEST_CASE(SchemaVersionTwoIsRejected) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -585,8 +556,7 @@ BOOST_AUTO_TEST_CASE(SchemaVersionTwoIsRejected)
     std::filesystem::remove(tmpPath);
 }
 
-BOOST_AUTO_TEST_CASE(MissingSchemaVersionIsRejected)
-{
+BOOST_AUTO_TEST_CASE(MissingSchemaVersionIsRejected) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -615,8 +585,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(GamepadRebindEdgeDetection)
 
-BOOST_AUTO_TEST_CASE(StartRebindingPrimesPrevStateWithoutSpuriousCapture)
-{
+BOOST_AUTO_TEST_CASE(StartRebindingPrimesPrevStateWithoutSpuriousCapture) {
     // Without a real gamepad open (m_gamepads is empty in headless), we cannot
     // drive the actual held-button path; injecting SDL_EVENT_GAMEPAD_BUTTON_DOWN
     // with which=0 is a no-op because onGamepadButtonDown() filters on open
@@ -635,7 +604,7 @@ BOOST_AUTO_TEST_CASE(StartRebindingPrimesPrevStateWithoutSpuriousCapture)
         SDL_Event e;
         SDL_zero(e);
         e.type = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
-        e.gbutton.which = 0;   // instance id 0 — may not match real hardware
+        e.gbutton.which = 0; // instance id 0 — may not match real hardware
         e.gbutton.button = SDL_GAMEPAD_BUTTON_SOUTH;
         // Push and drain so onGamepadButtonDown is called if a gamepad is open.
         // Without a real gamepad, m_gamepads will be empty, so the call is a no-op.
@@ -648,7 +617,7 @@ BOOST_AUTO_TEST_CASE(StartRebindingPrimesPrevStateWithoutSpuriousCapture)
     }
 
     mgr.startRebinding(InputManager::Command::Pause,
-                       InputManager::DeviceCategory::Controller);
+        InputManager::DeviceCategory::Controller);
     BOOST_CHECK(mgr.isRebinding());
 
     // One frame with no keyboard/mouse input and no new gamepad rising edge
@@ -666,8 +635,7 @@ BOOST_AUTO_TEST_CASE(StartRebindingPrimesPrevStateWithoutSpuriousCapture)
     mgr.resetBindingsToDefaults();
 }
 
-BOOST_AUTO_TEST_CASE(TriggerAxisPositiveBindingActivatesCommand)
-{
+BOOST_AUTO_TEST_CASE(TriggerAxisPositiveBindingActivatesCommand) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -680,7 +648,7 @@ BOOST_AUTO_TEST_CASE(TriggerAxisPositiveBindingActivatesCommand)
 
     mgr.clearBindings(C::AttackLight);
     mgr.addBinding(C::AttackLight,
-                   {S::GamepadAxisPositive, SDL_GAMEPAD_AXIS_LEFT_TRIGGER});
+        {S::GamepadAxisPositive, SDL_GAMEPAD_AXIS_LEFT_TRIGGER});
 
     TestHelpers::injectGamepadAxisMotion(
         gamepad.instanceId, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_JOYSTICK_AXIS_MAX);
@@ -691,7 +659,7 @@ BOOST_AUTO_TEST_CASE(TriggerAxisPositiveBindingActivatesCommand)
 
     mgr.clearBindings(C::AttackLight);
     mgr.addBinding(C::AttackLight,
-                   {S::GamepadAxisNegative, SDL_GAMEPAD_AXIS_LEFT_TRIGGER});
+        {S::GamepadAxisNegative, SDL_GAMEPAD_AXIS_LEFT_TRIGGER});
     TestHelpers::processFrame();
 
     BOOST_CHECK(!mgr.isCommandDown(C::AttackLight));
@@ -699,8 +667,7 @@ BOOST_AUTO_TEST_CASE(TriggerAxisPositiveBindingActivatesCommand)
     mgr.resetBindingsToDefaults();
 }
 
-BOOST_AUTO_TEST_CASE(TriggerAxisCanBeCapturedForControllerRebind)
-{
+BOOST_AUTO_TEST_CASE(TriggerAxisCanBeCapturedForControllerRebind) {
     TestHelpers::resetState();
     auto& mgr = InputManager::Instance();
 
@@ -737,15 +704,13 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(UIHelpers)
 
-BOOST_AUTO_TEST_CASE(DescribeBindingKeyboard)
-{
+BOOST_AUTO_TEST_CASE(DescribeBindingKeyboard) {
     auto& mgr = InputManager::Instance();
     InputManager::InputBinding b{InputManager::InputSource::Keyboard, SDL_SCANCODE_F};
     BOOST_CHECK(!mgr.describeBinding(b).empty());
 }
 
-BOOST_AUTO_TEST_CASE(DescribeBindingMouseButton)
-{
+BOOST_AUTO_TEST_CASE(DescribeBindingMouseButton) {
     auto& mgr = InputManager::Instance();
     InputManager::InputBinding b{InputManager::InputSource::MouseButton, LEFT};
     std::string desc = mgr.describeBinding(b);
@@ -753,8 +718,7 @@ BOOST_AUTO_TEST_CASE(DescribeBindingMouseButton)
     BOOST_CHECK_EQUAL(desc, "Left Mouse");
 }
 
-BOOST_AUTO_TEST_CASE(CommandDisplayNameNonEmpty)
-{
+BOOST_AUTO_TEST_CASE(CommandDisplayNameNonEmpty) {
     auto& mgr = InputManager::Instance();
     using C = InputManager::Command;
     constexpr size_t kCount = static_cast<size_t>(C::COUNT);

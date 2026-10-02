@@ -166,18 +166,19 @@ bool hasMusic = soundMgr.isMusicLoaded("bg_music");
 
 ```cpp
 // Initialization and cleanup
-bool init();
+[[nodiscard]] bool init();
+void update(float deltaTime);   // GameEngine::update(); starts delayed (pending) music
 void clean();
 bool isShutdown() const;
 
 // Sound effects
-bool loadSFX(const std::string& filePath, const std::string& soundID);
+[[nodiscard]] bool loadSFX(const std::string& filePath, const std::string& soundID);
 void playSFX(const std::string& soundID, int loops = 0, float volume = 1.0f);
 void clearSFX(const std::string& soundID);
 bool isSFXLoaded(const std::string& soundID) const;
 
 // Music
-bool loadMusic(const std::string& filePath, const std::string& musicID);
+[[nodiscard]] bool loadMusic(const std::string& filePath, const std::string& musicID);
 void playMusic(const std::string& musicID, int loops = -1, float volume = 1.0f);
 void pauseMusic();
 void resumeMusic();
@@ -187,9 +188,9 @@ bool isMusicLoaded(const std::string& musicID) const;
 bool isMusicPlaying() const;
 
 // Volume control
-void setMusicVolume(float volume); // 0.0 to 1.0
+void setMusicVolume(float volume); // clamped to 0.0-10.0 (1.0 = unity gain)
 float getMusicVolume() const;
-void setSFXVolume(float volume);   // 0.0 to 1.0
+void setSFXVolume(float volume);   // clamped to 0.0-10.0 (1.0 = unity gain)
 float getSFXVolume() const;
 ```
 

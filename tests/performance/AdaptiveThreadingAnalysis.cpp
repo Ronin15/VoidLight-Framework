@@ -137,7 +137,8 @@ BOOST_FIXTURE_TEST_SUITE(WorkerBudgetValidation, AnalysisFixture)
  * Validates that WBM forces single-threaded below MIN_WORKLOAD (100) for all systems
  */
 BOOST_AUTO_TEST_CASE(MinWorkloadEnforcement) {
-    std::cout << "\n===== MIN_WORKLOAD ENFORCEMENT (ALL SYSTEMS) =====\n" << std::endl;
+    std::cout << "\n===== MIN_WORKLOAD ENFORCEMENT (ALL SYSTEMS) =====\n"
+              << std::endl;
 
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 
@@ -179,14 +180,16 @@ BOOST_AUTO_TEST_CASE(MinWorkloadEnforcement) {
     std::cout << "\nValidation: MIN_WORKLOAD enforcement: " << (allPassed ? "PASS" : "FAIL") << std::endl;
     BOOST_CHECK(allPassed);
 
-    std::cout << "================================================\n" << std::endl;
+    std::cout << "================================================\n"
+              << std::endl;
 }
 
 /**
  * Test: AI Manager Threshold Learning
  */
 BOOST_AUTO_TEST_CASE(AIManager_ThresholdLearning) {
-    std::cout << "\n===== AI MANAGER THRESHOLD LEARNING =====\n" << std::endl;
+    std::cout << "\n===== AI MANAGER THRESHOLD LEARNING =====\n"
+              << std::endl;
 
     reset();
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
@@ -225,14 +228,16 @@ BOOST_AUTO_TEST_CASE(AIManager_ThresholdLearning) {
     }
 
     BOOST_CHECK_MESSAGE(true, "AI threshold learning test completed");
-    std::cout << "==========================================\n" << std::endl;
+    std::cout << "==========================================\n"
+              << std::endl;
 }
 
 /**
  * Test: Collision Manager Threshold Learning
  */
 BOOST_AUTO_TEST_CASE(CollisionManager_ThresholdLearning) {
-    std::cout << "\n===== COLLISION MANAGER THRESHOLD LEARNING =====\n" << std::endl;
+    std::cout << "\n===== COLLISION MANAGER THRESHOLD LEARNING =====\n"
+              << std::endl;
 
     reset();
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
@@ -266,14 +271,16 @@ BOOST_AUTO_TEST_CASE(CollisionManager_ThresholdLearning) {
     std::cout << "  Threshold active: " << (finalActive ? "true" : "false") << std::endl;
 
     BOOST_CHECK_MESSAGE(true, "Collision threshold learning test completed");
-    std::cout << "================================================\n" << std::endl;
+    std::cout << "================================================\n"
+              << std::endl;
 }
 
 /**
  * Test: Particle Manager Threshold Learning
  */
 BOOST_AUTO_TEST_CASE(ParticleManager_ThresholdLearning) {
-    std::cout << "\n===== PARTICLE MANAGER THRESHOLD LEARNING =====\n" << std::endl;
+    std::cout << "\n===== PARTICLE MANAGER THRESHOLD LEARNING =====\n"
+              << std::endl;
 
     reset();
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
@@ -307,7 +314,8 @@ BOOST_AUTO_TEST_CASE(ParticleManager_ThresholdLearning) {
     std::cout << "  Threshold active: " << (finalActive ? "true" : "false") << std::endl;
 
     BOOST_CHECK_MESSAGE(true, "Particle threshold learning test completed");
-    std::cout << "===============================================\n" << std::endl;
+    std::cout << "===============================================\n"
+              << std::endl;
 }
 
 /**
@@ -315,7 +323,8 @@ BOOST_AUTO_TEST_CASE(ParticleManager_ThresholdLearning) {
  * Validates that WBM re-learns when workload drops below 95% of threshold
  */
 BOOST_AUTO_TEST_CASE(HysteresisRelearning) {
-    std::cout << "\n===== HYSTERESIS BAND RE-LEARNING =====\n" << std::endl;
+    std::cout << "\n===== HYSTERESIS BAND RE-LEARNING =====\n"
+              << std::endl;
 
     reset();
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
@@ -337,7 +346,8 @@ BOOST_AUTO_TEST_CASE(HysteresisRelearning) {
     if (threshold == 0) {
         std::cout << "\n  (Threshold not learned - hardware may be too fast)" << std::endl;
         BOOST_CHECK_MESSAGE(true, "Hysteresis test skipped - no threshold learned");
-        std::cout << "==========================================\n" << std::endl;
+        std::cout << "==========================================\n"
+                  << std::endl;
         return;
     }
 
@@ -360,14 +370,16 @@ BOOST_AUTO_TEST_CASE(HysteresisRelearning) {
     std::cout << "\nValidation: Re-learning triggered: " << (relearned ? "PASS" : "FAIL") << std::endl;
 
     BOOST_CHECK_MESSAGE(relearned, "Hysteresis should trigger re-learning");
-    std::cout << "==========================================\n" << std::endl;
+    std::cout << "==========================================\n"
+              << std::endl;
 }
 
 /**
  * Test: Batch Multiplier Tuning (all systems)
  */
 BOOST_AUTO_TEST_CASE(BatchMultiplierTuning) {
-    std::cout << "\n===== BATCH MULTIPLIER TUNING =====\n" << std::endl;
+    std::cout << "\n===== BATCH MULTIPLIER TUNING =====\n"
+              << std::endl;
 
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 
@@ -397,14 +409,16 @@ BOOST_AUTO_TEST_CASE(BatchMultiplierTuning) {
     std::cout << "\nValidation: All multipliers in range: " << (allInRange ? "PASS" : "FAIL") << std::endl;
     BOOST_CHECK(allInRange);
 
-    std::cout << "====================================\n" << std::endl;
+    std::cout << "====================================\n"
+              << std::endl;
 }
 
 /**
  * Test: Threading State Summary for all systems
  */
 BOOST_AUTO_TEST_CASE(ThreadingStateSummary) {
-    std::cout << "\n===== WORKERBUDGET STATE SUMMARY (ALL SYSTEMS) =====\n" << std::endl;
+    std::cout << "\n===== WORKERBUDGET STATE SUMMARY (ALL SYSTEMS) =====\n"
+              << std::endl;
 
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
 
@@ -438,7 +452,8 @@ BOOST_AUTO_TEST_CASE(ThreadingStateSummary) {
     std::cout << "  TIME_SMOOTHING = 0.25 (~6 frames to converge)" << std::endl;
     std::cout << "  MIN_WORKLOAD = 100 entities" << std::endl;
 
-    std::cout << "\n====================================================\n" << std::endl;
+    std::cout << "\n====================================================\n"
+              << std::endl;
 }
 
 BOOST_AUTO_TEST_SUITE_END()

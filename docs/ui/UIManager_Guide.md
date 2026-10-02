@@ -4,14 +4,14 @@
 
 ## Overview
 
-`UIManager` is the engine's main-thread UI system. It owns component creation, layout, theming, animation, input routing, and frame-local UI render batches. SDL_GPU device objects, pipelines, samplers, command buffers, render passes, and vertex pools stay owned by the GPU architecture.
+`UIManager` is the engine's main-thread UI system. It owns component creation, layout, theming, input routing, and frame-local UI render batches. SDL_GPU device objects, pipelines, samplers, command buffers, render passes, and vertex pools stay owned by the GPU architecture.
 
 Core contracts:
 
 - GPU text is atlas-backed through SDL3_ttf draw sequences
 - raster text placement is snapped to whole pixels before vertex emission
-- combat HUD helpers are part of the public API
 - UI update belongs in `GameState::update()`, not in `render()`
+- gameplay action HUD policy (vitals, target, harvest, hotbar) lives on `HudController`; `UIManager` is the widget service
 
 ## Basic Pattern
 
@@ -21,7 +21,7 @@ void SomeState::update(float dt) {
     ui.update(dt);
 }
 
-void SomeState::recordGPUVertices(VoidLight::GPURenderer& gpu, float) {
+void SomeState::recordGPUUIVertices(VoidLight::GPURenderer& gpu) {
     UIManager::Instance().recordGPUVertices(gpu);
 }
 
@@ -44,18 +44,6 @@ Guidelines:
 - do not generate one GPU texture per UI label
 - do not apply UV flips or half-texel offsets
 - snap integer-layout text positions before emitting vertices
-
-## Combat HUD Helpers
-
-Built-in combat HUD helpers are used by gameplay/demo states:
-
-```cpp
-createCombatHUD();
-updateCombatHUD(playerHealth, playerStamina, hasTarget, targetName, targetHealth);
-destroyCombatHUD();
-```
-
-Use them from states that own combat flow instead of rebuilding the same health/stamina/target frame wiring by hand.
 
 ## Input Focus and Simulated Clicks
 

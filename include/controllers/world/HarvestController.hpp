@@ -116,8 +116,7 @@ public:
      */
     [[nodiscard]] Vector2D getTargetPosition() const { return m_targetPosition; }
 
-    // Configuration constants
-    static constexpr float HARVEST_RANGE = 48.0f;
+    // Configuration constants (reach is VoidLight::HarvestCommit::HARVEST_RANGE)
     static constexpr float MOVEMENT_CANCEL_THRESHOLD = 8.0f;
 
 private:
@@ -134,8 +133,8 @@ private:
     /**
      * @brief Complete the harvest and award resources
      *
-     * Calculates yield, adds to inventory or drops on ground,
-     * marks harvestable as depleted.
+     * Depletes the target through HarvestCommit::commit (shared with AI
+     * foragers), then adds the yield to inventory or drops it on the ground.
      */
     void completeHarvest();
 
@@ -146,10 +145,9 @@ private:
     float m_harvestTimer{0.0f};
     float m_harvestDuration{0.0f};
     EntityHandle m_currentTarget{};
-    size_t m_targetStaticIndex{0};  // EDM static pool index
     VoidLight::HarvestType m_currentType{VoidLight::HarvestType::Gathering};
-    Vector2D m_harvestStartPos{};   // Player position when harvest started
-    Vector2D m_targetPosition{};    // Target harvestable position
+    Vector2D m_harvestStartPos{}; // Player position when harvest started
+    Vector2D m_targetPosition{}; // Target harvestable position
 
     // Reusable buffers to avoid per-frame allocations
     std::vector<size_t> m_harvestableIndicesBuffer;

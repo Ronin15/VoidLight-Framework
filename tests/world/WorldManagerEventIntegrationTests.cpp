@@ -37,8 +37,7 @@ BOOST_AUTO_TEST_SUITE(WorldManagerEventIntegrationTests)
 
 namespace {
 
-void drainWorldLoadEvents()
-{
+void drainWorldLoadEvents() {
     for (int i = 0; i < 100; ++i) {
         EventManager::Instance().update();
         if (!VoidLight::ThreadSystem::Instance().isBusy()) {
@@ -64,7 +63,7 @@ BOOST_AUTO_TEST_CASE(TestWorldLoadedEventPayload) {
     std::string capturedWorldId;
     int capturedW = -1, capturedH = -1;
 
-    EventManager::Instance().registerHandler(EventTypeId::World, [&](const EventData& data){
+    EventManager::Instance().registerHandler(EventTypeId::World, [&](const EventData& data) {
         if (!data.event) return;
         auto loaded = std::dynamic_pointer_cast<WorldLoadedEvent>(data.event);
         if (loaded) {
@@ -76,7 +75,13 @@ BOOST_AUTO_TEST_CASE(TestWorldLoadedEventPayload) {
     });
 
     WorldGenerationConfig cfg{};
-    cfg.width = 5; cfg.height = 5; cfg.seed = 4242; cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f; cfg.waterLevel = 0.3f; cfg.mountainLevel = 0.7f;
+    cfg.width = 5;
+    cfg.height = 5;
+    cfg.seed = 4242;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
 
     // Wait for ThreadSystem task execution - give workers time to process the task
@@ -89,8 +94,8 @@ BOOST_AUTO_TEST_CASE(TestWorldLoadedEventPayload) {
     }
 
     // Validate
-    int w=0, h=0;
-    WorldManager::Instance().getWorldDimensions(w,h);
+    int w = 0, h = 0;
+    WorldManager::Instance().getWorldDimensions(w, h);
     BOOST_CHECK(gotLoaded.load());
     BOOST_CHECK_EQUAL(capturedW, w);
     BOOST_CHECK_EQUAL(capturedH, h);
@@ -107,12 +112,18 @@ BOOST_AUTO_TEST_CASE(TestHarvestResourceIntegration) {
     BOOST_REQUIRE(EventManager::Instance().init());
 
     WorldGenerationConfig cfg{};
-    cfg.width = 20; cfg.height = 20; cfg.seed = 7777; cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f; cfg.waterLevel = 0.2f; cfg.mountainLevel = 0.8f;
+    cfg.width = 20;
+    cfg.height = 20;
+    cfg.seed = 7777;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.2f;
+    cfg.mountainLevel = 0.8f;
     BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
 
-    int targetX=-1, targetY=-1;
-    for (int y=0; y<cfg.height && targetX==-1; ++y) {
-        for (int x=0; x<cfg.width; ++x) {
+    int targetX = -1, targetY = -1;
+    for (int y = 0; y < cfg.height && targetX == -1; ++y) {
+        for (int x = 0; x < cfg.width; ++x) {
             const auto tile = WorldManager::Instance().getTileCopyAt(x, y);
             if (tile.has_value() && tile->obstacleType != ObstacleType::NONE) {
                 targetX = x;
@@ -121,10 +132,10 @@ BOOST_AUTO_TEST_CASE(TestHarvestResourceIntegration) {
             }
         }
     }
-    BOOST_REQUIRE_MESSAGE(targetX!=-1 && targetY!=-1, "No obstacle tile found to harvest in generated world");
+    BOOST_REQUIRE_MESSAGE(targetX != -1 && targetY != -1, "No obstacle tile found to harvest in generated world");
 
     std::atomic<int> tileChangedCount{0};
-    EventManager::Instance().registerHandler(EventTypeId::World, [&](const EventData& data){
+    EventManager::Instance().registerHandler(EventTypeId::World, [&](const EventData& data) {
         if (!data.event) return;
         auto changed = std::dynamic_pointer_cast<TileChangedEvent>(data.event);
         if (changed) { tileChangedCount.fetch_add(1); }
@@ -190,7 +201,7 @@ BOOST_AUTO_TEST_CASE(TestBasicWorldManagerEventIntegration) {
 
     // Test trigger method works (dispatch-only architecture)
     std::atomic<bool> handlerCalled{false};
-    EventManager::Instance().registerHandler(EventTypeId::World, [&](const EventData& data){
+    EventManager::Instance().registerHandler(EventTypeId::World, [&](const EventData& data) {
         if (data.event) handlerCalled.store(true);
     });
 
@@ -296,7 +307,7 @@ BOOST_AUTO_TEST_CASE(TestSimpleWorldGeneration) {
 
     // Generate a very small world to minimize processing time
     WorldGenerationConfig config{};
-    config.width = 5;  // Very small to avoid hanging
+    config.width = 5; // Very small to avoid hanging
     config.height = 5;
     config.seed = 12345;
     config.elevationFrequency = 0.1f;

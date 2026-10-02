@@ -1,6 +1,10 @@
 # VoidLight-Framework
 
-A modern, production-ready C++20 SDL3 game engine template for 2D games. Built for rapid prototyping and scalable game development, it features Data-Oriented Design with EntityDataManager as the central data authority, robust multi-threading, high-performance AI supporting 10K+ entities, a professional UI system, and comprehensive resource, world, and event systems. Designed for cross-platform deployment (Windows, macOS, Linux) with a focus on performance, safety, and extensibility.
+A C++20 SDL3 game engine template for building 2D games on Windows, macOS, and Linux.
+
+VoidLight is designed for games with large, busy worlds. Its data-oriented core and adaptive multi-threading keep thousands of AI-driven entities running smoothly, and a simulated world gives them settlements, factions, a day/night cycle, seasons, and weather to live in.
+
+The template ships with the systems a game needs already working together (GPU rendering, UI, input, resources and inventories, combat, trading, and events), so you can start on gameplay instead of plumbing.
 
 ## Key Features
 
@@ -14,19 +18,23 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Adaptive Multi-Threading System**
 
-   Hardware-adaptive thread pool with intelligent WorkerBudget batch optimization. Automatically detects logical cores (including SMT/hyperthreading) and reserves one to reduce OS contention. Sequential manager execution gives each system ALL workers during its update window. Priority-based scheduling and adaptive batch sizing help the engine scale cleanly across hardware.
+    Thread pool that sizes itself to the hardware and spreads each system's work across the available cores, scaling from handheld PCs to many-core desktops without manual tuning.
 
 - **High-Performance AI System**
 
-    Data-Oriented Design with EntityDataManager as single source of truth. Cache-friendly, lock-free, batch-processed AI supports 10K+ entities at 60+ FPS with simulation tiers (Active/Background/Hibernated), rich behaviors, dense per-behavior state pools, sparse transient sidecars, and scalable pathfinding and combat integration.
+    Batch-processed AI that keeps 10K+ entities running at 60+ FPS. Entities near the player get full simulation while distant ones run at reduced cost, and a library of behaviors (idle, wander, patrol, guard, follow, chase, flee, attack, and forage) comes with pathfinding and combat built in.
 
-- **Robust Event & State Management**  
-    
+- **Living World Simulation**
+
+    Procedurally generated worlds populated with settlements and NPCs. Factions keep relationships with each other and with the player, NPCs pursue their own needs, and AI responds to the time of day and the weather.
+
+- **Event & State Management**
+
     Event-driven architecture centered on `EventManager` as the dispatch hub, with immediate/deferred dispatch modes, persistent and transient handler lifetimes, pooled hot-path events, merchant/NPC spawn helpers, entity/game state machines, and thread-safe manager updates.
 
 - **Flexible UI System**
 
-    Content-aware auto-sizing, professional theming (light/dark plus programmatic custom themes), and rich component library (buttons, labels, input fields, lists, modals, etc.). Responsive layouts with DPI-aware rendering and animation support. Centralized UI constants with resolution-aware scaling (1920×1080 baseline) and event-driven resize handling. Optimized for PC handheld devices (Steam Deck, ROG Ally, OneXPlayer) with automatic baseline resolution scaling down to 1280×720.
+    Content-aware auto-sizing, theming (light/dark plus programmatic custom themes), and rich component library (buttons, labels, input fields, lists, modals, etc.). Responsive layouts with DPI-aware rendering. Centralized UI constants with resolution-aware scaling (1920×1080 baseline) and event-driven resize handling. Optimized for PC handheld devices (Steam Deck, ROG Ally, OneXPlayer) with automatic baseline resolution scaling down to 1280×720.
 
 - **Action-Mapped Input & Menu Navigation**
 
@@ -42,11 +50,11 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **Fast, Safe Serialization**
   
-    Header-only binary serialization system with smart pointer memory management. Used by SaveGameManager for robust, versioned save/load across platforms.
+    Header-only binary serialization with smart pointer memory management. It is the foundation for SaveGameManager's versioned, cross-platform save files; full save/load is still in progress.
 
-- **Comprehensive Testing & Analysis**
+- **Testing & Analysis**
 
-    80 core source-controlled Boost.Test executables plus 8 GPU-specific test targets covering unit, integration, and performance testing. Includes AI+Collision integration tests, GPU rendering tests, SIMD correctness validation, NPC memory coverage, and comprehensive thread safety verification with documented TSAN suppressions. Static analysis (cppcheck, clang-tidy), AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind integration support production-ready quality assurance.
+    84 core Boost.Test executables plus 8 GPU-specific test targets covering unit, integration, and performance testing, including AI+Collision integration, GPU rendering, SIMD correctness, and thread-safety tests with documented TSAN suppressions. Static analysis (cppcheck, clang-tidy), AddressSanitizer (ASAN), ThreadSanitizer (TSAN), and Valgrind are wired into the test scripts.
 
 - **Debug Profiling Tools**
 
@@ -62,13 +70,13 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
 - **GameTime & World Simulation**
 
-    Fantasy calendar system with day/night cycles, four seasons, dynamic weather, and temperature simulation. Chunk-based world support includes procedural generation, streaming, and resource interactions.
+    Fantasy calendar system with day/night cycles, four seasons, dynamic weather, and temperature simulation.
 
 - **Chunk-Based World System**
 
-    Efficient tile-based world rendering with chunk culling for off-screen optimization. Supports procedural generation, seamless streaming, and automatic seasonal tile switching.
+    Procedurally generated tile worlds with chunk culling for off-screen tiles, harvestable resource nodes, and automatic seasonal tile switching.
 
-- **Robust Combat System**
+- **Gameplay Controllers**
 
     Dedicated combat, harvesting, projectile, inventory, and social/trading controllers support hit detection, knockback, resource gathering, theft/gift flows, and gameplay-specific state transitions without bloating core engine systems.
 
@@ -76,17 +84,17 @@ A modern, production-ready C++20 SDL3 game engine template for 2D games. Built f
 
     Optimized for battery-powered devices. Completes frame work quickly then sleeps until vsync, achieving 80%+ CPU idle residency during active gameplay. See [Power Efficiency](docs/performance/PowerEfficiency.md) for detailed benchmarks.
 
-- **Extensive Documentation**  
-    
-    Full guides, API references, best practices, and troubleshooting for all major systems.
+- **Documentation**
 
-### Why Choose VoidLight-Framework?
+    Guides, API references, and troubleshooting for the major systems.
 
-- **Performance**: Engineered for cache efficiency, lock-free concurrency, and minimal CPU overhead—even with thousands of entities.
-- **Safety**: Smart pointers, RAII, strong typing, and robust error handling throughout.
-- **Extensibility**: Modular managers, clear APIs, and easy resource and UI customization.
-- **Developer Experience**: Clean code, strict style, automated testing, and comprehensive docs.
-- **Production-Ready Design**: Architecture and tooling designed for serious game development, with comprehensive testing infrastructure and performance validation.
+### Design Priorities
+
+- **Data layout first**: entity state lives in `EntityDataManager` as structure-of-arrays, so hot loops walk contiguous memory instead of chasing pointers.
+- **Hardware-adaptive threading**: `WorkerBudget` decides for each system whether work is worth splitting across cores and how large each batch should be, so small workloads stay single-threaded and large ones use every available core, from a handheld to a desktop.
+- **No per-frame allocations on hot paths**: buffers are reserved up front and reused every frame.
+- **Explicit ownership**: RAII, smart pointers, and handles; no raw-pointer ownership.
+- **Tested and measured**: Boost.Test suites per system, ASan/TSan builds, static analysis, and benchmarks compared against stored baselines.
 
 ---
 
@@ -216,8 +224,9 @@ For the full workflow, command reference, file locations, and seasonal texture g
 - **Core:** [GameEngine](docs/core/GameEngine.md), [GameTimeManager](docs/managers/GameTimeManager.md), [ThreadSystem](docs/core/ThreadSystem.md), [WorkerBudget](docs/core/WorkerBudget.md), [TimestepManager](docs/core/TimestepManager.md)
 - **AI System:** [Overview](docs/ai/AIManager.md), [Behavior Execution Pipeline](docs/ai/BehaviorExecutionPipeline.md), [Behaviors](docs/ai/BehaviorModes.md), [Quick Reference](docs/ai/BehaviorQuickReference.md), [NPC Memory](docs/ai/NPCMemory.md), [Pathfinding System](docs/ai/PathfindingSystem.md)
 - **Collision & Physics:** [CollisionManager](docs/managers/CollisionManager.md)
+- **World:** [WorldManager](docs/managers/WorldManager.md), [World Population](docs/world/WorldPopulation.md), [WorldResourceManager](docs/managers/WorldResourceManager.md)
 - **Entity System:** [Overview](docs/entities/README.md), [EntityHandle](docs/entities/EntityHandle.md), [EntityDataManager](docs/managers/EntityDataManager.md), [BackgroundSimulationManager](docs/managers/BackgroundSimulationManager.md)
-- **Event System:** [Overview](docs/events/EventManager.md), [Quick Reference](docs/events/EventManager_QuickReference.md), [Advanced](docs/events/EventManager_Advanced.md), [TimeEvents](docs/events/TimeEvents.md), [EventFactory](docs/events/EventFactory.md)
+- **Event System:** [Overview](docs/events/EventManager.md), [Quick Reference](docs/events/EventManager_QuickReference.md), [Advanced](docs/events/EventManager_Advanced.md), [TimeEvents](docs/events/TimeEvents.md)
 - **Controllers:** [Overview](docs/controllers/README.md), [ControllerRegistry](docs/controllers/ControllerRegistry.md), [WeatherController](docs/controllers/WeatherController.md), [DayNightController](docs/controllers/DayNightController.md), [CombatController](docs/controllers/CombatController.md), [HudController](docs/controllers/HudController.md), [InventoryController](docs/controllers/InventoryController.md), [HarvestController](docs/controllers/HarvestController.md), [SocialController](docs/controllers/SocialController.md)
 - **Managers:** [BackgroundSimulationManager](docs/managers/BackgroundSimulationManager.md), [CollisionManager](docs/managers/CollisionManager.md), [EntityDataManager](docs/managers/EntityDataManager.md), [FontManager](docs/managers/FontManager.md), [InputManager](docs/managers/InputManager.md), [ParticleManager](docs/managers/ParticleManager.md), [PathfinderManager](docs/managers/PathfinderManager.md), [ProjectileManager](docs/managers/ProjectileManager.md), [ResourceFactory](docs/managers/ResourceFactory.md), [ResourceTemplateManager](docs/managers/ResourceTemplateManager.md), [SoundManager](docs/managers/SoundManager.md), [TextureManager](docs/managers/TextureManager.md), [WorldManager](docs/managers/WorldManager.md), [WorldResourceManager](docs/managers/WorldResourceManager.md)
 - **UI:** [UIManager Guide](docs/ui/UIManager_Guide.md), [UIConstants Reference](docs/ui/UIConstants.md), [Auto-Sizing](docs/ui/Auto_Sizing_System.md), [DPI-Aware Fonts](docs/ui/DPI_Aware_Font_System.md), [Minimap Implementation](docs/ui/Minimap_Implementation.md)
@@ -226,33 +235,22 @@ For the full workflow, command reference, file locations, and seasonal texture g
 - **Utilities:** [FrameProfiler](docs/utils/FrameProfiler.md), [Camera](docs/utils/Camera.md), [JsonReader](docs/utils/JsonReader.md), [JSON Resource Loading](docs/utils/JSON_Resource_Loading_Guide.md), [MenuNavigation](docs/utils/MenuNavigation.md), [Serialization](docs/utils/SERIALIZATION.md), [ResourceHandle System](docs/utils/ResourceHandle_System.md)
 - **Architecture:** [Interpolation System](docs/architecture/InterpolationSystem.md)
 - **Performance:** [Power Efficiency](docs/performance/PowerEfficiency.md), [EntityDataManager Power Analysis](docs/performance_reports/power_profile_edm_comparison_2026-01-29.md)
-- **Development:** Repo-wide agent guidance lives in [AGENTS.md](AGENTS.md).
+- **Development:** Repo-wide agent guidance lives in [CLAUDE.md](CLAUDE.md).
 - **Engine Issues:** [SDL3 macOS Cleanup Issue](docs/issues/SDL3_MACOS_CLEANUP_ISSUE.md)
 
 For the full, up-to-date documentation map, see [docs/README.md](docs/README.md).
 
 ---
 
-## Core Design Principles
+## Engineering Practices
 
-VoidLight-Framework is built around three commitments held simultaneously, not traded off against each other: **performance**, **correctness**, and **safety**. The build tooling, data layout, and test infrastructure exist specifically to hold all three at once.
+Beyond the [design priorities](#design-priorities) above, a few practices keep the engine fast and dependable across platforms and build types:
 
-**Performance**
-- Data-oriented design: EntityDataManager as the single source of truth, Structure-of-Arrays (SoA) storage for cache locality.
-- SIMD-accelerated hot paths (SSE2/NEON/AVX2 — see [SIMDMath](docs/utils/SIMDMath.md)) and adaptive threading via [WorkerBudget](docs/core/WorkerBudget.md) that scales from single-core to many-core with no manual tuning.
-- No per-frame allocations — reused buffers, `reserve()`d containers.
-- Race-to-idle scheduling for battery efficiency — see [Power Efficiency](docs/performance/PowerEfficiency.md).
-
-**Correctness**
-- Deterministic update ordering: managers run sequentially on the main thread; `EventManager` dispatch and deferred draining are main-thread-only and sequence-preserved.
-- Strong typing, `[[nodiscard]]` on critical fallible calls (`init()`, `load()`, `create()`), compile-time validation over runtime guessing.
-- Boost.Test coverage across managers, controllers, and cross-manager integration; ASan/TSan sanitizer builds catch memory errors and data races before they reach a shipped build.
-
-**Safety**
-- Memory safety by default: smart pointers and RAII throughout. Raw pointers are never stored for ownership or long-lived state — only materialized momentarily at a final API boundary (GPU submission, SIMD intrinsics).
-- Four build types (`Debug`/`ReleaseSafe`/`Release`/`Profile`) make safety-check-versus-optimization tradeoffs explicit and deliberate rather than an accident of one flag — see [Build Safety Controls](docs/performance/BuildSafetyControls.md) for exactly what's checked in which build.
-- Explicit contracts instead of silent assumptions: the little-endian save format is enforced with a compile-time `static_assert`, and hot-path SIMD reads against variable-length buffers carry explicit bounds assertions rather than relying on optimization flags to catch a mistake.
-- Cross-platform by construction, not by accident: unified codebase with platform-specific optimizations isolated behind the same abstractions (SIMDMath, GPU shader backends) everywhere else.
+- **SIMD on hot paths**: math-heavy loops use SSE2/AVX2 on x86-64 and NEON on ARM64 through one shared interface (see [SIMDMath](docs/utils/SIMDMath.md)).
+- **Battery-friendly frame pacing**: each frame finishes its work quickly and then idles until the next one (see [Power Efficiency](docs/performance/PowerEfficiency.md)).
+- **Build types with clear tradeoffs**: `Debug`, `ReleaseSafe`, `Release`, and `Profile` each make an explicit choice between safety checks and optimization (see [Build Safety Controls](docs/performance/BuildSafetyControls.md)).
+- **Mistakes caught early**: important fallible calls must have their results checked, and assumptions such as the save format's byte order are verified at compile time.
+- **Cross-platform by design**: one codebase, with platform-specific code kept behind shared abstractions such as SIMDMath and the GPU shader backends.
 
 ---
 
@@ -268,7 +266,6 @@ Contributions welcome!
 
 - Window icon support for all platforms (see `res/img/`)
 - Player and NPC controls: mouse, keyboard, controller (see `InputManager`)
-- Template can be adapted for 3D (see `GameEngine.cpp` and `TextureManager`)
 - For advanced usage, see [docs/README.md](docs/README.md)
 - This is a work in progress, and the bundled art is placeholder content credited below.
 

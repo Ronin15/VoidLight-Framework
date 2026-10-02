@@ -20,6 +20,7 @@
 
 #include "Event.hpp"
 #include <string>
+#include <string_view>
 #include <vector>
 #include <functional>
 #include <iostream>
@@ -39,13 +40,12 @@ enum class WeatherType {
 std::ostream& operator<<(std::ostream& os, const WeatherType& type);
 
 struct WeatherParams {
-    float intensity{1.0f};       // 0.0 to 1.0 intensity level
-    float windSpeed{0.0f};       // Wind speed in arbitrary units
-    float windDirection{0.0f};   // Direction in degrees (0-359)
-    float visibility{1.0f};      // 0.0 (no visibility) to 1.0 (full visibility)
-    float transitionTime{5.0f};  // Time in seconds to transition to this weather
-    std::string particleEffect{}; // Optional particle effect ID
-    std::string soundEffect{};    // Optional sound effect ID
+    float intensity{1.0f}; // 0.0 to 1.0 intensity level
+    float windSpeed{0.0f}; // Wind speed in arbitrary units
+    float windDirection{0.0f}; // Direction in degrees (0-359)
+    float visibility{1.0f}; // 0.0 (no visibility) to 1.0 (full visibility)
+    float transitionTime{5.0f}; // Time in seconds to transition to this weather
+    std::string soundEffect{}; // Optional sound effect ID
 
     // Color modifiers for environment rendering
     float colorR{1.0f};
@@ -64,7 +64,10 @@ struct WeatherParams {
 class WeatherEvent : public Event {
 public:
     WeatherEvent(const std::string& name, WeatherType type);
-    WeatherEvent(const std::string& name, const std::string& customType);
+    // Parses weatherTypeName via weatherTypeFromName(); canonical names give
+    // that WeatherType, anything else is Custom with the name kept. Params are
+    // the per-type defaults in both constructors.
+    WeatherEvent(const std::string& name, const std::string& weatherTypeName);
     ~WeatherEvent() override = default;
 
     // Core event methods implementation
@@ -83,7 +86,16 @@ public:
     WeatherType getWeatherType() const { return m_weatherType; }
     std::string getWeatherTypeString() const;
     void setWeatherType(WeatherType type);
-    void setWeatherType(const std::string& customType);
+    // Canonical names select that WeatherType; any other name is Custom.
+    void setWeatherType(const std::string& weatherTypeName);
+    // Case-sensitive canonical name ("Clear", "Cloudy", "Rainy", "Stormy",
+    // "Foggy", "Snowy", "Windy") to WeatherType; anything else, including "",
+    // is Custom.
+    [[nodiscard]] static WeatherType weatherTypeFromName(std::string_view name);
+    // Replaces all params with the defaults for the current weather type.
+    // Pooled events call this after setWeatherType() so fresh and reused
+    // events carry identical params.
+    void applyDefaultParamsForType();
 
     // Weather parameters
     const WeatherParams& getWeatherParams() const { return m_params; }
@@ -120,8 +132,8 @@ private:
 
     // Time-based parameters
     float m_startHour{-1.0f}; // -1 means no time restriction
-    float m_endHour{-1.0f};   // -1 means no time restriction
-    int m_season{-1};         // -1 means all seasons
+    float m_endHour{-1.0f}; // -1 means no time restriction
+    int m_season{-1}; // -1 means all seasons
 
     // Geographic parameters
     std::string m_regionName;

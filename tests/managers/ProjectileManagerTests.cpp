@@ -38,7 +38,7 @@ struct ThreadSystemTestLifetime {
     ThreadSystemTestLifetime() {
         VOIDLIGHT_ENABLE_BENCHMARK_MODE();
         BOOST_REQUIRE_MESSAGE(VoidLight::ThreadSystem::Instance().init(),
-                              "Failed to initialize ThreadSystem");
+            "Failed to initialize ThreadSystem");
     }
     ~ThreadSystemTestLifetime() {
         VoidLight::ThreadSystem::Instance().clean();
@@ -110,8 +110,7 @@ struct ProjectileTestFixture {
 
 BOOST_FIXTURE_TEST_SUITE(LifecycleTests, ProjectileTestFixture)
 
-BOOST_AUTO_TEST_CASE(ProjectileCreation)
-{
+BOOST_AUTO_TEST_CASE(ProjectileCreation) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
 
@@ -152,8 +151,7 @@ BOOST_AUTO_TEST_CASE(ProjectileCreation)
     BOOST_CHECK_EQUAL(projData.flags, 0);
 }
 
-BOOST_AUTO_TEST_CASE(OwnerCollisionMask)
-{
+BOOST_AUTO_TEST_CASE(OwnerCollisionMask) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
 
@@ -184,8 +182,7 @@ BOOST_AUTO_TEST_CASE(OwnerCollisionMask)
     BOOST_CHECK(!(npcProjHot.collisionMask & VoidLight::CollisionLayer::Layer_Projectile));
 }
 
-BOOST_AUTO_TEST_CASE(StateTransitionCleanup)
-{
+BOOST_AUTO_TEST_CASE(StateTransitionCleanup) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     EntityHandle owner = createPlayerOwner();
@@ -214,8 +211,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(MovementTests, ProjectileTestFixture)
 
-BOOST_AUTO_TEST_CASE(ProjectileMovement)
-{
+BOOST_AUTO_TEST_CASE(ProjectileMovement) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     EntityHandle owner = createPlayerOwner();
@@ -230,13 +226,12 @@ BOOST_AUTO_TEST_CASE(ProjectileMovement)
     size_t idx = edm.getIndex(proj);
     BOOST_REQUIRE_NE(idx, SIZE_MAX);
     const auto& transform = edm.getHotDataByIndex(idx).transform;
-    float expectedX = 500.0f + 200.0f * 0.1f;  // 520
+    float expectedX = 500.0f + 200.0f * 0.1f; // 520
     BOOST_CHECK_CLOSE(transform.position.getX(), expectedX, 1.0f);
     BOOST_CHECK_CLOSE(transform.position.getY(), 500.0f, 1.0f);
 }
 
-BOOST_AUTO_TEST_CASE(LifetimeExpiry)
-{
+BOOST_AUTO_TEST_CASE(LifetimeExpiry) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     EntityHandle owner = createPlayerOwner();
@@ -252,8 +247,7 @@ BOOST_AUTO_TEST_CASE(LifetimeExpiry)
     BOOST_CHECK(!edm.isValidHandle(proj));
 }
 
-BOOST_AUTO_TEST_CASE(BoundaryDestruction)
-{
+BOOST_AUTO_TEST_CASE(BoundaryDestruction) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     EntityHandle owner = createPlayerOwner();
@@ -275,8 +269,7 @@ BOOST_AUTO_TEST_CASE(BoundaryDestruction)
     BOOST_CHECK_SMALL(hot.transform.velocity.lengthSquared(), 0.001f);
 }
 
-BOOST_AUTO_TEST_CASE(GlobalPause)
-{
+BOOST_AUTO_TEST_CASE(GlobalPause) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     EntityHandle owner = createPlayerOwner();
@@ -311,8 +304,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(CollisionTests, ProjectileTestFixture)
 
-BOOST_AUTO_TEST_CASE(CollisionDamage)
-{
+BOOST_AUTO_TEST_CASE(CollisionDamage) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -376,8 +368,7 @@ BOOST_AUTO_TEST_CASE(CollisionDamage)
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(CollisionDamageAfterVelocityCancellation)
-{
+BOOST_AUTO_TEST_CASE(CollisionDamageAfterVelocityCancellation) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -433,8 +424,7 @@ BOOST_AUTO_TEST_CASE(CollisionDamageAfterVelocityCancellation)
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(CollisionDamageToNeutralTarget)
-{
+BOOST_AUTO_TEST_CASE(CollisionDamageToNeutralTarget) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -475,8 +465,7 @@ BOOST_AUTO_TEST_CASE(CollisionDamageToNeutralTarget)
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(PiercingFlag)
-{
+BOOST_AUTO_TEST_CASE(PiercingFlag) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
 
@@ -506,8 +495,7 @@ BOOST_AUTO_TEST_CASE(PiercingFlag)
     BOOST_CHECK(edm.isValidHandle(proj));
 }
 
-BOOST_AUTO_TEST_CASE(NonPiercingProjectileOnlyDamagesOnceAcrossDuplicateCollisions)
-{
+BOOST_AUTO_TEST_CASE(NonPiercingProjectileOnlyDamagesOnceAcrossDuplicateCollisions) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -549,8 +537,7 @@ BOOST_AUTO_TEST_CASE(NonPiercingProjectileOnlyDamagesOnceAcrossDuplicateCollisio
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(ProjectileAsSecondCollisionParticipantInvertsKnockback)
-{
+BOOST_AUTO_TEST_CASE(ProjectileAsSecondCollisionParticipantInvertsKnockback) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -586,8 +573,7 @@ BOOST_AUTO_TEST_CASE(ProjectileAsSecondCollisionParticipantInvertsKnockback)
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(MovableStaticProjectileHitEmbedsProjectileWithoutCombatDamage)
-{
+BOOST_AUTO_TEST_CASE(MovableStaticProjectileHitEmbedsProjectileWithoutCombatDamage) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -623,8 +609,7 @@ BOOST_AUTO_TEST_CASE(MovableStaticProjectileHitEmbedsProjectileWithoutCombatDama
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(ProjectileIgnoresOwnerCollision)
-{
+BOOST_AUTO_TEST_CASE(ProjectileIgnoresOwnerCollision) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -665,8 +650,7 @@ BOOST_AUTO_TEST_CASE(ProjectileIgnoresOwnerCollision)
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(ProjectileCollisionDoesNotDisplaceTargetMovement)
-{
+BOOST_AUTO_TEST_CASE(ProjectileCollisionDoesNotDisplaceTargetMovement) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -708,8 +692,7 @@ BOOST_AUTO_TEST_CASE(ProjectileCollisionDoesNotDisplaceTargetMovement)
     eventMgr.removeHandler(combatToken);
 }
 
-BOOST_AUTO_TEST_CASE(TriggerCollisionDoesNotEmbedProjectile)
-{
+BOOST_AUTO_TEST_CASE(TriggerCollisionDoesNotEmbedProjectile) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
 
@@ -732,8 +715,7 @@ BOOST_AUTO_TEST_CASE(TriggerCollisionDoesNotEmbedProjectile)
     BOOST_CHECK(edm.getHotDataByIndex(edm.getIndex(proj)).hasCollision());
 }
 
-BOOST_AUTO_TEST_CASE(EmbeddedProjectileExpiresAfterFadeLifetime)
-{
+BOOST_AUTO_TEST_CASE(EmbeddedProjectileExpiresAfterFadeLifetime) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     auto& eventMgr = EventManager::Instance();
@@ -771,8 +753,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_FIXTURE_TEST_SUITE(PerfStatsTests, ProjectileTestFixture)
 
-BOOST_AUTO_TEST_CASE(PerfStatsTracking)
-{
+BOOST_AUTO_TEST_CASE(PerfStatsTracking) {
     prepareForTest();
     auto& edm = EntityDataManager::Instance();
     EntityHandle owner = createPlayerOwner();

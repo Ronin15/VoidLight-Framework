@@ -2,7 +2,7 @@
 
 ## Overview
 
-The VoidLight-Framework pathfinding system provides high-performance A* pathfinding with advanced optimizations including hierarchical pathfinding, dynamic weight fields, and object pooling. The system is designed to scale efficiently from small tactical movements to large-scale navigation across entire game worlds.
+The VoidLight-Framework pathfinding system provides high-performance A* pathfinding with advanced optimizations including hierarchical pathfinding, tile-derived cell weights, and object pooling. The system is designed to scale efficiently from small tactical movements to large-scale navigation across entire game worlds.
 
 ## Architecture
 
@@ -25,16 +25,27 @@ public:
     void setMaxIterations(int maxIters);
     void setCosts(float straight, float diagonal);
 
-    // Dynamic weighting
+    // World build and dirty-cell updates
+    void rebuildFromWorld();                         // full rebuild
+    void rebuildFromWorld(int rowStart, int rowEnd); // row range (batched rebuilds)
+    void updateCoarseGrid();
+    void markDirtyRegion(int cellX, int cellY, int width = 1, int height = 1);
+    void takeDirtyRows(std::vector<int>& outRows);
+
+    // Dynamic weighting (grid-local; see Dynamic Weight Fields)
     void resetWeights(float defaultWeight = 1.0f);
     void addWeightCircle(const Vector2D& worldCenter, float worldRadius, float weightMultiplier);
+
+    // Stats
+    const PathfindingStats& getStats() const;
+    void resetStats();
 };
 ```
 
 #### PathfindingResult
 Result enumeration for pathfinding operations.
 ```cpp
-enum class PathfindingResult {
+enum class PathfindingResult : uint8_t {
     SUCCESS,         // Path found successfully
     NO_PATH_FOUND,   // No valid path exists
     INVALID_START,   // Starting position is blocked
@@ -166,6 +177,13 @@ PathfindingGrid grid(mapWidth, mapHeight, 128.0f, worldOffset);
 
 ## Dynamic Weight Fields
 
+`addWeightCircle` / `resetWeights` operate on a `PathfindingGrid` you own
+(tests and standalone grids). They are not reachable through
+`PathfinderManager`: there is no manager-level weight-field API, the manager's
+published grid is never mutated in place, and any row rebuild
+(`rebuildFromWorld`) recomputes cell weights from tile data. Static bodies and
+tile data are the only production grid inputs.
+
 ### Avoidance Areas
 ```cpp
 // Create danger zone around explosion
@@ -186,126 +204,47 @@ grid.addWeightCircle(
 grid.resetWeights(1.0f);
 ```
 
-### Temporary Obstacles
-```cpp
-// Add temporary obstacle avoidance
-void createTemporaryAvoidanceZone(const Vector2D& center, float radius, float duration) {
-    std::string fieldName = "temp_obstacle_" + std::to_string(UniqueID::generate());
-
-    pathfindingGrid.addWeightCircle(center, radius, 8.0f);
-
-    // Schedule removal
-    Timer::schedule(duration, [fieldName, &pathfindingGrid]() {
-        pathfindingGrid.resetWeights(1.0f); // or remove specific field
-    });
-}
-```
-
 ## Integration Examples
 
 ### PathfinderManager Integration
+
 ```cpp
-// PathfinderManager handles the PathfindingGrid internally
-PathfinderManager::Instance().requestPath(
-    entityId,
-    startPosition,
-    goalPosition,
-    [](const std::vector<Vector2D>& path, PathfindingResult result) {
-        if (result == PathfindingResult::SUCCESS) {
-            // Use the computed path
-            entity.setPath(path);
-        } else {
-            // Handle pathfinding failure
-            handlePathfindingError(result);
-        }
-    },
-    PathfinderManager::Priority::Normal
-);
+PathfinderManager::Instance().requestPathToEDM(
+    edmIndex, startPosition, goalPosition, PathfinderManager::Priority::Normal);
+// Main thread:
+PathfinderManager::Instance().commitCompletedPaths();
+// Result is in EDM PathData for that index.
 ```
+
+There is no public callback `requestPath`.
 
 ### AI Behavior Integration
-```cpp
-class PathfindingBehavior : public AIBehavior {
-public:
-    void execute(EntityPtr entity, float deltaTime) override {
-        if (!m_hasPath || m_pathIndex >= m_path.size()) {
-            requestNewPath(entity);
-            return;
-        }
 
-        // Follow current path
-        Vector2D targetWaypoint = m_path[m_pathIndex];
-        Vector2D direction = (targetWaypoint - entity->getPosition()).normalized();
-
-        entity->move(direction * m_speed * deltaTime);
-
-        // Check if reached waypoint
-        if ((entity->getPosition() - targetWaypoint).magnitude() < 16.0f) {
-            m_pathIndex++;
-        }
-    }
-
-private:
-    void requestNewPath(EntityPtr entity) {
-        PathfinderManager::Instance().requestPath(
-            entity->getId(),
-            entity->getPosition(),
-            m_targetPosition,
-            [this](const std::vector<Vector2D>& path, PathfindingResult result) {
-                if (result == PathfindingResult::SUCCESS) {
-                    m_path = path;
-                    m_pathIndex = 0;
-                    m_hasPath = true;
-                } else {
-                    handlePathfindingFailure(result);
-                }
-            }
-        );
-    }
-};
-```
+Wander, Patrol, Flee, Guard, Chase, and Follow call `requestPathToEDM` from the behavior executor. Path progress lives in EDM `PathData`. `AIManager` calls `commitCompletedPaths()` on the main thread. Do not store paths in behavior-local members and do not use worker callbacks.
 
 ### World Integration
-```cpp
-void PathfindingGrid::rebuildFromWorld() {
-    WorldManager& worldMgr = WorldManager::Instance();
 
-    // Update grid from world tiles
-    for (int y = 0; y < m_h; ++y) {
-        for (int x = 0; x < m_w; ++x) {
-            Vector2D worldPos = gridToWorld(x, y);
-            int worldX = static_cast<int>(worldPos.x / TILE_SIZE);
-            int worldY = static_cast<int>(worldPos.y / TILE_SIZE);
+`PathfindingGrid::rebuildFromWorld(rowStart, rowEnd)` is the single cell
+worker. For each 64 px cell it samples the covered 32 px tiles:
 
-            // Check if tile blocks movement
-            auto tileType = worldMgr.getTileType(worldX, worldY);
-            bool blocked = (tileType == TileType::WALL ||
-                           tileType == TileType::OBSTACLE ||
-                           tileType == TileType::WATER);
+- blocked when more than half the tiles are `BUILDING` obstacles or
+  `MOUNTAIN` biome, or when `CollisionManager::queryAreaHasStaticOverlap()`
+  finds a static body (EventOnly water-edge triggers included) within the
+  cell plus 28 px clearance;
+- weight is the tile average: water 2.0, `TREE` / `ROCK` 2.5, else 1.0. A
+  harvested tree or rock lowers the cell weight; it does not unblock it.
 
-            setBlocked(x, y, blocked);
+Two callers share it:
 
-            // Set movement cost based on terrain
-            float weight = getTerrainWeight(tileType);
-            setWeight(x, y, weight);
-        }
-    }
-
-    // Update coarse grid for hierarchical pathfinding
-    updateCoarseGrid();
-}
-
-float getTerrainWeight(TileType type) {
-    switch (type) {
-        case TileType::GRASS:    return 1.0f;   // Normal movement
-        case TileType::DIRT:     return 1.2f;   // Slightly slower
-        case TileType::SAND:     return 1.5f;   // Slow movement
-        case TileType::SWAMP:    return 3.0f;   // Very slow
-        case TileType::ROAD:     return 0.8f;   // Fast movement
-        default:                 return 1.0f;
-    }
-}
-```
+- **Load:** `StaticCollidersReady` → `PathfinderManager::rebuildGrid()` builds
+  a new grid in `WorkerBudget` row batches on a detached task (LoadingState's
+  pause window), then `updateCoarseGrid()` and publish.
+- **Gameplay:** `CollisionObstacleChanged` / `TileChanged` handlers mark dirty
+  cells (`markDirtyRegion`). `PathfinderManager::update()` takes the dirty rows
+  (`takeDirtyRows`), rebuilds them on a copy of the published grid in joined
+  `WorkerBudget` batches, updates the coarse grid, and publishes the copy.
+  Published grids are never mutated in place; path tasks keep the snapshot
+  they captured.
 
 ## Performance Characteristics
 
@@ -333,13 +272,17 @@ float getTerrainWeight(TileType type) {
 
 ### Memory Optimization
 ```cpp
-// Object pool reduces allocation overhead
+// PathfindingGrid::getStats() (per-grid counters)
 struct PathfindingStats {
     uint64_t totalRequests{0};
     uint64_t successfulPaths{0};
     uint64_t timeouts{0};
+    uint64_t invalidStarts{0};
+    uint64_t invalidGoals{0};
     uint64_t totalIterations{0};
+    uint64_t totalPathLength{0};
     uint32_t avgPathLength{0};
+    uint32_t framesSinceReset{0};
 };
 
 // Typical performance profile:
@@ -481,10 +424,15 @@ void handlePathfindingFailure(PathfindingResult result, EntityID entityId) {
 
 # Individual test executables
 ./bin/debug/pathfinding_system_tests     # Core A* algorithm tests
-./bin/debug/pathfinding_performance_tests # Scaling and performance tests
+./bin/debug/pathfinder_benchmark          # Scaling and performance benchmark
 ```
 
 ### Debug Visualization
+
+There is no `renderPathfindingDebug(SDL_Renderer*)` path. Production rendering is GPU-only (`GameEngine` / `GPURenderer`). Path debug, if added, belongs on the GPU scene/UI hooks — do not reintroduce SDL_Renderer.
+
+Historical sketch (do not copy):
+
 ```cpp
 void renderPathfindingDebug(SDL_Renderer* renderer, const Camera& camera) {
     // Render grid
@@ -514,18 +462,13 @@ void renderPathfindingDebug(SDL_Renderer* renderer, const Camera& camera) {
 
 ### Performance Profiling
 ```cpp
-void profilePathfinding() {
-    auto stats = grid.getStats();
-
-    GAMEENGINE_INFO("Pathfinding Statistics:");
-    GAMEENGINE_INFO("  Total Requests: " + std::to_string(stats.totalRequests));
-    GAMEENGINE_INFO("  Success Rate: " +
-                   std::to_string((float)stats.successfulPaths / stats.totalRequests * 100.0f) + "%");
-    GAMEENGINE_INFO("  Avg Iterations: " +
-                   std::to_string(stats.totalIterations / stats.totalRequests));
-    GAMEENGINE_INFO("  Avg Path Length: " + std::to_string(stats.avgPathLength));
-    GAMEENGINE_INFO("  Timeout Rate: " +
-                   std::to_string((float)stats.timeouts / stats.totalRequests * 100.0f) + "%");
+const auto& stats = grid.getStats();
+if (stats.totalRequests > 0) {
+    PATHFIND_INFO(std::format("Requests: {}, success: {:.1f}%, avg iterations: {}, avg path length: {}, timeouts: {:.1f}%",
+        stats.totalRequests,
+        100.0f * static_cast<float>(stats.successfulPaths) / static_cast<float>(stats.totalRequests),
+        stats.totalIterations / stats.totalRequests, stats.avgPathLength,
+        100.0f * static_cast<float>(stats.timeouts) / static_cast<float>(stats.totalRequests)));
 }
 ```
 

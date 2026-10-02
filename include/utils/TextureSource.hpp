@@ -8,8 +8,7 @@
 
 #include <string>
 
-struct TextureSource
-{
+struct TextureSource {
     std::string textureId{};
     int sourceX{0};
     int sourceY{0};
@@ -17,8 +16,7 @@ struct TextureSource
     int sourceH{0};
     bool useSourceRect{false};
 
-    bool isEmpty() const
-    {
+    bool isEmpty() const {
         return textureId.empty();
     }
 };

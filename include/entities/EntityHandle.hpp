@@ -35,16 +35,16 @@ enum class EntityKind : uint8_t {
 
     // Interactables (world objects)
     DroppedItem = 2,
-    Container = 3,      // Chests, barrels, corpse loot
-    Harvestable = 4,    // Trees, ore nodes, gathering spots
+    Container = 3, // Chests, barrels, corpse loot
+    Harvestable = 4, // Trees, ore nodes, gathering spots
 
     // Combat (physics-driven, short-lived)
     Projectile = 5,
-    AreaEffect = 6,     // AoE spell zones, traps
+    AreaEffect = 6, // AoE spell zones, traps
 
     // Environment (static or animated)
-    Prop = 7,           // Decorations, animated objects
-    Trigger = 8,        // Invisible trigger zones
+    Prop = 7, // Decorations, animated objects
+    Trigger = 8, // Invisible trigger zones
 
     // World geometry (static collision bodies)
     StaticObstacle = 9, // Tiles, walls, terrain collision
@@ -59,9 +59,9 @@ enum class EntityKind : uint8_t {
  * Tier assignment is based on distance from camera/player.
  */
 enum class SimulationTier : uint8_t {
-    Active = 0,      // Full update: AI, collision, render (near camera)
-    Background = 1,  // Simplified: position only, no collision (off-screen)
-    Hibernated = 2   // Minimal: data stored, no updates (far away)
+    Active = 0, // Full update: AI, collision, render (near camera)
+    Background = 1, // Simplified: position only, no collision (off-screen)
+    Hibernated = 2 // Minimal: data stored, no updates (far away)
 };
 
 /**
@@ -77,8 +77,8 @@ constexpr bool hasHealth(EntityKind kind) noexcept {
 /// Returns true if this entity kind can have an inventory
 constexpr bool hasInventory(EntityKind kind) noexcept {
     return kind == EntityKind::Player ||
-           kind == EntityKind::NPC ||
-           kind == EntityKind::Container;
+        kind == EntityKind::NPC ||
+        kind == EntityKind::Container;
 }
 
 /// Returns true if this entity kind participates in physics/collision
@@ -96,39 +96,39 @@ constexpr bool hasAI(EntityKind kind) noexcept {
 /// Static pool entities: Resources that don't move and use immediate (not deferred) destruction
 constexpr bool usesStaticPool(EntityKind kind) noexcept {
     return kind == EntityKind::DroppedItem ||
-           kind == EntityKind::Container ||
-           kind == EntityKind::Harvestable;
+        kind == EntityKind::Container ||
+        kind == EntityKind::Harvestable;
 }
 
 /// Returns true if this entity kind should be rendered
 constexpr bool isRenderable(EntityKind kind) noexcept {
-    return kind != EntityKind::Trigger;  // Only triggers are invisible
+    return kind != EntityKind::Trigger; // Only triggers are invisible
 }
 
 /// Returns string name for EntityKind (for debugging)
 constexpr const char* kindToString(EntityKind kind) noexcept {
     switch (kind) {
-        case EntityKind::Player:      return "Player";
-        case EntityKind::NPC:         return "NPC";
+        case EntityKind::Player: return "Player";
+        case EntityKind::NPC: return "NPC";
         case EntityKind::DroppedItem: return "DroppedItem";
-        case EntityKind::Container:   return "Container";
+        case EntityKind::Container: return "Container";
         case EntityKind::Harvestable: return "Harvestable";
-        case EntityKind::Projectile:  return "Projectile";
-        case EntityKind::AreaEffect:  return "AreaEffect";
-        case EntityKind::Prop:           return "Prop";
-        case EntityKind::Trigger:        return "Trigger";
+        case EntityKind::Projectile: return "Projectile";
+        case EntityKind::AreaEffect: return "AreaEffect";
+        case EntityKind::Prop: return "Prop";
+        case EntityKind::Trigger: return "Trigger";
         case EntityKind::StaticObstacle: return "StaticObstacle";
-        default:                         return "Unknown";
+        default: return "Unknown";
     }
 }
 
 /// Returns string name for SimulationTier (for debugging)
 constexpr const char* tierToString(SimulationTier tier) noexcept {
     switch (tier) {
-        case SimulationTier::Active:     return "Active";
+        case SimulationTier::Active: return "Active";
         case SimulationTier::Background: return "Background";
         case SimulationTier::Hibernated: return "Hibernated";
-        default:                         return "Unknown";
+        default: return "Unknown";
     }
 }
 
@@ -154,7 +154,7 @@ constexpr const char* tierToString(SimulationTier tier) noexcept {
  */
 struct EntityHandle {
     // Type aliases matching existing codebase patterns
-    using IDType = VoidLight::UniqueID::IDType;  // uint64_t
+    using IDType = VoidLight::UniqueID::IDType; // uint64_t
     using Generation = uint32_t;
 
     // Special values
@@ -162,22 +162,21 @@ struct EntityHandle {
     static constexpr Generation INVALID_GENERATION = 0;
 
     // Handle components (16 bytes total, naturally aligned)
-    IDType id{INVALID_ID};                      // 8 bytes: Unique entity identifier
-    EntityKind kind{EntityKind::NPC};           // 1 byte: Entity type
-    uint8_t padding[3]{};                       // 3 bytes: Alignment padding
-    Generation generation{INVALID_GENERATION};  // 4 bytes: Stale reference detection
+    IDType id{INVALID_ID}; // 8 bytes: Unique entity identifier
+    EntityKind kind{EntityKind::NPC}; // 1 byte: Entity type
+    uint8_t padding[3]{}; // 3 bytes: Alignment padding
+    Generation generation{INVALID_GENERATION}; // 4 bytes: Stale reference detection
 
     // Default constructor creates invalid handle
     constexpr EntityHandle() noexcept = default;
 
     // Construct with all components
     constexpr EntityHandle(IDType entityId, EntityKind entityKind,
-                          Generation entityGeneration) noexcept
+        Generation entityGeneration) noexcept
         : id(entityId)
         , kind(entityKind)
         , padding{}
-        , generation(entityGeneration)
-    {
+        , generation(entityGeneration) {
     }
 
     // Validity check
@@ -253,7 +252,7 @@ struct EntityHandle {
             return "EntityHandle::INVALID";
         }
         return std::format("EntityHandle({}:{}:{})",
-                          id, EntityTraits::kindToString(kind), generation);
+            id, EntityTraits::kindToString(kind), generation);
     }
 };
 

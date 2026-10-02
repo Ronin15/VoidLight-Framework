@@ -32,11 +32,9 @@
 /**
  * @brief Mock controller for testing (event-only, no IUpdatable)
  */
-class MockEventController : public ControllerBase
-{
+class MockEventController : public ControllerBase {
 public:
-    void subscribe() override
-    {
+    void subscribe() override {
         if (checkAlreadySubscribed()) {
             return;
         }
@@ -55,11 +53,9 @@ private:
 /**
  * @brief Mock controller for testing (with IUpdatable)
  */
-class MockUpdatableController : public ControllerBase, public IUpdatable
-{
+class MockUpdatableController : public ControllerBase, public IUpdatable {
 public:
-    void subscribe() override
-    {
+    void subscribe() override {
         if (checkAlreadySubscribed()) {
             return;
         }
@@ -67,8 +63,7 @@ public:
         setSubscribed(true);
     }
 
-    void update(float deltaTime) override
-    {
+    void update(float deltaTime) override {
         m_updateCount++;
         m_lastDeltaTime = deltaTime;
         m_totalTime += deltaTime;
@@ -91,19 +86,16 @@ private:
 /**
  * @brief Second mock updatable for multi-controller tests
  */
-class MockUpdatableController2 : public ControllerBase, public IUpdatable
-{
+class MockUpdatableController2 : public ControllerBase, public IUpdatable {
 public:
-    void subscribe() override
-    {
+    void subscribe() override {
         if (checkAlreadySubscribed()) {
             return;
         }
         setSubscribed(true);
     }
 
-    void update([[maybe_unused]] float deltaTime) override
-    {
+    void update([[maybe_unused]] float deltaTime) override {
         m_updateCount++;
     }
 
@@ -115,21 +107,17 @@ private:
     int m_updateCount{0};
 };
 
-class TokenOwningController : public ControllerBase
-{
+class TokenOwningController : public ControllerBase {
 public:
-    static void resetEventCount()
-    {
+    static void resetEventCount() {
         s_eventCount.store(0, std::memory_order_relaxed);
     }
 
-    static int eventCount()
-    {
+    static int eventCount() {
         return s_eventCount.load(std::memory_order_relaxed);
     }
 
-    void subscribe() override
-    {
+    void subscribe() override {
         if (checkAlreadySubscribed()) {
             return;
         }
@@ -148,8 +136,7 @@ private:
     static inline std::atomic<int> s_eventCount{0};
 };
 
-class TokenCleanupEvent : public Event
-{
+class TokenCleanupEvent : public Event {
 public:
     void update() override {}
     void execute() override {}
@@ -163,17 +150,14 @@ public:
     [[nodiscard]] bool checkConditions() override { return true; }
 };
 
-struct RegistryFixture
-{
-    RegistryFixture()
-    {
+struct RegistryFixture {
+    RegistryFixture() {
         // Initialize EventManager for tests that need it
         EventManager::Instance().prepareForStateTransition();
         BOOST_REQUIRE(EventManager::Instance().init());
     }
 
-    ~RegistryFixture()
-    {
+    ~RegistryFixture() {
         EventManager::Instance().clearAllHandlers();
     }
 
@@ -184,8 +168,7 @@ struct RegistryFixture
 
 BOOST_AUTO_TEST_SUITE(RegistrationTests)
 
-BOOST_FIXTURE_TEST_CASE(TestAddController, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestAddController, RegistryFixture) {
     BOOST_CHECK(registry.empty());
     BOOST_CHECK_EQUAL(registry.size(), 0u);
 
@@ -196,16 +179,14 @@ BOOST_FIXTURE_TEST_CASE(TestAddController, RegistryFixture)
     BOOST_CHECK_EQUAL(controller.getName(), "MockEventController");
 }
 
-BOOST_FIXTURE_TEST_CASE(TestAddMultipleControllers, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestAddMultipleControllers, RegistryFixture) {
     registry.add<MockEventController>();
     registry.add<MockUpdatableController>();
 
     BOOST_CHECK_EQUAL(registry.size(), 2u);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestDuplicateAddReturnsSame, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestDuplicateAddReturnsSame, RegistryFixture) {
     auto& first = registry.add<MockEventController>();
     auto& second = registry.add<MockEventController>();
 
@@ -214,8 +195,7 @@ BOOST_FIXTURE_TEST_CASE(TestDuplicateAddReturnsSame, RegistryFixture)
     BOOST_CHECK_EQUAL(registry.size(), 1u);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestAddWithConstructorArgs, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestAddWithConstructorArgs, RegistryFixture) {
     // MockEventController has default constructor, just verify it works
     auto& controller = registry.add<MockEventController>();
     BOOST_CHECK_EQUAL(controller.getName(), "MockEventController");
@@ -227,8 +207,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(RetrievalTests)
 
-BOOST_FIXTURE_TEST_CASE(TestGetExistingController, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestGetExistingController, RegistryFixture) {
     registry.add<MockEventController>();
 
     auto* controller = registry.get<MockEventController>();
@@ -237,8 +216,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetExistingController, RegistryFixture)
     BOOST_CHECK_EQUAL(controller->getName(), "MockEventController");
 }
 
-BOOST_FIXTURE_TEST_CASE(TestGetNonExistingController, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestGetNonExistingController, RegistryFixture) {
     // Don't add MockEventController
 
     auto* controller = registry.get<MockEventController>();
@@ -246,8 +224,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetNonExistingController, RegistryFixture)
     BOOST_CHECK(controller == nullptr);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestGetCorrectType, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestGetCorrectType, RegistryFixture) {
     registry.add<MockEventController>();
     registry.add<MockUpdatableController>();
 
@@ -260,8 +237,7 @@ BOOST_FIXTURE_TEST_CASE(TestGetCorrectType, RegistryFixture)
     BOOST_CHECK_EQUAL(updatableCtrl->getName(), "MockUpdatableController");
 }
 
-BOOST_FIXTURE_TEST_CASE(TestHasController, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestHasController, RegistryFixture) {
     BOOST_CHECK(!registry.has<MockEventController>());
 
     registry.add<MockEventController>();
@@ -270,8 +246,7 @@ BOOST_FIXTURE_TEST_CASE(TestHasController, RegistryFixture)
     BOOST_CHECK(!registry.has<MockUpdatableController>());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestConstGet, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestConstGet, RegistryFixture) {
     registry.add<MockEventController>();
 
     const ControllerRegistry& constRegistry = registry;
@@ -287,8 +262,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(BatchSubscribeTests)
 
-BOOST_FIXTURE_TEST_CASE(TestSubscribeAll, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestSubscribeAll, RegistryFixture) {
     auto& ctrl1 = registry.add<MockEventController>();
     auto& ctrl2 = registry.add<MockUpdatableController>();
 
@@ -301,8 +275,7 @@ BOOST_FIXTURE_TEST_CASE(TestSubscribeAll, RegistryFixture)
     BOOST_CHECK(ctrl2.isSubscribed());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUnsubscribeAll, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUnsubscribeAll, RegistryFixture) {
     auto& ctrl1 = registry.add<MockEventController>();
     auto& ctrl2 = registry.add<MockUpdatableController>();
 
@@ -316,8 +289,7 @@ BOOST_FIXTURE_TEST_CASE(TestUnsubscribeAll, RegistryFixture)
     BOOST_CHECK(!ctrl2.isSubscribed());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestSubscribeCountTracking, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestSubscribeCountTracking, RegistryFixture) {
     auto& ctrl = registry.add<MockEventController>();
 
     registry.subscribeAll();
@@ -339,8 +311,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(SuspendResumeTests)
 
-BOOST_FIXTURE_TEST_CASE(TestSuspendAll, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestSuspendAll, RegistryFixture) {
     auto& ctrl1 = registry.add<MockEventController>();
     auto& ctrl2 = registry.add<MockUpdatableController>();
 
@@ -352,14 +323,13 @@ BOOST_FIXTURE_TEST_CASE(TestSuspendAll, RegistryFixture)
 
     registry.suspendAll();
 
-    BOOST_CHECK(!ctrl1.isSubscribed());  // Default suspend unsubscribes
+    BOOST_CHECK(!ctrl1.isSubscribed()); // Default suspend unsubscribes
     BOOST_CHECK(!ctrl2.isSubscribed());
     BOOST_CHECK(ctrl1.isSuspended());
     BOOST_CHECK(ctrl2.isSuspended());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestResumeAll, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestResumeAll, RegistryFixture) {
     auto& ctrl1 = registry.add<MockEventController>();
     auto& ctrl2 = registry.add<MockUpdatableController>();
 
@@ -371,14 +341,13 @@ BOOST_FIXTURE_TEST_CASE(TestResumeAll, RegistryFixture)
 
     registry.resumeAll();
 
-    BOOST_CHECK(ctrl1.isSubscribed());  // Default resume re-subscribes
+    BOOST_CHECK(ctrl1.isSubscribed()); // Default resume re-subscribes
     BOOST_CHECK(ctrl2.isSubscribed());
     BOOST_CHECK(!ctrl1.isSuspended());
     BOOST_CHECK(!ctrl2.isSuspended());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestSuspendResumeIdempotent, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestSuspendResumeIdempotent, RegistryFixture) {
     auto& ctrl = registry.add<MockEventController>();
 
     registry.subscribeAll();
@@ -400,8 +369,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(UpdateTests)
 
-BOOST_FIXTURE_TEST_CASE(TestUpdateAllCallsUpdatables, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUpdateAllCallsUpdatables, RegistryFixture) {
     auto& updatable = registry.add<MockUpdatableController>();
 
     registry.subscribeAll();
@@ -414,9 +382,8 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllCallsUpdatables, RegistryFixture)
     BOOST_CHECK_CLOSE(updatable.getLastDeltaTime(), 0.016f, 0.0001f);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsNonUpdatables, RegistryFixture)
-{
-    registry.add<MockEventController>();  // Not IUpdatable
+BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsNonUpdatables, RegistryFixture) {
+    registry.add<MockEventController>(); // Not IUpdatable
     auto& updatable = registry.add<MockUpdatableController>();
 
     registry.subscribeAll();
@@ -426,8 +393,7 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsNonUpdatables, RegistryFixture)
     BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUpdateAllMultipleUpdatables, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUpdateAllMultipleUpdatables, RegistryFixture) {
     auto& updatable1 = registry.add<MockUpdatableController>();
     auto& updatable2 = registry.add<MockUpdatableController2>();
 
@@ -438,8 +404,7 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllMultipleUpdatables, RegistryFixture)
     BOOST_CHECK_EQUAL(updatable2.getUpdateCount(), 1);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUpdateAllAccumulatesTime, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUpdateAllAccumulatesTime, RegistryFixture) {
     auto& updatable = registry.add<MockUpdatableController>();
 
     registry.subscribeAll();
@@ -452,8 +417,7 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllAccumulatesTime, RegistryFixture)
     BOOST_CHECK_CLOSE(updatable.getTotalTime(), 0.048f, 0.0001f);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsSuspended, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsSuspended, RegistryFixture) {
     auto& updatable = registry.add<MockUpdatableController>();
 
     registry.subscribeAll();
@@ -461,14 +425,14 @@ BOOST_FIXTURE_TEST_CASE(TestUpdateAllSkipsSuspended, RegistryFixture)
     BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1);
 
     registry.suspendAll();
-    registry.updateAll(0.016f);  // Should be skipped
+    registry.updateAll(0.016f); // Should be skipped
 
-    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1);  // Still 1
+    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 1); // Still 1
 
     registry.resumeAll();
     registry.updateAll(0.016f);
 
-    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 2);  // Now 2
+    BOOST_CHECK_EQUAL(updatable.getUpdateCount(), 2); // Now 2
 }
 
 BOOST_AUTO_TEST_SUITE_END()
@@ -477,8 +441,7 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(LifecycleTests)
 
-BOOST_FIXTURE_TEST_CASE(TestClear, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestClear, RegistryFixture) {
     registry.add<MockEventController>();
     registry.add<MockUpdatableController>();
     registry.subscribeAll();
@@ -493,8 +456,7 @@ BOOST_FIXTURE_TEST_CASE(TestClear, RegistryFixture)
     BOOST_CHECK(!registry.has<MockUpdatableController>());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestClearUnsubscribesFirst, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestClearUnsubscribesFirst, RegistryFixture) {
     auto& ctrl = registry.add<MockEventController>();
     registry.subscribeAll();
     BOOST_CHECK(ctrl.isSubscribed());
@@ -509,8 +471,7 @@ BOOST_FIXTURE_TEST_CASE(TestClearUnsubscribesFirst, RegistryFixture)
     BOOST_CHECK(registry.empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestClearRemovesEventHandlerTokens, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestClearRemovesEventHandlerTokens, RegistryFixture) {
     TokenOwningController::resetEventCount();
     registry.add<TokenOwningController>();
     registry.subscribeAll();
@@ -527,8 +488,7 @@ BOOST_FIXTURE_TEST_CASE(TestClearRemovesEventHandlerTokens, RegistryFixture)
     BOOST_CHECK_EQUAL(TokenOwningController::eventCount(), 1);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestReAddAfterClear, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestReAddAfterClear, RegistryFixture) {
     registry.add<MockEventController>();
     registry.clear();
 
@@ -538,8 +498,7 @@ BOOST_FIXTURE_TEST_CASE(TestReAddAfterClear, RegistryFixture)
     BOOST_CHECK_EQUAL(ctrl.getName(), "MockEventController");
 }
 
-BOOST_FIXTURE_TEST_CASE(TestMoveConstruction, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestMoveConstruction, RegistryFixture) {
     registry.add<MockEventController>();
     registry.add<MockUpdatableController>();
     registry.subscribeAll();
@@ -551,8 +510,7 @@ BOOST_FIXTURE_TEST_CASE(TestMoveConstruction, RegistryFixture)
     BOOST_CHECK(movedRegistry.has<MockUpdatableController>());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestMoveAssignment, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestMoveAssignment, RegistryFixture) {
     registry.add<MockEventController>();
     registry.subscribeAll();
 
@@ -569,43 +527,37 @@ BOOST_AUTO_TEST_SUITE_END()
 
 BOOST_AUTO_TEST_SUITE(EmptyRegistryTests)
 
-BOOST_FIXTURE_TEST_CASE(TestSubscribeAllOnEmpty, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestSubscribeAllOnEmpty, RegistryFixture) {
     // Should not crash
     registry.subscribeAll();
     BOOST_CHECK(registry.empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUnsubscribeAllOnEmpty, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUnsubscribeAllOnEmpty, RegistryFixture) {
     // Should not crash
     registry.unsubscribeAll();
     BOOST_CHECK(registry.empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestSuspendAllOnEmpty, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestSuspendAllOnEmpty, RegistryFixture) {
     // Should not crash
     registry.suspendAll();
     BOOST_CHECK(registry.empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestResumeAllOnEmpty, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestResumeAllOnEmpty, RegistryFixture) {
     // Should not crash
     registry.resumeAll();
     BOOST_CHECK(registry.empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestUpdateAllOnEmpty, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestUpdateAllOnEmpty, RegistryFixture) {
     // Should not crash
     registry.updateAll(0.016f);
     BOOST_CHECK(registry.empty());
 }
 
-BOOST_FIXTURE_TEST_CASE(TestClearOnEmpty, RegistryFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestClearOnEmpty, RegistryFixture) {
     // Should not crash
     registry.clear();
     BOOST_CHECK(registry.empty());

@@ -4,13 +4,13 @@
 
 ## Overview
 
-`FrameProfiler` is a debug-only timing system with three levels of breakdown:
+`FrameProfiler` is a timing system (enabled by `VOIDLIGHT_FRAME_PROFILER_ENABLED`, set for Debug and ReleaseSafe builds) with three levels of breakdown:
 
 - frame phases
 - manager phases
 - render phases
 
-It powers hitch logging and the F3 overlay. In release builds it compiles away.
+It powers hitch logging (frames above the 20 ms default threshold) and the F3 overlay. In Release and Profile builds it compiles to no-op stubs.
 
 ## Current Render Phases
 
@@ -54,5 +54,8 @@ Use the scoped helpers or macros:
 - `PROFILE_PHASE(...)`
 - `PROFILE_MANAGER(...)`
 - `PROFILE_RENDER(...)`
+- `PROFILE_RENDER_GPU(...)` (GPU-aware render phase timer)
+
+The RAII types behind them are `ScopedPhaseTimer`, `ScopedManagerTimer`, `ScopedRenderTimer`, and `ScopedRenderTimerGPU`.
 
 Call `suppressFrames()` around known heavy transitions such as loading or state changes to avoid noisy hitch logs.

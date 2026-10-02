@@ -106,14 +106,14 @@ void PlayerRunningState::handleRunningAnimation(float deltaTime) {
     if (velocity.lengthSquared() > 1.0f) {
         // Accumulate deltaTime (m_animSpeed is in milliseconds, convert to seconds)
         float accumulator = m_player.get().getAnimationAccumulator() + deltaTime;
-        float frameTime = m_player.get().getAnimSpeed() / 1000.0f;  // ms to seconds
+        float frameTime = m_player.get().getAnimSpeed() / 1000.0f; // ms to seconds
 
         // Advance frame when accumulator exceeds frame time
         if (accumulator >= frameTime) {
             int currentFrame = m_player.get().getCurrentFrame();
             int numFrames = m_player.get().getNumFrames();
             m_player.get().setCurrentFrame((currentFrame + 1) % numFrames);
-            accumulator -= frameTime;  // Preserve excess time for smooth timing
+            accumulator -= frameTime; // Preserve excess time for smooth timing
         }
         m_player.get().setAnimationAccumulator(accumulator);
     } else {
@@ -125,9 +125,9 @@ void PlayerRunningState::handleRunningAnimation(float deltaTime) {
 bool PlayerRunningState::hasInputDetected() const {
     const InputManager& input = InputManager::Instance();
 
-    if (input.isCommandDown(InputManager::Command::MoveUp)    ||
-        input.isCommandDown(InputManager::Command::MoveDown)  ||
-        input.isCommandDown(InputManager::Command::MoveLeft)  ||
+    if (input.isCommandDown(InputManager::Command::MoveUp) ||
+        input.isCommandDown(InputManager::Command::MoveDown) ||
+        input.isCommandDown(InputManager::Command::MoveLeft) ||
         input.isCommandDown(InputManager::Command::MoveRight)) {
         return true;
     }

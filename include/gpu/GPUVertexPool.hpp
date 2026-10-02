@@ -24,7 +24,7 @@ namespace VoidLight {
 class GPUVertexPool {
 public:
     static constexpr size_t FRAME_COUNT = 3;
-    static constexpr size_t DEFAULT_VERTEX_CAPACITY = 150000;  // 4K + zoom headroom
+    static constexpr size_t DEFAULT_VERTEX_CAPACITY = 150000; // 4K + zoom headroom
 
     GPUVertexPool() = default;
     ~GPUVertexPool() = default;
@@ -43,7 +43,7 @@ public:
      * @return true on success
      */
     [[nodiscard]] bool init(SDL_GPUDevice* device, uint32_t vertexSize,
-              size_t maxVertices = DEFAULT_VERTEX_CAPACITY);
+        size_t maxVertices = DEFAULT_VERTEX_CAPACITY);
 
     /**
      * Shutdown and release all buffers.

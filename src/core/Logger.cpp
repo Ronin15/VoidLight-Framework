@@ -55,7 +55,7 @@ public:
         auto time_t_now = std::chrono::system_clock::to_time_t(now);
         auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                       now.time_since_epoch()) %
-                  1000;
+            1000;
 
         std::tm timeinfo{};
 #ifdef _WIN32
@@ -162,9 +162,9 @@ private:
 
         // Sort by modification time (oldest first)
         std::sort(logFiles.begin(), logFiles.end(),
-                  [](const fs::directory_entry& a, const fs::directory_entry& b) {
-                      return fs::last_write_time(a) < fs::last_write_time(b);
-                  });
+            [](const fs::directory_entry& a, const fs::directory_entry& b) {
+                return fs::last_write_time(a) < fs::last_write_time(b);
+            });
 
         // Remove oldest files
         size_t toRemove = logFiles.size() - keepCount;
@@ -183,7 +183,7 @@ private:
 
 // Logger::Log implementations for release builds - write to file instead of console
 void Logger::Log(const char* level, const char* system,
-                 const std::string& message) {
+    const std::string& message) {
     if (s_benchmarkMode.load(std::memory_order_relaxed)) {
         return;
     }

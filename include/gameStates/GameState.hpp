@@ -14,8 +14,7 @@ namespace VoidLight {
 class GPURenderer;
 }
 
-enum class GameStateId : uint8_t
-{
+enum class GameStateId : uint8_t {
     LOGO,
     LOADING,
     MAIN_MENU,
@@ -24,65 +23,58 @@ enum class GameStateId : uint8_t
     GAME_OVER,
     PAUSE,
     AI_DEMO,
-    ADVANCED_AI_DEMO,
     EVENT_DEMO,
-    UI_DEMO,
-    OVERLAY_DEMO,
     COUNT
 };
 
 // pure virtual for inheritance
 class GameState {
- public:
-  virtual bool enter() = 0;
-  virtual void update(float deltaTime) = 0;
-  virtual void handleInput() = 0;
-  virtual bool exit() = 0;
-  virtual void pause() {}
-  virtual void resume() {}
-  virtual GameStateId getStateId() const = 0;
-  virtual ~GameState() = default;
+public:
+    virtual bool enter() = 0;
+    virtual void update(float deltaTime) = 0;
+    virtual void handleInput() = 0;
+    virtual bool exit() = 0;
+    virtual void pause() {}
+    virtual void resume() {}
+    virtual GameStateId getStateId() const = 0;
+    virtual ~GameState() = default;
 
-  /**
-   * Record vertices for GPU rendering (called before scene pass).
-   * Override in states that support GPU rendering.
-   * @param gpuRenderer Reference to GPURenderer for accessing vertex pools/batches
-   * @param interpolationAlpha Interpolation factor for smooth rendering
+    /**
+   * True when this state owns a scene pass (world, diorama, logo sprites).
+   * GameStateManager records/renders scene from the highest stacked state
+   * that returns true, and UI from the top state.
    */
-  virtual void recordGPUVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                                  [[maybe_unused]] float interpolationAlpha) {}
+    virtual bool hasGPUScene() const { return false; }
 
-  /**
+    /**
+   * Record scene vertices (world/diorama/particles) before the scene pass.
+   */
+    virtual void recordGPUSceneVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
+        [[maybe_unused]] float interpolationAlpha) {}
+
+    /**
+   * Record UI vertices before the swapchain UI pass.
+   */
+    virtual void recordGPUUIVertices([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer) {}
+
+    /**
    * Issue GPU draw calls during scene pass.
-   * Override in states that support GPU rendering.
-   * @param gpuRenderer Reference to GPURenderer
-   * @param scenePass Active scene render pass
-   * @param interpolationAlpha Interpolation factor
    */
-  virtual void renderGPUScene([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                               [[maybe_unused]] SDL_GPURenderPass* scenePass,
-                               [[maybe_unused]] float interpolationAlpha) {}
+    virtual void renderGPUScene([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
+        [[maybe_unused]] SDL_GPURenderPass* scenePass,
+        [[maybe_unused]] float interpolationAlpha) {}
 
-  /**
+    /**
    * Render UI/overlays during swapchain pass.
-   * Override in states that need to render UI with GPU.
    * UI renders at exact screen positions - no interpolation needed.
-   * @param gpuRenderer Reference to GPURenderer
-   * @param swapchainPass Active swapchain render pass
    */
-  virtual void renderGPUUI([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
-                            [[maybe_unused]] SDL_GPURenderPass* swapchainPass) {}
+    virtual void renderGPUUI([[maybe_unused]] VoidLight::GPURenderer& gpuRenderer,
+        [[maybe_unused]] SDL_GPURenderPass* swapchainPass) {}
 
-  /**
-   * Check if this state supports GPU rendering.
-   * @return true if GPU render methods are implemented
-   */
-  virtual bool supportsGPURendering() const { return false; }
+    // State manager access - set by GameStateManager when state is registered
+    void setStateManager(GameStateManager* manager) { mp_stateManager = manager; }
 
-  // State manager access - set by GameStateManager when state is registered
-  void setStateManager(GameStateManager* manager) { mp_stateManager = manager; }
-
- protected:
-  GameStateManager* mp_stateManager = nullptr;
+protected:
+    GameStateManager* mp_stateManager = nullptr;
 };
-#endif  // GAME_STATE_HPP
+#endif // GAME_STATE_HPP

@@ -90,8 +90,7 @@ public:
             s_testWindow = SDL_CreateWindow(
                 "GPU Test Window",
                 64, 64,
-                SDL_WINDOW_HIDDEN
-            );
+                SDL_WINDOW_HIDDEN);
             if (!s_testWindow) {
                 BOOST_TEST_MESSAGE("Failed to create test window: " << SDL_GetError());
             }
@@ -124,8 +123,7 @@ protected:
         SDL_GPUDevice* device = SDL_CreateGPUDevice(
             VoidLight::GPUPlatformConfig::getRequestedShaderFormats(),
             false,
-            VoidLight::GPUPlatformConfig::getPreferredDriverName()
-        );
+            VoidLight::GPUPlatformConfig::getPreferredDriverName());
 
         if (!device) {
             BOOST_TEST_MESSAGE("Cannot create GPU device: " << SDL_GetError());

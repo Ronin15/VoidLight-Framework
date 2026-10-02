@@ -27,14 +27,14 @@ void example1_StateScopedHandler() {
     auto& eventMgr = EventManager::Instance();
     eventMgr.init();
 
-    uint64_t token = eventMgr.registerHandlerWithToken(
+    EventManager::HandlerToken token = eventMgr.registerHandlerWithToken(
         EventTypeId::ResourceChange,
         [](const EventData& data) {
             std::cout << "Resource change received\n";
             (void)data;
         });
 
-    eventMgr.removeHandler(EventTypeId::ResourceChange, token);
+    eventMgr.removeHandler(token);
 }
 
 //=============================================================================

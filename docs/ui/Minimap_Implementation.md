@@ -1,5 +1,7 @@
 # Minimap Implementation Plan for VoidLight-Framework UI Manager
 
+**Historical / superseded.** Slice 8 owns production minimap (HudController or a sibling UI controller, not a UIManager widget). Do not implement this document’s ownership.
+
 ## Overview
 
 This document outlines the design and implementation steps for integrating a basic minimap into the VoidLight-Framework UI system. The minimap will display the current area of the world and indicate which regions have been discovered by the player. The design follows the engine's architecture, rendering flow, and code style guidelines.
@@ -94,7 +96,7 @@ This document outlines the design and implementation steps for integrating a bas
 
 ```cpp
 // Pseudocode for UI render flow
-void SomeState::recordGPUVertices(VoidLight::GPURenderer& gpu, float) {
+void SomeState::recordGPUUIVertices(VoidLight::GPURenderer& gpu) {
     UIManager::Instance().recordGPUVertices(gpu);
 }
 

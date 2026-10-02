@@ -31,7 +31,7 @@
 #include "managers/AIManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/EventManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "managers/PathfinderManager.hpp"
 #include "managers/CollisionManager.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
@@ -115,7 +115,7 @@ public:
 
     // Create entities with specific behavior distribution
     void createEntitiesWithBehaviors(size_t count, float worldSize,
-                                      const std::vector<std::string>& behaviors) {
+        const std::vector<std::string>& behaviors) {
         auto& edm = EntityDataManager::Instance();
         auto& aim = AIManager::Instance();
         std::uniform_real_distribution<float> posDist(100.0f, worldSize - 100.0f);
@@ -214,8 +214,8 @@ public:
             attackConfig.attackCooldown = (scenario == AttackScenario::BurstResolve)
                 ? 0.0f
                 : (scenario == AttackScenario::CadencedResolve
-                    ? CADENCED_COOLDOWN_SECONDS
-                    : DAMAGE_FREE_COOLDOWN_SECONDS);
+                          ? CADENCED_COOLDOWN_SECONDS
+                          : DAMAGE_FREE_COOLDOWN_SECONDS);
             attackConfig.attackSpeed = (scenario == AttackScenario::BurstResolve)
                 ? 1000.0f
                 : attackConfig.attackSpeed;
@@ -232,10 +232,10 @@ public:
 
             auto& attackState = edm.getAttackState(ref.index);
             attackState.currentState = (scenario == AttackScenario::BurstResolve)
-                ? 3  // Attacking: immediately resolves melee/ranged attack actions.
+                ? 3 // Attacking: immediately resolves melee/ranged attack actions.
                 : 1; // Assessing: immediately enters decision logic.
             attackState.attackTimer = (scenario == AttackScenario::BurstResolve ||
-                                       scenario == AttackScenario::CadencedResolve)
+                                          scenario == AttackScenario::CadencedResolve)
                 ? 10.0f
                 : 0.0f;
             attackState.hasExplicitTarget = true;
@@ -346,11 +346,10 @@ public:
             int iterations = 0;
             double elapsedMs = 0.0;
             while (iterations < MIN_ITERATIONS ||
-                   (elapsedMs < TARGET_WALL_MS && iterations < MAX_ITERATIONS)) {
+                (elapsedMs < TARGET_WALL_MS && iterations < MAX_ITERATIONS)) {
                 aim.update(0.016f);
                 ++iterations;
-                elapsedMs = std::chrono::duration<double, std::milli>(
-                    std::chrono::high_resolution_clock::now() - start).count();
+                elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
             }
 
             // Sanity check: confirm AIManager actually executed the expected work per frame
@@ -387,8 +386,7 @@ public:
         const size_t pendingEventsAfterAI = eventMgr.getPendingEventCount();
         eventMgr.update();
 
-        const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::high_resolution_clock::now() - start).count();
+        const double elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
 
         const size_t executionsAfter = aim.getBehaviorUpdateCount();
         const size_t projectilesAfter = edm.getEntityCount(EntityKind::Projectile);
@@ -416,8 +414,7 @@ public:
             eventMgr.update();
         }
 
-        const double elapsedMs = std::chrono::duration<double, std::milli>(
-            std::chrono::high_resolution_clock::now() - start).count();
+        const double elapsedMs = std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - start).count();
 
         const size_t executionsAfter = aim.getBehaviorUpdateCount();
         const size_t projectilesAfter = edm.getEntityCount(EntityKind::Projectile);
@@ -479,8 +476,7 @@ BOOST_GLOBAL_FIXTURE(AIScalingModuleCleanup);
 BOOST_FIXTURE_TEST_SUITE(AIScalingTests, AIScalingFixture)
 
 // Print header with system info
-BOOST_AUTO_TEST_CASE(PrintHeader)
-{
+BOOST_AUTO_TEST_CASE(PrintHeader) {
     const auto& budget = VoidLight::WorkerBudgetManager::Instance().getBudget();
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
     double multiTP = budgetMgr.getExpectedThroughput(VoidLight::SystemType::AI, true);
@@ -496,8 +492,7 @@ BOOST_AUTO_TEST_CASE(PrintHeader)
 // ---------------------------------------------------------------------------
 // AI Entity Scaling (Primary benchmark)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(AIEntityScaling)
-{
+BOOST_AUTO_TEST_CASE(AIEntityScaling) {
     std::cout << "--- AI Entity Scaling ---\n";
     std::cout << std::setw(10) << "Entities"
               << std::setw(12) << "Time (ms)"
@@ -520,7 +515,7 @@ BOOST_AUTO_TEST_CASE(AIEntityScaling)
 
         float worldSize = std::sqrt(static_cast<float>(count)) * 100.0f;
         createEntities(count, worldSize);
-        setupWorld(worldSize);  // Pass spawn worldSize directly
+        setupWorld(worldSize); // Pass spawn worldSize directly
 
         // Verify ALL entities are in Active tier
         size_t activeCount = verifyActiveTier();
@@ -579,8 +574,7 @@ BOOST_AUTO_TEST_CASE(AIEntityScaling)
 // ---------------------------------------------------------------------------
 // Behavior Mix Test
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(BehaviorMixTest)
-{
+BOOST_AUTO_TEST_CASE(BehaviorMixTest) {
     std::cout << "--- Behavior Mix Test (2000 entities) ---\n";
     std::cout << std::setw(15) << "Distribution"
               << std::setw(12) << "Time (ms)"
@@ -597,13 +591,12 @@ BOOST_AUTO_TEST_CASE(BehaviorMixTest)
     std::vector<BehaviorMix> mixes = {
         {"All Wander", {"Wander"}},
         {"Wander+Guard", {"Wander", "Guard"}},
-        {"Full Mix", {"Wander", "Guard", "Patrol", "Follow", "Chase"}}
-    };
+        {"Full Mix", {"Wander", "Guard", "Patrol", "Follow", "Chase"}}};
 
     for (const auto& mix : mixes) {
         prepareForTest();
         createEntitiesWithBehaviors(ENTITY_COUNT, WORLD_SIZE, mix.behaviors);
-        setupWorld(WORLD_SIZE);  // Pass spawn worldSize directly
+        setupWorld(WORLD_SIZE); // Pass spawn worldSize directly
 
         double medianMs = runBenchmark(verifyActiveTier());
         double updatesPerSec = (medianMs > 0.0)
@@ -622,8 +615,7 @@ BOOST_AUTO_TEST_CASE(BehaviorMixTest)
 // ---------------------------------------------------------------------------
 // Attack Behavior Scaling
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(AttackBehaviorPressureScaling)
-{
+BOOST_AUTO_TEST_CASE(AttackBehaviorPressureScaling) {
     std::cout << "--- Attack Behavior Decision Pressure Scaling (50/50 melee+ranged) ---\n";
     std::cout << "Workload: Attack AI decision and pressure movement only; "
               << "damage/projectile resolution intentionally suppressed.\n";
@@ -668,8 +660,7 @@ BOOST_AUTO_TEST_CASE(AttackBehaviorPressureScaling)
     std::cout << std::endl;
 }
 
-BOOST_AUTO_TEST_CASE(AttackBehaviorTacticalResetScaling)
-{
+BOOST_AUTO_TEST_CASE(AttackBehaviorTacticalResetScaling) {
     std::cout << "--- Attack Behavior Decision Tactical Reset Scaling (50/50 melee+ranged) ---\n";
     std::cout << "Workload: Attack pressure scoring and tactical reset movement only; "
               << "damage/projectile resolution intentionally suppressed.\n";
@@ -714,8 +705,7 @@ BOOST_AUTO_TEST_CASE(AttackBehaviorTacticalResetScaling)
     std::cout << std::endl;
 }
 
-BOOST_AUTO_TEST_CASE(AttackBehaviorBurstResolveScaling)
-{
+BOOST_AUTO_TEST_CASE(AttackBehaviorBurstResolveScaling) {
     std::cout << "--- Attack Behavior Cold Burst Resolve Scaling (50/50 melee+ranged) ---\n";
     std::cout << "Workload: one synchronized resolve frame from fresh state; "
               << "forces melee EventManager damage and ranged AICommandBus projectile creation "
@@ -767,8 +757,7 @@ BOOST_AUTO_TEST_CASE(AttackBehaviorBurstResolveScaling)
     std::cout << std::endl;
 }
 
-BOOST_AUTO_TEST_CASE(AttackBehaviorCadencedResolveScaling)
-{
+BOOST_AUTO_TEST_CASE(AttackBehaviorCadencedResolveScaling) {
     std::cout << "--- Attack Behavior Cadenced Resolve Scaling (50/50 melee+ranged) ---\n";
     std::cout << "Workload: 90-frame cooldown-driven combat sequence; includes AI update, "
               << "ranged command commit, melee EventManager dispatch, and projectile creation.\n";
@@ -816,8 +805,7 @@ BOOST_AUTO_TEST_CASE(AttackBehaviorCadencedResolveScaling)
 // ---------------------------------------------------------------------------
 // WorkerBudget Adaptive Tuning Test (Batch Sizing + Threading Threshold)
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
-{
+BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning) {
     std::cout << "--- WorkerBudget Adaptive Tuning (AI) ---\n";
     std::cout << "Tests both batch sizing hill-climb and threading threshold adaptation\n\n";
 
@@ -830,7 +818,7 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
     std::cout << "PART 1: Batch Sizing Hill-Climb\n";
     std::cout << "(Converges in ~100 frames)\n\n";
 
-    constexpr size_t BATCH_ENTITY_COUNT = 5000;  // Sufficient to trigger threading
+    constexpr size_t BATCH_ENTITY_COUNT = 5000; // Sufficient to trigger threading
     constexpr float BATCH_WORLD_SIZE = 7000.0f;
     constexpr int BATCH_MEASURE_INTERVAL = 100;
     constexpr int BATCH_TOTAL_FRAMES = 500;
@@ -963,8 +951,7 @@ BOOST_AUTO_TEST_CASE(WorkerBudgetAdaptiveTuning)
 // ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
-BOOST_AUTO_TEST_CASE(PrintSummary)
-{
+BOOST_AUTO_TEST_CASE(PrintSummary) {
     auto& budgetMgr = VoidLight::WorkerBudgetManager::Instance();
     double multiTP = budgetMgr.getExpectedThroughput(VoidLight::SystemType::AI, true);
     float batchMult = budgetMgr.getBatchMultiplier(VoidLight::SystemType::AI);

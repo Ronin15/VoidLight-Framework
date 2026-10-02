@@ -21,7 +21,7 @@
 #include "managers/PathfinderManager.hpp"
 #include "core/ThreadSystem.hpp"
 #include "utils/GPUSceneRecorder.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "gpu/SpriteBatch.hpp"
 #include "gpu/GPUDevice.hpp"
 #include <SDL3/SDL.h>
@@ -161,10 +161,10 @@ BOOST_AUTO_TEST_CASE(TestFrameWrapsToZero) {
     auto& rd = getRenderData(npc);
 
     // Update to advance through all frames (2 frames at 100ms each)
-    m_controller.update(0.11f);  // Frame 0 -> 1
+    m_controller.update(0.11f); // Frame 0 -> 1
     BOOST_CHECK_EQUAL(rd.currentFrame, 1);
 
-    m_controller.update(0.11f);  // Frame 1 -> 0 (wrap)
+    m_controller.update(0.11f); // Frame 1 -> 0 (wrap)
     BOOST_CHECK_EQUAL(rd.currentFrame, 0);
 }
 
@@ -181,7 +181,7 @@ BOOST_AUTO_TEST_CASE(TestIdleRowSelectedWhenStationary) {
     m_controller.update(0.01f);
 
     auto& rd = getRenderData(npc);
-    BOOST_CHECK_EQUAL(rd.currentRow, rd.idleRow);  // Should match idle row from config
+    BOOST_CHECK_EQUAL(rd.currentRow, rd.idleRow); // Should match idle row from config
 }
 
 BOOST_AUTO_TEST_CASE(TestMoveRowSelectedWhenMoving) {
@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE(TestMoveRowSelectedWhenMoving) {
     m_controller.update(0.01f);
 
     auto& rd = getRenderData(npc);
-    BOOST_CHECK_EQUAL(rd.currentRow, rd.moveRow);  // Should match move row from config
+    BOOST_CHECK_EQUAL(rd.currentRow, rd.moveRow); // Should match move row from config
 }
 
 BOOST_AUTO_TEST_CASE(TestFlipHorizontalWhenMovingLeft) {
@@ -292,7 +292,7 @@ BOOST_AUTO_TEST_CASE(TestZeroSpeedHandled) {
     BOOST_CHECK_GE(rd.moveSpeedMs, 1);
 
     uint8_t initialFrame = rd.currentFrame;
-    m_controller.update(0.001f);  // Very small delta
+    m_controller.update(0.001f); // Very small delta
 
     // Should not cycle through all frames instantly
     BOOST_CHECK_LE(rd.currentFrame - initialFrame, 1);
@@ -324,7 +324,7 @@ BOOST_AUTO_TEST_CASE(TestOnlyActiveNPCsUpdated) {
 
     // Background NPC should NOT have updated (still at default row)
     auto& bgRd = getRenderData(bgNPC);
-    BOOST_CHECK_EQUAL(bgRd.currentRow, 0);  // Default, not updated
+    BOOST_CHECK_EQUAL(bgRd.currentRow, 0); // Default, not updated
 }
 
 BOOST_AUTO_TEST_CASE(TestVerySmallDeltaTimeAccumulates) {
@@ -338,7 +338,7 @@ BOOST_AUTO_TEST_CASE(TestVerySmallDeltaTimeAccumulates) {
 
     // Update with very small delta times
     for (int i = 0; i < 10; ++i) {
-        m_controller.update(0.001f);  // 1ms each
+        m_controller.update(0.001f); // 1ms each
     }
 
     // Accumulator should have accumulated (10 * 0.001 = 0.01)

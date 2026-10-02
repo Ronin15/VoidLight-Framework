@@ -22,10 +22,11 @@ struct PathSmoother {
         for (size_t i = 1; i + 1 < path.size(); ++i) {
             Vector2D a = out.back();
             Vector2D b = path[i];
-            Vector2D c = path[i+1];
-            Vector2D ab = b - a; Vector2D bc = c - b;
+            Vector2D c = path[i + 1];
+            Vector2D ab = b - a;
+            Vector2D bc = c - b;
             // Check near collinearity via cross product ~ 0
-            float cross = ab.getX()*bc.getY() - ab.getY()*bc.getX();
+            float cross = ab.getX() * bc.getY() - ab.getY() * bc.getX();
             if (std::fabs(cross) > 1e-3f) {
                 out.push_back(b);
             }
@@ -38,4 +39,3 @@ struct PathSmoother {
 } // namespace VoidLight
 
 #endif // PATH_SMOOTHER_HPP
-

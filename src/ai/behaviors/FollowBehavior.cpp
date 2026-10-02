@@ -10,7 +10,7 @@
 namespace Behaviors {
 
 void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig&,
-                VoidLight::FollowStateData& state) {
+    VoidLight::FollowStateData& state) {
     auto& edm = EntityDataManager::Instance();
     edm.initBehaviorData(edmIndex, BehaviorType::Follow);
     auto& shared = edm.getBehaviorData(edmIndex);
@@ -38,29 +38,25 @@ void initFollow(size_t edmIndex, const VoidLight::FollowBehaviorConfig&,
 }
 
 void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& config,
-                   VoidLight::FollowStateData& follow) {
+    VoidLight::FollowStateData& follow) {
     if (!ctx.sharedState.isValid()) return;
 
     auto& shared = ctx.sharedState;
 
     // Process pending behavior messages
-    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i)
-    {
-        switch (shared.pendingMessages[i].messageId)
-        {
+    for (uint8_t i = 0; i < shared.pendingMessageCount; ++i) {
+        switch (shared.pendingMessages[i].messageId) {
             case BehaviorMessage::PANIC:
                 shared.pendingMessageCount = 0;
                 switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                 return;
             case BehaviorMessage::CALM_DOWN:
-                if (ctx.memoryData.isValid())
-                {
+                if (ctx.memoryData.isValid()) {
                     ctx.memoryData.emotions.fear = std::max(0.0f, ctx.memoryData.emotions.fear - 0.5f);
                 }
                 break;
             case BehaviorMessage::RAISE_ALERT:
-                if (ctx.memoryData.personality.bravery < 0.4f)
-                {
+                if (ctx.memoryData.personality.bravery < 0.4f) {
                     shared.pendingMessageCount = 0;
                     switchBehavior(ctx.edmIndex, BehaviorType::Flee);
                     return;
@@ -156,7 +152,7 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
         }
 
         bool needsPath = !pathData.hasPath || pathData.navIndex >= pathData.pathLength ||
-                         pathData.pathUpdateTimer > config.pathTTL;
+            pathData.pathUpdateTimer > config.pathTTL;
 
         // Check if target moved significantly
         if (!needsPath && pathData.hasPath) {
@@ -168,7 +164,7 @@ void executeFollow(BehaviorContext& ctx, const VoidLight::FollowBehaviorConfig& 
 
         if (needsPath && pathData.pathRequestCooldown <= 0.0f) {
             PathfinderManager::Instance().requestPathToEDM(ctx.edmIndex, currentPos, desiredPos,
-                                                           PathfinderManager::Priority::Normal);
+                PathfinderManager::Priority::Normal);
             pathData.pathRequestCooldown = config.pathCooldown;
         }
 

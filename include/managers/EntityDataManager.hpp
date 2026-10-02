@@ -27,13 +27,19 @@
  * - Supports 100K+ entities with tiered simulation
  *
  * THREADING CONTRACT:
- * - All structural operations (create/destroy/register/getIndex) MUST be called
- *   from the main thread only. These operations are NOT thread-safe.
+ * One structural owner at a time (create, drain, register, getIndex, slot reuse).
+ * - Gameplay: the main thread is the owner.
+ * - Load: the load worker is the owner only inside LoadingState's exclusive
+ *   window (GameEngine globally paused). EventManager stays the gameplay and
+ *   lifecycle bus: deferred drain is left on so WorldLoaded can complete;
+ *   gameplay producers are paused so they do not enqueue onto that bus.
+ * - Tests that call WorldManager::loadNewWorld on the test thread are the owner.
+ * - Workers during gameplay: index-based hot data, non-overlapping batches,
+ *   and destroyEntity enqueue only. Do not create, drain, or compact.
  * - Index-based accessors (getHotDataByIndex, getTransformByIndex) are lock-free
- *   and safe for parallel batch processing with non-overlapping index ranges.
- * - Parallel batch processing uses pre-cached indices to avoid map lookups.
- * - GameEngine::update() sequential order guarantees no concurrent structural changes:
- *   EventManager → GameStateManager → AIManager → CollisionManager → BackgroundSimManager
+ *   for parallel batches with non-overlapping index ranges.
+ * - m_structuralMutex serializes create and processDestructionQueue so a missed
+ *   pause is a lock, not a data race. Dynamic destroyEntity only enqueues.
  */
 
 #include "ai/BehaviorCommonState.hpp"
@@ -133,10 +139,10 @@ public:
      * Example: Human (100 HP) + Warrior (1.3x) = 130 HP
      */
     EntityHandle createNPCWithRaceClass(const Vector2D& position,
-                                        const std::string& race,
-                                        const std::string& charClass,
-                                        Sex sex = Sex::Unknown,
-                                        uint8_t factionOverride = 0xFF);
+        const std::string& race,
+        const std::string& charClass,
+        Sex sex = Sex::Unknown,
+        uint8_t factionOverride = 0xFF);
 
     /**
      * @brief Get all registered race IDs
@@ -160,10 +166,10 @@ public:
      * @return Handle to the created entity, or invalid handle if type/variant not found
      */
     EntityHandle createMonster(const Vector2D& position,
-                               const std::string& monsterType,
-                               const std::string& variant,
-                               Sex sex = Sex::Unknown,
-                               uint8_t factionOverride = 0xFF);
+        const std::string& monsterType,
+        const std::string& variant,
+        Sex sex = Sex::Unknown,
+        uint8_t factionOverride = 0xFF);
 
     /**
      * @brief Create an animal with species and role composition
@@ -175,10 +181,10 @@ public:
      * @return Handle to the created entity, or invalid handle if species/role not found
      */
     EntityHandle createAnimal(const Vector2D& position,
-                              const std::string& species,
-                              const std::string& role,
-                              Sex sex = Sex::Unknown,
-                              uint8_t factionOverride = 0xFF);
+        const std::string& species,
+        const std::string& role,
+        Sex sex = Sex::Unknown,
+        uint8_t factionOverride = 0xFF);
 
     /**
      * @brief Get race info from registry
@@ -255,9 +261,9 @@ public:
      *       Dropped items use WRM spatial index, not collision system.
      */
     EntityHandle createDroppedItem(const Vector2D& position,
-                                   VoidLight::ResourceHandle resourceHandle,
-                                   int quantity = 1,
-                                   const std::string& worldId = "");
+        VoidLight::ResourceHandle resourceHandle,
+        int quantity = 1,
+        const std::string& worldId = "");
 
     /**
      * @brief Create a container entity with auto-inventory
@@ -277,10 +283,10 @@ public:
      * Auto-registers inventory with WorldResourceManager.
      */
     EntityHandle createContainer(const Vector2D& position,
-                                 ContainerType containerType,
-                                 uint16_t maxSlots = 20,
-                                 uint8_t lockLevel = 0,
-                                 const std::string& worldId = "");
+        ContainerType containerType,
+        uint16_t maxSlots = 20,
+        uint8_t lockLevel = 0,
+        const std::string& worldId = "");
 
     /**
      * @brief Create a harvestable resource node
@@ -301,12 +307,12 @@ public:
      * Auto-registers with WorldResourceManager for both registry and spatial queries.
      */
     EntityHandle createHarvestable(const Vector2D& position,
-                                   VoidLight::ResourceHandle yieldResource,
-                                   int yieldMin = 1,
-                                   int yieldMax = 3,
-                                   float respawnTime = 60.0f,
-                                   const std::string& worldId = "",
-                                   VoidLight::HarvestType harvestType = VoidLight::HarvestType::Gathering);
+        VoidLight::ResourceHandle yieldResource,
+        int yieldMin = 1,
+        int yieldMax = 3,
+        float respawnTime = 60.0f,
+        const std::string& worldId = "",
+        VoidLight::HarvestType harvestType = VoidLight::HarvestType::Gathering);
 
     // ========================================================================
     // PHASE 1: REGISTRATION OF EXISTING ENTITIES (Parallel Storage)
@@ -322,11 +328,12 @@ public:
      * @param halfWidth Collision half-width
      * @param halfHeight Collision half-height
      * @return Handle to the registered entity
+     * @details The player's CharacterData::faction is CharacterData::NO_FACTION.
      */
     EntityHandle registerPlayer(EntityHandle::IDType entityId,
-                                const Vector2D& position,
-                                float halfWidth = 32.0f,
-                                float halfHeight = 32.0f);
+        const Vector2D& position,
+        float halfWidth = 32.0f,
+        float halfHeight = 32.0f);
 
     /**
      * @brief Register an existing DroppedItem entity with EntityDataManager
@@ -337,9 +344,9 @@ public:
      * @return Handle to the registered entity
      */
     EntityHandle registerDroppedItem(EntityHandle::IDType entityId,
-                                     const Vector2D& position,
-                                     VoidLight::ResourceHandle resourceHandle,
-                                     int quantity = 1);
+        const Vector2D& position,
+        VoidLight::ResourceHandle resourceHandle,
+        int quantity = 1);
 
     /**
      * @brief Unregister an entity (called when Entity is destroyed)
@@ -357,10 +364,10 @@ public:
      * @return Handle to the created entity
      */
     EntityHandle createProjectile(const Vector2D& position,
-                                  const Vector2D& velocity,
-                                  EntityHandle owner,
-                                  float damage,
-                                  float lifetime = 5.0f);
+        const Vector2D& velocity,
+        EntityHandle owner,
+        float damage,
+        float lifetime = 5.0f);
 
     /**
      * @brief Create an area effect entity
@@ -372,10 +379,10 @@ public:
      * @return Handle to the created entity
      */
     EntityHandle createAreaEffect(const Vector2D& position,
-                                  float radius,
-                                  EntityHandle owner,
-                                  float damage,
-                                  float duration);
+        float radius,
+        EntityHandle owner,
+        float damage,
+        float duration);
 
     /**
      * @brief Create a static obstacle entity (world geometry)
@@ -388,8 +395,8 @@ public:
      * They don't move, have no AI, and use Hibernated tier for minimal overhead.
      */
     EntityHandle createStaticBody(const Vector2D& position,
-                                  float halfWidth,
-                                  float halfHeight);
+        float halfWidth,
+        float halfHeight);
 
     /**
      * @brief Create a trigger entity for detecting entity overlap
@@ -405,10 +412,10 @@ public:
      * Physical triggers participate in full broadphase + resolution.
      */
     EntityHandle createTrigger(const Vector2D& position,
-                               float halfWidth,
-                               float halfHeight,
-                               VoidLight::TriggerTag tag,
-                               VoidLight::TriggerType type);
+        float halfWidth,
+        float halfHeight,
+        VoidLight::TriggerTag tag,
+        VoidLight::TriggerType type);
 
     /**
      * @brief Mark an entity for destruction (processed at end of frame)
@@ -417,7 +424,16 @@ public:
     void destroyEntity(EntityHandle handle);
 
     /**
-     * @brief Process pending destructions (call at end of frame)
+     * @brief Process pending dynamic destructions (one structural owner)
+     *
+     * Legal callers:
+     * - GameEngine::processBackgroundTasks (frame-end; skipped when globally paused)
+     * - WorldManager::unloadWorld (main/test, after world locks drop)
+     * - EntityDataManager::prepareForStateTransition
+     *
+     * Worker, unloadWorldLocked, clearPopulatedNpcs, and
+     * destroyAllNPCsForStateTransition only enqueue. Static harvestable
+     * destroy on unload is immediate via destroyEntity and does not drain.
      */
     void processDestructionQueue();
 
@@ -492,7 +508,7 @@ public:
      */
     [[nodiscard]] bool
     consumeRequiredAmmoForRangedAttack(EntityHandle handle,
-                                       InventoryResourceChange* outChange);
+        InventoryResourceChange& outChange);
 
     [[nodiscard]] float getEffectiveAttackDamage(EntityHandle handle) const;
     [[nodiscard]] float getEffectiveDefense(EntityHandle handle) const;
@@ -523,8 +539,20 @@ public:
      * then fills empty slots. Respects maxStackSize from ResourceTemplateManager.
      */
     bool addToInventory(uint32_t inventoryIndex,
-                        VoidLight::ResourceHandle handle,
-                        int quantity);
+        VoidLight::ResourceHandle handle,
+        int quantity);
+
+    /**
+     * @brief Check whether addToInventory() would accept this add, without mutating
+     * @param inventoryIndex Target inventory
+     * @param handle Resource type handle
+     * @param quantity Amount to add
+     * @return true exactly when addToInventory(inventoryIndex, handle, quantity)
+     *         would succeed now (same validation and stacking capacity rule)
+     */
+    [[nodiscard]] bool canAddToInventory(uint32_t inventoryIndex,
+        VoidLight::ResourceHandle handle,
+        int quantity) const;
 
     /**
      * @brief Remove resources from an inventory
@@ -537,8 +565,8 @@ public:
      * Clears empty slots for reuse.
      */
     bool removeFromInventory(uint32_t inventoryIndex,
-                             VoidLight::ResourceHandle handle,
-                             int quantity);
+        VoidLight::ResourceHandle handle,
+        int quantity);
 
     /**
      * @brief Transfer resources between two inventories without partial mutation
@@ -553,9 +581,9 @@ public:
      */
     [[nodiscard]] std::optional<InventoryTransferResult>
     transferInventoryItem(uint32_t sourceInventoryIndex,
-                          uint32_t targetInventoryIndex,
-                          VoidLight::ResourceHandle handle,
-                          int quantity);
+        uint32_t targetInventoryIndex,
+        VoidLight::ResourceHandle handle,
+        int quantity);
 
     /**
      * @brief Get total quantity of a resource in an inventory
@@ -564,7 +592,7 @@ public:
      * @return Total quantity across all slots, or 0 if not found/invalid
      */
     [[nodiscard]] int getInventoryQuantity(uint32_t inventoryIndex,
-                                           VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Check if an inventory contains at least the specified quantity
@@ -574,8 +602,8 @@ public:
      * @return true if inventory contains >= quantity
      */
     [[nodiscard]] bool hasInInventory(uint32_t inventoryIndex,
-                                      VoidLight::ResourceHandle handle,
-                                      int quantity) const;
+        VoidLight::ResourceHandle handle,
+        int quantity) const;
 
     /**
      * @brief Get all resources in an inventory as a map
@@ -595,7 +623,7 @@ public:
      * @return Slot contents by value, or an empty slot for invalid input/state
      */
     [[nodiscard]] InventorySlotData getInventorySlot(uint32_t inventoryIndex,
-                                                     size_t slotIndex) const;
+        size_t slotIndex) const;
 
     /**
      * @brief Copy ordered physical inventory slots into caller-owned storage
@@ -604,7 +632,7 @@ public:
      * @return Number of slots copied, or 0 for invalid input/state
      */
     [[nodiscard]] size_t getInventorySlots(uint32_t inventoryIndex,
-                                           std::span<InventorySlotData> outSlots) const;
+        std::span<InventorySlotData> outSlots) const;
 
     /**
      * @brief Swap two ordered physical inventory slots
@@ -617,8 +645,8 @@ public:
      * and usedSlots remains unchanged because occupancy count does not change.
      */
     bool swapInventorySlots(uint32_t inventoryIndex,
-                            size_t sourceSlot,
-                            size_t targetSlot);
+        size_t sourceSlot,
+        size_t targetSlot);
 
     /**
      * @brief Get inventory data by index
@@ -641,8 +669,8 @@ public:
      */
     [[nodiscard]] bool isValidInventoryIndex(uint32_t inventoryIndex) const noexcept {
         return inventoryIndex != INVALID_INVENTORY_INDEX &&
-               inventoryIndex < m_inventoryData.size() &&
-               m_inventoryData[inventoryIndex].isValid();
+            inventoryIndex < m_inventoryData.size() &&
+            m_inventoryData[inventoryIndex].isValid();
     }
 
     // ========================================================================
@@ -790,6 +818,54 @@ public:
     [[nodiscard]] const SparseSidecar<KnockbackData>& knockbackSidecar() const noexcept;
 
     /**
+     * @brief Player-only faction standing. 0 if the sidecar is missing or faction is oob.
+     */
+    [[nodiscard]] int8_t getPlayerFactionStanding(size_t edmIndex, uint8_t faction) const;
+
+    /**
+     * @brief Add delta to player standing for faction. Lazy apply(); clamps to int8_t.
+     */
+    void addPlayerFactionStanding(size_t edmIndex, uint8_t faction, int8_t delta);
+
+    // ========================================================================
+    // NPC NEED SIDECAR ACCESS (SparseSidecar<NpcNeedData>)
+    // Storage only; need growth, threshold, and backoff are Behaviors:: policy.
+    // ========================================================================
+
+    /**
+     * @brief Create (or retrieve existing) need state for an entity. Main-thread only.
+     */
+    NpcNeedData& ensureNpcNeed(size_t edmIndex);
+
+    /**
+     * @brief Remove the entity's need entry (no-op when absent). Main-thread only,
+     *        never while AI batches run.
+     */
+    void removeNpcNeed(size_t edmIndex);
+
+    /**
+     * @brief True if the entity has a need entry.
+     */
+    [[nodiscard]] bool hasNpcNeed(size_t edmIndex) const noexcept;
+
+    /**
+     * @brief Need pressure in [0, 1]; 0 when the entity has no need entry.
+     */
+    [[nodiscard]] float getNpcNeedPressure(size_t edmIndex) const noexcept;
+
+    /**
+     * @brief Set need pressure (clamped to [0, 1]). Creates the entry if absent. Main-thread only.
+     */
+    void setNpcNeedPressure(size_t edmIndex, float pressure);
+
+    /**
+     * @brief Direct access to the need sidecar (for BehaviorContext pre-fetch).
+     *        Worker threads mutate only the entry of the entity they execute via get().
+     */
+    [[nodiscard]] SparseSidecar<NpcNeedData>& npcNeedSidecar() noexcept;
+    [[nodiscard]] const SparseSidecar<NpcNeedData>& npcNeedSidecar() const noexcept;
+
+    /**
      * @brief Get read-only span of static hot data (for collision system)
      */
     [[nodiscard]] std::span<const EntityHotData> getStaticHotDataArray() const;
@@ -820,19 +896,27 @@ public:
     [[nodiscard]] const CharacterData& getCharacterData(EntityHandle handle) const;
 
     void setCharacterBaseStats(EntityHandle handle,
-                               float maxHealth,
-                               float maxStamina,
-                               float attackDamage,
-                               float attackRange,
-                               float moveSpeed);
+        float maxHealth,
+        float maxStamina,
+        float attackDamage,
+        float attackRange,
+        float moveSpeed);
     void setCharacterInventoryIndex(EntityHandle handle, uint32_t inventoryIndex);
 
     /**
-     * @brief Set the faction of a character and update collision layers
-     * @param handle Entity handle
-     * @param newFaction New faction value (0=Friendly, 1=Enemy, 2=Neutral)
+     * @brief Set the faction id of a character. Collision grouping is AIManager policy.
+     * @param handle Entity handle. EntityKind::Player is rejected with a warning:
+     *        the player stays CharacterData::NO_FACTION (set by registerPlayer).
+     * @param newFaction Faction id (0-15). Does not consult faction id for Layer_Enemy.
      */
     void setFaction(EntityHandle handle, uint8_t newFaction);
+
+    /**
+     * @brief Storage setter for NPC collision grouping. Does not consult faction id.
+     * @param index EDM index. Out of range is a no-op.
+     * @param asEnemy true: Layer_Enemy + mask including Enemy; false: Layer_Default without Enemy.
+     */
+    void setNpcCollisionAsEnemy(size_t index, bool asEnemy);
 
     [[nodiscard]] ItemData& getItemData(EntityHandle handle);
     [[nodiscard]] const ItemData& getItemData(EntityHandle handle) const;
@@ -851,6 +935,12 @@ public:
     [[nodiscard]] const HarvestableData& getHarvestableData(EntityHandle handle) const;
     [[nodiscard]] HarvestableData& getHarvestableData(uint32_t typeLocalIndex);
     [[nodiscard]] const HarvestableData& getHarvestableData(uint32_t typeLocalIndex) const;
+
+    /**
+     * @brief Storage write: mark a harvestable depleted and start its respawn timer.
+     *        Main-thread only; the caller owns validation and events (HarvestCommit).
+     */
+    void markHarvestableDepleted(uint32_t typeLocalIndex);
 
     [[nodiscard]] AreaEffectData& getAreaEffectData(EntityHandle handle);
     [[nodiscard]] const AreaEffectData& getAreaEffectData(EntityHandle handle) const;
@@ -1010,35 +1100,38 @@ public:
     void clearBehaviorConfig(size_t edmIdx);
 
     // Per-variant dense config accessors — const& (no copy)
-    [[nodiscard]] const VoidLight::IdleBehaviorConfig&   getIdleConfig(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::IdleBehaviorConfig& getIdleConfig(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::WanderBehaviorConfig& getWanderConfig(uint32_t poolIndex) const;
-    [[nodiscard]] const VoidLight::ChaseBehaviorConfig&  getChaseConfig(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::ChaseBehaviorConfig& getChaseConfig(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::PatrolBehaviorConfig& getPatrolConfig(uint32_t poolIndex) const;
-    [[nodiscard]] const VoidLight::FleeBehaviorConfig&   getFleeConfig(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::FleeBehaviorConfig& getFleeConfig(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::FollowBehaviorConfig& getFollowConfig(uint32_t poolIndex) const;
-    [[nodiscard]] const VoidLight::GuardBehaviorConfig&  getGuardConfig(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::GuardBehaviorConfig& getGuardConfig(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::AttackBehaviorConfig& getAttackConfig(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::ForageBehaviorConfig& getForageConfig(uint32_t poolIndex) const;
 
     // Per-variant dense state accessors — mutable& for frame-by-frame writes in execute().
     // Indexed by the same pool index as the corresponding config pool.
-    [[nodiscard]] VoidLight::IdleStateData&   getIdleState(uint32_t poolIndex);
+    [[nodiscard]] VoidLight::IdleStateData& getIdleState(uint32_t poolIndex);
     [[nodiscard]] VoidLight::WanderStateData& getWanderState(uint32_t poolIndex);
-    [[nodiscard]] VoidLight::ChaseStateData&  getChaseState(uint32_t poolIndex);
+    [[nodiscard]] VoidLight::ChaseStateData& getChaseState(uint32_t poolIndex);
     [[nodiscard]] VoidLight::PatrolStateData& getPatrolState(uint32_t poolIndex);
-    [[nodiscard]] VoidLight::FleeStateData&   getFleeState(uint32_t poolIndex);
+    [[nodiscard]] VoidLight::FleeStateData& getFleeState(uint32_t poolIndex);
     [[nodiscard]] VoidLight::FollowStateData& getFollowState(uint32_t poolIndex);
-    [[nodiscard]] VoidLight::GuardStateData&  getGuardState(uint32_t poolIndex);
+    [[nodiscard]] VoidLight::GuardStateData& getGuardState(uint32_t poolIndex);
     [[nodiscard]] VoidLight::AttackStateData& getAttackState(uint32_t poolIndex);
+    [[nodiscard]] VoidLight::ForageStateData& getForageState(uint32_t poolIndex);
 
     // Const overloads for diagnostics / tests
-    [[nodiscard]] const VoidLight::IdleStateData&   getIdleState(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::IdleStateData& getIdleState(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::WanderStateData& getWanderState(uint32_t poolIndex) const;
-    [[nodiscard]] const VoidLight::ChaseStateData&  getChaseState(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::ChaseStateData& getChaseState(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::PatrolStateData& getPatrolState(uint32_t poolIndex) const;
-    [[nodiscard]] const VoidLight::FleeStateData&   getFleeState(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::FleeStateData& getFleeState(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::FollowStateData& getFollowState(uint32_t poolIndex) const;
-    [[nodiscard]] const VoidLight::GuardStateData&  getGuardState(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::GuardStateData& getGuardState(uint32_t poolIndex) const;
     [[nodiscard]] const VoidLight::AttackStateData& getAttackState(uint32_t poolIndex) const;
+    [[nodiscard]] const VoidLight::ForageStateData& getForageState(uint32_t poolIndex) const;
 
     /**
      * @brief Check if behavior data exists and is valid for an entity
@@ -1108,8 +1201,8 @@ public:
      * @param maxResults Maximum results to return (0 = all)
      */
     void findMemoriesByType(size_t index, MemoryType type,
-                            std::vector<const MemoryEntry*>& outMemories,
-                            size_t maxResults = 0) const;
+        std::vector<const MemoryEntry*>& outMemories,
+        size_t maxResults = 0) const;
 
     /**
      * @brief Find memories involving a specific entity
@@ -1118,7 +1211,7 @@ public:
      * @param outMemories Output vector of matching memories
      */
     void findMemoriesOfEntity(size_t index, EntityHandle subject,
-                              std::vector<const MemoryEntry*>& outMemories) const;
+        std::vector<const MemoryEntry*>& outMemories) const;
 
     /**
      * @brief Update emotional state with decay
@@ -1137,7 +1230,7 @@ public:
      * @param suspicion Delta suspicion (-1.0 to 1.0)
      */
     void modifyEmotions(size_t index, float aggression, float fear,
-                        float curiosity, float suspicion);
+        float curiosity, float suspicion);
 
     /**
      * @brief Record a combat event (updates aggregate stats + adds memory)
@@ -1149,8 +1242,8 @@ public:
      * @param gameTime Current game time for timestamp
      */
     void recordCombatEvent(size_t index, EntityHandle attacker,
-                           EntityHandle target, float damage, bool wasAttacked,
-                           float gameTime);
+        EntityHandle target, float damage, bool wasAttacked,
+        float gameTime);
 
     /**
      * @brief Add a location to history
@@ -1185,8 +1278,8 @@ public:
      * @param backgroundRadius Entities within this (but outside activeRadius) are Background
      */
     void updateSimulationTiers(const Vector2D& referencePoint,
-                               float activeRadius = 1500.0f,
-                               float backgroundRadius = 10000.0f);
+        float activeRadius = 1500.0f,
+        float backgroundRadius = 10000.0f);
 
     /**
      * @brief Get indices of all Active tier entities
@@ -1234,9 +1327,9 @@ public:
      * @param kindFilter Optional: only return entities of this kind (COUNT = all)
      */
     void queryEntitiesInRadius(const Vector2D& center,
-                               float radius,
-                               std::vector<EntityHandle>& outHandles,
-                               EntityKind kindFilter = EntityKind::COUNT) const;
+        float radius,
+        std::vector<EntityHandle>& outHandles,
+        EntityKind kindFilter = EntityKind::COUNT) const;
 
     /**
      * @brief Get total entity count
@@ -1294,16 +1387,16 @@ private:
      * @note Use createNPCWithRaceClass() for the public API
      */
     EntityHandle createNPC(const Vector2D& position,
-                          float halfWidth = 16.0f,
-                          float halfHeight = 16.0f);
+        float halfWidth = 16.0f,
+        float halfHeight = 16.0f);
 
     // ========================================================================
     // STORAGE (Structure of Arrays)
     // ========================================================================
 
     // Shared data (indexed by global entity index)
-    std::vector<EntityHotData> m_hotData;           // Dynamic entities only
-    std::vector<EntityHotData> m_staticHotData;     // Static entities (separate, not tiered)
+    std::vector<EntityHotData> m_hotData; // Dynamic entities only
+    std::vector<EntityHotData> m_staticHotData; // Static entities (separate, not tiered)
     std::vector<EntityHandle::IDType> m_entityIds;
     std::vector<EntityHandle::IDType> m_staticEntityIds;
 
@@ -1312,34 +1405,37 @@ private:
     std::unordered_map<EntityHandle::IDType, size_t> m_staticIdToIndex;
 
     // Type-specific data (indexed by typeLocalIndex in EntityHotData)
-    std::vector<CharacterData> m_characterData;      // Player + NPC
-    std::vector<ItemData> m_itemData;                // DroppedItem
-    std::vector<ProjectileData> m_projectileData;    // Projectile
-    std::vector<ContainerData> m_containerData;      // Container
-    std::vector<HarvestableData> m_harvestableData;  // Harvestable
-    std::vector<AreaEffectData> m_areaEffectData;    // AreaEffect
-    std::vector<NPCRenderData> m_npcRenderData;      // NPC render data (same index as CharacterData for NPCs)
-    std::vector<ItemRenderData> m_itemRenderData;    // DroppedItem render data (same index as ItemData)
-    std::vector<ContainerRenderData> m_containerRenderData;  // Container render data
+    std::vector<CharacterData> m_characterData; // Player + NPC
+    std::vector<ItemData> m_itemData; // DroppedItem
+    std::vector<ProjectileData> m_projectileData; // Projectile
+    std::vector<ContainerData> m_containerData; // Container
+    std::vector<HarvestableData> m_harvestableData; // Harvestable
+    std::vector<AreaEffectData> m_areaEffectData; // AreaEffect
+    std::vector<NPCRenderData> m_npcRenderData; // NPC render data (same index as CharacterData for NPCs)
+    std::vector<ItemRenderData> m_itemRenderData; // DroppedItem render data (same index as ItemData)
+    std::vector<ContainerRenderData> m_containerRenderData; // Container render data
 
     // Inventory data (indexed by inventory index from createInventory())
     std::vector<InventoryData> m_inventoryData;
-    std::unordered_map<uint32_t, InventoryOverflow> m_inventoryOverflow;  // overflowId -> overflow data
-    std::vector<uint32_t> m_freeInventorySlots;                           // Free-list for inventory reuse
-    uint32_t m_nextOverflowId{1};                                         // Next overflow ID (0 = none)
-    mutable std::mutex m_inventoryMutex;                                  // Thread safety for inventory ops
+    std::unordered_map<uint32_t, InventoryOverflow> m_inventoryOverflow; // overflowId -> overflow data
+    std::vector<uint32_t> m_freeInventorySlots; // Free-list for inventory reuse
+    uint32_t m_nextOverflowId{1}; // Next overflow ID (0 = none)
+    mutable std::mutex m_inventoryMutex; // Thread safety for inventory ops
 
     // Transient knockback state — sparse/dense; only entities under knockback occupy space.
     // resizeSparse() called at every m_hotData growth site (allocateSlot new-slot path).
     // removeAllFor() called from freeSlot() to clean up on entity destruction.
     SparseSidecar<KnockbackData> m_knockback;
+    SparseSidecar<PlayerFactionStanding> m_playerFactionStanding;
+    // Civilian survival need — entries created by AIManager role assignment / Forage init.
+    SparseSidecar<NpcNeedData> m_npcNeed;
 
     // Sidecar coordination hooks — registered once in init(). Each sidecar pushes its
     // three lambdas here so allocateSlot / freeSlot / clearAllEntityStorage dispatch
     // to all sidecars without per-sidecar edits at each call site.
     std::vector<std::function<void(size_t /*newCapacity*/)>> m_sidecarGrowHooks;
-    std::vector<std::function<void(uint32_t /*edmIdx*/)>>    m_sidecarPerEntityHooks;
-    std::vector<std::function<void()>>                       m_sidecarResetHooks;
+    std::vector<std::function<void(uint32_t /*edmIdx*/)>> m_sidecarPerEntityHooks;
+    std::vector<std::function<void()>> m_sidecarResetHooks;
 
     // Path data (indexed by edmIndex, sparse - grows lazily for AI entities)
     std::vector<PathData> m_pathData;
@@ -1358,14 +1454,15 @@ private:
     // Dense per-variant config pools.  Only entities that actually use a given
     // behavior type occupy space here — dramatically cheaper than the old 388-byte
     // union for every entity regardless of type.
-    std::vector<VoidLight::IdleBehaviorConfig>   m_idleConfigs;
+    std::vector<VoidLight::IdleBehaviorConfig> m_idleConfigs;
     std::vector<VoidLight::WanderBehaviorConfig> m_wanderConfigs;
-    std::vector<VoidLight::ChaseBehaviorConfig>  m_chaseConfigs;
+    std::vector<VoidLight::ChaseBehaviorConfig> m_chaseConfigs;
     std::vector<VoidLight::PatrolBehaviorConfig> m_patrolConfigs;
-    std::vector<VoidLight::FleeBehaviorConfig>   m_fleeConfigs;
+    std::vector<VoidLight::FleeBehaviorConfig> m_fleeConfigs;
     std::vector<VoidLight::FollowBehaviorConfig> m_followConfigs;
-    std::vector<VoidLight::GuardBehaviorConfig>  m_guardConfigs;
+    std::vector<VoidLight::GuardBehaviorConfig> m_guardConfigs;
     std::vector<VoidLight::AttackBehaviorConfig> m_attackConfigs;
+    std::vector<VoidLight::ForageBehaviorConfig> m_forageConfigs;
 
     // Parallel owner vectors — m_*Owners[i] == edmIndex that owns m_*Configs[i]
     // AND m_*States[i]. Config and state pools share the same owner vector by invariant.
@@ -1378,18 +1475,20 @@ private:
     std::vector<size_t> m_followOwners;
     std::vector<size_t> m_guardOwners;
     std::vector<size_t> m_attackOwners;
+    std::vector<size_t> m_forageOwners;
 
     // Dense per-variant state pools — lockstep with config pools (same index, same owner).
     // Populated with a default-constructed slot in reassignBehaviorConfig; filled by
     // Behaviors::init*() afterward. Popped together with the config in clearBehaviorConfig.
-    std::vector<VoidLight::IdleStateData>   m_idleStates;
+    std::vector<VoidLight::IdleStateData> m_idleStates;
     std::vector<VoidLight::WanderStateData> m_wanderStates;
-    std::vector<VoidLight::ChaseStateData>  m_chaseStates;
+    std::vector<VoidLight::ChaseStateData> m_chaseStates;
     std::vector<VoidLight::PatrolStateData> m_patrolStates;
-    std::vector<VoidLight::FleeStateData>   m_fleeStates;
+    std::vector<VoidLight::FleeStateData> m_fleeStates;
     std::vector<VoidLight::FollowStateData> m_followStates;
-    std::vector<VoidLight::GuardStateData>  m_guardStates;
+    std::vector<VoidLight::GuardStateData> m_guardStates;
     std::vector<VoidLight::AttackStateData> m_attackStates;
+    std::vector<VoidLight::ForageStateData> m_forageStates;
 
     // NPC Memory data (indexed by edmIndex, pre-allocated alongside hotData)
     // Persists across behavior changes unlike BehaviorData
@@ -1422,8 +1521,9 @@ private:
     mutable bool m_triggerDetectionDirty{true};
 
     // Kind indices (per-kind dirty flags to avoid full rebuild when querying single kind)
-    // NOTE: Entity creation is protected by m_creationMutex (safe from worker threads).
-    // Destruction uses m_destructionMutex. These dirty flags don't need atomics.
+    // NOTE: Create and drain share m_structuralMutex (one structural owner).
+    // Dynamic destroyEntity only takes m_destructionMutex to enqueue.
+    // These dirty flags don't need atomics.
     std::array<std::vector<size_t>, static_cast<size_t>(EntityKind::COUNT)> m_kindIndices;
     mutable std::array<bool, static_cast<size_t>(EntityKind::COUNT)> m_kindIndicesDirty{};
 
@@ -1443,7 +1543,20 @@ private:
      * @note MUST be called while holding m_inventoryMutex lock
      */
     [[nodiscard]] int getInventoryQuantityLocked(uint32_t inventoryIndex,
-                                                  VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
+
+    /**
+     * @brief Internal: Units of `handle` an inventory can still accept
+     * @param inventoryIndex Valid inventory index
+     * @param handle Resource type handle
+     * @param maxStack Resolved max stack size for `handle`
+     * @return Free room in same-type stacks plus maxStack per empty slot; all
+     *         inline slots count regardless of maxSlots (non-issues C.87)
+     * @note MUST be called while holding m_inventoryMutex lock
+     */
+    [[nodiscard]] int inventoryAddCapacityLocked(uint32_t inventoryIndex,
+        VoidLight::ResourceHandle handle,
+        int maxStack) const;
 
     /**
      * @brief Internal: Destroy a static resource entity (DroppedItem, Container, Harvestable)
@@ -1454,7 +1567,7 @@ private:
 
     // Destruction queue and processing buffer (avoid per-frame allocation)
     std::vector<EntityHandle> m_destructionQueue;
-    std::vector<EntityHandle> m_destroyBuffer;  // Reused in processDestructionQueue
+    std::vector<EntityHandle> m_destroyBuffer; // Reused in processDestructionQueue
 
     // Free list for slot reuse
     std::vector<size_t> m_freeSlots;
@@ -1465,8 +1578,8 @@ private:
     std::vector<uint32_t> m_staticGenerations;
 
     // Thread safety for entity operations
-    std::mutex m_destructionMutex;  // Protects destruction queue
-    std::mutex m_creationMutex;     // Protects entity creation (allocateSlot + vector growth)
+    std::mutex m_destructionMutex; // Protects destruction queue enqueue/swap
+    std::mutex m_structuralMutex; // One owner: create + processDestructionQueue freeSlot
 
     // ========================================================================
     // CREATURE COMPOSITION REGISTRIES
@@ -1502,8 +1615,6 @@ private:
     void initializeSpeciesRegistry();
     void initializeAnimalRoleRegistry();
 
-    // Helper for faction-based collision layers
-    void applyFactionCollision(size_t index, uint8_t faction);
     bool autoEquipCharacterEquipment(EntityHandle handle);
     void recalculateCharacterEquipmentStats(uint32_t characterIndex);
     [[nodiscard]] VoidLight::ResourceHandle
@@ -1515,7 +1626,7 @@ private:
     // Counters
     std::atomic<size_t> m_totalEntityCount{0};
     std::array<std::atomic<size_t>, static_cast<size_t>(EntityKind::COUNT)> m_countByKind{};
-    std::array<std::atomic<size_t>, 3> m_countByTier{};  // Active, Background, Hibernated
+    std::array<std::atomic<size_t>, 3> m_countByTier{}; // Active, Background, Hibernated
 };
 
 // ============================================================================
@@ -1601,6 +1712,11 @@ inline const VoidLight::AttackBehaviorConfig& EntityDataManager::getAttackConfig
     return m_attackConfigs[poolIndex];
 }
 
+inline const VoidLight::ForageBehaviorConfig& EntityDataManager::getForageConfig(uint32_t poolIndex) const {
+    assert(poolIndex < m_forageConfigs.size() && "Forage config pool index out of bounds");
+    return m_forageConfigs[poolIndex];
+}
+
 // ============================================================================
 // BEHAVIOR STATE POOL ACCESSORS (inline hot-path)
 // ============================================================================
@@ -1675,6 +1791,15 @@ inline VoidLight::AttackStateData& EntityDataManager::getAttackState(uint32_t po
 inline const VoidLight::AttackStateData& EntityDataManager::getAttackState(uint32_t poolIndex) const {
     assert(poolIndex < m_attackStates.size() && "Attack state pool index out of bounds");
     return m_attackStates[poolIndex];
+}
+
+inline VoidLight::ForageStateData& EntityDataManager::getForageState(uint32_t poolIndex) {
+    assert(poolIndex < m_forageStates.size() && "Forage state pool index out of bounds");
+    return m_forageStates[poolIndex];
+}
+inline const VoidLight::ForageStateData& EntityDataManager::getForageState(uint32_t poolIndex) const {
+    assert(poolIndex < m_forageStates.size() && "Forage state pool index out of bounds");
+    return m_forageStates[poolIndex];
 }
 
 inline PathData& EntityDataManager::getPathData(size_t index) {

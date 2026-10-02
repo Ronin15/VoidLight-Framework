@@ -60,11 +60,11 @@ class SaveGameManager {
     
     // Slot-based operations  
     bool saveToSlot(int slotNumber, const Player& player);
-    bool loadFromSlot(int slotNumber, Player& player);
+    bool loadFromSlot(int slotNumber, Player& player) const;
     
     // File management
     bool deleteSave(const std::string& saveFileName) const;
-    bool deleteSlot(int slotNumber);
+    bool deleteSlot(int slotNumber) const;
     
     // Information and validation
     std::vector<std::string> getSaveFiles() const;

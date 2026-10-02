@@ -15,33 +15,47 @@
 /**
  * @brief Time of day periods for visual effects
  */
-enum class TimePeriod : uint8_t
-{
-    Morning = 0,   // 5:00 - 8:00
-    Day = 1,       // 8:00 - 17:00
-    Evening = 2,   // 17:00 - 21:00
-    Night = 3      // 21:00 - 5:00
+enum class TimePeriod : uint8_t {
+    Morning = 0, // 5:00 - 8:00
+    Day = 1, // 8:00 - 17:00
+    Evening = 2, // 17:00 - 21:00
+    Night = 3 // 21:00 - 5:00
 };
+
+/**
+ * @brief Map a game hour (0-23.999) to Morning/Day/Evening/Night.
+ * Single owner of period bounds: Morning [5,8), Day [8,17), Evening [17,21), else Night.
+ */
+[[nodiscard]] inline TimePeriod hourToTimePeriod(float hour) {
+    if (hour >= 5.0f && hour < 8.0f) {
+        return TimePeriod::Morning;
+    }
+    if (hour >= 8.0f && hour < 17.0f) {
+        return TimePeriod::Day;
+    }
+    if (hour >= 17.0f && hour < 21.0f) {
+        return TimePeriod::Evening;
+    }
+    return TimePeriod::Night;
+}
 
 /**
  * @brief Event types for time-related changes
  */
-enum class TimeEventType
-{
-    HourChanged,        // Every in-game hour
-    DayChanged,         // When day advances
-    MonthChanged,       // When month changes
-    SeasonChanged,      // When season changes
-    YearChanged,        // When year increments
-    WeatherCheck,       // Periodic weather roll
-    TimePeriodChanged   // When time period changes (Morning/Day/Evening/Night)
+enum class TimeEventType {
+    HourChanged, // Every in-game hour
+    DayChanged, // When day advances
+    MonthChanged, // When month changes
+    SeasonChanged, // When season changes
+    YearChanged, // When year increments
+    WeatherCheck, // Periodic weather roll
+    TimePeriodChanged // When time period changes (Morning/Day/Evening/Night)
 };
 
 /**
  * @brief Base class for all time-related events
  */
-class TimeEvent : public Event
-{
+class TimeEvent : public Event {
 public:
     explicit TimeEvent(TimeEventType eventType)
         : Event(), m_timeEventType(eventType) {}
@@ -61,8 +75,7 @@ public:
     std::string getType() const override { return getTypeName(); }
     bool checkConditions() override { return true; }
 
-    void reset() override
-    {
+    void reset() override {
         Event::resetCooldown();
         m_hasTriggered = false;
     }
@@ -74,12 +87,10 @@ protected:
 /**
  * @brief Event fired when the game hour changes
  */
-class HourChangedEvent : public TimeEvent
-{
+class HourChangedEvent : public TimeEvent {
 public:
     HourChangedEvent(int hour, bool isNight)
-        : TimeEvent(TimeEventType::HourChanged),
-          m_hour(hour), m_isNight(isNight) {}
+        : TimeEvent(TimeEventType::HourChanged), m_hour(hour), m_isNight(isNight) {}
 
     int getHour() const { return m_hour; }
     bool isNight() const { return m_isNight; }
@@ -88,8 +99,7 @@ public:
     std::string getName() const override { return "HourChangedEvent"; }
     std::string getType() const override { return "HourChangedEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_hour = 0;
         m_isNight = false;
@@ -103,12 +113,10 @@ private:
 /**
  * @brief Event fired when a new day begins
  */
-class DayChangedEvent : public TimeEvent
-{
+class DayChangedEvent : public TimeEvent {
 public:
     DayChangedEvent(int day, int dayOfMonth, int month, const std::string& monthName)
-        : TimeEvent(TimeEventType::DayChanged),
-          m_day(day), m_dayOfMonth(dayOfMonth), m_month(month), m_monthName(monthName) {}
+        : TimeEvent(TimeEventType::DayChanged), m_day(day), m_dayOfMonth(dayOfMonth), m_month(month), m_monthName(monthName) {}
 
     int getDay() const { return m_day; }
     int getDayOfMonth() const { return m_dayOfMonth; }
@@ -119,8 +127,7 @@ public:
     std::string getName() const override { return "DayChangedEvent"; }
     std::string getType() const override { return "DayChangedEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_day = 0;
         m_dayOfMonth = 0;
@@ -138,12 +145,10 @@ private:
 /**
  * @brief Event fired when the month changes
  */
-class MonthChangedEvent : public TimeEvent
-{
+class MonthChangedEvent : public TimeEvent {
 public:
     MonthChangedEvent(int month, const std::string& monthName, Season season)
-        : TimeEvent(TimeEventType::MonthChanged),
-          m_month(month), m_monthName(monthName), m_season(season) {}
+        : TimeEvent(TimeEventType::MonthChanged), m_month(month), m_monthName(monthName), m_season(season) {}
 
     int getMonth() const { return m_month; }
     const std::string& getMonthName() const { return m_monthName; }
@@ -153,8 +158,7 @@ public:
     std::string getName() const override { return "MonthChangedEvent"; }
     std::string getType() const override { return "MonthChangedEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_month = 0;
         m_monthName.clear();
@@ -170,14 +174,11 @@ private:
 /**
  * @brief Event fired when the season changes
  */
-class SeasonChangedEvent : public TimeEvent
-{
+class SeasonChangedEvent : public TimeEvent {
 public:
     SeasonChangedEvent(Season newSeason, Season previousSeason,
-                       const std::string& seasonName)
-        : TimeEvent(TimeEventType::SeasonChanged),
-          m_season(newSeason), m_previousSeason(previousSeason),
-          m_seasonName(seasonName) {}
+        const std::string& seasonName)
+        : TimeEvent(TimeEventType::SeasonChanged), m_season(newSeason), m_previousSeason(previousSeason), m_seasonName(seasonName) {}
 
     Season getSeason() const { return m_season; }
     Season getPreviousSeason() const { return m_previousSeason; }
@@ -187,8 +188,7 @@ public:
     std::string getName() const override { return "SeasonChangedEvent"; }
     std::string getType() const override { return "SeasonChangedEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_season = Season::Spring;
         m_previousSeason = Season::Spring;
@@ -204,8 +204,7 @@ private:
 /**
  * @brief Event fired when a new year begins
  */
-class YearChangedEvent : public TimeEvent
-{
+class YearChangedEvent : public TimeEvent {
 public:
     explicit YearChangedEvent(int year)
         : TimeEvent(TimeEventType::YearChanged), m_year(year) {}
@@ -216,8 +215,7 @@ public:
     std::string getName() const override { return "YearChangedEvent"; }
     std::string getType() const override { return "YearChangedEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_year = 0;
     }
@@ -229,12 +227,10 @@ private:
 /**
  * @brief Event fired when automatic weather should be checked/updated
  */
-class WeatherCheckEvent : public TimeEvent
-{
+class WeatherCheckEvent : public TimeEvent {
 public:
     WeatherCheckEvent(Season season, WeatherType recommendedWeather)
-        : TimeEvent(TimeEventType::WeatherCheck),
-          m_season(season), m_recommendedWeather(recommendedWeather) {}
+        : TimeEvent(TimeEventType::WeatherCheck), m_season(season), m_recommendedWeather(recommendedWeather) {}
 
     Season getSeason() const { return m_season; }
     WeatherType getRecommendedWeather() const { return m_recommendedWeather; }
@@ -243,8 +239,7 @@ public:
     std::string getName() const override { return "WeatherCheckEvent"; }
     std::string getType() const override { return "WeatherCheckEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_season = Season::Spring;
         // m_recommendedWeather will be set on next use
@@ -258,27 +253,25 @@ private:
 /**
  * @brief Visual configuration for a time period (overlay tint)
  */
-struct TimePeriodVisuals
-{
+struct TimePeriodVisuals {
     uint8_t overlayR{0};
     uint8_t overlayG{0};
     uint8_t overlayB{0};
-    uint8_t overlayA{0};  // Alpha 0 = no tint
+    uint8_t overlayA{0}; // Alpha 0 = no tint
 
     // Factory methods for default configurations
-    static TimePeriodVisuals getMorning() { return {255, 140, 80, 30}; }    // Red-orange dawn
-    static TimePeriodVisuals getDay() { return {255, 255, 200, 8}; }        // Slight yellow
-    static TimePeriodVisuals getEvening() { return {255, 80, 40, 40}; }     // Orange-red sunset
-    static TimePeriodVisuals getNight() { return {20, 20, 60, 90}; }        // Darker blue/purple
+    static TimePeriodVisuals getMorning() { return {255, 140, 80, 30}; } // Red-orange dawn
+    static TimePeriodVisuals getDay() { return {255, 255, 200, 8}; } // Slight yellow
+    static TimePeriodVisuals getEvening() { return {255, 80, 40, 40}; } // Orange-red sunset
+    static TimePeriodVisuals getNight() { return {20, 20, 60, 90}; } // Darker blue/purple
 
-    static TimePeriodVisuals getForPeriod(TimePeriod period)
-    {
+    static TimePeriodVisuals getForPeriod(TimePeriod period) {
         switch (period) {
             case TimePeriod::Morning: return getMorning();
-            case TimePeriod::Day:     return getDay();
+            case TimePeriod::Day: return getDay();
             case TimePeriod::Evening: return getEvening();
-            case TimePeriod::Night:   return getNight();
-            default:                  return getDay();
+            case TimePeriod::Night: return getNight();
+            default: return getDay();
         }
     }
 };
@@ -286,26 +279,23 @@ struct TimePeriodVisuals
 /**
  * @brief Event fired when the time period changes (Morning/Day/Evening/Night)
  */
-class TimePeriodChangedEvent : public TimeEvent
-{
+class TimePeriodChangedEvent : public TimeEvent {
 public:
     TimePeriodChangedEvent(TimePeriod newPeriod, TimePeriod previousPeriod,
-                           const TimePeriodVisuals& visuals)
-        : TimeEvent(TimeEventType::TimePeriodChanged),
-          m_period(newPeriod), m_previousPeriod(previousPeriod), m_visuals(visuals) {}
+        const TimePeriodVisuals& visuals)
+        : TimeEvent(TimeEventType::TimePeriodChanged), m_period(newPeriod), m_previousPeriod(previousPeriod), m_visuals(visuals) {}
 
     TimePeriod getPeriod() const { return m_period; }
     TimePeriod getPreviousPeriod() const { return m_previousPeriod; }
     const TimePeriodVisuals& getVisuals() const { return m_visuals; }
 
-    std::string_view getPeriodName() const
-    {
+    std::string_view getPeriodName() const {
         switch (m_period) {
             case TimePeriod::Morning: return "Morning";
-            case TimePeriod::Day:     return "Day";
+            case TimePeriod::Day: return "Day";
             case TimePeriod::Evening: return "Evening";
-            case TimePeriod::Night:   return "Night";
-            default:                  return "Unknown";
+            case TimePeriod::Night: return "Night";
+            default: return "Unknown";
         }
     }
 
@@ -313,8 +303,7 @@ public:
     std::string getName() const override { return "TimePeriodChangedEvent"; }
     std::string getType() const override { return "TimePeriodChangedEvent"; }
 
-    void reset() override
-    {
+    void reset() override {
         TimeEvent::reset();
         m_period = TimePeriod::Day;
         m_previousPeriod = TimePeriod::Day;

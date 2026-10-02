@@ -8,11 +8,10 @@
 namespace VoidLight {
 
 GPUTransferBuffer::GPUTransferBuffer(SDL_GPUDevice* device,
-                                     SDL_GPUTransferBufferUsage usage,
-                                     uint32_t size)
+    SDL_GPUTransferBufferUsage usage,
+    uint32_t size)
     : m_device(device)
-    , m_size(size)
-{
+    , m_size(size) {
     if (!device) {
         GAMEENGINE_ERROR("GPUTransferBuffer: null device");
         return;
@@ -31,7 +30,7 @@ GPUTransferBuffer::GPUTransferBuffer(SDL_GPUDevice* device,
 
     if (!m_buffer) {
         GAMEENGINE_ERROR(std::format("Failed to create GPU transfer buffer ({} bytes): {}",
-                         size, SDL_GetError()));
+            size, SDL_GetError()));
     }
 }
 
@@ -43,8 +42,7 @@ GPUTransferBuffer::GPUTransferBuffer(GPUTransferBuffer&& other) noexcept
     : m_buffer(other.m_buffer)
     , m_device(other.m_device)
     , m_size(other.m_size)
-    , m_mapped(other.m_mapped)
-{
+    , m_mapped(other.m_mapped) {
     other.m_buffer = nullptr;
     other.m_device = nullptr;
     other.m_size = 0;

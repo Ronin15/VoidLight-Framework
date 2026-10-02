@@ -121,8 +121,7 @@ SDL_Window* createWindow() {
     SDL_Window* window = SDL_CreateWindow(
         "SDL3 Controller Fixed Demo",
         640, 480,
-        0
-    );
+        0);
 
     if (!window) {
         printError("SDL_CreateWindow");
@@ -164,7 +163,7 @@ void closeGamepads() {
     for (auto& gamepad : g_gamepads) {
         if (gamepad) {
             SDL_CloseGamepad(gamepad);
-            gamepad = nullptr;  // Set to nullptr after closing
+            gamepad = nullptr; // Set to nullptr after closing
         }
     }
     g_gamepads.clear();

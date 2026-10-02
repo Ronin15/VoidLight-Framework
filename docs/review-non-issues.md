@@ -31,8 +31,28 @@ References are by symbol/function (not line numbers) so they survive edits.
   Intentional: `ResourceRenderController::update` takes a `Camera&` so it can't ride the
   parameterless `updateAll()`. No double-update path. Documented inline.
 
+- **Harvest tile removal is only wired in `GamePlayState`**
+  By design (user decision: demo states are not gameplay targets; `GamePlayState` is the
+  go-forward state). `GamePlayState::enter()` registers the transient `EventTypeId::Harvest`
+  handler that calls `WorldManager::handleHarvestResource()` to clear the tile obstacle;
+  depletion itself goes through `HarvestCommit::commit` for player and AI in every state.
+  AIDemo (load test) and EventDemo (power bench) do not register the handler, so in AIDemo,
+  where Wander NPCs forage (next entry), forage-depleted nodes keep their obstacle tiles. That
+  is intended, not a missing wire. A persistent Harvest handler for demos is a Slice 6R
+  non-goal; tile restore symmetry with this removal path is Slice 6.1.
+
+- **AIDemo Wander NPCs forage**
+  Expected. `AIManager::syncNeedForRole` seeds a survival need for humanoid NPCs assigned the
+  default-config `Idle` or `Wander` role, so AIDemo NPCs switched to `Wander` accumulate need
+  and forage. That is part of the AI load the demo measures, not demo-specific leakage.
+  Preset configs (`SmallWander`, `LargeWander`, …) do not get need entries.
+
 ## B. Thread/lifecycle items that are latent-only under current usage
 
+- **`loadNewWorld` replacing a live world fires `WorldUnloaded` Immediate on the load worker** —
+  that would touch main-thread-only Pathfinder/Collision state off the main thread. Unreachable:
+  every state unloads its world explicitly before `LoadingState` runs `loadNewWorld`. Precondition:
+  do not call `loadNewWorld` over a live world from a worker (found in the Slice 6S design pass).
 - **ThreadSystem `getTaskStats` unlocked read** — diagnostics-only, benign data race on
   size_t counters read off the hot path. Not worth synchronizing.
 - **ThreadSystem `isBusy`/accessors vs `clean()` TOCTOU** — `clean()` runs on the main
@@ -102,11 +122,12 @@ References are by symbol/function (not line numbers) so they survive edits.
 - **Camera shake computed but never applied** (`Camera::update` sets `m_shakeOffset`, but
   `getRenderOffset`/`getViewRect` never read it; no `Camera::shake()` callers) — wiring this
   into the render-offset pipeline is feature work, not a bug fix.
-- **GPURenderer one-frame viewport/scene-texture mismatch on resize** — the scene records
-  against the old viewport while the swapchain is acquired (and viewport synced) in
-  `beginScenePass` after recording; self-corrects next frame. A real fix means restructuring
-  the frame lifecycle (acquire before record), which is out of scope. Comment corrected to
-  state the actual order.
+- **GPURenderer record-before-acquire frame order** — scene vertices are still recorded
+  before `beginScenePass` acquires the swapchain (acquisition needs the active command
+  buffer). `GameEngine::refreshWindowMetrics` now pre-sizes `GPURenderer::updateViewport`
+  from window pixels during `handleEvents`, and acquire still syncs if swapchain size
+  differs. Residual: one frame of old texture if SDL pixels and the swapchain both lag
+  (e.g. delayed Wayland fullscreen). Do not reorder acquire before record.
 - **WorldResourceManager stale spatial-index entries** — dead EDM indices are filtered from
   query *output* (`isAlive()`) but not erased from the index, and entries are fully cleared
   at state transition. Opportunistic erase during a query is impossible under the `shared_lock`

@@ -42,6 +42,9 @@ void init(size_t edmIndex, const VoidLight::BehaviorConfigData& configData) {
         case BehaviorType::Follow:
             initFollow(edmIndex, configData.params.follow, edm.getFollowState(ref.index));
             break;
+        case BehaviorType::Forage:
+            initForage(edmIndex, configData.params.forage, edm.getForageState(ref.index));
+            break;
         case BehaviorType::Custom:
         case BehaviorType::COUNT:
         case BehaviorType::None:
@@ -61,7 +64,7 @@ void switchBehavior(size_t edmIndex, BehaviorType newType) {
 }
 
 void switchBehavior(size_t edmIndex, const VoidLight::BehaviorConfigData& config) {
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     VoidLight::AICommandBus::Instance().enqueueBehaviorTransition(
         edm.getHandle(edmIndex), edmIndex, config);
 }
@@ -90,6 +93,8 @@ VoidLight::BehaviorConfigData getDefaultConfig(BehaviorType type) {
             return BehaviorConfigData::makeFlee();
         case BehaviorType::Follow:
             return BehaviorConfigData::makeFollow();
+        case BehaviorType::Forage:
+            return BehaviorConfigData::makeForage();
         default:
             // Return an "empty" config for unknown types
             return BehaviorConfigData{};
@@ -117,7 +122,7 @@ bool shouldFleeFromFear(const BehaviorContext& ctx) {
 
     // Crowd courage: nearby allies boost effective bravery
     int nearbyCount = ctx.sharedState.cachedNearbyCount;
-    float crowdBoost = std::min(0.3f, nearbyCount * 0.05f);  // Up to +0.3 from 6+ allies
+    float crowdBoost = std::min(0.3f, nearbyCount * 0.05f); // Up to +0.3 from 6+ allies
     bravery = std::min(1.0f, bravery + crowdBoost);
 
     return (fear > 0.7f && bravery < 0.3f);
@@ -198,6 +203,70 @@ EntityHandle getLastAttacker(const BehaviorContext& ctx) {
     return ctx.memoryData.lastAttacker;
 }
 
+bool isHostileTowardFaction(const BehaviorContext& ctx, uint8_t faction) {
+    if (faction >= ctx.factionStanceRow.size()) {
+        return false;
+    }
+    return ctx.factionStanceRow[faction] == FactionStance::Hostile;
+}
+
+bool isAlliedTowardFaction(const BehaviorContext& ctx, uint8_t faction) {
+    if (faction >= ctx.factionStanceRow.size()) {
+        return false;
+    }
+    return ctx.factionStanceRow[faction] == FactionStance::Allied;
+}
+
+bool isHostileTowardTarget(const BehaviorContext& ctx, size_t targetIdx, EntityHandle target) {
+    if (ctx.playerValid && target == ctx.playerHandle) {
+        return ctx.hostileTowardPlayer;
+    }
+    auto& edm = EntityDataManager::Instance();
+    return isHostileTowardFaction(ctx, edm.getCharacterDataByIndex(targetIdx).faction);
+}
+
+bool shouldKeepCombatTarget(const BehaviorContext& ctx, size_t targetIdx, EntityHandle target) {
+    return target == ctx.memoryData.lastAttacker ||
+        isHostileTowardTarget(ctx, targetIdx, target);
+}
+
+bool tryEngageHostileInRange(BehaviorContext& ctx) {
+    if (!ctx.hasHostileInRow && !ctx.hostileTowardPlayer) {
+        return false;
+    }
+
+    const float engageRange = HOSTILE_ENGAGE_RANGE * ctx.envSnapshot.detectionScale;
+    const float rangeSq = engageRange * engageRange;
+    auto& edm = EntityDataManager::Instance();
+    if (ctx.hostileTowardPlayer && ctx.playerHandle.isValid()) {
+        const size_t playerIdx = edm.getIndex(ctx.playerHandle);
+        const float distSq =
+            Vector2D::distanceSquared(ctx.transform.position, ctx.playerPosition);
+        if (playerIdx != SIZE_MAX && edm.getHotDataByIndex(playerIdx).isAlive() &&
+            distSq <= rangeSq) {
+            ctx.memoryData.lastTarget = ctx.playerHandle;
+            switchBehavior(ctx.edmIndex, BehaviorType::Attack);
+            return true;
+        }
+    }
+    if (!ctx.hasHostileInRow) {
+        return false;
+    }
+
+    // Hostile-faction members only (never self: the diagonal is Allied), alive,
+    // within range. Takes the first hit in index order, not the nearest.
+    thread_local std::vector<size_t> s_hostileScanBuffer;
+    AIManager::Instance().scanHostileInRadius(
+        ctx.characterData.faction, ctx.transform.position, engageRange, s_hostileScanBuffer);
+    if (s_hostileScanBuffer.empty()) {
+        return false;
+    }
+
+    ctx.memoryData.lastTarget = edm.getHandle(s_hostileScanBuffer.front());
+    switchBehavior(ctx.edmIndex, BehaviorType::Attack);
+    return true;
+}
+
 Vector2D normalizeDirection(const Vector2D& vector) {
     float len = std::sqrt(vector.getX() * vector.getX() + vector.getY() * vector.getY());
     if (len < 0.0001f) return Vector2D{0.0f, 0.0f};
@@ -219,10 +288,15 @@ float calculateAngleToTarget(const Vector2D& from, const Vector2D& to) {
 // ============================================================================
 
 void queueBehaviorMessage(size_t edmIndex, uint8_t messageId, uint8_t param) {
-    auto& edm = EntityDataManager::Instance();
+    const auto& edm = EntityDataManager::Instance();
     VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
         edm.getHandle(edmIndex), edmIndex, messageId, param);
 }
+
+namespace {
+thread_local std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>
+    t_deferredBehaviorMessages;
+} // namespace
 
 void clearPendingMessages(size_t edmIndex) {
     auto& edm = EntityDataManager::Instance();
@@ -239,14 +313,14 @@ void clearPendingMessages(size_t edmIndex) {
 // Updated from main thread before batch processing; read by worker threads.
 // Sequential game loop ordering guarantees happens-before.
 namespace {
-    struct CachedBounds {
-        float minX{0.0f};
-        float minY{0.0f};
-        float maxX{0.0f};
-        float maxY{0.0f};
-        bool valid{false};
-    };
-    CachedBounds s_cachedBounds;
+struct CachedBounds {
+    float minX{0.0f};
+    float minY{0.0f};
+    float maxX{0.0f};
+    float maxY{0.0f};
+    bool valid{false};
+};
+CachedBounds s_cachedBounds;
 } // anonymous namespace
 
 void cacheWorldBounds() {
@@ -274,9 +348,16 @@ bool getCachedWorldBounds(float& minX, float& minY, float& maxX, float& maxY) {
 // ============================================================================
 
 void deferBehaviorMessage(size_t targetEdmIndex, uint8_t messageId, uint8_t param) {
-    auto& edm = EntityDataManager::Instance();
-    VoidLight::AICommandBus::Instance().enqueueBehaviorMessage(
-        edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param);
+    const auto& edm = EntityDataManager::Instance();
+    t_deferredBehaviorMessages.push_back({edm.getHandle(targetEdmIndex), targetEdmIndex, messageId, param, 0});
+}
+
+void collectDeferredBehaviorMessages(
+    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& out) {
+    out.insert(out.end(),
+        std::make_move_iterator(t_deferredBehaviorMessages.begin()),
+        std::make_move_iterator(t_deferredBehaviorMessages.end()));
+    t_deferredBehaviorMessages.clear();
 }
 
 } // namespace Behaviors

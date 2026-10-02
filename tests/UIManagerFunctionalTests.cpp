@@ -102,8 +102,8 @@ BOOST_AUTO_TEST_CASE(TestCenteredHorizontalPositioning) {
 
     UIPositioning positioning;
     positioning.mode = UIPositionMode::CENTERED_H;
-    positioning.offsetX = 0;      // No horizontal offset
-    positioning.offsetY = 50;     // 50 pixels from top
+    positioning.offsetX = 0; // No horizontal offset
+    positioning.offsetY = 50; // 50 pixels from top
     positioning.fixedWidth = 100;
 
     ui.setComponentPositioning("centered_h_button", positioning);
@@ -129,8 +129,8 @@ BOOST_AUTO_TEST_CASE(TestCenteredVerticalPositioning) {
 
     UIPositioning positioning;
     positioning.mode = UIPositionMode::CENTERED_V;
-    positioning.offsetX = 50;     // 50 pixels from left
-    positioning.offsetY = 0;      // No vertical offset
+    positioning.offsetX = 50; // 50 pixels from left
+    positioning.offsetY = 0; // No vertical offset
     positioning.fixedHeight = 40;
 
     ui.setComponentPositioning("centered_v_button", positioning);
@@ -182,8 +182,8 @@ BOOST_AUTO_TEST_CASE(TestTopAlignedPositioning) {
 
     UIPositioning positioning;
     positioning.mode = UIPositionMode::TOP_ALIGNED;
-    positioning.offsetX = 0;      // Horizontally centered
-    positioning.offsetY = 20;     // 20 pixels from top
+    positioning.offsetX = 0; // Horizontally centered
+    positioning.offsetY = 20; // 20 pixels from top
     positioning.fixedWidth = 100;
 
     ui.setComponentPositioning("top_aligned", positioning);
@@ -207,8 +207,8 @@ BOOST_AUTO_TEST_CASE(TestBottomAlignedPositioning) {
 
     UIPositioning positioning;
     positioning.mode = UIPositionMode::BOTTOM_ALIGNED;
-    positioning.offsetX = 0;      // Horizontally centered
-    positioning.offsetY = 20;     // 20 pixels from bottom
+    positioning.offsetX = 0; // Horizontally centered
+    positioning.offsetY = 20; // 20 pixels from bottom
     positioning.fixedWidth = 100;
     positioning.fixedHeight = 40;
 
@@ -233,8 +233,8 @@ BOOST_AUTO_TEST_CASE(TestLeftAlignedPositioning) {
 
     UIPositioning positioning;
     positioning.mode = UIPositionMode::LEFT_ALIGNED;
-    positioning.offsetX = 20;     // 20 pixels from left
-    positioning.offsetY = 0;      // Vertically centered
+    positioning.offsetX = 20; // 20 pixels from left
+    positioning.offsetY = 0; // Vertically centered
     positioning.fixedHeight = 40;
 
     ui.setComponentPositioning("left_aligned", positioning);
@@ -258,8 +258,8 @@ BOOST_AUTO_TEST_CASE(TestRightAlignedPositioning) {
 
     UIPositioning positioning;
     positioning.mode = UIPositionMode::RIGHT_ALIGNED;
-    positioning.offsetX = 20;     // 20 pixels from right edge
-    positioning.offsetY = 0;      // Vertically centered
+    positioning.offsetX = 20; // 20 pixels from right edge
+    positioning.offsetY = 0; // Vertically centered
     positioning.fixedWidth = 100;
     positioning.fixedHeight = 40;
 
@@ -596,7 +596,7 @@ BOOST_AUTO_TEST_CASE(TestCreateAtlasImage) {
     const UIRect sourceRect{16, 32, 24, 24};
     ui.createPanel("image_parent", UIRect{80, 80, 80, 80});
     ui.createAtlasImage("atlas_image", UIRect{100, 100, 32, 32},
-                        "atlas", sourceRect, "image_parent");
+        "atlas", sourceRect, "image_parent");
 
     BOOST_CHECK(ui.hasComponent("atlas_image"));
     BOOST_CHECK_EQUAL(ui.getTexture("atlas_image"), "atlas");
@@ -614,7 +614,7 @@ BOOST_AUTO_TEST_CASE(TestCreateAtlasImage) {
     BOOST_CHECK_EQUAL(newRect.width, updatedRect.width);
     BOOST_CHECK_EQUAL(newRect.height, updatedRect.height);
 
-    ui.setTexture("atlas_image", "");
+    ui.setImageSource("atlas_image", TextureSource{});
     BOOST_CHECK(ui.getTexture("atlas_image").empty());
 
     ui.setComponentVisible("image_parent", false);
@@ -654,31 +654,6 @@ BOOST_AUTO_TEST_CASE(TestSetImageSourceAppliesTextureAndSourceRectTogether) {
     BOOST_CHECK_EQUAL(storedRect.height, 0);
 
     ui.removeComponent("image_source");
-}
-
-BOOST_AUTO_TEST_CASE(TestCombatHUDHelperOwnsExpectedComponents) {
-    auto& ui = UIManager::Instance();
-
-    ui.createCombatHUD();
-
-    BOOST_CHECK(ui.hasComponent("hud_health_label"));
-    BOOST_CHECK(ui.hasComponent("hud_health_bar"));
-    BOOST_CHECK(ui.hasComponent("hud_stamina_label"));
-    BOOST_CHECK(ui.hasComponent("hud_stamina_bar"));
-    BOOST_CHECK(ui.hasComponent("hud_target_name"));
-    BOOST_CHECK(ui.hasComponent("hud_target_hp_label"));
-    BOOST_CHECK(ui.hasComponent("hud_target_health"));
-
-    ui.updateCombatHUD(75.0f, 40.0f, true, "Training Target", 25.0f);
-    BOOST_CHECK_CLOSE(ui.getValue("hud_health_bar"), 75.0f, 0.001f);
-    BOOST_CHECK_CLOSE(ui.getValue("hud_stamina_bar"), 40.0f, 0.001f);
-    BOOST_CHECK_EQUAL(ui.getText("hud_target_name"), "Training Target");
-    BOOST_CHECK_CLOSE(ui.getValue("hud_target_health"), 25.0f, 0.001f);
-
-    ui.destroyCombatHUD();
-    BOOST_CHECK(!ui.hasComponent("hud_health_label"));
-    BOOST_CHECK(!ui.hasComponent("hud_health_bar"));
-    BOOST_CHECK(!ui.hasComponent("hud_target_name"));
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -10,6 +10,8 @@
 #include "managers/CollisionManager.hpp"
 #include "managers/EntityDataManager.hpp"
 #include "managers/PathfinderManager.hpp"
+#include "managers/ResourceTemplateManager.hpp"
+#include "managers/WorldResourceManager.hpp"
 #include "collisions/AABB.hpp"
 #include "collisions/CollisionBody.hpp"
 #include "managers/EventManager.hpp"
@@ -18,6 +20,8 @@
 #include "utils/Vector2D.hpp"
 #include "ai/pathfinding/PathfindingGrid.hpp"
 #include "world/WorldData.hpp"
+#include "events/WorldEvent.hpp"
+#include <algorithm>
 #include <chrono>
 #include <thread>
 #include <vector>
@@ -33,6 +37,8 @@ struct CollisionPathfindingFixture {
 
         // Initialize managers in proper order
         BOOST_REQUIRE(EventManager::Instance().init());
+        BOOST_REQUIRE(WorldResourceManager::Instance().init());
+        BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
         BOOST_REQUIRE(WorldManager::Instance().init());
         BOOST_REQUIRE(EntityDataManager::Instance().init());
         BOOST_REQUIRE(CollisionManager::Instance().init());
@@ -40,32 +46,37 @@ struct CollisionPathfindingFixture {
 
         // Load a test world - larger size with reduced blocking for navigable paths
         VoidLight::WorldGenerationConfig cfg{};
-        cfg.width = 50; cfg.height = 50; cfg.seed = 1234;
-        cfg.elevationFrequency = 0.1f; cfg.humidityFrequency = 0.1f;
-        cfg.waterLevel = 0.1f; cfg.mountainLevel = 0.9f;
+        cfg.width = 50;
+        cfg.height = 50;
+        cfg.seed = 1234;
+        cfg.elevationFrequency = 0.1f;
+        cfg.humidityFrequency = 0.1f;
+        cfg.waterLevel = 0.1f;
+        cfg.mountainLevel = 0.9f;
 
         if (!WorldManager::Instance().loadNewWorld(cfg)) {
             throw std::runtime_error("Failed to load test world");
         }
 
-        // EVENT-DRIVEN: Process any deferred events (triggers WorldLoaded task on ThreadSystem)
+        // EVENT-DRIVEN: Process deferred world-load events, then wait for the
+        // async grid rebuild (StaticCollidersReady) to complete
         EventManager::Instance().update();
-
-        // Give ThreadSystem time to execute the WorldLoaded task and enqueue the deferred event
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
-        // Process the deferred WorldLoadedEvent (delivers to PathfinderManager)
-        EventManager::Instance().update();
-
-        // Wait for async grid rebuild to complete
-        // Larger world (50x50) needs more time for grid construction
-        std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (std::chrono::steady_clock::now() < deadline &&
+            !PathfinderManager::Instance().isGridReady()) {
+            PathfinderManager::Instance().update();
+            EventManager::Instance().update();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        BOOST_REQUIRE(PathfinderManager::Instance().isGridReady());
 
         // Set up a test world with some static obstacles
         setupTestWorld();
 
-        // Process any deferred collision events from setupTestWorld()
+        // Deferred CollisionObstacleChanged events from setupTestWorld() mark
+        // dirty cells; PathfinderManager::update() applies them.
         EventManager::Instance().update();
+        PathfinderManager::Instance().update();
     }
 
     ~CollisionPathfindingFixture() {
@@ -74,6 +85,8 @@ struct CollisionPathfindingFixture {
         CollisionManager::Instance().clean();
         EntityDataManager::Instance().clean();
         WorldManager::Instance().clean();
+        ResourceTemplateManager::Instance().clean();
+        WorldResourceManager::Instance().clean();
         EventManager::Instance().clean();
         // ThreadSystem persists across tests
     }
@@ -145,8 +158,7 @@ struct CollisionPathfindingFixture {
         CollisionManager::Instance().addStaticBody(
             testId, testAABB.center, testAABB.halfSize,
             CollisionLayer::Layer_Player, CollisionLayer::Layer_Environment,
-            false, 0, 1, edmIndex
-        );
+            false, 0, 1, edmIndex);
 
         // Check for collisions using queryArea (use actual radius, not 2x)
         AABB queryAABB(position.getX(), position.getY(), radius, radius);
@@ -167,45 +179,293 @@ struct CollisionPathfindingFixture {
 
         return hasCollision;
     }
+
+    size_t createPathNpc(const Vector2D& pos) {
+        EntityHandle handle =
+            EntityDataManager::Instance().createNPCWithRaceClass(pos, "Human", "Guard");
+        BOOST_REQUIRE(handle.isValid());
+        const size_t idx = EntityDataManager::Instance().getIndex(handle);
+        BOOST_REQUIRE(idx != SIZE_MAX);
+        BOOST_REQUIRE(EntityDataManager::Instance().hasPathData(idx));
+        return idx;
+    }
+
+    bool requestPathAndWait(size_t edmIndex, const Vector2D& start, const Vector2D& goal,
+        std::vector<Vector2D>& outPath, int maxPolls = 50) {
+        const uint64_t requestId = PathfinderManager::Instance().requestPathToEDM(
+            edmIndex, start, goal, PathfinderManager::Priority::High);
+        if (requestId == 0) {
+            return false;
+        }
+        return waitForPathCommit(edmIndex, outPath, maxPolls);
+    }
+
+    // Polls the async path request (a detached ThreadSystem task by design)
+    // until its completion is committed to EDM.
+    bool waitForPathCommit(size_t edmIndex, std::vector<Vector2D>& outPath,
+        int maxPolls = 50) {
+        auto& pm = PathfinderManager::Instance();
+        auto& edm = EntityDataManager::Instance();
+        for (int i = 0; i < maxPolls; ++i) {
+            pm.update();
+            pm.commitCompletedPaths();
+            auto& pd = edm.getPathData(edmIndex);
+            if (pd.pathRequestPending.load(std::memory_order_acquire) == 0) {
+                outPath.clear();
+                if (pd.hasPath) {
+                    outPath.reserve(pd.pathLength);
+                    for (uint16_t w = 0; w < pd.pathLength; ++w) {
+                        outPath.push_back(edm.getWaypoint(edmIndex, w));
+                    }
+                }
+                return pd.hasPath && pd.pathLength >= 2;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return false;
+    }
+
+    static Vector2D cellCenter(int gx, int gy) {
+        constexpr float CELL = 64.0f; // PathfinderManager cell size
+        return Vector2D((static_cast<float>(gx) + 0.5f) * CELL,
+            (static_cast<float>(gy) + 0.5f) * CELL);
+    }
+
+    // adjustSpawnToNavigable() keeps an open cell's center in place and moves a
+    // blocked one, so it reports the published grid's blocked state.
+    static bool isCellOpen(const Vector2D& center) {
+        const Vector2D snapped = PathfinderManager::Instance().adjustSpawnToNavigable(
+            center, 16.0f, 16.0f, 0.0f);
+        return (snapped - center).length() < 1.0f;
+    }
+
+    // First open cell in the fixture world's lower half (away from
+    // setupTestWorld() obstacles), scanned in a fixed order.
+    static Vector2D findOpenCellCenter() {
+        for (int gy = 12; gy < 22; ++gy) {
+            for (int gx = 3; gx < 22; ++gx) {
+                const Vector2D center = cellCenter(gx, gy);
+                if (isCellOpen(center)) {
+                    return center;
+                }
+            }
+        }
+        BOOST_FAIL("No open pathfinding cell in the fixture world");
+        return {};
+    }
+
+    EntityID addObstacleAt(const Vector2D& center, float halfSize) {
+        auto& edm = EntityDataManager::Instance();
+        EntityHandle handle = edm.createStaticBody(center, halfSize, halfSize);
+        BOOST_REQUIRE(handle.isValid());
+        CollisionManager::Instance().addStaticBody(handle.getId(), center,
+            Vector2D(halfSize, halfSize), CollisionLayer::Layer_Environment,
+            0xFFFFFFFFu, false, 0, 1, edm.getStaticIndex(handle));
+        return handle.getId();
+    }
+
+    // One production frame for the grid: drain deferred events, then let
+    // PathfinderManager apply the dirty cells they marked.
+    static void drainAndUpdatePathfinder() {
+        EventManager::Instance().update();
+        PathfinderManager::Instance().update();
+    }
 };
 
 BOOST_AUTO_TEST_SUITE(CollisionPathfindingIntegrationSuite)
 
-BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFixture)
-{
-    // Test that pathfinding correctly avoids collision obstacles using async requestPath()
+BOOST_FIXTURE_TEST_CASE(TestTileChangeAppliedOnPathfinderUpdate, CollisionPathfindingFixture) {
+    // TileChanged marks the cell dirty; the next PathfinderManager::update()
+    // rebuilds it. No rebuildGrid() call.
+    const Vector2D center = findOpenCellCenter();
+    const int tileX0 = static_cast<int>(center.getX() / TILE_SIZE) - 1;
+    const int tileY0 = static_cast<int>(center.getY() / TILE_SIZE) - 1;
 
-    Vector2D start(100.0f, 100.0f);  // Clear area
-    Vector2D goal(600.0f, 600.0f);   // Across obstacles
-
-    // Use async requestPath() like the real game does
-    std::vector<Vector2D> path;
-    bool callbackExecuted = false;
-
-    PathfinderManager::Instance().requestPath(
-        1000, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            path = resultPath;
-            callbackExecuted = true;
+    auto& wm = WorldManager::Instance();
+    std::vector<Tile> originalTiles;
+    for (int dy = 0; dy < 2; ++dy) {
+        for (int dx = 0; dx < 2; ++dx) {
+            const auto tile = wm.getTileCopyAt(tileX0 + dx, tileY0 + dy);
+            BOOST_REQUIRE(tile.has_value());
+            originalTiles.push_back(*tile);
+            BOOST_REQUIRE(wm.modifyTile(tileX0 + dx, tileY0 + dy,
+                [](Tile& t) { t.biome = Biome::MOUNTAIN; }));
         }
-    );
-
-    // Process async tasks (mimics game loop behavior)
-    for (int i = 0; i < 20 && !callbackExecuted; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // Path should be found successfully
-    BOOST_REQUIRE(callbackExecuted);
+    // Dirt is applied by update(), not by the event handler.
+    EventManager::Instance().update();
+    BOOST_CHECK(isCellOpen(center));
+    PathfinderManager::Instance().update();
+    BOOST_CHECK(!isCellOpen(center));
+
+    // Restoring the tiles reopens the cell the same way.
+    for (int dy = 0; dy < 2; ++dy) {
+        for (int dx = 0; dx < 2; ++dx) {
+            BOOST_REQUIRE(wm.updateTile(tileX0 + dx, tileY0 + dy,
+                originalTiles[static_cast<size_t>(dy * 2 + dx)]));
+        }
+    }
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(isCellOpen(center));
+}
+
+BOOST_FIXTURE_TEST_CASE(TestStaticBodyChangeAppliedOnPathfinderUpdate, CollisionPathfindingFixture) {
+    // CollisionObstacleChanged from addStaticBody/removeCollisionBody marks the
+    // area dirty; the next PathfinderManager::update() blocks/unblocks it.
+    const Vector2D center = findOpenCellCenter();
+
+    const EntityID obstacle = addObstacleAt(center, 24.0f);
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(!isCellOpen(center));
+
+    CollisionManager::Instance().removeCollisionBody(obstacle);
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(isCellOpen(center));
+}
+
+BOOST_FIXTURE_TEST_CASE(TestTreeTileChangeKeepsStaticHashClean, CollisionPathfindingFixture) {
+    // A TREE/ROCK tile change only re-weights its pathfinding cell. It adds,
+    // removes, or moves no collision body, so it must not dirty the static hash:
+    // no CollisionObstacleChanged, an unchanged body count, and no static hash
+    // rebuild on the next CollisionManager::update(). The in-slot dirty-row
+    // rebuild then stays on the hash path.
+    auto& cm = CollisionManager::Instance();
+
+    // An active movable makes update() rebuild a dirty static hash; settle the
+    // fixture's adds first.
+    createPathNpc(Vector2D(100.0f, 100.0f));
+    BOOST_REQUIRE(!EntityDataManager::Instance().getActiveIndices().empty());
+    drainAndUpdatePathfinder();
+    cm.update(0.016f);
+    const uint64_t rebuildsBefore = cm.getPerfStats().staticHashRebuilds;
+    BOOST_REQUIRE_GT(rebuildsBefore, 0U);
+
+    int obstacleEvents = 0;
+    auto obstacleToken = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::CollisionObstacleChanged,
+        [&obstacleEvents](const EventData&) { ++obstacleEvents; });
+    const size_t bodyCountBefore = cm.getBodyCount();
+
+    const Vector2D center = findOpenCellCenter();
+    const int tileX = static_cast<int>(center.getX() / TILE_SIZE);
+    const int tileY = static_cast<int>(center.getY() / TILE_SIZE);
+    const auto tile = WorldManager::Instance().getTileCopyAt(tileX, tileY);
+    BOOST_REQUIRE(tile.has_value());
+    BOOST_REQUIRE(!tile->isWater);
+    BOOST_REQUIRE_EQUAL(tile->buildingId, 0U);
+    const ObstacleType newType =
+        tile->obstacleType == ObstacleType::TREE ? ObstacleType::ROCK : ObstacleType::TREE;
+    BOOST_REQUIRE(WorldManager::Instance().modifyTile(
+        tileX, tileY, [newType](Tile& t) { t.obstacleType = newType; }));
+
+    drainAndUpdatePathfinder();
+    cm.update(0.016f);
+    BOOST_CHECK_EQUAL(cm.getPerfStats().staticHashRebuilds, rebuildsBefore);
+    BOOST_CHECK_EQUAL(obstacleEvents, 0);
+    BOOST_CHECK_EQUAL(cm.getBodyCount(), bodyCountBefore);
+    // TREE/ROCK only weight the cell; it stays open after the dirty-row rebuild.
+    BOOST_CHECK(isCellOpen(center));
+
+    EventManager::Instance().removeHandler(obstacleToken);
+}
+
+BOOST_FIXTURE_TEST_CASE(TestInFlightPathRequestSurvivesGridPublish, CollisionPathfindingFixture) {
+    // A path request captures the grid snapshot it was issued against. Applying
+    // dirty cells publishes a new grid instead of mutating that snapshot, so
+    // the request completes and the new grid carries the change.
+    const Vector2D start(100.0f, 100.0f);
+    const Vector2D goal(600.0f, 600.0f);
+    const Vector2D obstacleCenter = findOpenCellCenter();
+
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE_GT(PathfinderManager::Instance().requestPathToEDM(
+                         npc, start, goal, PathfinderManager::Priority::High),
+        0U);
+
+    const EntityID obstacle = addObstacleAt(obstacleCenter, 24.0f);
+    drainAndUpdatePathfinder();
+    BOOST_CHECK(!isCellOpen(obstacleCenter));
+
+    std::vector<Vector2D> path;
+    BOOST_CHECK(waitForPathCommit(npc, path));
+    BOOST_CHECK_GE(path.size(), 2U);
+
+    CollisionManager::Instance().removeCollisionBody(obstacle);
+}
+
+BOOST_AUTO_TEST_CASE(TestWorldLoadDoesNotFloodObstacleEvents) {
+    // rebuildStaticFromWorld() replaces every static without per-body
+    // CollisionObstacleChanged; StaticCollidersReady drives the grid rebuild.
+    BOOST_REQUIRE(VoidLight::ThreadSystem::Instance().init());
+    BOOST_REQUIRE(EventManager::Instance().init());
+    BOOST_REQUIRE(WorldResourceManager::Instance().init());
+    BOOST_REQUIRE(ResourceTemplateManager::Instance().init());
+    BOOST_REQUIRE(WorldManager::Instance().init());
+    BOOST_REQUIRE(EntityDataManager::Instance().init());
+    BOOST_REQUIRE(CollisionManager::Instance().init());
+
+    int obstacleEvents = 0;
+    size_t collidersReadyStatics = 0;
+    auto obstacleToken = EventManager::Instance().registerHandlerWithToken(
+        EventTypeId::CollisionObstacleChanged,
+        [&obstacleEvents](const EventData&) { ++obstacleEvents; });
+    auto worldToken = EventManager::Instance().registerHandlerWithToken(EventTypeId::World,
+        [&collidersReadyStatics](const EventData& data) {
+            if (auto ready = std::dynamic_pointer_cast<StaticCollidersReadyEvent>(data.event)) {
+                collidersReadyStatics = ready->getSolidBodyCount() + ready->getTriggerCount();
+            }
+        });
+
+    VoidLight::WorldGenerationConfig cfg{};
+    cfg.width = 50;
+    cfg.height = 50;
+    cfg.seed = 1234;
+    cfg.elevationFrequency = 0.1f;
+    cfg.humidityFrequency = 0.1f;
+    cfg.waterLevel = 0.3f;
+    cfg.mountainLevel = 0.7f;
+    cfg.populate = false;
+    BOOST_REQUIRE(WorldManager::Instance().loadNewWorld(cfg));
+
+    // WorldLoaded is posted by a WorldManager ThreadSystem task (a documented
+    // async exception), so poll the drain until the statics rebuild runs.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (collidersReadyStatics == 0 && std::chrono::steady_clock::now() < deadline) {
+        EventManager::Instance().update();
+        std::this_thread::yield();
+    }
+    // Deliver anything the statics rebuild deferred.
+    EventManager::Instance().update();
+
+    BOOST_REQUIRE_GT(collidersReadyStatics, 0U);
+    BOOST_CHECK_EQUAL(obstacleEvents, 0);
+
+    EventManager::Instance().removeHandler(obstacleToken);
+    EventManager::Instance().removeHandler(worldToken);
+    CollisionManager::Instance().clean();
+    EntityDataManager::Instance().clean();
+    WorldManager::Instance().clean();
+    ResourceTemplateManager::Instance().clean();
+    WorldResourceManager::Instance().clean();
+    EventManager::Instance().clean();
+}
+
+BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFixture) {
+    // Production path: requestPathToEDM + main-thread commitCompletedPaths.
+
+    Vector2D start(100.0f, 100.0f); // Clear area
+    Vector2D goal(600.0f, 600.0f); // Across obstacles
+
+    std::vector<Vector2D> path;
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, path));
     BOOST_REQUIRE_GE(path.size(), 2);
 
     // INTEGRATION TEST #1: Verify path avoids known obstacles
     bool pathClear = !pathIntersectsObstacles(path);
 
-    BOOST_TEST_MESSAGE("Path obstacle avoidance: " <<
-                      (pathClear ? "CLEAR" : "INTERSECTS") <<
-                      " (" << path.size() << " waypoints)");
+    BOOST_TEST_MESSAGE("Path obstacle avoidance: " << (pathClear ? "CLEAR" : "INTERSECTS") << " (" << path.size() << " waypoints)");
 
     // Path MUST avoid obstacles - this validates collision-pathfinding integration
     BOOST_CHECK_MESSAGE(pathClear, "Path should avoid collision obstacles");
@@ -220,35 +480,18 @@ BOOST_FIXTURE_TEST_CASE(TestObstacleAvoidancePathfinding, CollisionPathfindingFi
 
     BOOST_CHECK_MESSAGE(collisionCount == 0,
         "Path waypoints should not collide with obstacles (found " +
-        std::to_string(collisionCount) + " collisions)");
+            std::to_string(collisionCount) + " collisions)");
 }
 
-BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixture) {
     // Test dynamic obstacle integration between collision and pathfinding systems
 
     Vector2D start(200.0f, 200.0f);
     Vector2D goal(400.0f, 400.0f);
 
-    // Get initial path using async API
     std::vector<Vector2D> originalPath;
-    bool callback1Executed = false;
-
-    PathfinderManager::Instance().requestPath(
-        5000, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            originalPath = resultPath;
-            callback1Executed = true;
-        }
-    );
-
-    // Wait for async completion
-    for (int i = 0; i < 20 && !callback1Executed; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    BOOST_REQUIRE(callback1Executed);
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, originalPath));
 
     // Add dynamic obstacle
     auto& edm = EntityDataManager::Instance();
@@ -258,69 +501,33 @@ BOOST_FIXTURE_TEST_CASE(TestDynamicObstacleIntegration, CollisionPathfindingFixt
     size_t dynamicEdmIndex = edm.getStaticIndex(dynamicHandle);
     CollisionManager::Instance().addStaticBody(dynamicObstacle, obstacleAABB.center, obstacleAABB.halfSize, CollisionLayer::Layer_Enemy, 0xFFFFFFFFu, false, 0, 1, dynamicEdmIndex);
 
-    // Event-driven: PathfinderManager automatically updates via CollisionObstacleChanged events
+    // CollisionObstacleChanged marks dirty cells; update() applies them.
     EventManager::Instance().update();
+    PathfinderManager::Instance().update();
 
-    // Give time for grid rebuild
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    // Get new path
     std::vector<Vector2D> newPath;
-    bool callback2Executed = false;
-
-    PathfinderManager::Instance().requestPath(
-        5002, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            newPath = resultPath;
-            callback2Executed = true;
-        }
-    );
-
-    // Wait for async completion
-    for (int i = 0; i < 20 && !callback2Executed; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    BOOST_REQUIRE(callback2Executed);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, newPath));
 
     // Both paths should be valid
     BOOST_CHECK_GE(originalPath.size(), 2);
     BOOST_CHECK_GE(newPath.size(), 2);
 
     BOOST_TEST_MESSAGE("Dynamic obstacle integration: original " << originalPath.size()
-                      << " waypoints, new " << newPath.size() << " waypoints");
+                                                                 << " waypoints, new " << newPath.size() << " waypoints");
 
     // Clean up
     CollisionManager::Instance().removeCollisionBody(dynamicObstacle);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFixture) {
     // Test that collision events properly invalidate pathfinding cache
 
-    Vector2D start(100.0f, 100.0f);  // Clear starting position
-    Vector2D goal(300.0f, 300.0f);   // Distant goal requiring multiple steps
+    Vector2D start(100.0f, 100.0f); // Clear starting position
+    Vector2D goal(300.0f, 300.0f); // Distant goal requiring multiple steps
 
-    // Get initial path using async API
     std::vector<Vector2D> initialPath;
-    bool callback1Executed = false;
-
-    PathfinderManager::Instance().requestPath(
-        6000, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            initialPath = resultPath;
-            callback1Executed = true;
-        }
-    );
-
-    // Wait for async completion
-    for (int i = 0; i < 20 && !callback1Executed; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    BOOST_REQUIRE(callback1Executed);
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, initialPath));
     BOOST_CHECK_GE(initialPath.size(), 2);
 
     // Add new obstacle that should invalidate cached paths
@@ -331,29 +538,12 @@ BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFix
     size_t newObstacleEdmIndex = edm.getStaticIndex(newObstacleHandle);
     CollisionManager::Instance().addStaticBody(newObstacle, newObstacleAABB.center, newObstacleAABB.halfSize, CollisionLayer::Layer_Environment, 0xFFFFFFFFu, false, 0, 1, newObstacleEdmIndex);
 
-    // Process events and allow grid rebuild
+    // Process events; update() applies the dirty cells
     EventManager::Instance().update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    PathfinderManager::Instance().update();
 
-    // Get new path after obstacle added
     std::vector<Vector2D> newPath;
-    bool callback2Executed = false;
-
-    PathfinderManager::Instance().requestPath(
-        6002, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            newPath = resultPath;
-            callback2Executed = true;
-        }
-    );
-
-    // Wait for async completion
-    for (int i = 0; i < 20 && !callback2Executed; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    BOOST_REQUIRE(callback2Executed);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, newPath));
     BOOST_CHECK_GE(newPath.size(), 2);
 
     // Test demonstrates that pathfinding works before and after collision changes
@@ -362,34 +552,25 @@ BOOST_FIXTURE_TEST_CASE(TestEventDrivenPathInvalidation, CollisionPathfindingFix
     CollisionManager::Instance().removeCollisionBody(newObstacle);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionPathfindingFixture) {
     // Test concurrent collision and pathfinding operations using async API
 
     const int NUM_CONCURRENT_REQUESTS = 10;
 
-    // Track async path completions
-    std::atomic<int> successfulPaths{0};
-    std::atomic<int> completedCallbacks{0};
-
-    // Submit multiple concurrent async pathfinding requests (matches real game behavior)
+    std::vector<size_t> npcs;
+    npcs.reserve(NUM_CONCURRENT_REQUESTS);
+    auto& pm = PathfinderManager::Instance();
+    auto& edm = EntityDataManager::Instance();
     for (int i = 0; i < NUM_CONCURRENT_REQUESTS; ++i) {
         Vector2D start(100.0f + i * 50.0f, 100.0f);
         Vector2D goal(500.0f + i * 20.0f, 500.0f);
-
-        PathfinderManager::Instance().requestPath(
-            7000 + i, start, goal, PathfinderManager::Priority::High,
-            [&successfulPaths, &completedCallbacks](EntityID, const std::vector<Vector2D>& path) {
-                if (path.size() >= 2) {
-                    successfulPaths++;
-                }
-                completedCallbacks++;
-            }
-        );
+        npcs.push_back(createPathNpc(start));
+        BOOST_CHECK_GT(pm.requestPathToEDM(
+                           npcs.back(), start, goal, PathfinderManager::Priority::High),
+            0U);
     }
 
     // Simultaneously add collision bodies while paths are being computed
-    auto& edm = EntityDataManager::Instance();
     std::vector<EntityID> tempBodies;
     for (int i = 0; i < 5; ++i) {
         AABB bodyAABB(300.0f + i * 100.0f, 250.0f, 32.0f, 32.0f);
@@ -400,17 +581,32 @@ BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionP
         tempBodies.push_back(bodyId);
     }
 
-    // Wait for all async callbacks to complete
-    for (int i = 0; i < 50 && completedCallbacks < NUM_CONCURRENT_REQUESTS; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
+    int successfulPaths = 0;
+    for (int i = 0; i < 50; ++i) {
+        pm.update();
+        pm.commitCompletedPaths();
+        successfulPaths = 0;
+        bool allDone = true;
+        for (size_t idx : npcs) {
+            const auto& pd = edm.getPathData(idx);
+            if (pd.pathRequestPending.load(std::memory_order_acquire) != 0) {
+                allDone = false;
+                break;
+            }
+            if (pd.hasPath && pd.pathLength >= 2) {
+                ++successfulPaths;
+            }
+        }
+        if (allDone) {
+            break;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // Should have processed most requests successfully
-    BOOST_CHECK_GE(successfulPaths.load(), NUM_CONCURRENT_REQUESTS / 2);
+    BOOST_CHECK_GE(successfulPaths, NUM_CONCURRENT_REQUESTS / 2);
 
-    BOOST_TEST_MESSAGE("Concurrent operations: " << successfulPaths.load()
-                      << "/" << NUM_CONCURRENT_REQUESTS << " paths found successfully");
+    BOOST_TEST_MESSAGE("Concurrent operations: " << successfulPaths
+                                                 << "/" << NUM_CONCURRENT_REQUESTS << " paths found successfully");
 
     // Clean up
     for (EntityID bodyId : tempBodies) {
@@ -418,8 +614,7 @@ BOOST_FIXTURE_TEST_CASE(TestConcurrentCollisionPathfindingOperations, CollisionP
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture) {
     // Test system performance with both collision and pathfinding load
 
     const int NUM_COLLISION_BODIES = 50;
@@ -444,28 +639,38 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
     // Measure combined system performance using async API
     auto startTime = std::chrono::high_resolution_clock::now();
 
-    std::atomic<int> pathsCompleted{0};
-    std::atomic<int> completedCallbacks{0};
-
-    // Submit async pathfinding requests (matches real game behavior)
+    std::vector<size_t> npcs;
+    npcs.reserve(NUM_PATH_REQUESTS);
+    auto& pm = PathfinderManager::Instance();
+    auto& pathEdm = EntityDataManager::Instance();
     for (int i = 0; i < NUM_PATH_REQUESTS; ++i) {
         Vector2D start(100.0f, 100.0f + i * 30.0f);
         Vector2D goal(900.0f, 500.0f + i * 20.0f);
-
-        PathfinderManager::Instance().requestPath(
-            8100 + i, start, goal, PathfinderManager::Priority::High,
-            [&pathsCompleted, &completedCallbacks](EntityID, const std::vector<Vector2D>& path) {
-                if (path.size() >= 2) {
-                    pathsCompleted++;
-                }
-                completedCallbacks++;
-            }
-        );
+        npcs.push_back(createPathNpc(start));
+        BOOST_CHECK_GT(pm.requestPathToEDM(
+                           npcs.back(), start, goal, PathfinderManager::Priority::High),
+            0U);
     }
 
-    // Wait for all paths to complete
-    for (int i = 0; i < 200 && completedCallbacks < NUM_PATH_REQUESTS; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
+    int pathsCompleted = 0;
+    for (int i = 0; i < 200; ++i) {
+        pm.update();
+        pm.commitCompletedPaths();
+        pathsCompleted = 0;
+        bool allDone = true;
+        for (size_t idx : npcs) {
+            const auto& pd = pathEdm.getPathData(idx);
+            if (pd.pathRequestPending.load(std::memory_order_acquire) != 0) {
+                allDone = false;
+                break;
+            }
+            if (pd.hasPath && pd.pathLength >= 2) {
+                ++pathsCompleted;
+            }
+        }
+        if (allDone) {
+            break;
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
@@ -476,11 +681,11 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
     BOOST_CHECK_LT(duration.count(), 2000); // < 2 seconds total
 
     // Should complete most paths
-    BOOST_CHECK_GE(pathsCompleted.load(), NUM_PATH_REQUESTS / 3);
+    BOOST_CHECK_GE(pathsCompleted, NUM_PATH_REQUESTS / 3);
 
     BOOST_TEST_MESSAGE("Performance under load: " << NUM_COLLISION_BODIES
-                      << " bodies, " << pathsCompleted.load() << "/" << NUM_PATH_REQUESTS
-                      << " paths completed in " << duration.count() << "ms");
+                                                  << " bodies, " << pathsCompleted << "/" << NUM_PATH_REQUESTS
+                                                  << " paths completed in " << duration.count() << "ms");
 
     // Clean up
     for (EntityID bodyId : bodies) {
@@ -488,8 +693,7 @@ BOOST_FIXTURE_TEST_CASE(TestPerformanceUnderLoad, CollisionPathfindingFixture)
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathfindingFixture) {
     // Test that collision layers properly affect pathfinding
 
     // Add bodies with different collision layers
@@ -516,53 +720,35 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
     CollisionManager::Instance().setBodyLayer(
         playerObstacle,
         CollisionLayer::Layer_Player,
-        CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment
-    );
+        CollisionLayer::Layer_Enemy | CollisionLayer::Layer_Environment);
 
     CollisionManager::Instance().setBodyLayer(
         enemyObstacle,
         CollisionLayer::Layer_Enemy,
-        CollisionLayer::Layer_Player | CollisionLayer::Layer_Environment
-    );
+        CollisionLayer::Layer_Player | CollisionLayer::Layer_Environment);
 
     CollisionManager::Instance().setBodyLayer(
         environmentObstacle,
         CollisionLayer::Layer_Environment,
-        CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy
-    );
+        CollisionLayer::Layer_Player | CollisionLayer::Layer_Enemy);
 
-    // Event-driven: PathfinderManager automatically updates via CollisionObstacleChanged events
+    // CollisionObstacleChanged marks dirty cells; update() applies them.
     EventManager::Instance().update();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Allow grid rebuild
+    PathfinderManager::Instance().update();
 
     // Test pathfinding around the layered obstacles using async API
     Vector2D start(200.0f, 200.0f);
     Vector2D goal(500.0f, 500.0f);
 
     std::vector<Vector2D> path;
-    bool callbackExecuted = false;
-
-    PathfinderManager::Instance().requestPath(
-        10100, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            path = resultPath;
-            callbackExecuted = true;
-        }
-    );
-
-    // Wait for async completion
-    for (int i = 0; i < 20 && !callbackExecuted; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    BOOST_REQUIRE(callbackExecuted);
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, path));
 
     // Should handle layered obstacles appropriately
     BOOST_CHECK_GE(path.size(), 2);
 
     BOOST_TEST_MESSAGE("Collision layer pathfinding: " << path.size()
-                      << " waypoints with layered obstacles");
+                                                       << " waypoints with layered obstacles");
 
     // Clean up
     CollisionManager::Instance().removeCollisionBody(playerObstacle);
@@ -570,32 +756,15 @@ BOOST_FIXTURE_TEST_CASE(TestCollisionLayerPathfindingInteraction, CollisionPathf
     CollisionManager::Instance().removeCollisionBody(environmentObstacle);
 }
 
-BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture)
-{
+BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture) {
     // INTEGRATION TEST #3: Actually move an entity along a path and verify no collisions occur
 
-    Vector2D start(100.0f, 100.0f);  // Clear starting area
-    Vector2D goal(600.0f, 600.0f);   // Goal requires navigating around obstacles
+    Vector2D start(100.0f, 100.0f); // Clear starting area
+    Vector2D goal(600.0f, 600.0f); // Goal requires navigating around obstacles
 
-    // Request path
     std::vector<Vector2D> path;
-    bool callbackExecuted = false;
-
-    PathfinderManager::Instance().requestPath(
-        11000, start, goal, PathfinderManager::Priority::High,
-        [&](EntityID, const std::vector<Vector2D>& resultPath) {
-            path = resultPath;
-            callbackExecuted = true;
-        }
-    );
-
-    // Wait for path
-    for (int i = 0; i < 20 && !callbackExecuted; ++i) {
-        PathfinderManager::Instance().update(); // Process buffered requests
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-
-    BOOST_REQUIRE(callbackExecuted);
+    const size_t npc = createPathNpc(start);
+    BOOST_REQUIRE(requestPathAndWait(npc, start, goal, path));
     BOOST_REQUIRE_GE(path.size(), 2);
 
     // Simulated entity radius for collision queries
@@ -627,7 +796,7 @@ BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture
             for (EntityID colliderId : collisions) {
                 collisionsDetected++;
                 BOOST_TEST_MESSAGE("Collision detected at (" << currentPos.getX() << ", "
-                                 << currentPos.getY() << ") with entity " << colliderId);
+                                                             << currentPos.getY() << ") with entity " << colliderId);
                 break;
             }
 
@@ -642,7 +811,7 @@ BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture
     }
 
     BOOST_TEST_MESSAGE("Entity movement test: traversed " << waypointsTraversed
-                      << " waypoints with " << collisionsDetected << " collisions");
+                                                          << " waypoints with " << collisionsDetected << " collisions");
 
     // With 64px pathfinding grid, 32px obstacles, 16px entity radius, and 8px movement steps,
     // edge collisions are expected when brushing past obstacles. Each obstacle can trigger
@@ -651,16 +820,16 @@ BOOST_FIXTURE_TEST_CASE(TestEntityMovementAlongPath, CollisionPathfindingFixture
     int maxAcceptableCollisions = std::max(20, static_cast<int>(path.size() * waypointsTraversed * 0.3f));
     BOOST_CHECK_MESSAGE(collisionsDetected <= maxAcceptableCollisions,
         "Entity movement should mostly avoid collisions (detected " +
-        std::to_string(collisionsDetected) + " collisions, max acceptable: " +
-        std::to_string(maxAcceptableCollisions) + ")");
+            std::to_string(collisionsDetected) + " collisions, max acceptable: " +
+            std::to_string(maxAcceptableCollisions) + ")");
 
     // Verify entity made progress towards goal (not stuck)
     float finalDistance = (currentPos - goal).length();
     float startDistance = (start - goal).length();
     BOOST_CHECK_MESSAGE(finalDistance < startDistance,
         "Entity should make progress towards goal (start: " +
-        std::to_string(startDistance) + "px, end: " +
-        std::to_string(finalDistance) + "px)");
+            std::to_string(startDistance) + "px, end: " +
+            std::to_string(finalDistance) + "px)");
 
     // No collision body to clean up (query-only test)
 }

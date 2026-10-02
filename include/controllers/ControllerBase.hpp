@@ -41,8 +41,7 @@
 #include <string_view>
 #include <vector>
 
-class ControllerBase
-{
+class ControllerBase {
 public:
     /**
      * @brief Virtual destructor auto-unsubscribes from all events
@@ -57,16 +56,14 @@ public:
     ControllerBase(ControllerBase&& other) noexcept
         : m_subscribed(other.m_subscribed)
         , m_suspended(other.m_suspended)
-        , m_handlerTokens(std::move(other.m_handlerTokens))
-    {
+        , m_handlerTokens(std::move(other.m_handlerTokens)) {
         other.m_subscribed = false;
         other.m_suspended = false;
     }
 
-    ControllerBase& operator=(ControllerBase&& other) noexcept
-    {
+    ControllerBase& operator=(ControllerBase&& other) noexcept {
         if (this != &other) {
-            unsubscribe();  // Clean up current subscriptions
+            unsubscribe(); // Clean up current subscriptions
             m_subscribed = other.m_subscribed;
             m_suspended = other.m_suspended;
             m_handlerTokens = std::move(other.m_handlerTokens);
@@ -88,8 +85,7 @@ public:
      * @brief Unsubscribe from all registered event handlers
      * @note Safe to call multiple times
      */
-    void unsubscribe()
-    {
+    void unsubscribe() {
         if (!m_subscribed) {
             return;
         }
@@ -109,8 +105,7 @@ public:
      * Override if custom suspend behavior is needed (e.g., keep listening
      * but don't process, or pause internal timers).
      */
-    virtual void suspend()
-    {
+    virtual void suspend() {
         if (m_suspended) {
             return;
         }
@@ -124,8 +119,7 @@ public:
      * Default implementation re-subscribes to events.
      * Override if custom resume behavior is needed.
      */
-    virtual void resume()
-    {
+    virtual void resume() {
         if (!m_suspended) {
             return;
         }
@@ -158,8 +152,7 @@ protected:
      * @brief Register a handler token for automatic cleanup
      * @param token The handler token from EventManager::registerHandlerWithToken
      */
-    void addHandlerToken(const EventManager::HandlerToken& token)
-    {
+    void addHandlerToken(const EventManager::HandlerToken& token) {
         m_handlerTokens.push_back(token);
     }
 

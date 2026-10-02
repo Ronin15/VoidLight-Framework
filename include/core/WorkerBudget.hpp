@@ -38,8 +38,8 @@ enum class SystemType : uint8_t {
  * Managers should use shouldThread directly without additional overrides.
  */
 struct ThreadingDecision {
-    bool shouldThread;  // true = use multi-threading, false = single-threaded
-    int probePhase;     // 0=normal, non-zero=exploration (for debugging)
+    bool shouldThread; // true = use multi-threading, false = single-threaded
+    int probePhase; // 0=normal, non-zero=exploration (for debugging)
 };
 
 /**
@@ -49,7 +49,7 @@ struct ThreadingDecision {
  * during its execution window since managers don't run concurrently.
  */
 struct WorkerBudget {
-    size_t totalWorkers{0};  // Total available worker threads (all usable per manager)
+    size_t totalWorkers{0}; // Total available worker threads (all usable per manager)
 };
 
 /**
@@ -118,8 +118,8 @@ public:
      * @return Pair of {batchCount, batchSize}
      */
     std::pair<size_t, size_t> getBatchStrategy(SystemType system,
-                                                size_t workloadSize,
-                                                size_t optimalWorkers);
+        size_t workloadSize,
+        size_t optimalWorkers);
 
     /**
      * @brief Determine if threading should be used for current workload
@@ -158,7 +158,7 @@ public:
      * @param totalTimeMs Total time for processing to complete
      */
     void reportExecution(SystemType system, size_t workloadSize,
-                         bool wasThreaded, size_t batchCount, double totalTimeMs);
+        bool wasThreaded, size_t batchCount, double totalTimeMs);
 
     /**
      * @brief Get expected throughput for multi-threaded mode (for debugging/logging)
@@ -236,21 +236,21 @@ private:
      */
     struct alignas(64) SystemTuningState {
         // ===== Cache line 1: Multi-threaded path (frequently written together) =====
-        std::atomic<double> multiSmoothedThroughput{0.0};   // Items per ms when multi-threaded (8 bytes)
-        std::atomic<double> prevMultiThroughput{0.0};       // Previous for hill-climb (8 bytes)
-        std::atomic<float> multiplier{1.0f};                // Batch multiplier (4 bytes)
-        std::atomic<int8_t> direction{1};                   // Hill-climb direction (1 byte)
-        char _pad1[64 - 21]{};  // Pad to 64-byte boundary (43 bytes)
+        std::atomic<double> multiSmoothedThroughput{0.0}; // Items per ms when multi-threaded (8 bytes)
+        std::atomic<double> prevMultiThroughput{0.0}; // Previous for hill-climb (8 bytes)
+        std::atomic<float> multiplier{1.0f}; // Batch multiplier (4 bytes)
+        std::atomic<int8_t> direction{1}; // Hill-climb direction (1 byte)
+        char _pad1[64 - 21]{}; // Pad to 64-byte boundary (43 bytes)
 
         // ===== Cache line 2: Single-threaded path (threshold learning only) =====
-        std::atomic<double> smoothedSingleTime{0.0};        // EMA of single-threaded ms (8 bytes)
-        std::atomic<uint32_t> singleSampleCount{0};         // Warmup counter for EMA stabilization (4 bytes)
-        char _pad2[64 - 12]{};  // Pad to 64-byte boundary (52 bytes)
+        std::atomic<double> smoothedSingleTime{0.0}; // EMA of single-threaded ms (8 bytes)
+        std::atomic<uint32_t> singleSampleCount{0}; // Warmup counter for EMA stabilization (4 bytes)
+        char _pad2[64 - 12]{}; // Pad to 64-byte boundary (52 bytes)
 
         // ===== Cache line 3: Mode state (written occasionally) =====
-        std::atomic<size_t> learnedThreshold{0};            // Entity count threshold (8 bytes)
-        std::atomic<bool> thresholdActive{false};           // Above threshold flag (1 byte)
-        char _pad3[64 - 9]{};  // Pad to 64-byte boundary (55 bytes)
+        std::atomic<size_t> learnedThreshold{0}; // Entity count threshold (8 bytes)
+        std::atomic<bool> thresholdActive{false}; // Above threshold flag (1 byte)
+        char _pad3[64 - 9]{}; // Pad to 64-byte boundary (55 bytes)
 
         // ===== Constants (read-only, no padding needed) =====
         static constexpr float MIN_MULTIPLIER = 0.4f;

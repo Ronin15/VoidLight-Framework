@@ -24,7 +24,7 @@ class WorldGenerator {
 private:
     struct PerlinNoise {
         std::vector<int> permutation;
-        
+
         explicit PerlinNoise(int seed);
         float noise(float x, float y) const;
         float fade(float t) const;
@@ -35,64 +35,53 @@ private:
     static std::unique_ptr<WorldData> generateNoiseMaps(
         const WorldGenerationConfig& config,
         std::vector<std::vector<float>>& elevationMap,
-        std::vector<std::vector<float>>& humidityMap
-    );
-    
+        std::vector<std::vector<float>>& humidityMap);
+
     static void assignBiomes(
         WorldData& world,
         const std::vector<std::vector<float>>& elevationMap,
         const std::vector<std::vector<float>>& humidityMap,
-        const WorldGenerationConfig& config
-    );
-    
+        const WorldGenerationConfig& config);
+
     static void createWaterBodies(
         WorldData& world,
         const std::vector<std::vector<float>>& elevationMap,
-        const WorldGenerationConfig& config
-    );
-    
+        const WorldGenerationConfig& config);
+
     static void distributeObstacles(
         WorldData& world,
-        const WorldGenerationConfig& config
-    );
+        const WorldGenerationConfig& config);
 
     static void distributeDecorations(
         WorldData& world,
-        const WorldGenerationConfig& config
-    );
+        const WorldGenerationConfig& config);
 
     static void calculateInitialResources(
-        const WorldData& world
-    );
-    
+        const WorldData& world);
+
     // Building generation helpers
     static void generateBuildings(
         WorldData& world,
-        std::default_random_engine& rng
-    );
-    
+        std::default_random_engine& rng);
+
     static bool canPlaceBuilding(
         const WorldData& world,
-        int x, int y
-    );
-    
+        int x, int y);
+
     static uint32_t createBuilding(
         WorldData& world,
         int x, int y,
-        uint32_t& nextBuildingId
-    );
-    
+        uint32_t& nextBuildingId);
+
     static void tryConnectBuildings(
         WorldData& world,
         int x, int y,
-        uint32_t buildingId
-    );
+        uint32_t buildingId);
 
 public:
     static std::unique_ptr<WorldData> generateWorld(
         const WorldGenerationConfig& config,
-        const WorldGenerationProgressCallback& progressCallback = nullptr
-    );
+        const WorldGenerationProgressCallback& progressCallback = nullptr);
 };
 
 }

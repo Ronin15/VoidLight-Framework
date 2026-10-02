@@ -18,9 +18,9 @@ class Vector2D;
 // SaveGame header structure - used at the beginning of save files
 struct SaveGameHeader {
     char signature[9]{'F', 'O', 'R', 'G', 'E', 'S', 'A', 'V', 'E'}; // File signature "FORGESAVE"
-    uint32_t version{1};                                          // Save format version
-    time_t timestamp{0};                                          // Save timestamp
-    uint32_t dataSize{0};                                         // Size of data section
+    uint32_t version{1}; // Save format version
+    time_t timestamp{0}; // Save timestamp
+    uint32_t dataSize{0}; // Size of data section
 };
 
 // SaveGame data structure for metadata access
@@ -29,8 +29,8 @@ struct SaveGameData {
     std::string timestamp{};
     int playerLevel{0};
     float playerHealth{100.0f};
-    float playerXPos{0.0f};   // Added player X position
-    float playerYPos{0.0f};   // Added player Y position
+    float playerXPos{0.0f}; // Added player X position
+    float playerYPos{0.0f}; // Added player Y position
     std::string currentLevel{};
     // Add more fields as needed
 };
@@ -107,7 +107,6 @@ public:
     void setSaveDirectory(const std::string& directory);
 
 
-
     // Clean up resources
     void clean();
 
@@ -115,7 +114,7 @@ public:
     bool isShutdown() const { return m_isShutdown; }
 
 private:
-    std::string m_saveDirectory{"res"};  // Default save directory
+    std::string m_saveDirectory{"res"}; // Default save directory
     bool m_isInitialized{false};
     bool m_isShutdown{false};
 
@@ -134,10 +133,10 @@ private:
     bool readVector2D(std::ifstream& file, Vector2D& vec) const;
 
     // Delete copy constructor and assignment operator
-    SaveGameManager(const SaveGameManager&) = delete;  // prevent copy construction
-    SaveGameManager& operator=(const SaveGameManager&) = delete;  // prevent assignment
+    SaveGameManager(const SaveGameManager&) = delete; // prevent copy construction
+    SaveGameManager& operator=(const SaveGameManager&) = delete; // prevent assignment
 
     SaveGameManager() = default;
 };
 
-#endif  // SAVE_GAME_MANAGER_HPP
+#endif // SAVE_GAME_MANAGER_HPP

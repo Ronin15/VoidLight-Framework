@@ -9,17 +9,17 @@ This directory contains documentation for core utility classes and helper system
   - Multiple modes: Free, Follow, Fixed
   - Smooth interpolation for target following
   - Discrete zoom levels (pixel-perfect)
-  - World bounds clamping and camera shake
+  - World bounds clamping. Camera-shake offset exists on `Camera` but is not applied (`docs/review-non-issues.md`).
   - Event-driven state changes
 
 ### Debug & Profiling
-- **[FrameProfiler](FrameProfiler.md)** - Debug-only frame timing system
+- **[FrameProfiler](FrameProfiler.md)** - Frame timing system (Debug and ReleaseSafe builds)
   - Three-tier profiling: Frame → Manager → Render phases
   - Automatic hitch detection with configurable threshold
   - Live F3 debug overlay with timing breakdown
   - GPU-aware phases for accurate GPU timing
   - RAII scoped timers for easy instrumentation
-  - Zero overhead in Release builds (compiles to nothing)
+  - Zero overhead in Release and Profile builds (compiles to nothing)
 
 ### Performance & Resource Systems
 - **[ResourceHandle System](ResourceHandle_System.md)** - High-performance resource identification
@@ -43,6 +43,16 @@ This directory contains documentation for core utility classes and helper system
   - Extensible type system with custom resource creators
   - Comprehensive examples and error handling
   - Performance guidelines for handle-based runtime operations
+
+- **[Serialization](SERIALIZATION.md)** - Header-only binary serializer (`include/utils/BinarySerializer.hpp`) used by save/load
+
+### Core Helpers
+- **[Logger](Logger.md)** - Debug/release logging macros (`include/core/Logger.hpp`)
+- **[SIMDMath](SIMDMath.md)** - Cross-platform SIMD abstraction (`include/utils/SIMDMath.hpp`)
+- **[MenuNavigation](MenuNavigation.md)** - Shared keyboard/gamepad menu navigation helper
+
+### Removed (stubs kept for old links)
+- [SceneRenderer](SceneRenderer.md), [WorldRenderPipeline](WorldRenderPipeline.md) - replaced by the GPU path ([GPURendering](../gpu/GPURendering.md))
 
 ### Future Utilities
 
@@ -69,7 +79,7 @@ This directory contains documentation for core utility classes and helper system
 
 ### Error Handling Standards
 All utilities follow the engine's error handling conventions:
-- Use engine logging macros (`GAMEENGINE_ERROR`, `GAMEENGINE_WARNING`, etc.)
+- Use engine logging macros (`GAMEENGINE_ERROR`, `GAMEENGINE_WARN`, etc.) with `std::format()` messages
 - Provide detailed error messages
 - Graceful fallback to default values where appropriate
 - Non-throwing interfaces with explicit error checking

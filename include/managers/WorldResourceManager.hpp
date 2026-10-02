@@ -50,10 +50,7 @@ struct WorldResourceStats {
 
     WorldResourceStats() = default;
     WorldResourceStats(const WorldResourceStats& other)
-        : worldsTracked(other.worldsTracked.load()),
-          inventoriesRegistered(other.inventoriesRegistered.load()),
-          harvestablesRegistered(other.harvestablesRegistered.load()),
-          queryCount(other.queryCount.load()) {}
+        : worldsTracked(other.worldsTracked.load()), inventoriesRegistered(other.inventoriesRegistered.load()), harvestablesRegistered(other.harvestablesRegistered.load()), queryCount(other.queryCount.load()) {}
 
     WorldResourceStats& operator=(const WorldResourceStats& other) {
         if (this != &other) {
@@ -93,14 +90,14 @@ struct SpatialIndex {
     std::unordered_map<size_t, uint64_t> entityToCell;
 
     SpatialIndex() {
-        cells.reserve(INITIAL_CAPACITY / 4);  // ~125 cells expected
+        cells.reserve(INITIAL_CAPACITY / 4); // ~125 cells expected
         entityToCell.reserve(INITIAL_CAPACITY);
     }
 
     // Pack cell coordinates into 64-bit key
     [[nodiscard]] static uint64_t makeKey(int32_t cellX, int32_t cellY) noexcept {
         return (static_cast<uint64_t>(static_cast<uint32_t>(cellY)) << 32) |
-               static_cast<uint32_t>(cellX);
+            static_cast<uint32_t>(cellX);
     }
 
     // World position to cell coordinate
@@ -142,7 +139,7 @@ struct SpatialIndex {
 
     // Query all entities within radius of center
     void queryRadius(const Vector2D& center, float radius,
-                     std::vector<size_t>& outIndices) const {
+        std::vector<size_t>& outIndices) const {
         int32_t minCellX = toCell(center.getX() - radius);
         int32_t maxCellX = toCell(center.getX() + radius);
         int32_t minCellY = toCell(center.getY() - radius);
@@ -156,7 +153,7 @@ struct SpatialIndex {
                 auto it = cells.find(key);
                 if (it != cells.end()) {
                     std::copy(it->second.begin(), it->second.end(),
-                              std::back_inserter(outIndices));
+                        std::back_inserter(outIndices));
                 }
             }
         }
@@ -258,16 +255,19 @@ public:
     void unregisterInventory(uint32_t inventoryIndex);
 
     /**
-     * @brief Register a harvestable entity with a world
+     * @brief Register a harvestable with world-membership + spatial index (EDM indices only)
      * @param edmIndex EDM entity index for the harvestable
+     * @param position World position
      * @param worldId World to register with
      *
-     * The harvestable's potential yield will be included in world queries.
+     * Updates the world-membership + spatial index (EDM indices only);
+     * quantities stay in EDM.
+     * Called by EDM::createHarvestable().
      */
-    void registerHarvestable(size_t edmIndex, const WorldId& worldId);
+    void registerHarvestable(size_t edmIndex, const Vector2D& position, const WorldId& worldId);
 
     /**
-     * @brief Unregister a harvestable from its world
+     * @brief Unregister a harvestable from the world-membership + spatial index (EDM indices only)
      * @param edmIndex EDM entity index
      */
     void unregisterHarvestable(size_t edmIndex);
@@ -289,22 +289,6 @@ public:
      * @param edmIndex EDM entity index
      */
     void unregisterDroppedItem(size_t edmIndex);
-
-    /**
-     * @brief Register a harvestable with spatial tracking
-     * @param edmIndex EDM entity index
-     * @param position World position
-     * @param worldId World to register with
-     *
-     * Note: This is called automatically by EDM::createHarvestable()
-     */
-    void registerHarvestableSpatial(size_t edmIndex, const Vector2D& position, const WorldId& worldId);
-
-    /**
-     * @brief Unregister a harvestable from spatial tracking
-     * @param edmIndex EDM entity index
-     */
-    void unregisterHarvestableSpatial(size_t edmIndex);
 
     // ========================================================================
     // CONTAINER SPATIAL REGISTRATION
@@ -334,7 +318,7 @@ public:
      * @return Number of containers found
      */
     size_t queryContainersInRadius(const Vector2D& center, float radius,
-                                   std::vector<size_t>& outIndices) const;
+        std::vector<size_t>& outIndices) const;
 
     // ========================================================================
     // SPATIAL QUERIES (O(k) where k = cells in radius)
@@ -350,7 +334,7 @@ public:
      * Note: Returns EDM indices. Caller should validate with EDM::isAlive()
      */
     size_t queryDroppedItemsInRadius(const Vector2D& center, float radius,
-                                     std::vector<size_t>& outIndices) const;
+        std::vector<size_t>& outIndices) const;
 
     /**
      * @brief Query harvestables near a position in active world
@@ -360,7 +344,19 @@ public:
      * @return Number of harvestables found
      */
     size_t queryHarvestablesInRadius(const Vector2D& center, float radius,
-                                     std::vector<size_t>& outIndices) const;
+        std::vector<size_t>& outIndices) const;
+
+    /**
+     * @brief Count live, non-depleted harvestables near a position in active world
+     * @param center Query center position
+     * @param radius Search radius
+     * @return Number of available harvestables (any resource kind) within radius
+     *
+     * Read-only; allocation-free. Used by HarvestCommit for reserve and
+     * scarcity decisions.
+     */
+    [[nodiscard]] size_t countAvailableHarvestablesInRadius(const Vector2D& center,
+        float radius) const;
 
     /**
      * @brief Find closest dropped item to position
@@ -391,10 +387,15 @@ public:
     [[nodiscard]] const WorldId& getActiveWorld() const { return m_activeWorld; }
 
     /**
-     * @brief Clear all spatial data for a world (items + harvestables)
+     * @brief Clear all spatial data for a world (items, harvestables, containers)
      * @param worldId World to clear
      *
-     * Called directly during world teardown when needed.
+     * Also removes harvestable world membership: getHarvestableCount,
+     * copyHarvestableIndices, queryHarvestableTotal and getWorldResources all
+     * read 0 for this world afterwards. WRM does not destroy entities; callers
+     * destroying the world's EDM harvestables (e.g.
+     * WorldManager::destroyHarvestablesForWorld) must do so first, while
+     * copyHarvestableIndices still returns them.
      */
     void clearSpatialDataForWorld(const WorldId& worldId);
 
@@ -409,7 +410,7 @@ public:
      * @return Sum of quantities across all registered inventories
      */
     [[nodiscard]] Quantity queryInventoryTotal(const WorldId& worldId,
-                                               VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Query total harvestable yield potential in a world
@@ -418,7 +419,7 @@ public:
      * @return Sum of (yieldMax) for non-depleted harvestables
      */
     [[nodiscard]] Quantity queryHarvestableTotal(const WorldId& worldId,
-                                                 VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Query total world resources (inventories + harvestables)
@@ -427,14 +428,14 @@ public:
      * @return Combined total from inventories and harvestables
      */
     [[nodiscard]] Quantity queryWorldTotal(const WorldId& worldId,
-                                           VoidLight::ResourceHandle handle) const;
+        VoidLight::ResourceHandle handle) const;
 
     /**
      * @brief Check if a world has at least the specified quantity
      */
     [[nodiscard]] bool hasResource(const WorldId& worldId,
-                                   VoidLight::ResourceHandle handle,
-                                   Quantity minimumQuantity = 1) const;
+        VoidLight::ResourceHandle handle,
+        Quantity minimumQuantity = 1) const;
 
     /**
      * @brief Get all resource totals for a world
@@ -460,6 +461,39 @@ public:
      */
     [[nodiscard]] size_t getHarvestableCount(const WorldId& worldId) const;
 
+    /**
+     * @brief Copy static EDM harvestable indices for a world into out.
+     *
+     * Clears out then copies. Order is unspecified; callers that need a
+     * deterministic order sort. Callers destroy via EDM; WRM does not destroy.
+     */
+    void copyHarvestableIndices(const WorldId& worldId, std::vector<size_t>& out) const;
+
+    // ========================================================================
+    // HARVESTABLE VERSIONING
+    // ========================================================================
+
+    /**
+     * @brief Monotonic version of harvestable registry/availability state
+     *
+     * Bumped on register/unregister, active-world change, world clear/remove,
+     * state transition, clean, and notifyHarvestableStateChanged(). Never
+     * reset, so cached snapshots keyed on it stay distinguishable.
+     */
+    [[nodiscard]] uint64_t getHarvestableVersion() const noexcept {
+        return m_harvestableVersion.load(std::memory_order_acquire);
+    }
+
+    /**
+     * @brief Signal that a harvestable's availability changed (e.g. depleted)
+     *
+     * Called by HarvestCommit after the EDM depletion write. WRM stores no
+     * availability state; this only bumps the version.
+     */
+    void notifyHarvestableStateChanged() noexcept {
+        m_harvestableVersion.fetch_add(1, std::memory_order_acq_rel);
+    }
+
 private:
     WorldResourceManager() = default;
     ~WorldResourceManager();
@@ -474,14 +508,8 @@ private:
     // WorldId -> set of inventory indices
     std::unordered_map<WorldId, std::unordered_set<uint32_t>> m_inventoryRegistry;
 
-    // WorldId -> set of EDM harvestable indices
-    std::unordered_map<WorldId, std::unordered_set<size_t>> m_harvestableRegistry;
-
     // Reverse lookup: inventory index -> WorldId
     std::unordered_map<uint32_t, WorldId> m_inventoryToWorld;
-
-    // Reverse lookup: harvestable EDM index -> WorldId
-    std::unordered_map<size_t, WorldId> m_harvestableToWorld;
 
     // ========================================================================
     // SPATIAL INDEX STORAGE (per-world, for O(k) proximity queries)
@@ -490,14 +518,15 @@ private:
     // Per-world spatial indices for dropped items
     std::unordered_map<WorldId, SpatialIndex> m_itemSpatialIndices;
 
-    // Per-world spatial indices for harvestables
+    // Per-world harvestable world-membership + spatial index (EDM indices only).
+    // Single harvestable container: counts, copies, and totals read entityToCell.
     std::unordered_map<WorldId, SpatialIndex> m_harvestableSpatialIndices;
 
     // Reverse lookup: item EDM index -> WorldId (for O(1) unregistration)
     std::unordered_map<size_t, WorldId> m_itemToWorld;
 
-    // Reverse lookup: harvestable EDM index -> WorldId (for spatial unregistration)
-    std::unordered_map<size_t, WorldId> m_harvestableSpatialToWorld;
+    // Reverse lookup: harvestable EDM index -> WorldId (for O(1) unregistration)
+    std::unordered_map<size_t, WorldId> m_harvestableToWorld;
 
     // Per-world spatial indices for containers
     std::unordered_map<WorldId, SpatialIndex> m_containerSpatialIndices;
@@ -527,6 +556,9 @@ private:
     // These are updated on register/unregister and when active world changes
     std::atomic<size_t> m_activeWorldItemCount{0};
     std::atomic<size_t> m_activeWorldHarvestableCount{0};
+
+    // Harvestable registry/availability version (see getHarvestableVersion()).
+    std::atomic<uint64_t> m_harvestableVersion{0};
 
     // Helper to recalculate active world counts (called under lock)
     void recalculateActiveWorldCounts();

@@ -30,8 +30,7 @@
 class Player;
 class Entity;
 
-class CombatController : public ControllerBase, public IUpdatable
-{
+class CombatController : public ControllerBase, public IUpdatable {
 public:
     /**
      * @brief Construct CombatController with required player reference
@@ -81,8 +80,8 @@ public:
 
     // Configuration constants
     static constexpr float ATTACK_STAMINA_COST{10.0f};
-    static constexpr float STAMINA_REGEN_RATE{15.0f};     // per second
-    static constexpr float ATTACK_COOLDOWN{0.5f};         // seconds between attacks
+    static constexpr float STAMINA_REGEN_RATE{15.0f}; // per second
+    static constexpr float ATTACK_COOLDOWN{0.5f}; // seconds between attacks
 
 private:
     /**
@@ -106,7 +105,7 @@ private:
     float m_attackCooldown{0.0f};
 
     // Reusable buffers to avoid per-frame allocations
-    std::vector<EntityHandle> m_nearbyHandlesBuffer;  // Reused for queries
+    std::vector<EntityHandle> m_nearbyHandlesBuffer; // Reused for queries
 };
 
 #endif // COMBAT_CONTROLLER_HPP

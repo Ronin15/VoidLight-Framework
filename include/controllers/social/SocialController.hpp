@@ -27,7 +27,7 @@
 #include "controllers/ControllerBase.hpp"
 #include "controllers/IUpdatable.hpp"
 #include "entities/EntityHandle.hpp"
-#include "managers/EntityDataManager.hpp"  // For INVALID_INVENTORY_INDEX
+#include "managers/EntityDataManager.hpp" // For INVALID_INVENTORY_INDEX
 #include "utils/ResourceHandle.hpp"
 #include <memory>
 #include <string>
@@ -41,25 +41,25 @@ class InputManager;
  * @brief Result of a trade operation
  */
 enum class TradeResult {
-    Success,              // Trade completed successfully
-    InsufficientFunds,    // Buyer doesn't have enough gold/currency
-    InsufficientStock,    // Seller doesn't have the item
-    InvalidNPC,           // NPC handle invalid or not a merchant
-    InvalidItem,          // Item handle invalid
-    InventoryFull,        // Buyer's inventory is full
-    NPCRefused            // NPC refused trade (relationship too low)
+    Success, // Trade completed successfully
+    InsufficientFunds, // Buyer doesn't have enough gold/currency
+    InsufficientStock, // Seller doesn't have the item
+    InvalidNPC, // NPC handle invalid or not a merchant
+    InvalidItem, // Item handle invalid
+    InventoryFull, // Buyer's inventory is full
+    NPCRefused // NPC refused trade (relationship too low)
 };
 
 /**
  * @brief Type of social interaction for memory recording
  */
 enum class InteractionType {
-    Trade,        // Bought or sold items
-    Gift,         // Gave item to NPC
-    Greeting,     // Basic social interaction
-    Help,         // Helped the NPC (quest, rescue)
-    Theft,        // Stole from NPC (negative)
-    Insult        // Negative social interaction
+    Trade, // Bought or sold items
+    Gift, // Gave item to NPC
+    Greeting, // Basic social interaction
+    Help, // Helped the NPC (quest, rescue)
+    Theft, // Stole from NPC (negative)
+    Insult // Negative social interaction
 };
 
 /**
@@ -130,20 +130,20 @@ public:
     // ========================================================================
 
     TradeResult tryBuy(EntityHandle npcHandle,
-                       VoidLight::ResourceHandle itemHandle,
-                       int quantity = 1);
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1);
 
     TradeResult trySell(EntityHandle npcHandle,
-                        VoidLight::ResourceHandle itemHandle,
-                        int quantity = 1);
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1);
 
     [[nodiscard]] float calculateBuyPrice(EntityHandle npcHandle,
-                                          VoidLight::ResourceHandle itemHandle,
-                                          int quantity = 1) const;
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1) const;
 
     [[nodiscard]] float calculateSellPrice(EntityHandle npcHandle,
-                                           VoidLight::ResourceHandle itemHandle,
-                                           int quantity = 1) const;
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1) const;
 
     // ========================================================================
     // SOCIAL — Interactions & Memory
@@ -156,8 +156,8 @@ public:
      * based on item value. NPCs remember gifts and become more friendly.
      */
     bool tryGift(EntityHandle npcHandle,
-                 VoidLight::ResourceHandle itemHandle,
-                 int quantity = 1);
+        VoidLight::ResourceHandle itemHandle,
+        int quantity = 1);
 
     /**
      * @brief Record a social interaction for AI-owned NPC state application
@@ -167,16 +167,20 @@ public:
      * MemoryType::Interaction and updates NPC emotions.
      */
     void recordInteraction(EntityHandle npcHandle,
-                           InteractionType type,
-                           float value = 0.0f);
+        InteractionType type,
+        float value = 0.0f);
 
     /**
      * @brief Report a theft — records memory, fires event, alerts guards
+     * @details A player thief lowers the player's standing with the victim's
+     *          faction (AIManager::recordPlayerIncident). A valid NPC thief of a
+     *          different faction worsens the victim faction's stance toward it.
+     *          An invalid thief changes neither.
      */
     void reportTheft(EntityHandle thief,
-                     EntityHandle victim,
-                     VoidLight::ResourceHandle stolenItem,
-                     int quantity = 1);
+        EntityHandle victim,
+        VoidLight::ResourceHandle stolenItem,
+        int quantity = 1);
 
     /**
      * @brief Alert guards within range to a crime location
@@ -189,6 +193,9 @@ public:
 
     /** @brief Relationship score: -1.0 (hostile) to +1.0 (best friend), 0.0 neutral */
     [[nodiscard]] float getRelationshipLevel(EntityHandle npcHandle) const;
+
+    /** @brief Player standing with a faction (AIManager::getPlayerStanding). 0 if missing. Not mixed into getRelationshipLevel. */
+    [[nodiscard]] int8_t getPlayerFactionStanding(uint8_t faction) const;
 
     /** @brief Price multiplier: 0.7 (trusted) to 1.3 (hostile) */
     [[nodiscard]] float getPriceModifier(EntityHandle npcHandle) const;
@@ -251,10 +258,10 @@ private:
     void recordGift(EntityHandle npcHandle, float giftValue);
     // --- Utility ---
     void dispatchResourceChange(EntityHandle ownerHandle,
-                                VoidLight::ResourceHandle resourceHandle,
-                                int oldQuantity,
-                                int newQuantity,
-                                const std::string& reason) const;
+        VoidLight::ResourceHandle resourceHandle,
+        int oldQuantity,
+        int newQuantity,
+        const std::string& reason) const;
     [[nodiscard]] float getItemBaseValue(VoidLight::ResourceHandle itemHandle) const;
 
     // Player reference

@@ -15,15 +15,25 @@ the SDL3_GPU rendering path.
 - [TimestepManager](core/TimestepManager.md)
 - [ARCHITECTURE](ARCHITECTURE.md)
 - [InputManager](managers/InputManager.md)
+- [Manager Index](managers/README.md)
+- [EntityDataManager](managers/EntityDataManager.md)
+- [EntityStateManager](managers/EntityStateManager.md)
+- [GameStateManager](managers/GameStateManager.md)
+- [GameTimeManager](managers/GameTimeManager.md)
+- [BackgroundSimulationManager](managers/BackgroundSimulationManager.md)
+- [SettingsManager](managers/SettingsManager.md)
+- [SaveGameManager](managers/SaveGameManager.md)
 
 ## AI and Events
 
 - [AIManager](ai/AIManager.md)
+- [AIManager Architecture Summary](ai/AIManager_Optimization_Summary.md)
 - [Behavior Execution Pipeline](ai/BehaviorExecutionPipeline.md)
 - [Behavior Modes](ai/BehaviorModes.md)
 - [Behavior Quick Reference](ai/BehaviorQuickReference.md)
 - [NPC Memory](ai/NPCMemory.md)
 - [Pathfinding System](ai/PathfindingSystem.md)
+- [PathfinderManager](managers/PathfinderManager.md)
 - [EventManager](events/EventManager.md)
 - [EventManager Quick Reference](events/EventManager_QuickReference.md)
 - [EventManager Advanced](events/EventManager_Advanced.md)
@@ -33,27 +43,44 @@ the SDL3_GPU rendering path.
 ## Controllers and World Systems
 
 - [Controllers Overview](controllers/README.md)
+- [ControllerRegistry](controllers/ControllerRegistry.md)
 - [CombatController](controllers/CombatController.md)
 - [HudController](controllers/HudController.md)
 - [InventoryController](controllers/InventoryController.md)
 - [HarvestController](controllers/HarvestController.md)
 - [SocialController](controllers/SocialController.md)
+- [DayNightController](controllers/DayNightController.md)
+- [WeatherController](controllers/WeatherController.md)
 - [WorldManager](managers/WorldManager.md)
 - [WorldResourceManager](managers/WorldResourceManager.md)
+- [World Population](world/WorldPopulation.md)
 - [ProjectileManager](managers/ProjectileManager.md)
+- [CollisionManager](managers/CollisionManager.md)
+- [ParticleManager](managers/ParticleManager.md)
+- [ResourceTemplateManager](managers/ResourceTemplateManager.md)
+- [ResourceFactory](managers/ResourceFactory.md)
 
 ## Rendering and UI
 
 - [GPU Rendering](gpu/GPURendering.md)
+- [SceneRenderer](utils/SceneRenderer.md)
+- [World Render Pipeline](utils/WorldRenderPipeline.md)
+- [TextureManager](managers/TextureManager.md)
+- [FontManager](managers/FontManager.md)
+- [SoundManager](managers/SoundManager.md)
 - [UIManager Guide](ui/UIManager_Guide.md)
 - [UIConstants Reference](ui/UIConstants.md)
 - [Auto-Sizing System](ui/Auto_Sizing_System.md)
 - [DPI-Aware Font System](ui/DPI_Aware_Font_System.md)
-- [Minimap Implementation](ui/Minimap_Implementation.md)
+- [Minimap Implementation](ui/Minimap_Implementation.md) (superseded plan; Slice 8 owns production minimap)
+- [SDL3 Logical Presentation Modes](ui/SDL3_Logical_Presentation_Modes.md)
 
 ## Entities and GameStates
 
 - [Entity System](entities/README.md)
+- [EntityHandle](entities/EntityHandle.md)
+- [Entity States](entities/EntityStates.md)
+- [Resource](entities/Resource.md)
 - [GameState Documentation](gameStates/README.md)
 - [LogoState](gameStates/LogoState.md)
 - [MainMenuState](gameStates/MainMenuState.md)
@@ -65,7 +92,10 @@ the SDL3_GPU rendering path.
 
 ## Utilities
 
+- [Utilities Overview](utils/README.md)
 - [FrameProfiler](utils/FrameProfiler.md)
+- [Logger](utils/Logger.md)
+- [SIMDMath](utils/SIMDMath.md)
 - [Camera](utils/Camera.md)
 - [JsonReader](utils/JsonReader.md)
 - [JSON Resource Loading Guide](utils/JSON_Resource_Loading_Guide.md)
@@ -77,17 +107,23 @@ the SDL3_GPU rendering path.
 
 - [Architecture Overview](ARCHITECTURE.md)
 - [Interpolation System](architecture/InterpolationSystem.md)
+- [Architecture snapshots vs live](architecture/README.md) (dated dependency-analysis snapshots)
+- [Spatial Query Optimization Plan](architecture/SpatialQueryOptimizationPlan.md) (plan, not live architecture)
+- [Emergent Gameplay Analysis](EMERGENT_GAMEPLAY_ANALYSIS.md) (analysis, not a runtime contract)
+- [Review Non-Issues](review-non-issues.md) (adjudicated review findings)
 - [Implementation slices (workflow and gates)](framework-implementation-slices.md)
 
 ## Performance & Development
 
 - [Power Efficiency](performance/PowerEfficiency.md)
-- [SDL3 macOS Cleanup Issue](issues/SDL3_MACOS_CLEANUP_ISSUE.md)
-- [AGENTS.md](../AGENTS.md)
+- [Build Safety Controls](performance/BuildSafetyControls.md)
+- [SDL3 macOS Cleanup Issue](issues/SDL3_MACOS_CLEANUP_ISSUE.md) (platform note, not current architecture)
+- [CLAUDE.md](../CLAUDE.md)
 
 ## Testing and Validation
 
 - [`tests/TESTING.md`](../tests/TESTING.md)
+- [`tests/TROUBLESHOOTING.md`](../tests/TROUBLESHOOTING.md)
 - [`tests/valgrind/README.md`](../tests/valgrind/README.md)
 - [`tests/cppcheck/README.md`](../tests/cppcheck/README.md)
 - [`tests/clang-tidy/README.md`](../tests/clang-tidy/README.md)

@@ -29,27 +29,27 @@ public:
         BOOST_REQUIRE(resourceTemplateManager != nullptr);
         bool templateInitialized = resourceTemplateManager->init();
         BOOST_REQUIRE(templateInitialized);
-        
+
         // Initialize WorldResourceManager (required dependency)
         worldResourceManager = &WorldResourceManager::Instance();
         BOOST_REQUIRE(worldResourceManager != nullptr);
         bool resourceInitialized = worldResourceManager->init();
         BOOST_REQUIRE(resourceInitialized);
-        
+
         // Initialize WorldManager
         worldManager = &WorldManager::Instance();
         BOOST_REQUIRE(worldManager != nullptr);
         bool managerInitialized = worldManager->init();
         BOOST_REQUIRE(managerInitialized);
     }
-    
+
     ~WorldManagerTestFixture() {
         // Clean up in reverse order
         worldManager->clean();
         worldResourceManager->clean();
         resourceTemplateManager->clean();
     }
-    
+
 protected:
     WorldResourceManager* worldResourceManager;
     WorldManager* worldManager;
@@ -61,7 +61,7 @@ BOOST_FIXTURE_TEST_SUITE(WorldManagerTestSuite, WorldManagerTestFixture)
 BOOST_AUTO_TEST_CASE(TestSingletonPattern) {
     WorldManager* instance1 = &WorldManager::Instance();
     WorldManager* instance2 = &WorldManager::Instance();
-    
+
     BOOST_CHECK(instance1 == instance2);
     BOOST_CHECK(instance1 == worldManager);
 }
@@ -82,18 +82,22 @@ BOOST_AUTO_TEST_CASE(TestLoadNewWorld) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     bool loadResult = worldManager->loadNewWorld(config);
-    
+
     BOOST_CHECK(loadResult);
     BOOST_CHECK(worldManager->hasActiveWorld());
     BOOST_CHECK(!worldManager->getCurrentWorldId().empty());
-    
+
     worldManager->withWorldDataRead([&](const VoidLight::WorldData* worldData) {
         BOOST_REQUIRE(worldData != nullptr);
         BOOST_CHECK_EQUAL(worldData->grid.size(), 20);
         BOOST_CHECK_EQUAL(worldData->grid[0].size(), 20);
+        BOOST_CHECK(worldData->settlements.empty());
     });
+
+    const std::string worldId = worldManager->getCurrentWorldId();
+    BOOST_CHECK_EQUAL(worldManager->getPopulatedNpcCount(worldId), 0u);
 }
 
 BOOST_AUTO_TEST_CASE(TestUnloadWorldRemovesWRMState) {
@@ -111,11 +115,18 @@ BOOST_AUTO_TEST_CASE(TestUnloadWorldRemovesWRMState) {
     BOOST_REQUIRE(!worldId.empty());
     BOOST_REQUIRE(worldResourceManager->hasWorld(worldId));
 
+    const size_t harvestablesBeforeUnload =
+        worldResourceManager->getHarvestableCount(worldId);
+    BOOST_REQUIRE_GT(harvestablesBeforeUnload, 0u);
+    BOOST_REQUIRE_GT(EntityDataManager::Instance().getEntityCount(EntityKind::Harvestable), 0u);
+
     worldManager->unloadWorld();
 
     BOOST_CHECK(!worldManager->hasActiveWorld());
     BOOST_CHECK(!worldResourceManager->hasWorld(worldId));
     BOOST_CHECK(worldResourceManager->getActiveWorld().empty());
+    BOOST_CHECK_EQUAL(worldResourceManager->getHarvestableCount(worldId), 0u);
+    BOOST_CHECK_EQUAL(EntityDataManager::Instance().getEntityCount(EntityKind::Harvestable), 0u);
 }
 
 BOOST_AUTO_TEST_CASE(TestWorldUnloadedHandlerCanQueryWorldManager) {
@@ -231,7 +242,7 @@ BOOST_AUTO_TEST_CASE(TestHarvestablesUseConfiguredHarvestTypes) {
                 }
 
                 Vector2D pos(static_cast<float>(x) * TILE_SIZE + TILE_SIZE * 0.5f,
-                             static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
+                    static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
                 nearbyHarvestables.clear();
                 worldResourceManager->queryHarvestablesInRadius(pos, 8.0f, nearbyHarvestables);
                 BOOST_REQUIRE_MESSAGE(!nearbyHarvestables.empty(), "Expected harvestable at tree obstacle");
@@ -255,7 +266,7 @@ BOOST_AUTO_TEST_CASE(TestHarvestablesUseConfiguredHarvestTypes) {
                 }
 
                 Vector2D pos(static_cast<float>(x) * TILE_SIZE + TILE_SIZE * 0.5f,
-                             static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
+                    static_cast<float>(y) * TILE_SIZE + TILE_SIZE * 0.5f);
                 nearbyHarvestables.clear();
                 worldResourceManager->queryHarvestablesInRadius(pos, 8.0f, nearbyHarvestables);
                 BOOST_REQUIRE_MESSAGE(!nearbyHarvestables.empty(), "Expected harvestable at iron deposit obstacle");
@@ -279,29 +290,29 @@ BOOST_AUTO_TEST_CASE(TestGetTileAt) {
     config.humidityFrequency = 0.2f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     BOOST_REQUIRE(worldManager->loadNewWorld(config));
-    
+
     // Test valid positions
     auto tile = worldManager->getTileCopyAt(5, 5);
     BOOST_CHECK(tile.has_value());
-    
+
     tile = worldManager->getTileCopyAt(0, 0);
     BOOST_CHECK(tile.has_value());
-    
+
     tile = worldManager->getTileCopyAt(9, 9);
     BOOST_CHECK(tile.has_value());
-    
+
     // Test invalid positions
     tile = worldManager->getTileCopyAt(-1, 5);
     BOOST_CHECK(!tile.has_value());
-    
+
     tile = worldManager->getTileCopyAt(5, -1);
     BOOST_CHECK(!tile.has_value());
-    
+
     tile = worldManager->getTileCopyAt(10, 5);
     BOOST_CHECK(!tile.has_value());
-    
+
     tile = worldManager->getTileCopyAt(5, 10);
     BOOST_CHECK(!tile.has_value());
 }
@@ -315,14 +326,14 @@ BOOST_AUTO_TEST_CASE(TestIsValidPosition) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     BOOST_REQUIRE(worldManager->loadNewWorld(config));
-    
+
     // Test valid positions
     BOOST_CHECK(worldManager->isValidPosition(0, 0));
     BOOST_CHECK(worldManager->isValidPosition(14, 9));
     BOOST_CHECK(worldManager->isValidPosition(7, 5));
-    
+
     // Test invalid positions
     BOOST_CHECK(!worldManager->isValidPosition(-1, 0));
     BOOST_CHECK(!worldManager->isValidPosition(0, -1));
@@ -340,30 +351,30 @@ BOOST_AUTO_TEST_CASE(TestUpdateTile) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     BOOST_REQUIRE(worldManager->loadNewWorld(config));
-    
+
     // Get original tile
     const auto originalTile = worldManager->getTileCopyAt(2, 2);
     BOOST_REQUIRE(originalTile.has_value());
-    
+
     // Create modified tile
     Tile newTile = *originalTile;
     newTile.biome = Biome::DESERT;
     newTile.obstacleType = ObstacleType::ROCK;
     newTile.elevation = 0.8f;
-    
+
     // Update tile
     bool updateResult = worldManager->updateTile(2, 2, newTile);
     BOOST_CHECK(updateResult);
-    
+
     // Verify the update
     const auto updatedTile = worldManager->getTileCopyAt(2, 2);
     BOOST_REQUIRE(updatedTile.has_value());
     BOOST_CHECK_EQUAL(updatedTile->biome, Biome::DESERT);
     BOOST_CHECK_EQUAL(updatedTile->obstacleType, ObstacleType::ROCK);
     BOOST_CHECK_CLOSE(updatedTile->elevation, 0.8f, 0.001f);
-    
+
     // Test invalid position update
     bool invalidUpdate = worldManager->updateTile(-1, -1, newTile);
     BOOST_CHECK(!invalidUpdate);
@@ -378,9 +389,9 @@ BOOST_AUTO_TEST_CASE(TestHarvestResource) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.1f; // Low water level for more land
     config.mountainLevel = 0.9f; // High mountain level
-    
+
     BOOST_REQUIRE(worldManager->loadNewWorld(config));
-    
+
     // Find a tile with an obstacle
     int obstacleX = -1, obstacleY = -1;
     for (int y = 0; y < 50; ++y) {
@@ -394,20 +405,20 @@ BOOST_AUTO_TEST_CASE(TestHarvestResource) {
         }
         if (obstacleX != -1) break;
     }
-    
+
     // We should find at least one obstacle in a 50x50 world
     BOOST_REQUIRE(obstacleX != -1);
     BOOST_REQUIRE(obstacleY != -1);
-    
+
     // Verify tile has obstacle before harvesting
     const auto beforeHarvest = worldManager->getTileCopyAt(obstacleX, obstacleY);
     BOOST_REQUIRE(beforeHarvest.has_value());
     BOOST_CHECK(beforeHarvest->obstacleType != ObstacleType::NONE);
-    
+
     // Harvest the resource
     bool harvestResult = worldManager->handleHarvestResource(1, obstacleX, obstacleY);
     BOOST_CHECK(harvestResult);
-    
+
     // Verify tile no longer has obstacle
     const auto afterHarvest = worldManager->getTileCopyAt(obstacleX, obstacleY);
     BOOST_REQUIRE(afterHarvest.has_value());
@@ -423,9 +434,9 @@ BOOST_AUTO_TEST_CASE(TestHarvestEmptyTile) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.8f; // High water level, mostly water tiles
     config.mountainLevel = 0.9f;
-    
+
     BOOST_REQUIRE(worldManager->loadNewWorld(config));
-    
+
     // Find a tile without obstacles (likely water)
     int emptyX = -1, emptyY = -1;
     for (int y = 0; y < 10; ++y) {
@@ -439,9 +450,9 @@ BOOST_AUTO_TEST_CASE(TestHarvestEmptyTile) {
         }
         if (emptyX != -1) break;
     }
-    
+
     BOOST_REQUIRE(emptyX != -1);
-    
+
     // Try to harvest from empty tile
     bool harvestResult = worldManager->handleHarvestResource(1, emptyX, emptyY);
     BOOST_CHECK(!harvestResult); // Should fail
@@ -449,10 +460,10 @@ BOOST_AUTO_TEST_CASE(TestHarvestEmptyTile) {
 
 BOOST_AUTO_TEST_CASE(TestRenderingState) {
     BOOST_CHECK(worldManager->isRenderingEnabled()); // Default enabled
-    
+
     worldManager->enableRendering(false);
     BOOST_CHECK(!worldManager->isRenderingEnabled());
-    
+
     worldManager->enableRendering(true);
     BOOST_CHECK(worldManager->isRenderingEnabled());
 }
@@ -477,14 +488,14 @@ BOOST_AUTO_TEST_CASE(TestUnloadWorld) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.3f;
     config.mountainLevel = 0.7f;
-    
+
     BOOST_REQUIRE(worldManager->loadNewWorld(config));
     BOOST_CHECK(worldManager->hasActiveWorld());
-    
+
     worldManager->unloadWorld();
     BOOST_CHECK(!worldManager->hasActiveWorld());
     BOOST_CHECK(worldManager->getCurrentWorldId().empty());
-    
+
     // Verify tile access returns null after unload
     const auto tile = worldManager->getTileCopyAt(5, 5);
     BOOST_CHECK(!tile.has_value());
@@ -499,7 +510,7 @@ BOOST_AUTO_TEST_CASE(TestMultipleWorldLoads) {
     config1.humidityFrequency = 0.1f;
     config1.waterLevel = 0.3f;
     config1.mountainLevel = 0.7f;
-    
+
     WorldGenerationConfig config2;
     config2.width = 15;
     config2.height = 15;
@@ -508,25 +519,25 @@ BOOST_AUTO_TEST_CASE(TestMultipleWorldLoads) {
     config2.humidityFrequency = 0.1f;
     config2.waterLevel = 0.3f;
     config2.mountainLevel = 0.7f;
-    
+
     // Load first world
     BOOST_REQUIRE(worldManager->loadNewWorld(config1));
     std::string firstWorldId = worldManager->getCurrentWorldId();
-    
+
     worldManager->withWorldDataRead([&](const VoidLight::WorldData* firstWorldData) {
         BOOST_REQUIRE(firstWorldData != nullptr);
         BOOST_CHECK_EQUAL(firstWorldData->grid.size(), 10);
     });
-    
+
     // Load second world (should replace first)
     BOOST_REQUIRE(worldManager->loadNewWorld(config2));
     std::string secondWorldId = worldManager->getCurrentWorldId();
-    
+
     worldManager->withWorldDataRead([&](const VoidLight::WorldData* secondWorldData) {
         BOOST_REQUIRE(secondWorldData != nullptr);
         BOOST_CHECK_EQUAL(secondWorldData->grid.size(), 15);
     });
-    
+
     // World IDs should be different
     BOOST_CHECK_NE(firstWorldId, secondWorldId);
     BOOST_CHECK(!worldResourceManager->hasWorld(firstWorldId));
@@ -543,17 +554,17 @@ BOOST_AUTO_TEST_CASE(TestWorldResourceInitialization) {
     config.humidityFrequency = 0.1f;
     config.waterLevel = 0.2f; // Low water level for more land biomes
     config.mountainLevel = 0.6f; // Moderate mountain level
-    
+
     // Load the world - this should trigger the resource initialization
     bool loadResult = worldManager->loadNewWorld(config);
     BOOST_REQUIRE(loadResult);
-    
+
     // Verify basic world loading
     BOOST_CHECK(worldManager->hasActiveWorld());
     BOOST_CHECK(!worldManager->getCurrentWorldId().empty());
-    
+
     std::string worldId = worldManager->getCurrentWorldId();
-    
+
     // Check if harvestables were spawned and registered with WorldResourceManager
     // World resources are now tracked via harvestables (query-only API)
     auto woodHandle = resourceTemplateManager->getHandleById("wood");
@@ -582,22 +593,22 @@ BOOST_AUTO_TEST_CASE(TestWorldResourceInitialization) {
     } else {
         BOOST_WARN_MESSAGE(false, "Gold ore resource handle not found - check materials.json");
     }
-    
+
     // Get all resources for this world to see what was actually initialized
     auto allResources = worldResourceManager->getWorldResources(worldId);
     BOOST_CHECK_GT(allResources.size(), 0); // Should have some resources
     // Log total resource types
-    
+
     // Verify multiple world loading works with resource initialization
     WorldGenerationConfig config2 = config;
     config2.seed = 888888; // Different seed
-    
+
     bool loadResult2 = worldManager->loadNewWorld(config2);
     BOOST_REQUIRE(loadResult2);
-    
+
     std::string newWorldId = worldManager->getCurrentWorldId();
     BOOST_CHECK_NE(newWorldId, worldId); // Should be different world
-    
+
     // Verify new world also has resources
     auto newWorldResources = worldResourceManager->getWorldResources(newWorldId);
     BOOST_CHECK_GT(newWorldResources.size(), 0); // Should have resources too

@@ -45,12 +45,11 @@ bool GPUDevice::init(SDL_Window* window) {
     m_device = SDL_CreateGPUDevice(
         requestedFormats,
         debugMode,
-        preferredDriver
-    );
+        preferredDriver);
 
     if (!m_device) {
         GAMEENGINE_ERROR(std::format("Failed to create GPU device for preferred driver {}: {}",
-                                     preferredDriver, SDL_GetError()));
+            preferredDriver, SDL_GetError()));
         return false;
     }
 
@@ -73,7 +72,7 @@ bool GPUDevice::init(SDL_Window* window) {
 
     if (!swapchainConfigured) {
         GAMEENGINE_WARN(std::format("Failed to configure swapchain VSYNC: {}",
-                                     SDL_GetError()));
+            SDL_GetError()));
     }
 
     const char* driver = SDL_GetGPUDeviceDriver(m_device);
@@ -124,12 +123,12 @@ SDL_GPUTextureFormat GPUDevice::getSwapchainFormat() const {
 }
 
 bool GPUDevice::supportsFormat(SDL_GPUTextureFormat format,
-                               SDL_GPUTextureUsageFlags usage) const {
+    SDL_GPUTextureUsageFlags usage) const {
     if (!m_device) {
         return false;
     }
     return SDL_GPUTextureSupportsFormat(m_device, format,
-                                        SDL_GPU_TEXTURETYPE_2D, usage);
+        SDL_GPU_TEXTURETYPE_2D, usage);
 }
 
 const char* GPUDevice::getDriverName() const {

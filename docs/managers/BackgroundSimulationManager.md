@@ -41,16 +41,9 @@ Entities in the Background tier receive reduced simulation:
 
 **What Background Entities Do**:
 ```cpp
-// Simplified Background tier update
-void BackgroundSimulationManager::processBackgroundEntity(size_t edmIndex, float dt) {
-    auto& edm = EntityDataManager::Instance();
-    auto& transform = edm.getTransformByIndex(edmIndex);
-
-    // Simple position integration (no AI, no collision)
-    transform.position += transform.velocity * dt;
-
-    // Optional: Apply simple world bounds clamping
-}
+// Simplified Background tier update (simulateNPC)
+void BackgroundSimulationManager::simulateNPC(float dt, size_t index);
+// Position integration + 0.98 velocity decay at 10 Hz. No AI, no collision.
 ```
 
 ### Hibernated Tier
@@ -127,7 +120,7 @@ if (hot.tier == SimulationTier::Active) {
 
 - **Power-Efficient**: Zero CPU when paused or no background entities
 - **Accumulator-Based Timing**: Fixed 10Hz updates regardless of frame rate
-- **Tier Management**: Updates simulation tiers every 60 frames (~1 second)
+- **Tier Management**: Updates simulation tiers every 120 frames (~2 seconds)
 - **WorkerBudget Integration**: Adaptive batch sizing for parallel processing
 - **Screen-Size Aware**: Configurable radii based on display dimensions
 
@@ -141,7 +134,7 @@ GameEngine::update()
     │
     └─► BackgroundSimulationManager::update()
             │
-            ├─► Phase 1: Tier updates (every 60 frames)
+            ├─► Phase 1: Tier updates (every 120 frames)
             │   └─► EntityDataManager::updateSimulationTiers()
             │
             └─► Phase 2: Background entity processing (10 Hz)
@@ -170,7 +163,7 @@ void prepareForStateTransition();
  * @param deltaTime Frame delta time (for accumulator)
  *
  * Power-efficient single entry point:
- * - Phase 1: Tier updates every 60 frames (~1 sec at 60Hz)
+ * - Phase 1: Tier updates every 120 frames (~2 sec at 60Hz)
  * - Phase 2: Background entity processing at 10Hz (only if entities exist)
  */
 void update(const Vector2D& referencePoint, float deltaTime);
@@ -238,21 +231,19 @@ void resetPerfStats();
 ### Basic Integration
 
 ```cpp
-// In GameEngine::update()
-void GameEngine::update(float dt) {
-    // Process Active tier entities
-    AIManager::Instance().update(dt);
-    CollisionManager::Instance().update(dt);
+// In GameEngine::update() (sequential manager slots, main thread)
+mp_aiManager->update(deltaTime);          // Active tier
+// ... projectiles, particles, pathfinder ...
+mp_collisionManager->update(deltaTime);   // Active tier
 
-    // Process Background tier entities (power-efficient, 10Hz)
-    BackgroundSimulationManager::Instance().update(playerPosition, dt);
-}
+// Background tier (power-efficient, 10Hz)
+mp_backgroundSimManager->update(mp_aiManager->getPlayerPosition(), deltaTime);
 ```
 
 ### Screen-Size Configuration
 
 ```cpp
-// In GameEngine::init() after window creation
+// GameEngine calls this at init and again on window resize
 BackgroundSimulationManager::Instance().configureForScreenSize(1920, 1080);
 // Results in:
 // - Active radius: ~1650 pixels (1.5x half-diagonal)
@@ -262,11 +253,10 @@ BackgroundSimulationManager::Instance().configureForScreenSize(1920, 1080);
 ### State Transitions
 
 ```cpp
-void GameState::exit() {
-    // Wait for any async background processing
-    BackgroundSimulationManager::Instance().waitForAsyncCompletion();
-
-    // Now safe to clean up
+bool GamePlayState::exit() {
+    // prepareForStateTransition() waits for in-flight batches
+    // (waitForAsyncCompletion()) before clearing transient state
+    BackgroundSimulationManager::Instance().prepareForStateTransition();
     // ...
 }
 ```
@@ -285,21 +275,22 @@ BackgroundSimulationManager::Instance().setUpdateRate(5.0f);   // 5 Hz
 
 BackgroundSimulationManager follows the AIManager threading pattern:
 
-### Single-Threaded Path (< 500 entities)
-- Direct processing on main thread
-- No threading overhead
+`WorkerBudgetManager::shouldUseThreading(SystemType::BackgroundSim, backgroundCount)`
+is the authoritative threading decision; there is no manager-side entity-count
+threshold.
 
-### Multi-Threaded Path (>= 500 entities)
-- Uses WorkerBudget for optimal batch sizing
+### Single-Threaded Path
+- Direct processing on main thread when WorkerBudget declines threading
+
+### Multi-Threaded Path
+- `getOptimalWorkers` / `getBatchStrategy` size the batches
 - Submits batches to ThreadSystem
 - Per-batch output buffers (zero contention)
 
-### Threading Thresholds
+### Constants
 
 | Constant | Value | Purpose |
 |----------|-------|---------|
-| `MIN_ENTITIES_FOR_THREADING` | 500 | Threshold for multi-threaded processing |
-| `MIN_BATCH_SIZE` | 64 | Minimum entities per batch |
 | `TIER_UPDATE_INTERVAL` | 120 | Frames between tier recalculation |
 
 ## Tier Radius Configuration
@@ -335,7 +326,7 @@ BackgroundSimulationManager is designed for minimal CPU usage:
 1. **Zero CPU when paused**: Immediate return from `update()`
 2. **No work detection**: Skips processing if no background entities
 3. **Accumulator-based timing**: Only processes at target rate (10Hz)
-4. **Tier caching**: Only recalculates tiers every 60 frames
+4. **Tier caching**: Only recalculates tiers every 120 frames
 
 ### Typical CPU Usage
 

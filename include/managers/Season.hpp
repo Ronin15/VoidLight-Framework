@@ -11,8 +11,7 @@
 /**
  * @brief Type-safe season enumeration
  */
-enum class Season : uint8_t
-{
+enum class Season : uint8_t {
     Spring = 0,
     Summer = 1,
     Fall = 2,

@@ -21,6 +21,9 @@
 
 #include "ai/BehaviorConfig.hpp"
 #include "ai/AICommandBus.hpp"
+#include "ai/BehaviorExecutors.hpp" // HarvestableSnapshotEntry
+#include "ai/EnvironmentModifiers.hpp"
+#include "ai/FactionStance.hpp"
 #include "core/Logger.hpp"
 #include "entities/EntityHandle.hpp"
 #include "managers/EntityDataManager.hpp"
@@ -28,7 +31,9 @@
 #include <array>
 #include <atomic>
 #include <future>
+#include <optional>
 #include <shared_mutex>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -46,46 +51,46 @@ class PathfinderManager;
  */
 class AIManager {
 public:
-  enum class SocialInteractionType : uint8_t {
-    Trade,
-    Gift,
-    Greeting,
-    Help,
-    Theft,
-    Insult
-  };
+    enum class SocialInteractionType : uint8_t {
+        Trade,
+        Gift,
+        Greeting,
+        Help,
+        Theft,
+        Insult
+    };
 
-  static AIManager &Instance() {
-    static AIManager instance;
-    return instance;
-  }
+    static AIManager& Instance() {
+        static AIManager instance;
+        return instance;
+    }
 
-  /**
+    /**
    * @brief Initializes the AI Manager and its internal systems
    * @return true if initialization successful, false otherwise
    */
-  [[nodiscard]] bool init();
+    [[nodiscard]] bool init();
 
-  /**
+    /**
    * @brief Checks if the AI Manager has been initialized
    * @return true if initialized, false otherwise
    */
-  bool isInitialized() const {
-    return m_initialized.load(std::memory_order_acquire);
-  }
+    bool isInitialized() const {
+        return m_initialized.load(std::memory_order_acquire);
+    }
 
-  /**
+    /**
    * @brief Cleans up all AI resources and marks manager as shut down
    */
-  void clean();
+    void clean();
 
-  /**
+    /**
    * @brief Prepares for state transition by safely cleaning up entities
    * @details Call this before exit() in game states to avoid deadlocks
    */
-  void prepareForStateTransition();
+    void prepareForStateTransition();
 
-  /**
+    /**
    * @brief Updates all active AI entities
    *
    * Data processing pipeline:
@@ -97,255 +102,407 @@ public:
    *
    * @param deltaTime Time elapsed since last update in seconds
    */
-  void update(float deltaTime);
+    void update(float deltaTime);
 
-  /**
+    /**
    * @brief Checks if AIManager has been shut down
    * @return true if manager is shut down, false otherwise
    */
-  bool isShutdown() const { return m_isShutdown; }
+    bool isShutdown() const { return m_isShutdown; }
 
-  /**
+    /**
    * @brief Registers all standard behavior types (Idle, Wander, Chase, Guard, Attack, Flee, Follow, Patrol)
    * @details Called by GameEngine after init(). Sets up m_behaviorTypeMap for name->type lookup.
    */
-  void registerDefaultBehaviors();
+    void registerDefaultBehaviors();
 
-  /**
+    /**
    * @brief Checks if a behavior name is registered
    * @param name Name of the behavior to check
    * @return true if behavior name is known, false otherwise
    */
-  bool hasBehavior(const std::string &name) const;
+    bool hasBehavior(const std::string& name) const;
 
-  /**
+    /**
    * @brief Assigns a behavior to an entity by name
    * @param handle Entity to assign behavior to
    * @param behaviorName Name of the behavior (e.g., "Idle", "Attack")
    */
-  void assignBehavior(EntityHandle handle, const std::string &behaviorName);
+    void assignBehavior(EntityHandle handle, const std::string& behaviorName);
 
-  /**
+    /**
    * @brief Assigns a behavior to an entity with custom config
    * @param handle Entity to assign behavior to
    * @param config Behavior configuration (includes type)
    */
-  void assignBehavior(EntityHandle handle, const VoidLight::BehaviorConfigData& config);
+    void assignBehavior(EntityHandle handle, const VoidLight::BehaviorConfigData& config);
 
-  /**
+    /**
    * @brief Removes behavior assignment from an entity
    */
-  void unassignBehavior(EntityHandle handle);
+    void unassignBehavior(EntityHandle handle);
 
-  /**
+    /**
    * @brief Checks if an entity has an assigned behavior
    */
-  bool hasBehavior(EntityHandle handle) const;
+    bool hasBehavior(EntityHandle handle) const;
 
 
-  // Player handle for AI targeting
-  void setPlayerHandle(EntityHandle player);
-  EntityHandle getPlayerHandle() const;
-  Vector2D getPlayerPosition() const;
-  bool isPlayerValid() const;
+    // Player handle for AI targeting
+    void setPlayerHandle(EntityHandle player);
+    EntityHandle getPlayerHandle() const;
+    Vector2D getPlayerPosition() const;
+    bool isPlayerValid() const;
 
-  // Entity registration (requires behavior - use assignBehavior() or registerEntity with behavior)
-  void registerEntity(EntityHandle handle, const std::string &behaviorName);
-  void unregisterEntity(EntityHandle handle);
-  void destroyAllNPCsForStateTransition();
-  void onEntityFactionChanged(size_t edmIndex, uint8_t oldFaction, uint8_t newFaction);
-  void applySocialInteraction(EntityHandle npcHandle, EntityHandle subjectHandle,
-                              SocialInteractionType interactionType,
-                              float value);
+    // Entity registration (requires behavior - use assignBehavior() or registerEntity with behavior)
+    void registerEntity(EntityHandle handle, const std::string& behaviorName);
+    void unregisterEntity(EntityHandle handle);
+    void destroyAllNPCsForStateTransition();
+    void onEntityFactionChanged(size_t edmIndex, uint8_t oldFaction, uint8_t newFaction);
+    void applySocialInteraction(EntityHandle npcHandle, EntityHandle subjectHandle,
+        SocialInteractionType interactionType,
+        float value);
 
-  /**
+    /**
    * @brief Linear scan of active entities returning handles within radius (O(N))
    */
-  void scanActiveHandlesInRadius(const Vector2D& center, float radius,
-                                 std::vector<EntityHandle>& outHandles,
-                                 bool excludePlayer = true) const;
+    void scanActiveHandlesInRadius(const Vector2D& center, float radius,
+        std::vector<EntityHandle>& outHandles,
+        bool excludePlayer = true) const;
 
-  /**
+    /**
    * @brief Linear scan of active entities returning EDM indices within radius (O(N))
    * Preferred API for behavior code - returns edmIndices directly, avoiding
    * redundant getIndex(handle) lookups at call sites.
    */
-  void scanActiveIndicesInRadius(const Vector2D& center, float radius,
-                                 std::vector<size_t>& outEdmIndices,
-                                 bool excludePlayer = true) const;
+    void scanActiveIndicesInRadius(const Vector2D& center, float radius,
+        std::vector<size_t>& outEdmIndices,
+        bool excludePlayer = true) const;
 
-  /**
+    /**
    * @brief Scan only guard entities within radius (O(G) where G = guard count)
    * Uses incrementally maintained guard index — no per-frame rebuild.
    */
-  void scanGuardsInRadius(const Vector2D& center, float radius,
-                          std::vector<size_t>& outEdmIndices,
-                          bool excludePlayer = true) const;
+    void scanGuardsInRadius(const Vector2D& center, float radius,
+        std::vector<size_t>& outEdmIndices,
+        bool excludePlayer = true) const;
 
-  /**
-   * @brief Scan only same-faction entities within radius (O(F) where F = faction size)
-   * Uses incrementally maintained faction index — no per-frame rebuild.
+    static constexpr uint8_t MAX_FACTIONS = kFactionStanceRowSize;
+
+    /**
+   * @brief Directed stance of fromFaction toward towardFaction.
+   * Out-of-range factions return Neutral.
    */
-  void scanFactionInRadius(uint8_t faction, const Vector2D& center, float radius,
-                           std::vector<size_t>& outEdmIndices,
-                           bool excludePlayer = true) const;
-
-  // Global controls
-  void setGlobalPause(bool paused);
-  bool isGloballyPaused() const;
-
-  // Priority from EDM CharacterData
-  int getEntityPriority(EntityHandle handle) const;
-  float getUpdateRangeMultiplier(int priority) const;
-  static constexpr int AI_MIN_PRIORITY = 0;
-  static constexpr int AI_MAX_PRIORITY = 9;
-  static constexpr int DEFAULT_PRIORITY = 5;
-  void resetBehaviors();
-
-  VOIDLIGHT_DEBUG_ONLY(
-  // Threading configuration (benchmarking only - compiles out in release)
-  void enableThreading(bool enable);
-  )
-
-  // Performance monitoring
-  size_t getBehaviorCount() const;
-  size_t getBehaviorUpdateCount() const;
-
-  // Thread-safe assignment tracking (atomic counter only)
-  size_t getTotalAssignmentCount() const;
-
-  /**
-   * @brief Get direct access to PathfinderManager for optimal pathfinding
-   * performance
-   * @return Reference to PathfinderManager instance
-   * @details Provides access to centralized pathfinding service for all AI
-   * entities
-   *
-   * All pathfinding functionality has been moved to PathfinderManager.
-   * Use PathfinderManager::Instance() to access pathfinding services.
+    [[nodiscard]] FactionStance getStance(uint8_t fromFaction, uint8_t towardFaction) const;
+    /**
+   * @brief Set a directed stance cell. Out-of-range or diagonal (i,i) is a no-op.
    */
-  PathfinderManager &getPathfinderManager() const;
+    void setStance(uint8_t fromFaction, uint8_t towardFaction, FactionStance stance);
+    [[nodiscard]] bool isHostileTo(uint8_t fromFaction, uint8_t towardFaction) const;
+    [[nodiscard]] bool isAlliedTo(uint8_t fromFaction, uint8_t towardFaction) const;
+    /** Allied → Neutral → Hostile. Out-of-range or diagonal is a no-op. */
+    void worsenStance(uint8_t fromFaction, uint8_t towardFaction);
+    /** Fill Neutral, then set the diagonal to Allied. Main-thread lifecycle reset. */
+    void resetFactionStances();
+
+    // Player relations. The player has no faction (CharacterData::NO_FACTION);
+    // per-faction standing (EDM PlayerFactionStanding sidecar) is the single
+    // source of truth. The stance table above stays NPC-faction only.
+    static constexpr int8_t PLAYER_STANDING_MIN = -100;
+    static constexpr int8_t PLAYER_STANDING_MAX = 100;
+    static constexpr int8_t PLAYER_STANDING_ASSAULT_DELTA = -10;
+    static constexpr int8_t PLAYER_STANDING_KILL_DELTA = -30;
+    static constexpr int8_t PLAYER_STANDING_THEFT_DELTA = -25;
+    static constexpr int8_t PLAYER_STANDING_GIFT_DELTA = 15;
+    // Derived relation: standing <= HOSTILE_AT is Hostile, >= ALLIED_AT is Allied.
+    static constexpr int8_t PLAYER_STANDING_HOSTILE_AT = -50;
+    static constexpr int8_t PLAYER_STANDING_ALLIED_AT = 50;
+
+    enum class PlayerIncident : uint8_t {
+        Assault, // Non-lethal player hit; applies only while not already Hostile
+        Kill, // Lethal player hit; always applies
+        Theft,
+        Gift
+    };
+
+    /**
+   * @brief Apply a player incident against an NPC to the player's standing
+   *        with that NPC's faction. Main thread only.
+   * @details No-op for an invalid or non-EntityKind::Player player, a target
+   *          that is not EntityKind::NPC, or a faction >= MAX_FACTIONS.
+   *          Never writes the stance table. A derived relation change emits
+   *          StanceChangedEvent (towardPlayer, settlement at the NPC) and, for
+   *          the current player handle, resyncs that faction's collision.
+   */
+    void recordPlayerIncident(PlayerIncident incident, EntityHandle player, EntityHandle npc);
+    /**
+   * @brief Raw standing delta (clamped). Same relation/event/collision path as
+   *        recordPlayerIncident with settlement id 0. No-op unless playerHandle
+   *        is a live EntityKind::Player. Main thread only.
+   */
+    void adjustPlayerStanding(EntityHandle playerHandle, uint8_t towardFaction, int8_t delta);
+    [[nodiscard]] int8_t getPlayerStanding(EntityHandle playerHandle, uint8_t faction) const;
+    /**
+   * @brief Relation of an NPC faction toward the current player handle, derived
+   *        from standing. Neutral without a player or for an out-of-range
+   *        faction. Reads the player handle unlocked: call on the main thread,
+   *        or with m_entitiesMutex held (assignBehavior, including the
+   *        LoadingState worker populate path).
+   */
+    [[nodiscard]] FactionStance getPlayerRelation(uint8_t faction) const;
+
+    /**
+   * @brief True if fromFaction's row contains any Hostile cell.
+   * Out-of-range factions return false.
+   */
+    [[nodiscard]] bool factionRowHasHostile(uint8_t faction) const;
+    /**
+   * @brief Scan entities whose faction is Allied from fromFaction's row.
+   * Uses incrementally maintained faction indices. Safe for worker reads.
+   */
+    void scanAlliedInRadius(uint8_t fromFaction, const Vector2D& center, float radius,
+        std::vector<size_t>& outEdmIndices,
+        bool excludePlayer = true) const;
+    /**
+   * @brief Scan entities whose faction is Hostile from fromFaction's row.
+   * Returns immediately (empty) when the row has no Hostile cell, so the cost
+   * is O(members of Hostile factions) only when hostility exists. Uses the
+   * incrementally maintained faction indices. Safe for worker reads.
+   */
+    void scanHostileInRadius(uint8_t fromFaction, const Vector2D& center, float radius,
+        std::vector<size_t>& outEdmIndices,
+        bool excludePlayer = true) const;
+
+    // Global controls
+    void setGlobalPause(bool paused);
+    bool isGloballyPaused() const;
+
+    /**
+   * @brief Per-frame environment scales filled on the main thread in update().
+   * @details Main thread only. Workers read the by-value copy on BehaviorContext.
+   */
+    [[nodiscard]] const EnvironmentSnapshot& getEnvironmentSnapshot() const {
+        return m_environmentSnapshot;
+    }
+
+    /**
+   * @brief Current-world settlement at a world-space pixel. Main thread only.
+   * @details First matching settlement wins. Wilderness is not a faction.
+   *          Workers must not call this (it queries WorldManager).
+   */
+    struct TerritoryQueryResult {
+        uint32_t settlementId{0}; // SettlementRecord.id, 1-based
+        uint8_t faction{0};
+    };
+    [[nodiscard]] std::optional<TerritoryQueryResult> queryTerritoryAtPixel(float worldX, float worldY) const;
+    [[nodiscard]] std::optional<TerritoryQueryResult> queryTerritoryAtTile(int tileX, int tileY) const;
+
+    /**
+   * @brief Available harvestables of the active world, as last snapshotted for workers.
+   * @details Main thread only. Rebuilt in update() only when the WRM harvestable
+   *          version changes; cleared on prepareForStateTransition() / clean().
+   *          Entries are grouped by HarvestableSnapshotView grid cell.
+   */
+    [[nodiscard]] std::span<const HarvestableSnapshotEntry> getHarvestableSnapshot() const {
+        return m_harvestableSnapshot;
+    }
+
+    /**
+   * @brief Number of harvestable snapshot rebuilds since init (diagnostic). Main thread only.
+   */
+    [[nodiscard]] size_t getHarvestableSnapshotRebuildCount() const {
+        return m_harvestableSnapshotRebuilds;
+    }
+
+    // Priority from EDM CharacterData
+    int getEntityPriority(EntityHandle handle) const;
+    float getUpdateRangeMultiplier(int priority) const;
+    static constexpr int AI_MIN_PRIORITY = 0;
+    static constexpr int AI_MAX_PRIORITY = 9;
+    static constexpr int DEFAULT_PRIORITY = 5;
+    void resetBehaviors();
+
+    VOIDLIGHT_DEBUG_ONLY(
+        // Threading configuration (benchmarking only - compiles out in release)
+        void enableThreading(bool enable);)
+
+    // Performance monitoring
+    size_t getBehaviorCount() const;
+    size_t getBehaviorUpdateCount() const;
+
+    // Thread-safe assignment tracking (atomic counter only)
+    size_t getTotalAssignmentCount() const;
 
 private:
-  AIManager() = default;
-  ~AIManager();
-  AIManager(const AIManager &) = delete;
-  AIManager &operator=(const AIManager &) = delete;
+    AIManager() = default;
+    ~AIManager();
+    AIManager(const AIManager&) = delete;
+    AIManager& operator=(const AIManager&) = delete;
 
-  // Cache-efficient storage using Structure of Arrays (SoA)
-  // Position/size data lives in EntityDataManager (single source of truth)
-  // AIManager stores AI-specific data (behaviors, priorities) + cached EDM indices
-  // Active/inactive state is tracked via m_edmToStorageIndex (SIZE_MAX = inactive)
-  struct EntityStorage {
-    std::vector<EntityHandle> handles;  // 8 bytes each
-    std::vector<float> lastUpdateTimes;
-    std::vector<size_t> edmIndices;  // Cached for O(1) batch access
+    // Cache-efficient storage using Structure of Arrays (SoA)
+    // Position/size data lives in EntityDataManager (single source of truth)
+    // AIManager stores AI-specific data (behaviors, priorities) + cached EDM indices
+    // Active/inactive state is tracked via m_edmToStorageIndex (SIZE_MAX = inactive)
+    struct EntityStorage {
+        std::vector<EntityHandle> handles; // 8 bytes each
+        std::vector<float> lastUpdateTimes;
+        std::vector<size_t> edmIndices; // Cached for O(1) batch access
 
-    size_t size() const { return handles.size(); }
-    void reserve(size_t capacity) {
-      handles.reserve(capacity);
-      lastUpdateTimes.reserve(capacity);
-      edmIndices.reserve(capacity);
-    }
-  };
+        size_t size() const { return handles.size(); }
+        void reserve(size_t capacity) {
+            handles.reserve(capacity);
+            lastUpdateTimes.reserve(capacity);
+            edmIndices.reserve(capacity);
+        }
+    };
 
-  EntityStorage m_storage;
-  std::unordered_map<EntityHandle, size_t> m_handleToIndex;
-  std::unordered_map<std::string, BehaviorType> m_behaviorTypeMap;
+    EntityStorage m_storage;
+    std::unordered_map<EntityHandle, size_t> m_handleToIndex;
+    std::unordered_map<std::string, BehaviorType> m_behaviorTypeMap;
 
-  // Named preset configs (SmallWander, LargeWander, etc.) - checked before m_behaviorTypeMap
-  std::unordered_map<std::string, VoidLight::BehaviorConfigData> m_presetConfigs;
+    // Named preset configs (SmallWander, LargeWander, etc.) - checked before m_behaviorTypeMap
+    std::unordered_map<std::string, VoidLight::BehaviorConfigData> m_presetConfigs;
 
-  // Reverse mapping: EDM index -> dense storage index for O(1) lookup in processBatch
-  // SIZE_MAX = no behavior assigned. Much cheaper than shared_ptr (8 bytes vs 16, no atomic ops)
-  std::vector<size_t> m_edmToStorageIndex;
+    // Reverse mapping: EDM index -> dense storage index for O(1) lookup in processBatch
+    // SIZE_MAX = no behavior assigned. Much cheaper than shared_ptr (8 bytes vs 16, no atomic ops)
+    std::vector<size_t> m_edmToStorageIndex;
 
-  // Player handle
-  EntityHandle m_playerHandle{};
+    // Player handle
+    EntityHandle m_playerHandle{};
 
-  // Threading and state
-  std::atomic<bool> m_initialized{false};
-  VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
-  std::atomic<bool> m_globallyPaused{false};
+    // Threading and state
+    std::atomic<bool> m_initialized{false};
+    VOIDLIGHT_DEBUG_ONLY(std::atomic<bool> m_useThreading{true};)
+    std::atomic<bool> m_globallyPaused{false};
 
-  // Behavior execution tracking — worker threads fetch_add once per batch;
-  // cache-line isolated to avoid false sharing with read-mostly atomics above.
-  alignas(64) std::atomic<size_t> m_totalBehaviorExecutions{0};
+    // Behavior execution tracking — worker threads fetch_add once per batch;
+    // cache-line isolated to avoid false sharing with read-mostly atomics above.
+    alignas(64) std::atomic<size_t> m_totalBehaviorExecutions{0};
 
-  // Thread-safe assignment tracking
-  std::atomic<size_t> m_totalAssignmentCount{0};
+    // Thread-safe assignment tracking
+    std::atomic<size_t> m_totalAssignmentCount{0};
 
-  // Frame counter for cache invalidation and distance staggering (operational)
-  // Written once per frame on main thread; isolated from the worker-written counter above.
-  alignas(64) std::atomic<uint64_t> m_frameCounter{0};
+    // Frame counter for cache invalidation and distance staggering (operational)
+    // Written once per frame on main thread; isolated from the worker-written counter above.
+    alignas(64) std::atomic<uint64_t> m_frameCounter{0};
 
-  // Thread synchronization
-  mutable std::shared_mutex m_entitiesMutex;
+    // Thread synchronization
+    mutable std::shared_mutex m_entitiesMutex;
 
-  // Cached manager references (avoid singleton lookups in hot paths)
-  PathfinderManager* mp_pathfinderManager{nullptr};
+    // Cached manager references (avoid singleton lookups in hot paths)
+    PathfinderManager* mp_pathfinderManager{nullptr};
 
-  // Batch futures for parallel processing - reused via clear() each frame
-  std::vector<std::future<void>> m_batchFutures;
+    // Batch futures for parallel processing - reused via clear() each frame
+    std::vector<std::future<void>> m_batchFutures;
 
-  // Pre-allocated per-batch event buffers (avoids per-frame allocation in threaded path)
-  std::vector<std::vector<EventManager::DeferredEvent>> m_batchEventBuffers;
+    // Pre-allocated per-batch event buffers (avoids per-frame allocation in threaded path)
+    std::vector<std::vector<EventManager::DeferredEvent>> m_batchEventBuffers;
+    std::vector<std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>> m_batchMessageBuffers;
 
-  // Reusable buffer for collecting damage events from batch futures
-  std::vector<EventManager::DeferredEvent> m_allDamageEvents;
+    // Reusable buffer for collecting damage events from batch futures
+    std::vector<EventManager::DeferredEvent> m_allDamageEvents;
 
-  // Reusable buffer for single-threaded path deferred events (avoids per-call allocation)
-  std::vector<EventManager::DeferredEvent> m_singleBatchEvents;
+    // Reusable buffer for single-threaded path deferred events (avoids per-call allocation)
+    std::vector<EventManager::DeferredEvent> m_singleBatchEvents;
+    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> m_singleBatchMessages;
 
-  // Per-batch knockback-expiry queues. Workers enqueue edmIdx when framesRemaining
-  // hits zero; main thread drains after futures join. Keeps SparseSidecar::remove()
-  // off worker threads — its pop_back / cross-entity m_sparse patch is not race-safe.
-  std::vector<std::vector<uint32_t>> m_batchKnockbackClears;
-  std::vector<uint32_t> m_singleBatchKnockbackClears;
+    // Per-batch knockback-expiry queues. Workers enqueue edmIdx when framesRemaining
+    // hits zero; main thread drains after futures join. Keeps SparseSidecar::remove()
+    // off worker threads — its pop_back / cross-entity m_sparse patch is not race-safe.
+    std::vector<std::vector<uint32_t>> m_batchKnockbackClears;
+    std::vector<uint32_t> m_singleBatchKnockbackClears;
 
-  // Reusable buffer for Active tier EDM indices (avoids per-frame allocation)
-  std::vector<size_t> m_activeIndicesBuffer;
+    // Reusable buffer for Active tier EDM indices (avoids per-frame allocation)
+    std::vector<size_t> m_activeIndicesBuffer;
 
-  // Cached player edmIndex (updated once per frame during update(), SIZE_MAX = no player)
-  size_t m_cachedPlayerEdmIdx{SIZE_MAX};
+    // Cached player edmIndex (updated once per frame during update(), SIZE_MAX = no player)
+    size_t m_cachedPlayerEdmIdx{SIZE_MAX};
+    // Per-frame "faction is Hostile toward the player" from standing, rebuilt in
+    // update() before batches; workers read it by value via BehaviorContext.
+    std::array<bool, MAX_FACTIONS> m_playerHostileByFaction{};
 
-  // Incrementally maintained behavior/faction indices for O(G)/O(F) radius scans.
-  // Modified only on main thread (under m_entitiesMutex write lock in assignBehavior etc.),
-  // read-only during batch processing — thread-safe by construction.
-  static constexpr uint8_t MAX_FACTIONS = 16;
-  std::vector<size_t> m_guardEdmIndices;                           // EDM indices of Guard-assigned entities
-  std::array<std::vector<size_t>, MAX_FACTIONS> m_factionEdmIndices;  // Per-faction EDM indices
-  std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> m_pendingBehaviorMessages;
-  std::vector<VoidLight::AICommandBus::BehaviorTransitionCommand> m_pendingBehaviorTransitions;
-  std::vector<VoidLight::AICommandBus::BehaviorTransitionCommand> m_selectedTransitions;
-  std::unordered_map<size_t, size_t> m_selectedTransitionsByEdmIndex;
-  std::vector<VoidLight::AICommandBus::FactionChangeCommand> m_pendingFactionChanges;
-  std::vector<VoidLight::AICommandBus::EquipmentSwapCommand> m_pendingMeleeFallbackEquips;
-  std::vector<VoidLight::AICommandBus::RangedAttackCommand> m_pendingRangedAttacks;
+    // Directed 16×16 Allied/Neutral/Hostile table. Main-thread writes only;
+    // workers bind a const-ref to the matching row (or kNeutralFactionStanceRow)
+    // plus m_factionHasHostile[faction] — no per-entity copy or scan.
+    std::array<std::array<FactionStance, MAX_FACTIONS>, MAX_FACTIONS> m_factionStances{};
+    std::array<bool, MAX_FACTIONS> m_factionHasHostile{};
+    EventManager::HandlerToken m_combatHandlerToken{};
+    bool m_combatHandlerRegistered{false};
+    EventManager::HandlerToken m_weatherHandlerToken{};
+    bool m_weatherHandlerRegistered{false};
+    uint8_t m_lastWeatherType{0};
+    EnvironmentSnapshot m_environmentSnapshot{};
 
-  void addToIndices(size_t edmIndex, BehaviorType behaviorType);
-  void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
-  void commitQueuedFactionChanges();
-  void commitQueuedRangedAttacks();
-  void commitQueuedMeleeFallbackEquips();
-  void commitQueuedBehaviorMessages();
-  void commitQueuedBehaviorTransitions();
+    // Incrementally maintained behavior/faction indices for O(G)/O(F) radius scans.
+    // Modified only on main thread (under m_entitiesMutex write lock in assignBehavior etc.),
+    // read-only during batch processing — thread-safe by construction.
+    std::vector<size_t> m_guardEdmIndices; // EDM indices of Guard-assigned entities
+    std::array<std::vector<size_t>, MAX_FACTIONS> m_factionEdmIndices; // Per-faction EDM indices
+    std::vector<VoidLight::AICommandBus::BehaviorMessageCommand> m_pendingBehaviorMessages;
+    std::vector<VoidLight::AICommandBus::BehaviorTransitionCommand> m_pendingBehaviorTransitions;
+    std::vector<VoidLight::AICommandBus::BehaviorTransitionCommand> m_selectedTransitions;
+    std::unordered_map<size_t, size_t> m_selectedTransitionsByEdmIndex;
+    std::vector<VoidLight::AICommandBus::FactionChangeCommand> m_pendingFactionChanges;
+    std::vector<VoidLight::AICommandBus::EquipmentSwapCommand> m_pendingMeleeFallbackEquips;
+    std::vector<VoidLight::AICommandBus::RangedAttackCommand> m_pendingRangedAttacks;
+    std::vector<VoidLight::AICommandBus::HarvestCommand> m_pendingHarvests;
 
-  // Process batch of Active tier entities using EDM indices directly.
-  // Runs emotional decay and behavior dispatch in a single fused pass.
-  // Collects deferred events from this batch's thread-local buffer into outEvents.
-  void processBatch(const std::vector<size_t>& activeIndices,
-                    size_t start, size_t end,
-                    float deltaTime,
-                    float worldWidth, float worldHeight,
-                    EntityHandle playerHandle, const Vector2D& playerPos,
-                    const Vector2D& playerVel, bool playerValid,
-                    float gameTime,
-                    std::vector<EventManager::DeferredEvent>& outEvents,
-                    std::vector<uint32_t>& outKnockbackClears);
+    // Harvestable snapshot for Forage workers. Main-thread rebuild only (before
+    // batches, gated on WRM getHarvestableVersion()); read-only while batches run.
+    // Entries are grid-bucketed (HarvestableSnapshotView) by bucketHarvestableSnapshot().
+    std::vector<HarvestableSnapshotEntry> m_harvestableSnapshot;
+    std::vector<HarvestableSnapshotEntry> m_harvestableEntryScratch;
+    std::vector<size_t> m_harvestableIndexScratch;
+    std::vector<uint32_t> m_harvestableCellStarts;
+    Vector2D m_harvestableGridOrigin{0.0f, 0.0f};
+    uint32_t m_harvestableGridCols{0};
+    uint32_t m_harvestableGridRows{0};
+    uint64_t m_harvestableSnapshotVersion{UINT64_MAX};
+    size_t m_harvestableSnapshotRebuilds{0};
 
-  // Shutdown state
-  bool m_isShutdown{false};
+    void addToIndices(size_t edmIndex, BehaviorType behaviorType);
+    void removeFromIndices(size_t edmIndex, BehaviorType oldBehaviorType);
+    void refreshFactionHasHostile(uint8_t faction);
+    void commitDirectedStance(uint8_t fromFaction, uint8_t towardFaction,
+        FactionStance newStance, uint32_t settlementId);
+    void emitStanceChanged(uint8_t fromFaction, uint8_t towardFaction,
+        FactionStance oldStance, FactionStance newStance,
+        uint32_t settlementId, bool towardPlayer);
+    void applyPlayerStandingDelta(EntityHandle player, size_t playerIdx,
+        uint8_t faction, int8_t delta, uint32_t settlementId);
+    void syncNpcCollisionTowardPlayer(size_t edmIndex);
+    void syncFactionCollisionTowardPlayer(uint8_t faction);
+    void commitQueuedFactionChanges();
+    void commitQueuedRangedAttacks();
+    void commitQueuedMeleeFallbackEquips();
+    void commitQueuedBehaviorMessages();
+    void commitQueuedBehaviorTransitions();
+    void commitQueuedHarvests();
+    void refreshHarvestableSnapshot();
+    void bucketHarvestableSnapshot();
+    [[nodiscard]] HarvestableSnapshotView harvestableSnapshotView() const;
+    void clearHarvestableSnapshot();
+    void syncNeedForRole(size_t edmIndex, BehaviorType behaviorType, bool defaultConfig);
+
+    // Process batch of Active tier entities using EDM indices directly.
+    // Runs emotional decay and behavior dispatch in a single fused pass.
+    // Collects deferred events and behavior messages from this batch's
+    // thread-local buffers into outEvents / outMessages.
+    void processBatch(const std::vector<size_t>& activeIndices,
+        size_t start, size_t end,
+        float deltaTime,
+        float worldWidth, float worldHeight,
+        EntityHandle playerHandle, const Vector2D& playerPos,
+        const Vector2D& playerVel, bool playerValid,
+        float gameTime,
+        EnvironmentSnapshot envSnapshot,
+        const HarvestableSnapshotView& harvestables,
+        std::vector<EventManager::DeferredEvent>& outEvents,
+        std::vector<uint32_t>& outKnockbackClears,
+        std::vector<VoidLight::AICommandBus::BehaviorMessageCommand>& outMessages);
+
+    // Shutdown state
+    bool m_isShutdown{false};
 };
 
 #endif // AI_MANAGER_HPP

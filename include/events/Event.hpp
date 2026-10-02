@@ -51,14 +51,14 @@ public:
 
     // Condition checking
     virtual bool checkConditions() = 0;
-    
+
     // Frequency control
     virtual void setUpdateFrequency(int framesPerUpdate) { m_updateFrequency = framesPerUpdate; }
     virtual int getUpdateFrequency() const { return m_updateFrequency; }
-    
+
     // Optional message handling for event communication
     virtual void onMessage([[maybe_unused]] const std::string& message) {}
-    
+
     // Update control
     virtual bool shouldUpdate() const;
 
@@ -67,7 +67,10 @@ public:
     virtual float getCooldown() const { return m_cooldownTime; }
     virtual bool isOnCooldown() const { return m_onCooldown; }
     virtual void startCooldown();
-    virtual void resetCooldown() { m_onCooldown = false; m_cooldownTimer = 0.0f; }
+    virtual void resetCooldown() {
+        m_onCooldown = false;
+        m_cooldownTimer = 0.0f;
+    }
     virtual void updateCooldown(float deltaTime);
 
     // One-time event settings
@@ -78,16 +81,16 @@ public:
 protected:
     bool m_active{true};
     int m_updateFrequency{1}; // How often to update (1 = every frame, 2 = every other frame, etc.)
-    
+
     // Cooldown system
     bool m_onCooldown{false};
     float m_cooldownTime{0.0f}; // In seconds
     float m_cooldownTimer{0.0f};
-    
+
     // One-time event tracking
     bool m_oneTimeEvent{false};
     bool m_hasTriggered{false};
-    
+
     // Frame counter for update frequency
     mutable int m_frameCounter{0};
 };

@@ -10,7 +10,7 @@
 #include "core/WorkerBudget.hpp"
 #include "managers/BackgroundSimulationManager.hpp"
 #include "managers/EntityDataManager.hpp"
-#include "entities/Entity.hpp"  // For AnimationConfig
+#include "entities/Entity.hpp" // For AnimationConfig
 #include "entities/EntityHandle.hpp"
 #include "utils/Vector2D.hpp"
 #include <cmath>
@@ -73,7 +73,8 @@ protected:
         }
         BOOST_REQUIRE(
             budgetMgr.shouldUseThreading(
-                VoidLight::SystemType::BackgroundSim, workloadSize).shouldThread);
+                         VoidLight::SystemType::BackgroundSim, workloadSize)
+                .shouldThread);
     }
 
     EntityDataManager* edm;
@@ -157,7 +158,7 @@ BOOST_AUTO_TEST_CASE(TestSetGlobalPause) {
 
 BOOST_AUTO_TEST_CASE(TestNoUpdateWhenPaused) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create a background entity
@@ -176,7 +177,7 @@ BOOST_AUTO_TEST_CASE(TestNoUpdateWhenPaused) {
 
     // Call update multiple times - should do nothing while paused
     for (int i = 0; i < 10; ++i) {
-        bgsm->update(Vector2D(0.0f, 0.0f), 0.2f);  // 200ms each, total 2000ms
+        bgsm->update(Vector2D(0.0f, 0.0f), 0.2f); // 200ms each, total 2000ms
     }
 
     // Updates should not have incremented while paused
@@ -249,12 +250,12 @@ BOOST_FIXTURE_TEST_SUITE(TierManagementTests, BackgroundSimManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestUpdateTiers) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create entities at different distances
-    EntityHandle near = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");   // Active (<500)
-    EntityHandle far = edm->createNPCWithRaceClass(Vector2D(750.0f, 0.0f), "Human", "Guard");      // Background (500-1000)
+    EntityHandle near = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // Active (<500)
+    EntityHandle far = edm->createNPCWithRaceClass(Vector2D(750.0f, 0.0f), "Human", "Guard"); // Background (500-1000)
 
     bgsm->setReferencePoint(Vector2D(0.0f, 0.0f));
     bgsm->updateTiers();
@@ -289,14 +290,14 @@ BOOST_AUTO_TEST_CASE(TestHasWorkWithNoEntities) {
 
 BOOST_AUTO_TEST_CASE(TestHasWorkWithBackgroundEntities) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create entity in background range (500-1000)
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(750.0f, 0.0f), "Human", "Guard");
 
     bgsm->setReferencePoint(Vector2D(0.0f, 0.0f));
-    bgsm->invalidateTiers();  // Force tier recalc
+    bgsm->invalidateTiers(); // Force tier recalc
     bgsm->update(Vector2D(0.0f, 0.0f), 0.0f);
 
     BOOST_CHECK(edm->isValidHandle(handle));
@@ -380,7 +381,7 @@ BOOST_AUTO_TEST_CASE(TestBasicUpdate) {
 
 BOOST_AUTO_TEST_CASE(TestUpdateWithBackgroundEntities) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create entities in background tier (500-1000)
@@ -398,7 +399,7 @@ BOOST_AUTO_TEST_CASE(TestUpdateWithBackgroundEntities) {
     BOOST_CHECK(!edm->getBackgroundIndices().empty());
 
     for (int i = 0; i < 5; ++i) {
-        bgsm->update(Vector2D(0.0f, 0.0f), 0.1f);  // 100ms per update
+        bgsm->update(Vector2D(0.0f, 0.0f), 0.1f); // 100ms per update
     }
 
     BOOST_CHECK_GT(bgsm->getPerfStats().totalUpdates, 0U);
@@ -433,23 +434,23 @@ BOOST_AUTO_TEST_CASE(TestTierUpdateInterval) {
 
 BOOST_AUTO_TEST_CASE(TestAccumulatorPattern) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000, Hibernated: >1000
 
     // Create entity in background tier range (between 500 and 1000)
     EntityHandle handle = edm->createNPCWithRaceClass(Vector2D(750.0f, 0.0f), "Human", "Guard");
 
     bgsm->setReferencePoint(Vector2D(0.0f, 0.0f));
-    bgsm->invalidateTiers();  // Force tier update within update()
-    bgsm->setUpdateRate(10.0f);  // 10Hz = 100ms interval
+    bgsm->invalidateTiers(); // Force tier update within update()
+    bgsm->setUpdateRate(10.0f); // 10Hz = 100ms interval
 
     // First update to trigger tier recalc and set hasNonActiveEntities flag
     bgsm->update(Vector2D(0.0f, 0.0f), 0.0f);
-    bgsm->resetPerfStats();  // Reset after tier update
+    bgsm->resetPerfStats(); // Reset after tier update
 
     // Small updates shouldn't trigger processing
     for (int i = 0; i < 5; ++i) {
-        bgsm->update(Vector2D(0.0f, 0.0f), 0.01f);  // 10ms each = 50ms total
+        bgsm->update(Vector2D(0.0f, 0.0f), 0.01f); // 10ms each = 50ms total
     }
 
     // Larger update should trigger processing (150ms total = triggers at least once)
@@ -485,7 +486,7 @@ BOOST_AUTO_TEST_CASE(TestGetPerfStats) {
 
 BOOST_AUTO_TEST_CASE(TestResetPerfStats) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create entity in background tier and process
@@ -511,7 +512,7 @@ BOOST_AUTO_TEST_CASE(TestResetPerfStats) {
 
 BOOST_AUTO_TEST_CASE(TestPerfStatsUpdateAfterProcessing) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create multiple background entities in background tier range (500-1000)
@@ -524,11 +525,11 @@ BOOST_AUTO_TEST_CASE(TestPerfStatsUpdateAfterProcessing) {
     }
 
     bgsm->setReferencePoint(Vector2D(0.0f, 0.0f));
-    bgsm->invalidateTiers();  // Force tier update within update()
+    bgsm->invalidateTiers(); // Force tier update within update()
 
     // First update to trigger tier recalc and set hasNonActiveEntities flag
     bgsm->update(Vector2D(0.0f, 0.0f), 0.0f);
-    bgsm->resetPerfStats();  // Reset after tier update
+    bgsm->resetPerfStats(); // Reset after tier update
 
     // Process enough to trigger update (200ms at 10Hz = 2 updates)
     bgsm->update(Vector2D(0.0f, 0.0f), 0.2f);
@@ -554,7 +555,7 @@ BOOST_FIXTURE_TEST_SUITE(NPCSimulationTests, BackgroundSimManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestBackgroundNPCVelocityDecay) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create NPC in background tier range (distance 750)
@@ -584,7 +585,7 @@ BOOST_AUTO_TEST_CASE(TestBackgroundNPCVelocityDecay) {
     // Velocity should have decayed
     const auto& newTransform = edm->getTransform(handle);
     float velMag = std::sqrt(newTransform.velocity.getX() * newTransform.velocity.getX() +
-                             newTransform.velocity.getY() * newTransform.velocity.getY());
+        newTransform.velocity.getY() * newTransform.velocity.getY());
     // Velocity should be less than initial (was ~141.4)
     BOOST_CHECK(velMag < 141.0f);
 
@@ -594,7 +595,7 @@ BOOST_AUTO_TEST_CASE(TestBackgroundNPCVelocityDecay) {
 
 BOOST_AUTO_TEST_CASE(TestBackgroundNPCPositionUpdate) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create NPC in background tier range (distance 750)
@@ -633,15 +634,15 @@ BOOST_FIXTURE_TEST_SUITE(IntegrationTests, BackgroundSimManagerTestFixture)
 
 BOOST_AUTO_TEST_CASE(TestFullWorkflow) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000, Hibernated: >1000
     bgsm->setUpdateRate(10.0f);
 
     // Create mixed entities at appropriate distances
     EntityHandle player = edm->registerPlayer(1, Vector2D(0.0f, 0.0f));
-    EntityHandle nearNpc = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard");       // Active (<500)
-    EntityHandle farNpc = edm->createNPCWithRaceClass(Vector2D(750.0f, 0.0f), "Human", "Guard");          // Background (500-1000)
-    EntityHandle veryFarNpc = edm->createNPCWithRaceClass(Vector2D(1500.0f, 0.0f), "Human", "Guard");     // Hibernated (>1000)
+    EntityHandle nearNpc = edm->createNPCWithRaceClass(Vector2D(100.0f, 100.0f), "Human", "Guard"); // Active (<500)
+    EntityHandle farNpc = edm->createNPCWithRaceClass(Vector2D(750.0f, 0.0f), "Human", "Guard"); // Background (500-1000)
+    EntityHandle veryFarNpc = edm->createNPCWithRaceClass(Vector2D(1500.0f, 0.0f), "Human", "Guard"); // Hibernated (>1000)
 
     // Force initial tier assignment
     bgsm->setReferencePoint(Vector2D(0.0f, 0.0f));
@@ -679,27 +680,27 @@ BOOST_AUTO_TEST_CASE(TestFullWorkflow) {
 
 BOOST_AUTO_TEST_CASE(TestManyBackgroundEntities) {
     // Set explicit radii for deterministic testing
-    bgsm->setActiveRadius(500.0f);      // Active: 0-500
+    bgsm->setActiveRadius(500.0f); // Active: 0-500
     bgsm->setBackgroundRadius(1000.0f); // Background: 500-1000
 
     // Create many background entities in background tier range (500-1000)
     std::vector<EntityHandle> handles;
     for (int i = 0; i < 500; ++i) {
         // Place entities in a ring pattern in background tier range
-        float angle = (i / 500.0f) * 6.28f * 10.0f;  // 10 revolutions
-        float dist = 600.0f + (i % 50) * 7.0f;        // 600-949 (background tier)
+        float angle = (i / 500.0f) * 6.28f * 10.0f; // 10 revolutions
+        float dist = 600.0f + (i % 50) * 7.0f; // 600-949 (background tier)
         handles.push_back(edm->createNPCWithRaceClass(Vector2D(dist * std::cos(angle), dist * std::sin(angle)), "Human", "Guard"));
     }
 
     bgsm->setReferencePoint(Vector2D(0.0f, 0.0f));
-    bgsm->invalidateTiers();  // Force tier update within update()
+    bgsm->invalidateTiers(); // Force tier update within update()
     bgsm->resetPerfStats();
 
     // First update to trigger tier recalc and set hasNonActiveEntities flag
     bgsm->update(Vector2D(0.0f, 0.0f), 0.0f);
     BOOST_REQUIRE_EQUAL(edm->getBackgroundIndices().size(), handles.size());
     primeBackgroundThreadingDecision(handles.size());
-    bgsm->resetPerfStats();  // Reset again after tier update
+    bgsm->resetPerfStats(); // Reset again after tier update
 
     // Process - 50 updates of 100ms = 5000ms = should trigger 50 updates at 10Hz
     for (int i = 0; i < 50; ++i) {

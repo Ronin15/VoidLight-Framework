@@ -199,14 +199,14 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyAddedToStorage) {
 
     // Add static body to CollisionManager with proper EDM routing
     size_t staticIdx = CollisionManager::Instance().addStaticBody(
-        id,  // entityId from handle
-        center,  // position
-        Vector2D(halfWidth, halfHeight),    // halfSize
-        CollisionLayer::Layer_Environment,  // layer
-        0xFFFF,  // collidesWith
-        false,   // isTrigger
-        0,       // triggerTag
-        1,       // triggerType
+        id, // entityId from handle
+        center, // position
+        Vector2D(halfWidth, halfHeight), // halfSize
+        CollisionLayer::Layer_Environment, // layer
+        0xFFFF, // collidesWith
+        false, // isTrigger
+        0, // triggerTag
+        1, // triggerType
         edmIndex // EDM index for static body
     );
 
@@ -248,8 +248,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodyAlwaysCheckedForCollision) {
         false,
         0,
         1,
-        edmIndex
-    );
+        edmIndex);
 
     // Create dynamic entity near the static obstacle
     [[maybe_unused]] EntityHandle entityHandle = createTestNPC(Vector2D(510.0f, 510.0f));
@@ -370,8 +369,7 @@ BOOST_AUTO_TEST_CASE(TestMovableStaticPairMixedIndices) {
         false,
         0,
         1,
-        edmIndex
-    );
+        edmIndex);
     BOOST_REQUIRE(staticStorageIdx != SIZE_MAX);
 
     // Create dynamic entity near static
@@ -436,8 +434,7 @@ BOOST_AUTO_TEST_CASE(TestStaticBodiesPreservedAfterDynamicClear) {
         false,
         0,
         1,
-        edmIndex
-    );
+        edmIndex);
 
     // Create dynamic entity
     [[maybe_unused]] EntityHandle entityHandle = createTestNPC(Vector2D(100.0f, 100.0f));
@@ -566,6 +563,39 @@ BOOST_AUTO_TEST_CASE(TestCollisionUpdateAfterStateTransitionDoesNotCrash) {
     // Verify new state works correctly
     auto newActiveIndices = edm.getActiveIndicesWithCollision();
     BOOST_CHECK_EQUAL(newActiveIndices.size(), 50);
+}
+
+/**
+ * @test TestStaticQueryCacheClearedAfterStateTransition
+ *
+ * The broadphase caches static storage indices for the culling area and only
+ * re-queries when the area moves or statics change. prepareForStateTransition()
+ * clears m_storage, so a new state with no statics and the same culling area
+ * must not reuse the old cached static indices (out-of-range storage access).
+ */
+BOOST_AUTO_TEST_CASE(TestStaticQueryCacheClearedAfterStateTransition) {
+    auto& edm = EntityDataManager::Instance();
+    auto& cm = CollisionManager::Instance();
+    const Vector2D center(500.0f, 500.0f);
+
+    EntityHandle staticHandle = edm.createStaticBody(center, 50.0f, 50.0f);
+    BOOST_REQUIRE(cm.addStaticBody(staticHandle.getId(), center, Vector2D(50.0f, 50.0f),
+                      CollisionLayer::Layer_Environment, 0xFFFF, false, 0, 1,
+                      edm.getStaticIndex(staticHandle)) != SIZE_MAX);
+    createTestNPC(Vector2D(510.0f, 510.0f));
+    edm.updateSimulationTiers(center, 1500.0f, 10000.0f);
+    cm.update(0.016f);
+    BOOST_REQUIRE_GT(cm.getPerfStats().lastPairs, 0u);
+
+    cm.prepareForStateTransition();
+    edm.prepareForStateTransition();
+    BOOST_REQUIRE_EQUAL(cm.getStaticBodyCount(), 0u);
+
+    // Same entity layout -> same culling area, but no statics this time.
+    createTestNPC(Vector2D(510.0f, 510.0f));
+    edm.updateSimulationTiers(center, 1500.0f, 10000.0f);
+    cm.update(0.016f);
+    BOOST_CHECK_EQUAL(cm.getPerfStats().lastPairs, 0u);
 }
 
 /**

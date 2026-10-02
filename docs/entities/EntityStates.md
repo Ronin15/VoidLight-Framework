@@ -11,11 +11,12 @@ The current codebase only includes player entity state classes. The old NPC stat
 `EntityState` defines the `enter()`, `update(float)`, and `exit()` lifecycle. `EntityStateManager` owns the active state and handles transitions.
 
 ```cpp
-if (player->getHealth() <= 0) {
-    stateManager.changeState(std::make_unique<PlayerDyingState>(*player));
-} else if (movementInput) {
-    stateManager.changeState(std::make_unique<PlayerRunningState>(*player));
-}
+stateManager.addState("idle", std::make_unique<PlayerIdleState>(*player));
+stateManager.addState("running", std::make_unique<PlayerRunningState>(*player));
+stateManager.setState("idle");
+
+// Player wraps the named API:
+player->changeState("running");
 ```
 
 ## Current Player States
